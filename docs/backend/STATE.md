@@ -2,192 +2,198 @@
 
 ## Current milestone
 
-**Sprint 0 — Foundation de Produção**  
+**Sprint 1 — Auth, RBAC e Controle de Acesso**
 Status: concluída em 19 de junho de 2026.
 
-O repositório contém exclusivamente a fundação técnica do ERP Operacional White Label. Nenhum
-módulo funcional ou regra de negócio foi implementado.
+A foundation da Sprint 0 foi preservada. O backend agora possui identidade, sessões, autorização
+por papel e auditoria de autenticação. Nenhum módulo de negócio do ERP foi criado.
 
 ## Architecture
 
-- NestJS 11 com TypeScript em modo estrito.
-- API HTTP com prefixo global `/api` e versionamento URI do NestJS. A versão atual é `v1`.
-- Configuração centralizada no `AppConfigModule`, usando `ConfigModule` global, cache de valores e
-  validação fail-fast.
-- PostgreSQL acessado exclusivamente pelo Prisma.
-- `DatabaseModule` e `LoggerModule` globais para infraestrutura compartilhada.
-- Módulo `health` como único módulo HTTP.
-- Componentes transversais organizados em `shared`:
-  - constantes;
-  - decorators;
-  - DTOs;
-  - exceptions;
-  - filters;
-  - interceptors;
-  - types.
-- Infraestrutura organizada em `infra/logger`, `infra/security` e `infra/storage`.
-- Respostas de sucesso envelopadas globalmente por interceptor.
-- Exceções normalizadas por filtro global.
-- Logs estruturados em JSON para startup, shutdown, requests e exceptions.
+- NestJS 11 e TypeScript estrito.
+- API versionada em `/api/v1`.
+- PostgreSQL e Prisma.
+- JWT HS256 com issuer, audience, tipo de token, `jti` e expiração validados.
+- Senhas e refresh tokens protegidos com Argon2id.
+- `JwtAuthGuard` e `RoleGuard` registrados globalmente.
+- Autorização deny-by-default: rotas são protegidas, exceto quando marcadas com `@Public()`.
+- Decorators disponíveis:
+  - `@Public()`;
+  - `@CurrentUser()`;
+  - `@Roles(...)`.
+- Access tokens são vinculados à sessão persistida pelo claim `sid`.
+- Refresh rotation é transacional.
+- Reutilização de refresh token revogado invalida todas as sessões ativas do usuário.
+- Auditoria persistente em `AuditLog`.
 
-Estrutura principal:
+Módulos atuais:
 
 ```text
-src/
-├── main.ts
-├── app.module.ts
-├── modules/
-│   ├── config/
-│   ├── database/
-│   └── health/
-├── shared/
-│   ├── constants/
-│   ├── decorators/
-│   ├── dto/
-│   ├── exceptions/
-│   ├── filters/
-│   ├── interceptors/
-│   └── types/
-└── infra/
-    ├── logger/
-    ├── security/
-    └── storage/
+src/modules/
+├── auth/
+├── config/
+├── database/
+└── health/
 ```
+
+Somente `auth` e `health` expõem endpoints.
 
 ## Environment
 
-Variáveis obrigatórias validadas antes da inicialização:
+Variáveis JWT obrigatórias:
 
-- `DATABASE_URL`
 - `JWT_SECRET`
 - `JWT_REFRESH_SECRET`
-- `APP_NAME`
-- `APP_PORT`
-- `CORS_ORIGINS`
-- `STORAGE_PROVIDER`
+- `JWT_ACCESS_EXPIRES_IN_SECONDS` — recomendado e usado no exemplo: `900`
+- `JWT_REFRESH_EXPIRES_IN_SECONDS` — recomendado e usado no exemplo: `2592000`
+- `JWT_ISSUER`
+- `JWT_AUDIENCE`
 
-Variáveis opcionais com defaults seguros:
+`OWNER_EMAIL` é exigida apenas na execução do seed inicial.
 
-- `NODE_ENV=development`
-- `RATE_LIMIT_TTL_MS=60000`
-- `RATE_LIMIT_MAX=100`
-- `LOG_LEVEL=info`
-
-Os segredos JWT já são obrigatórios, distintos e devem ter pelo menos 32 caracteres, mas ainda não
-são consumidos. Autenticação está fora da Sprint 0.
-
-O arquivo `.env.example` contém o contrato completo. O `.env` real não é versionado.
+Os demais contratos de ambiente da Sprint 0 permanecem válidos. Consulte `.env.example`.
 
 ## Persistence
 
-Schema: `prisma/schema.prisma`.
+Migrations:
 
-Migration criada:
+1. `20260619090000_foundation`
+2. `20260619130000_auth_rbac`
 
-- `20260619090000_foundation`
+### Enum `Role`
 
-Tabelas de aplicação:
+- `OWNER`
+- `MANAGER`
+- `OPERATOR`
+- `VIEWER`
 
-- `system_settings`
-  - `id` UUID
-  - `key` varchar único
-  - `value` JSONB
-  - `created_at` timestamptz
-  - `updated_at` timestamptz
-- `audit_logs`
-  - `id` UUID
-  - `action` varchar
-  - `resource` varchar
-  - `actor` varchar nullable
-  - `metadata` JSONB nullable
-  - `created_at` timestamptz
-  - índices por `(resource, created_at)` e `(actor, created_at)`
+### `users`
 
-`actor` permanece nullable porque usuários e autenticação ainda não existem. Nenhuma entidade além
-das duas previstas pela Sprint 0 foi criada.
+- `id` UUID;
+- `email` único;
+- `username` único;
+- `name`;
+- `password_hash`;
+- `role`;
+- `is_active`;
+- `last_login_at`;
+- `created_at`;
+- `updated_at`.
 
-## HTTP endpoints
+### `refresh_tokens`
 
-| Method | Path             | Purpose                                                 |
-| ------ | ---------------- | ------------------------------------------------------- |
-| GET    | `/api/v1/health` | Estado da aplicação e conectividade real com PostgreSQL |
+- `id` UUID, também usado como `jti`;
+- `user_id`, FK para `users` com cascade delete;
+- `token_hash`;
+- `expires_at`;
+- `revoked_at`;
+- `created_at`.
 
-Consulte `API_CONTRACTS.md` para payloads e códigos HTTP.
+Somente o hash Argon2id do refresh token é persistido.
 
-## Docker
+### `audit_logs`
 
-`docker-compose.yml` oferece:
+Estrutura da Sprint 0 foi preservada. Eventos implementados:
 
-- `postgres`: PostgreSQL 17, volume persistente, rede interna e healthcheck;
-- `api`: build multi-stage, usuário não-root, migrations automáticas antes do startup e healthcheck
-  HTTP.
+- `LOGIN_SUCCESS`
+- `LOGIN_FAILURE`
+- `LOGOUT`
+- `TOKEN_REFRESH`
 
-O PostgreSQL não publica porta no host. A API é o único serviço exposto.
+`actor` recebe o UUID do usuário quando conhecido. `metadata` registra request ID, IP, user agent e
+contexto mínimo da sessão. Senhas e tokens nunca são auditados.
 
-Inicialização local:
+## Endpoints
+
+| Method | Path                   | Public | Purpose                       |
+| ------ | ---------------------- | ------ | ----------------------------- |
+| GET    | `/api/v1/health`       | Sim    | Readiness da API e PostgreSQL |
+| POST   | `/api/v1/auth/login`   | Sim    | Criar sessão                  |
+| POST   | `/api/v1/auth/refresh` | Sim    | Rotacionar sessão             |
+| POST   | `/api/v1/auth/logout`  | Sim    | Revogar sessão por refresh    |
+| GET    | `/api/v1/auth/me`      | Não    | Identidade autenticada        |
+
+O logout é público no guard de access token porque deve continuar utilizável quando o access token
+expirar. Ele exige e valida o refresh token no body.
+
+## Seed OWNER
+
+O seed cria uma única conta inicial:
+
+- username: `ninja`;
+- name: `Darlan Simplicio`;
+- role: `OWNER`;
+- email: valor de `OWNER_EMAIL`.
+
+Execução após build/migrations:
 
 ```bash
-cp .env.example .env
-# Substituir todos os valores "change_me" e segredos de exemplo.
-docker compose up -d --build
+docker compose exec api npm run prisma:seed
 ```
 
-Parada sem remover dados:
+Na primeira execução, uma senha aleatória forte é impressa uma única vez. Execuções posteriores são
+idempotentes e não alteram nem reexibem credenciais.
 
-```bash
-docker compose down
-```
+## Security decisions
 
-## Decisions
+- Access token padrão: 15 minutos, configurável.
+- Refresh token padrão: 30 dias, configurável.
+- Segredos de access e refresh obrigatoriamente distintos.
+- Algoritmo JWT fixado em HS256 na assinatura e verificação.
+- Claims de refresh não são aceitos como access tokens, e vice-versa.
+- Usuário e sessão são consultados no banco em cada uso de access token.
+- Desativação do usuário, logout e rotação têm efeito imediato sobre access tokens.
+- Login usa verificação Argon2 dummy para reduzir diferença temporal entre usuário existente e
+  inexistente.
+- Login: 10 tentativas por minuto.
+- Refresh e logout: 20 requisições por minuto.
+- DTOs rejeitam propriedades desconhecidas, formatos inválidos e entradas excessivamente longas.
+- O RoleGuard nunca confia no papel presente no request do cliente; usa o usuário carregado do
+  banco.
 
-- Cada instalação representa exatamente um cliente, com banco, storage e configuração próprios.
-  Não existe tenant compartilhado nem `tenantId` no schema.
-- Prisma migrations são aplicadas antes do processo da API iniciar no container.
-- O processo falha no startup quando configuração obrigatória ou conexão inicial com o banco falha.
-- `SystemSetting.value` e `AuditLog.metadata` usam JSONB para configuração e contexto de auditoria
-  sem antecipar entidades de negócio.
-- IDs usam UUID gerado pelo PostgreSQL/Prisma.
-- Datas são persistidas com timezone e precisão de milissegundos.
-- O healthcheck retorna HTTP 503 se a conexão com o banco estiver indisponível.
-- CORS não aceita wildcard.
-- Request IDs recebidos são aceitos apenas quando seguem formato seguro e têm no máximo 128
-  caracteres; caso contrário, um UUID é gerado.
-- A dependência transitiva `multer` foi fixada em `2.2.0` por override para eliminar vulnerabilidades
-  conhecidas presentes na versão trazida pelo adapter Express. Uploads não foram implementados.
+Consulte `SECURITY.md` para a matriz oficial de permissões.
 
 ## Verification performed
 
 - `npm run build`: aprovado.
 - `npm run lint`: aprovado.
+- `npm test`: 3 testes do RoleGuard aprovados.
 - `npm run prisma:validate`: aprovado.
-- `npm audit --omit=dev`: zero vulnerabilidades.
-- `docker compose config --quiet`: aprovado.
-- Build multi-stage da imagem: aprovado.
-- Containers `api` e `postgres`: saudáveis.
-- Migration aplicada em PostgreSQL real: aprovada.
-- Tabelas verificadas: `_prisma_migrations`, `audit_logs`, `system_settings`.
-- Healthcheck HTTP real: `200`, `status=ok`, `database_connection=connected`.
-- Contrato global de erro verificado com rota inexistente: `404`, `code=NOT_FOUND`.
-- Headers de Helmet, throttling e `X-Request-Id`: verificados.
+- `npm audit`: zero vulnerabilidades, incluindo dependências de desenvolvimento.
+- Build Docker multi-stage: aprovado.
+- PostgreSQL e API em containers: saudáveis.
+- Migrations executadas do zero: aprovadas.
+- Seed OWNER inicial e reexecução idempotente: aprovados.
+- Login válido e inválido: aprovados.
+- `GET /auth/me` com e sem token: aprovado.
+- Rotação de refresh token: aprovada.
+- Access e refresh antigos rejeitados após rotação: aprovados.
+- Logout e invalidação imediata do access token: aprovados.
+- Detecção de replay com revogação das sessões ativas: aprovada.
+- Auditoria dos quatro eventos: verificada diretamente no PostgreSQL.
+- Hashes Argon2id e ausência de JWT puro no banco: verificados.
 
 ## Explicitly not implemented
 
-- autenticação, JWT operacional e refresh tokens;
-- usuários e RBAC;
+- CRUD de usuários;
+- recuperação ou alteração de senha;
+- envio de e-mail;
+- MFA;
 - clientes;
 - equipamentos;
+- catálogos;
 - orçamentos;
 - ordens de serviço;
-- uploads e implementação de storage;
-- PDFs;
-- qualquer regra de negócio.
+- documentos, uploads e PDFs;
+- dashboards ou relatórios funcionais.
 
-## Next sprint guidance
+## Future work
 
-Antes de alterar o backend:
+- CRUD administrativo de usuários somente em sprint autorizada.
+- Recuperação de senha e MFA.
+- Política de limpeza de refresh tokens expirados/revogados.
+- Permissões granulares além dos papéis oficiais, caso uma sprint futura exija.
+- Configuração explícita de trusted proxies antes de deploy atrás de proxy reverso.
 
-1. Ler este documento e `API_CONTRACTS.md`.
-2. Preservar o envelope de respostas, request IDs e versionamento.
-3. Criar migration apenas para entidades autorizadas pela sprint.
-4. Aplicar autorização deny-by-default quando autenticação/RBAC entrar no escopo.
-5. Atualizar os quatro documentos obrigatórios ao final.
+Toda sprint futura deve preservar os envelopes HTTP, versionamento, guards globais e documentação
+obrigatória.

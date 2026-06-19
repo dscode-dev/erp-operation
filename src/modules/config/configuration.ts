@@ -7,6 +7,10 @@ export interface EnvironmentVariables {
   DATABASE_URL: string;
   JWT_SECRET: string;
   JWT_REFRESH_SECRET: string;
+  JWT_ACCESS_EXPIRES_IN_SECONDS: number;
+  JWT_REFRESH_EXPIRES_IN_SECONDS: number;
+  JWT_ISSUER: string;
+  JWT_AUDIENCE: string;
   CORS_ORIGINS: string[];
   STORAGE_PROVIDER: StorageProvider;
   RATE_LIMIT_TTL_MS: number;
@@ -18,6 +22,10 @@ const REQUIRED_VARIABLES = [
   'DATABASE_URL',
   'JWT_SECRET',
   'JWT_REFRESH_SECRET',
+  'JWT_ACCESS_EXPIRES_IN_SECONDS',
+  'JWT_REFRESH_EXPIRES_IN_SECONDS',
+  'JWT_ISSUER',
+  'JWT_AUDIENCE',
   'APP_NAME',
   'APP_PORT',
   'CORS_ORIGINS',
@@ -121,6 +129,18 @@ export function validateEnvironment(config: Record<string, unknown>): Environmen
     DATABASE_URL: requireString(config, 'DATABASE_URL'),
     JWT_SECRET: jwtSecret,
     JWT_REFRESH_SECRET: jwtRefreshSecret,
+    JWT_ACCESS_EXPIRES_IN_SECONDS: parsePositiveInteger(
+      requireString(config, 'JWT_ACCESS_EXPIRES_IN_SECONDS'),
+      'JWT_ACCESS_EXPIRES_IN_SECONDS',
+      86400,
+    ),
+    JWT_REFRESH_EXPIRES_IN_SECONDS: parsePositiveInteger(
+      requireString(config, 'JWT_REFRESH_EXPIRES_IN_SECONDS'),
+      'JWT_REFRESH_EXPIRES_IN_SECONDS',
+      31536000,
+    ),
+    JWT_ISSUER: requireString(config, 'JWT_ISSUER'),
+    JWT_AUDIENCE: requireString(config, 'JWT_AUDIENCE'),
     CORS_ORIGINS: parseCorsOrigins(requireString(config, 'CORS_ORIGINS')),
     STORAGE_PROVIDER: storageProvider as EnvironmentVariables['STORAGE_PROVIDER'],
     RATE_LIMIT_TTL_MS: parsePositiveInteger(

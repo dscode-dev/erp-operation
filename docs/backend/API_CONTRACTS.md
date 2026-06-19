@@ -4,12 +4,10 @@
 
 - Base path: `/api/v1`
 - Media type: `application/json`
-- Datas: ISO 8601 em UTC.
-- Campos JSON: `camelCase`, exceto campos explicitamente definidos no contrato.
+- Datas: ISO 8601 UTC.
+- Campos JSON: `camelCase`, exceto contratos legados explícitos.
 - Toda resposta inclui `X-Request-Id`.
-- O cliente pode enviar `X-Request-Id` com 1 a 128 caracteres em
-  `[A-Za-z0-9._-]`. Valores ausentes ou inválidos são substituídos por UUID.
-- Rate-limit padrão: 100 requisições por janela de 60 segundos, configurável por ambiente.
+- Endpoints protegidos usam `Authorization: Bearer <accessToken>`.
 
 ### Success envelope
 
@@ -33,29 +31,211 @@
 }
 ```
 
-O frontend deve tomar decisões programáticas por `error.code`, nunca por `error.message`.
+Use `error.code` para lógica de cliente. Mensagens podem mudar sem quebra de contrato.
 
-## GET `/api/v1/health`
+## Authentication model
 
-Verifica o processo da API e executa uma consulta real `SELECT 1` no PostgreSQL.
+- Access token: JWT HS256, padrão de 900 segundos.
+- Refresh token: JWT HS256, padrão de 2.592.000 segundos.
+- Refresh tokens são single-use: cada refresh retorna um par novo.
+- Rotação ou logout invalidam imediatamente o access token vinculado à sessão anterior.
+- Reutilizar um refresh já rotacionado é tratado como replay e revoga todas as sessões ativas do
+  usuário.
 
-### Authentication
+## POST `/api/v1/auth/login`
 
-Não requer autenticação.
+Cria uma sessão.
 
 ### Request
 
-Sem query parameters e sem body.
-
-Headers opcionais:
-
-```http
-X-Request-Id: frontend-check-01
+```json
+{
+  "email": "owner@example.com",
+  "password": "user-supplied-password"
+}
 ```
 
-### Response — 200 OK
+`email` é normalizado com trim e lowercase. Propriedades extras são rejeitadas.
 
-Retornado quando a conexão com PostgreSQL está operacional.
+### Response — 200
+
+```json
+{
+  "success": true,
+  "data": {
+    "accessToken": "<jwt>",
+    "refreshToken": "<jwt>",
+    "expiresIn": 900
+  }
+}
+```
+
+`expiresIn` informa a validade do access token em segundos.
+
+### Errors
+
+| HTTP | Code                       | Condition                        |
+| ---- | -------------------------- | -------------------------------- |
+| 400  | `VALIDATION_ERROR`         | Email/body inválido              |
+| 401  | `AUTH_INVALID_CREDENTIALS` | Email ou senha incorretos        |
+| 401  | `AUTH_USER_INACTIVE`       | Conta desativada                 |
+| 429  | `RATE_LIMIT_EXCEEDED`      | Mais de 10 tentativas por minuto |
+| 500  | `INTERNAL_SERVER_ERROR`    | Falha interna não exposta        |
+
+Credencial inválida:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "AUTH_INVALID_CREDENTIALS",
+    "message": "Invalid email or password",
+    "details": {}
+  }
+}
+```
+
+## POST `/api/v1/auth/refresh`
+
+Rotaciona o refresh token e a sessão associada.
+
+### Request
+
+```json
+{
+  "refreshToken": "<current-refresh-jwt>"
+}
+```
+
+### Response — 200
+
+```json
+{
+  "success": true,
+  "data": {
+    "accessToken": "<new-access-jwt>",
+    "refreshToken": "<new-refresh-jwt>",
+    "expiresIn": 900
+  }
+}
+```
+
+O cliente deve substituir os dois tokens de forma atômica e nunca reutilizar o refresh anterior.
+
+### Errors
+
+| HTTP | Code                    | Condition                                      |
+| ---- | ----------------------- | ---------------------------------------------- |
+| 400  | `VALIDATION_ERROR`      | Body ausente ou token fora do formato JWT      |
+| 401  | `AUTH_INVALID_TOKEN`    | Token inválido, expirado ou desconhecido       |
+| 401  | `AUTH_SESSION_REVOKED`  | Token já rotacionado/revogado; possível replay |
+| 429  | `RATE_LIMIT_EXCEEDED`   | Mais de 20 requisições por minuto              |
+| 500  | `INTERNAL_SERVER_ERROR` | Falha interna                                  |
+
+Replay/revogação:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "AUTH_SESSION_REVOKED",
+    "message": "Refresh token has already been used or revoked",
+    "details": {}
+  }
+}
+```
+
+## POST `/api/v1/auth/logout`
+
+Revoga a sessão identificada pelo refresh token. Não requer access token.
+
+### Request
+
+```json
+{
+  "refreshToken": "<current-refresh-jwt>"
+}
+```
+
+### Response — 200
+
+```json
+{
+  "success": true,
+  "data": {
+    "revoked": true
+  }
+}
+```
+
+Repetir logout com o mesmo token criptograficamente válido é idempotente.
+
+### Errors
+
+| HTTP | Code                    | Condition                                |
+| ---- | ----------------------- | ---------------------------------------- |
+| 400  | `VALIDATION_ERROR`      | Body/token malformado                    |
+| 401  | `AUTH_INVALID_TOKEN`    | Token inválido, expirado ou desconhecido |
+| 429  | `RATE_LIMIT_EXCEEDED`   | Mais de 20 requisições por minuto        |
+| 500  | `INTERNAL_SERVER_ERROR` | Falha interna                            |
+
+## GET `/api/v1/auth/me`
+
+Retorna o usuário da sessão atual. Password hash e token hash nunca são retornados.
+
+### Request
+
+```http
+Authorization: Bearer <accessToken>
+```
+
+### Response — 200
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "f33e0c47-1cb8-4bc9-b4c7-97356ff8749e",
+    "email": "owner@example.com",
+    "username": "ninja",
+    "name": "Darlan Simplicio",
+    "role": "OWNER",
+    "isActive": true
+  }
+}
+```
+
+`role` é um de `OWNER`, `MANAGER`, `OPERATOR`, `VIEWER`.
+
+### Errors
+
+| HTTP | Code                   | Condition                              |
+| ---- | ---------------------- | -------------------------------------- |
+| 401  | `UNAUTHORIZED`         | Bearer token ausente/malformado        |
+| 401  | `AUTH_INVALID_TOKEN`   | Access token inválido ou expirado      |
+| 401  | `AUTH_SESSION_REVOKED` | Sessão rotacionada, revogada ou expira |
+| 401  | `AUTH_USER_INACTIVE`   | Usuário desativado                     |
+| 403  | `FORBIDDEN`            | Papel não autorizado pela rota         |
+| 429  | `RATE_LIMIT_EXCEEDED`  | Limite global excedido                 |
+
+Sem bearer:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "UNAUTHORIZED",
+    "message": "Bearer access token is required",
+    "details": {}
+  }
+}
+```
+
+## GET `/api/v1/health`
+
+Contrato da Sprint 0 preservado.
+
+### Response — 200
 
 ```json
 {
@@ -69,18 +249,7 @@ Retornado quando a conexão com PostgreSQL está operacional.
 }
 ```
 
-| Field                      | Type    | Contract                                  |
-| -------------------------- | ------- | ----------------------------------------- |
-| `success`                  | boolean | Sempre `true` para a resposta do endpoint |
-| `data.status`              | string  | `ok` ou `degraded`                        |
-| `data.uptime`              | number  | Segundos desde o startup do processo      |
-| `data.timestamp`           | string  | Data/hora UTC ISO 8601                    |
-| `data.database_connection` | string  | `connected` ou `disconnected`             |
-
-### Response — 503 Service Unavailable
-
-Retornado quando o processo responde, mas a consulta ao PostgreSQL falha. O payload de health é
-preservado para observabilidade:
+### Response — 503
 
 ```json
 {
@@ -94,68 +263,24 @@ preservado para observabilidade:
 }
 ```
 
-O HTTP 503, e não o valor de `success`, determina que a instância não está pronta para receber
-tráfego.
-
-### Response headers
-
-Exemplo:
-
-```http
-X-Request-Id: frontend-check-01
-X-RateLimit-Limit: 100
-X-RateLimit-Remaining: 99
-X-RateLimit-Reset: 60
-Content-Type: application/json; charset=utf-8
-```
-
-## Global errors
-
-### 404 Not Found
+## Validation errors
 
 ```json
 {
   "success": false,
   "error": {
-    "code": "NOT_FOUND",
-    "message": "Cannot GET /api/v1/unknown",
-    "details": {}
-  }
-}
-```
-
-### 429 Too Many Requests
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "RATE_LIMIT_EXCEEDED",
-    "message": "ThrottlerException: Too Many Requests",
-    "details": {}
-  }
-}
-```
-
-### 500 Internal Server Error
-
-Detalhes internos e stack trace nunca são enviados ao cliente.
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "INTERNAL_SERVER_ERROR",
-    "message": "An unexpected error occurred",
-    "details": {}
+    "code": "VALIDATION_ERROR",
+    "message": "Request validation failed",
+    "details": {
+      "violations": ["email must be an email"]
+    }
   }
 }
 ```
 
 ## Compatibility policy
 
-- Mudanças compatíveis podem adicionar campos opcionais.
-- Remoção, renomeação, mudança de tipo ou semântica exige nova versão da API.
-- O frontend deve ignorar campos desconhecidos.
-- Todos os endpoints futuros devem permanecer sob `/api/v1` até uma mudança incompatível
-  deliberada.
+- Contratos da Sprint 0 foram preservados.
+- Campos opcionais podem ser adicionados de forma compatível.
+- Remoções, renomes ou mudanças semânticas exigem nova versão.
+- Clientes devem ignorar campos desconhecidos.

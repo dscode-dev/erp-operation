@@ -18,6 +18,34 @@ export class AppConfigService {
     return this.configService.get('CORS_ORIGINS', { infer: true });
   }
 
+  get jwtSecret(): string {
+    return this.configService.get('JWT_SECRET', { infer: true });
+  }
+
+  get jwtRefreshSecret(): string {
+    return this.configService.get('JWT_REFRESH_SECRET', { infer: true });
+  }
+
+  get jwtAccessExpiresInSeconds(): number {
+    return this.configService.get('JWT_ACCESS_EXPIRES_IN_SECONDS', {
+      infer: true,
+    });
+  }
+
+  get jwtRefreshExpiresInSeconds(): number {
+    return this.configService.get('JWT_REFRESH_EXPIRES_IN_SECONDS', {
+      infer: true,
+    });
+  }
+
+  get jwtIssuer(): string {
+    return this.configService.get('JWT_ISSUER', { infer: true });
+  }
+
+  get jwtAudience(): string {
+    return this.configService.get('JWT_AUDIENCE', { infer: true });
+  }
+
   get rateLimitTtlMs(): number {
     return this.configService.get('RATE_LIMIT_TTL_MS', { infer: true });
   }

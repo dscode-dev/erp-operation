@@ -7,6 +7,9 @@ import { AppConfigModule } from './modules/config/app-config.module';
 import { AppConfigService } from './modules/config/app-config.service';
 import { DatabaseModule } from './modules/database/database.module';
 import { HealthModule } from './modules/health/health.module';
+import { AuthModule } from './modules/auth/auth.module';
+import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
+import { RoleGuard } from './modules/auth/guards/role.guard';
 import { GlobalExceptionFilter } from './shared/filters/global-exception.filter';
 import { RequestLoggingInterceptor } from './shared/interceptors/request-logging.interceptor';
 import { ResponseEnvelopeInterceptor } from './shared/interceptors/response-envelope.interceptor';
@@ -26,12 +29,21 @@ import { ResponseEnvelopeInterceptor } from './shared/interceptors/response-enve
     }),
     LoggerModule,
     DatabaseModule,
+    AuthModule,
     HealthModule,
   ],
   providers: [
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: JwtAuthGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: RoleGuard,
     },
     {
       provide: APP_INTERCEPTOR,

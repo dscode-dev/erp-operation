@@ -2,175 +2,223 @@
 
 ## Security posture
 
-A instalação é isolada por cliente: aplicação, PostgreSQL, storage e configuração próprios. Não há
-banco multi-tenant compartilhado. A Sprint 0 estabelece controles transversais; autenticação e RBAC
-serão implementados somente em sprint autorizada.
+Cada cliente opera instalação, banco, storage e configuração isolados. Não existe multi-tenancy
+compartilhada. A autenticação e autorização seguem deny-by-default.
 
-## Environment validation
+## Official roles V1
 
-A aplicação usa validação fail-fast antes de abrir a porta HTTP.
+Somente estes papéis existem:
 
-- Variáveis obrigatórias vazias interrompem o startup.
-- `APP_PORT` aceita somente inteiro entre 1 e 65535.
-- `CORS_ORIGINS` exige origens HTTP/HTTPS exatas e rejeita `*`.
-- Segredos JWT devem ser diferentes e ter no mínimo 32 caracteres.
-- `STORAGE_PROVIDER` aceita apenas `local` ou `s3`.
-- Rate limit aceita somente inteiros positivos.
+- `OWNER`
+- `MANAGER`
+- `OPERATOR`
+- `VIEWER`
 
-Segredos reais ficam no `.env` local ou no mecanismo de secrets do ambiente e nunca devem ser
-commitados. O `.env.example` contém apenas placeholders.
+## Official permission matrix V1
 
-## Helmet
+| Módulo       | OWNER | MANAGER | OPERATOR | VIEWER  |
+| ------------ | ----- | ------- | -------- | ------- |
+| Financeiro   | Sim   | Não     | Não      | Não     |
+| Usuários     | Sim   | Não     | Não      | Não     |
+| Clientes     | Sim   | Sim     | Leitura  | Leitura |
+| Equipamentos | Sim   | Sim     | Sim      | Leitura |
+| OS           | Sim   | Sim     | Sim      | Leitura |
+| Relatórios   | Sim   | Sim     | Leitura  | Leitura |
 
-Helmet é aplicado globalmente antes das rotas. Ele define headers defensivos, incluindo:
+Essa matriz é normativa para módulos futuros. Nesta sprint, esses módulos não foram implementados.
+Operadores não podem acessar financeiro nem configurações administrativas.
 
-- Content Security Policy;
-- HSTS;
-- `X-Content-Type-Options`;
-- `X-Frame-Options`;
-- Referrer Policy;
-- Cross-Origin policies.
+## Password hashing
 
-Esses headers protegem a superfície HTTP, mas não substituem TLS. Produção deve publicar a API
-somente atrás de HTTPS.
+Senhas usam Argon2id:
 
-## CORS
+- memória: 19.456 KiB;
+- iterações: 3;
+- paralelismo: 1;
+- hash: 32 bytes.
 
-CORS é configurado pela variável `CORS_ORIGINS`, uma lista separada por vírgulas.
+Os parâmetros são centralizados e usados também para hashes de refresh token e seed. Não existe
+bcrypt no projeto.
 
-Exemplo:
+Login com email inexistente executa verificação contra um hash dummy gerado no startup, reduzindo
+diferença temporal que poderia facilitar enumeração.
 
-```text
-CORS_ORIGINS=https://erp.example.com,https://pwa.example.com
-```
+## JWT
 
-Decisões:
+Dois segredos independentes:
 
-- wildcard é proibido;
-- apenas origem exata é aceita;
-- credenciais cross-origin estão desabilitadas nesta sprint;
-- métodos permitidos: `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`;
-- headers aceitos: `Authorization`, `Content-Type`, `X-Request-Id`;
-- `X-Request-Id` é exposto ao cliente;
-- preflight pode ser cacheado por 600 segundos.
+- `JWT_SECRET`;
+- `JWT_REFRESH_SECRET`.
 
-Quando refresh tokens forem implementados, a estratégia de transporte será revisada antes de
-habilitar qualquer cookie ou `credentials: true`.
+Ambos exigem ao menos 32 caracteres e não podem ser iguais.
+
+Validades configuráveis:
+
+- access: `JWT_ACCESS_EXPIRES_IN_SECONDS`, padrão operacional 900 segundos;
+- refresh: `JWT_REFRESH_EXPIRES_IN_SECONDS`, padrão operacional 2.592.000 segundos.
+
+Verificações obrigatórias:
+
+- algoritmo HS256;
+- issuer;
+- audience;
+- expiração;
+- tipo `access` ou `refresh`;
+- subject;
+- JWT ID.
+
+Access token inclui `sid`, que referencia a sessão persistida. O papel no JWT não concede acesso por
+si só: guards carregam novamente usuário e papel do PostgreSQL.
+
+## Sessions and refresh rotation
+
+Refresh tokens são JWTs entregues ao cliente, porém somente hashes Argon2id são persistidos.
+
+Fluxo de rotação:
+
+1. Verificar assinatura e claims.
+2. Localizar `jti` no banco.
+3. Verificar expiração, revogação, usuário ativo e hash Argon2id.
+4. Revogar o token atual e criar o sucessor na mesma transação.
+5. Emitir novo access token ligado ao novo `sid`.
+6. Auditar `TOKEN_REFRESH`.
+
+O token anterior deixa de funcionar imediatamente. Access tokens vinculados à sessão anterior
+também são recusados.
+
+Se um refresh já revogado for reutilizado, o sistema assume possível comprometimento e revoga todas
+as sessões ativas daquele usuário.
+
+Logout valida o refresh token e preenche `revokedAt`. É idempotente para o mesmo token válido.
+
+## Global guards
+
+Ordem global:
+
+1. `ThrottlerGuard`;
+2. `JwtAuthGuard`;
+3. `RoleGuard`.
+
+`JwtAuthGuard` protege todas as rotas, salvo `@Public()`. Rotas públicas atuais:
+
+- health;
+- login;
+- refresh;
+- logout.
+
+`RoleGuard` lê `@Roles(...)` e compara com o papel atualizado vindo do banco. Ausência de permissão
+retorna HTTP 403.
+
+`GET /auth/me` declara os quatro papéis oficiais, exercitando a cadeia completa de guards.
+
+## Input validation
+
+O `ValidationPipe` global:
+
+- remove implicitamente a possibilidade de campos extras ao rejeitá-los;
+- transforma valores declarados;
+- valida email;
+- limita comprimento de email, senha e token;
+- rejeita refresh fora do formato JWT.
+
+Emails de login recebem trim e lowercase. Senhas nunca são transformadas ou logadas.
 
 ## Rate limiting
 
-`ThrottlerGuard` é global e deny-by-default para todos os endpoints.
+- global: 100 requisições por 60 segundos;
+- login: 10 por 60 segundos;
+- refresh: 20 por 60 segundos;
+- logout: 20 por 60 segundos.
 
-Defaults:
+Trusted proxy deve ser configurado explicitamente antes de produção atrás de proxy reverso.
 
-- janela: 60.000 ms;
-- limite: 100 requisições.
+## Audit
 
-Configuração:
+Eventos persistidos:
 
-- `RATE_LIMIT_TTL_MS`;
-- `RATE_LIMIT_MAX`.
+- `LOGIN_SUCCESS`;
+- `LOGIN_FAILURE`;
+- `LOGOUT`;
+- `TOKEN_REFRESH`.
 
-Ao exceder o limite, a API responde HTTP 429 no envelope global com
-`code=RATE_LIMIT_EXCEEDED`.
+Cada evento contém:
 
-Antes de operar atrás de proxy reverso, a lista de proxies confiáveis deve ser configurada
-explicitamente. Não se deve confiar indiscriminadamente em `X-Forwarded-For`, pois isso permitiria
-bypass do limite por falsificação de IP.
+- `actor`: UUID quando o usuário é conhecido;
+- `action`;
+- `resource=AUTH_SESSION`;
+- timestamp;
+- metadata com request ID, IP, user agent e identificadores de sessão quando aplicável.
 
-## Request IDs
+Falha de login registra email normalizado e motivo interno controlado. Nenhum audit log contém
+senha, access token, refresh token ou hash.
 
-O middleware global:
+## Initial OWNER seed
 
-1. lê `X-Request-Id`;
-2. aceita somente 1 a 128 caracteres alfanuméricos, ponto, underscore ou hífen;
-3. gera UUID criptograficamente seguro quando ausente ou inválido;
-4. adiciona o valor à requisição, resposta e logs.
+Configurar:
 
-Request IDs servem para correlação e nunca são usados como autenticação, autorização ou chave de
-idempotência.
-
-## Structured logging
-
-Logs são JSON de uma linha, direcionados para stdout/stderr e adequados à coleta por container.
-
-Eventos mínimos:
-
-- startup;
-- shutdown;
-- requisições HTTP;
-- exceções.
-
-Logs de request incluem request ID, método, path, status, duração, user agent e IP. Exceções são
-registradas com stack no servidor. A resposta HTTP 500 nunca expõe stack ou detalhes internos.
-
-Regras para sprints futuras:
-
-- não registrar senhas, tokens, cookies, authorization headers ou secrets;
-- mascarar dados pessoais e financeiros;
-- não incluir bodies completos por padrão;
-- eventos sensíveis persistentes devem usar `AuditLog`, não apenas log operacional.
-
-## Global error handling
-
-Todas as exceções HTTP são convertidas para um formato único. Erros inesperados retornam mensagem
-genérica:
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "INTERNAL_SERVER_ERROR",
-    "message": "An unexpected error occurred",
-    "details": {}
-  }
-}
+```text
+OWNER_EMAIL=owner@example.com
 ```
 
-Stack traces permanecem somente nos logs estruturados.
+Após subir a stack:
 
-## Database and containers
+```bash
+docker compose exec api npm run prisma:seed
+```
 
-- PostgreSQL não publica porta no host pelo Compose.
-- Serviços comunicam-se por rede Docker dedicada.
-- API aguarda o healthcheck do PostgreSQL.
-- Migrations são aplicadas antes do startup.
-- Container da API executa como usuário não-root.
-- `dumb-init` trata sinais e permite shutdown gracioso.
-- Volume PostgreSQL persiste dados fora do ciclo de vida do container.
+Primeira execução:
 
-Produção deve substituir todas as credenciais de exemplo, restringir acesso ao host e adotar backup
-criptografado e testado. Backup/restore operacional está fora do escopo desta sprint.
+- cria `ninja`;
+- nome `Darlan Simplicio`;
+- papel `OWNER`;
+- gera senha com 24 bytes aleatórios (`base64url`);
+- imprime a senha somente nessa execução;
+- persiste apenas Argon2id.
+
+Armazene imediatamente a senha em gerenciador de segredos e remova-a do histórico/terminal
+compartilhado. Reexecutar o seed não redefine senha e não a reexibe. Não existe recuperação de senha
+nesta sprint.
+
+## Existing platform controls
+
+Permanecem ativos:
+
+- Helmet;
+- CORS por allowlist exata;
+- request IDs validados;
+- filtro global sem exposição de stack;
+- logs JSON sem body/header de autorização;
+- PostgreSQL não exposto pelo Compose;
+- container API não-root;
+- migrations antes do startup;
+- shutdown gracioso.
 
 ## Dependency security
 
-- Lockfile versionado para builds reproduzíveis.
-- `npm audit --omit=dev` validado com zero vulnerabilidades em 19 de junho de 2026.
-- `multer` está fixado em `2.2.0` via `overrides` devido a vulnerabilidades conhecidas na versão
-  transitiva anteriormente resolvida pelo adapter Express.
-- Atualizações devem passar por build, lint, audit e validação integrada antes de merge.
+Em 19 de junho de 2026:
 
-## Future authentication and authorization strategy
+- `npm audit`: zero vulnerabilidades;
+- `multer` fixado em `2.2.0`;
+- `js-yaml` fixado em `4.2.0`.
 
-Ainda não implementada. A direção obrigatória para a sprint de autenticação é:
+Overrides tratam dependências transitivas dos adapters e ferramentas de teste.
 
-- access token JWT de curta duração;
-- refresh token opaco ou JWT com rotação a cada uso;
-- armazenar somente hash do refresh token no banco;
-- detectar reutilização e revogar a família de tokens;
-- segredos separados para access e refresh;
-- claims mínimas, com identificador de usuário, papel e identificador único do token;
-- validação estrita de algoritmo, issuer, audience, expiração e clock tolerance;
-- logout com revogação server-side;
-- RBAC deny-by-default aplicado por guards;
-- decorators apenas para declarar permissões, sem confiar em papel enviado pelo cliente;
-- auditoria de login, falhas, refresh, logout e ações administrativas;
-- rate limit mais restritivo em login e refresh.
+## Frontend security requirements
 
-Separação mínima prevista:
+- Nunca usar papel da UI como controle de segurança.
+- Nunca registrar tokens.
+- Implementar refresh single-flight.
+- Limpar tokens em `AUTH_SESSION_REVOKED`, `AUTH_USER_INACTIVE` ou falha de refresh.
+- Evitar armazenamento persistente inseguro; em PWA nativa, usar storage seguro.
+- Não enviar tokens em query string.
 
-- operadores: sem acesso a dados financeiros e configurações administrativas;
-- perfis administrativos/financeiros: acesso apenas conforme permissão explícita;
-- nenhuma rota sensível será protegida apenas por ocultação no frontend.
+## Out of scope
 
-O modelo de usuário, papéis, permissões e tokens só será criado quando entrar formalmente no escopo.
+- CRUD de usuários;
+- reset de senha;
+- e-mail;
+- MFA;
+- SSO;
+- módulos de negócio;
+- cookies HttpOnly/BFF;
+- limpeza agendada de sessões expiradas.
