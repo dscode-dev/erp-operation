@@ -2,7 +2,7 @@
 
 ## Current milestone
 
-**Sprint 4 — Customer Domain Foundation**  
+**Sprint 5 — Equipment Domain Foundation**  
 Status: concluída em 24 de junho de 2026.
 
 As Sprints 0, 1, 2 e 3 foram preservadas. Nenhuma entidade, migration ou regra operacional foi
@@ -10,6 +10,9 @@ adicionada.
 
 Sprint 4 introduz o primeiro domínio operacional de produção: Customer. Organization continua
 representando a empresa dona da instalação; Customer representa o cliente atendido por ela.
+
+Sprint 5 introduz Equipment como domínio real ligado obrigatoriamente a Customer e opcionalmente a
+CustomerAddress e equipamento pai.
 
 ## Architecture
 
@@ -31,6 +34,7 @@ src/modules/
 ├── config/
 ├── customers/
 ├── database/
+├── equipments/
 ├── health/
 ├── internal-demo/
 ├── organization/
@@ -46,6 +50,7 @@ Migrations:
 3. `20260623140000_organization_foundation`
 4. `20260624110000_user_team_foundation`
 5. `20260624160000_customer_domain_foundation`
+6. `20260624190000_equipment_domain_foundation`
 
 Sprint 3.5 não criou migrations e não alterou `schema.prisma`.
 
@@ -85,6 +90,43 @@ attachments.
 
 Validação em PostgreSQL 17 confirmou migration, CRUD, busca, paginação, stats, soft delete, RBAC,
 anexos, idempotência do seed e os 13 eventos de auditoria.
+
+### Equipment Domain
+
+Entidades:
+
+- `Equipment`;
+- `EquipmentAttachment`;
+- `EquipmentMetric`;
+- enums `EquipmentType`, `EquipmentStatus`, `EquipmentAttachmentCategory`.
+
+Equipment pertence a Customer, pode apontar para CustomerAddress do mesmo cliente e pode possuir um
+parent simples do mesmo cliente. Relações cruzadas e ciclo direto são rejeitados.
+
+`qrToken` é UUID único e `qrCode` usa `equipment:<qrToken>`. Não há geração de imagem.
+
+Busca: name, tag, serialNumber, model e manufacturer. Filtros: customerId, addressId, status e type.
+Stats retornam totais por status e por tipo.
+
+RBAC:
+
+- OWNER total;
+- MANAGER CRUD/status, anexos e métricas;
+- OPERATOR leitura e criação de métricas;
+- VIEWER leitura.
+
+Demo real:
+
+- Split Samsung 24.000 BTU;
+- Condensadora LG VRF;
+- Chiller Trane 120 TR;
+- Inversor Fronius 8kW;
+- Evaporadora LG VRF filha da condensadora.
+
+Cada equipamento demo possui endereço real, métrica e manual PDF. `demo.equipment.v1` foi removido.
+
+Validação: 6 migrations do zero, 5 equipamentos demo, hierarquia, filtros combinados, QR,
+integridade customer/address/parent, métricas, anexos, soft delete, RBAC e nove eventos auditados.
 
 ### Stage 0
 
@@ -295,7 +337,6 @@ Snapshots temporários em `SystemSetting`:
 - dashboard;
 - agenda;
 - financeiro;
-- equipamentos;
 - manifesto interno.
 
 Esses snapshots não representam modelagem final dos módulos.

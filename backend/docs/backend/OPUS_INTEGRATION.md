@@ -153,16 +153,6 @@ type DemoDataset = {
       amount: number;
     }>;
   };
-  'demo.equipment.v1': {
-    generatedAt: string;
-    items: Array<{
-      id: string;
-      name: string;
-      manufacturer: string;
-      customerId: string;
-      state: string;
-    }>;
-  };
 };
 ```
 
@@ -189,7 +179,8 @@ Amounts are BRL decimal values, not cents. Dates are ISO 8601.
 - team list/detail/preferences mocks;
 - avatar mocks;
 - customer list/detail/form mocks: use the production `/customers` API;
-- local dashboard/schedule/finance/equipment fixtures when the demo bridge is enabled.
+- equipment list/detail/cards/metrics mocks: use production `/equipments`;
+- local dashboard/schedule/finance fixtures when the demo bridge is enabled.
 
 Do not ship calls to `/internal/demo/*` in a production build. Keep the bridge behind frontend
 development configuration.
@@ -197,14 +188,13 @@ development configuration.
 ## Mocks that must return later
 
 When demo endpoints are disabled and before remaining operational modules exist, dashboard,
-schedule, finance and equipment have no production API. The frontend should render honest empty/coming-soon
+schedule and finance have no production API. The frontend should render honest empty/coming-soon
 states rather than treating demo snapshots as permanent contracts.
 
 ## Next expected production endpoints
 
-Customer Domain is now available. Future contracts:
+Customer and Equipment domains are now available. Future contracts:
 
-- equipment CRUD linked to customer;
 - service/work-order lifecycle;
 - schedule endpoints;
 - dashboard aggregations;
@@ -278,3 +268,53 @@ JPEG. Read `/customers/attachments/:attachmentId`, then build a data URL from MI
 
 The demo seed creates Hospital Santa Clara, Condomínio Atlântico Sul, Shopping Recife and Colégio
 Boa Viagem in real Customer tables. Consume `/customers`; no customer demo snapshot remains.
+
+## Equipment screens
+
+### List and cards
+
+Use `GET /equipments` with server pagination, debounced search and optional customer/address/status/type
+filters. Cards should show name, type, status, customer, address, tag, manufacturer/model and child/
+attachment/metric counts.
+
+Permissions: OWNER/MANAGER show create/edit/status controls; OPERATOR/VIEWER are read-only.
+
+### Form
+
+Required: customerId, type, name. Optional: addressId, parentEquipmentId, status, tag, manufacturer,
+model, serialNumber, capacity, voltage, installation/warranty dates and observations.
+
+After customer selection, load Customer detail and restrict address options to its addresses.
+Parent options must come from Equipment list filtered by the same customer and must exclude the
+current equipment.
+
+### Hierarchy
+
+Only direct parent and direct children exist. Do not build drag-and-drop trees or arbitrary depth
+editing. Detail response contains `parent` and `children`.
+
+### Status and stats
+
+Statuses: ACTIVE, MAINTENANCE, INACTIVE, RETIRED. Use `/equipments/stats` for cards and `byType`.
+Disable/soft delete keeps records visible; enable returns status to ACTIVE.
+
+### Metrics
+
+POST `{ key, value, unit, recordedAt? }` to `/equipments/:id/metrics`. OPERATOR is allowed to create.
+GET returns newest first. OWNER/MANAGER may delete. Suggested UX: compact latest readings in detail
+and a chronological chart/table.
+
+### Attachments
+
+Categories: PHOTO, MANUAL, WARRANTY, DOCUMENT. Upload multipart; read base64; OWNER/MANAGER delete.
+
+### QR foundation
+
+Display or generate a visual QR from `qrCode`. Store no QR image. `qrToken` and `qrCode` are stable
+identifiers, not access credentials. A scan-resolution endpoint is future scope.
+
+### Demo
+
+Real `/equipments` returns Samsung split, LG VRF condenser/evaporator, Trane chiller and Fronius
+inverter linked to demo customers and addresses. Each includes a metric and manual. Remove the
+equipment demo snapshot/mock.

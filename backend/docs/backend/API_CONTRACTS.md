@@ -897,10 +897,6 @@ Response 200:
         "projecao30Dias": 62400
       },
       "entries": []
-    },
-    "demo.equipment.v1": {
-      "generatedAt": "2026-06-24T12:00:00.000Z",
-      "items": []
     }
   }
 }
@@ -922,12 +918,7 @@ Response 200:
     "organization": "preserved",
     "usersCreated": ["ricardo", "joao", "maria", "financeiro"],
     "usersPreserved": ["ninja"],
-    "snapshotKeys": [
-      "demo.dashboard.v1",
-      "demo.schedule.v1",
-      "demo.finance.v1",
-      "demo.equipment.v1"
-    ]
+    "snapshotKeys": ["demo.dashboard.v1", "demo.schedule.v1", "demo.finance.v1"]
   }
 }
 ```
@@ -1081,3 +1072,104 @@ Errors:
 | 400  | `UPLOAD_INVALID_EXTENSION` | Extensão inválida         |
 | 400  | `UPLOAD_INVALID_MIME_TYPE` | MIME/conteúdo inválido    |
 | 413  | `UPLOAD_FILE_TOO_LARGE`    | Multipart maior que 5 MiB |
+
+## Equipments
+
+Enums:
+
+- type: `SPLIT`, `CHILLER`, `CONDENSER`, `EVAPORATOR`, `AIR_HANDLER`, `SOLAR_INVERTER`,
+  `ELECTRICAL_PANEL`, `GENERATOR`, `OTHER`;
+- status: `ACTIVE`, `MAINTENANCE`, `INACTIVE`, `RETIRED`;
+- attachment category: `PHOTO`, `MANUAL`, `WARRANTY`, `DOCUMENT`.
+
+### GET `/api/v1/equipments`
+
+Query: `page`, `limit`, `search`, `customerId`, `addressId`, `status`, `type`. Search is partial over
+name, tag, serialNumber, model and manufacturer.
+
+Response data: `{ items, pagination }`. Each item includes summarized customer/address and `_count`
+for children, attachments and metrics.
+
+### GET `/api/v1/equipments/stats`
+
+```json
+{
+  "total": 5,
+  "active": 4,
+  "maintenance": 1,
+  "inactive": 0,
+  "retired": 0,
+  "byType": {
+    "SPLIT": 1,
+    "CHILLER": 1,
+    "CONDENSER": 1,
+    "EVAPORATOR": 1,
+    "AIR_HANDLER": 0,
+    "SOLAR_INVERTER": 1,
+    "ELECTRICAL_PANEL": 0,
+    "GENERATOR": 0,
+    "OTHER": 0
+  }
+}
+```
+
+### POST `/api/v1/equipments`
+
+OWNER/MANAGER:
+
+```json
+{
+  "customerId": "uuid",
+  "addressId": "uuid",
+  "parentEquipmentId": null,
+  "type": "SPLIT",
+  "status": "ACTIVE",
+  "name": "Split Samsung 24.000 BTU",
+  "tag": "CBV-SPL-001",
+  "manufacturer": "Samsung",
+  "model": "WindFree 24K",
+  "serialNumber": "SN-2026-001",
+  "capacity": "24.000 BTU",
+  "voltage": "220V",
+  "installationDate": "2024-03-15",
+  "warrantyExpiration": "2027-03-15",
+  "observations": "Unidade da sala 12"
+}
+```
+
+Response 201 adds UUID `qrToken`, stable `qrCode`, timestamps and state fields. Address and parent
+must belong to the selected Customer.
+
+### GET/PATCH/DELETE `/api/v1/equipments/:id`
+
+GET all roles; PATCH OWNER/MANAGER; DELETE OWNER and performs soft delete. Detail includes customer,
+address, parent, children, attachment metadata and the 20 latest metrics.
+
+PATCH `/equipments/:id/disable` and `/enable`: OWNER/MANAGER. Disable sets status `INACTIVE`;
+enable sets `ACTIVE`.
+
+### Attachments
+
+POST `/equipments/:id/attachments`: OWNER/MANAGER, multipart `category` + `file`, 5 MiB,
+PDF/PNG/JPG/JPEG.
+
+GET `/equipments/attachments/:attachmentId`: all roles, metadata plus `contentBase64`.
+
+DELETE `/equipments/attachments/:attachmentId`: OWNER/MANAGER.
+
+### Metrics
+
+POST `/equipments/:id/metrics`: OWNER/MANAGER/OPERATOR.
+
+```json
+{ "key": "temperature", "value": 22.4, "unit": "°C", "recordedAt": "2026-06-24T12:00:00Z" }
+```
+
+`recordedAt` is optional and defaults to server time.
+
+GET `/equipments/:id/metrics`: all roles, newest first.
+
+DELETE `/equipments/:id/metrics/:metricId`: OWNER/MANAGER.
+
+Errors: `EQUIPMENT_NOT_FOUND`, `EQUIPMENT_ADDRESS_MISMATCH`, `EQUIPMENT_HIERARCHY_INVALID`,
+`CUSTOMER_NOT_FOUND`, `NOT_FOUND`, validation/upload/common protected errors.

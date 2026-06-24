@@ -15,6 +15,7 @@ import { PasswordChangeRequiredGuard } from './modules/auth/guards/password-chan
 import { UsersModule } from './modules/users/users.module';
 import { InternalDemoModule } from './modules/internal-demo/internal-demo.module';
 import { CustomersModule } from './modules/customers/customers.module';
+import { EquipmentsModule } from './modules/equipments/equipments.module';
 import { GlobalExceptionFilter } from './shared/filters/global-exception.filter';
 import { RequestLoggingInterceptor } from './shared/interceptors/request-logging.interceptor';
 import { ResponseEnvelopeInterceptor } from './shared/interceptors/response-envelope.interceptor';
@@ -39,6 +40,7 @@ import { ResponseEnvelopeInterceptor } from './shared/interceptors/response-enve
     UsersModule,
     InternalDemoModule,
     CustomersModule,
+    EquipmentsModule,
     HealthModule,
   ],
   providers: [

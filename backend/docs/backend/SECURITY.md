@@ -84,6 +84,26 @@ Eventos auditados: `CUSTOMER_CREATED`, `CUSTOMER_UPDATED`, `CUSTOMER_DISABLED`,
 `CUSTOMER_ENABLED`, `CUSTOMER_DELETED`, os eventos CREATE/UPDATE/DELETE de address/contact e
 UPLOAD/DELETE de attachment.
 
+## Equipment permissions
+
+| Ação                                     | OWNER | MANAGER | OPERATOR | VIEWER  |
+| ---------------------------------------- | ----- | ------- | -------- | ------- |
+| Lista, stats, detalhe, anexos e métricas | Sim   | Sim     | Leitura  | Leitura |
+| Criar/editar/enable/disable              | Sim   | Sim     | Não      | Não     |
+| Criar métrica                            | Sim   | Sim     | Sim      | Não     |
+| Excluir métrica/anexo                    | Sim   | Sim     | Não      | Não     |
+| Soft delete                              | Sim   | Não     | Não      | Não     |
+
+Integridade: endereço e parent precisam pertencer ao Customer do equipamento; self-parent e ciclo
+direto são rejeitados. QR token é UUID aleatório e único; `qrCode` não contém segredo de acesso e
+não concede autorização.
+
+Uploads usam `equipments/<id>/attachments/<uuid>`, 5 MiB e validação de assinatura PDF/PNG/JPEG.
+AuditLog nunca recebe arquivo/base64 ou valor completo de observações.
+
+Eventos: `EQUIPMENT_CREATED`, `EQUIPMENT_UPDATED`, `EQUIPMENT_DISABLED`, `EQUIPMENT_ENABLED`,
+`EQUIPMENT_DELETED`, attachment upload/delete e metric create/delete.
+
 Proteções administrativas:
 
 - OWNER não pode desativar ou excluir a própria conta;
@@ -447,7 +467,6 @@ Em 24 de junho de 2026, a Sprint 3.5 não adicionou dependências.
 - e-mail;
 - MFA;
 - SSO;
-- equipamentos;
 - serviços/produtos;
 - orçamentos;
 - ordens de serviço;

@@ -586,7 +586,7 @@ Real endpoints ready for frontend:
 
 Temporary local bridge:
 
-- `GET /internal/demo/dataset`: dashboard, schedule, finance, customer and equipment snapshots;
+- `GET /internal/demo/dataset`: dashboard, schedule and finance snapshots;
 - `POST /internal/demo/reset`: OWNER-only dataset reset.
 
 Never include the internal demo bridge in production builds. When disabled, it returns
@@ -654,3 +654,56 @@ Important UX states:
 - use `CUSTOMER_CONFLICT` for CPF/CNPJ field feedback;
 - confirm soft delete and attachment deletion;
 - show honest empty states when no customers exist.
+
+## Equipment Domain
+
+Production API is ready. Remove equipment mocks and `demo.equipment.v1`.
+
+```ts
+type EquipmentType =
+  | 'SPLIT'
+  | 'CHILLER'
+  | 'CONDENSER'
+  | 'EVAPORATOR'
+  | 'AIR_HANDLER'
+  | 'SOLAR_INVERTER'
+  | 'ELECTRICAL_PANEL'
+  | 'GENERATOR'
+  | 'OTHER';
+type EquipmentStatus = 'ACTIVE' | 'MAINTENANCE' | 'INACTIVE' | 'RETIRED';
+```
+
+List:
+
+```http
+GET /equipments?page=1&limit=20&search=Samsung&customerId=<uuid>&addressId=<uuid>&status=ACTIVE&type=SPLIT
+```
+
+All filters combine with AND. Search is debounced and partial. Items include customer/address and
+counts for children, metrics and attachments.
+
+Create/update fields are documented in API_CONTRACTS. `customerId`, `type`, `name` are required on
+create. Address and parent selectors must be restricted to the selected customer.
+
+Detail includes:
+
+- customer and address;
+- parent summary and direct children;
+- attachment metadata;
+- latest 20 metrics;
+- `qrToken` and `qrCode`.
+
+QR UX: render a client-side visual QR from `qrCode`; do not interpret it as authentication. Image
+generation and public scan resolution are not implemented.
+
+Metrics: OWNER/MANAGER/OPERATOR may POST key/value/unit; all roles read. Use complete metric history
+endpoint when opening charts.
+
+Attachments: multipart category `PHOTO|MANUAL|WARRANTY|DOCUMENT` plus file. PDF/PNG/JPG/JPEG,
+5 MiB. GET returns base64.
+
+Status cards use `/equipments/stats`; `byType` always contains every official type. Inactive records
+remain visible after soft delete.
+
+Errors to map: `EQUIPMENT_NOT_FOUND`, `CUSTOMER_NOT_FOUND`, `EQUIPMENT_ADDRESS_MISMATCH`,
+`EQUIPMENT_HIERARCHY_INVALID`, validation and upload codes.

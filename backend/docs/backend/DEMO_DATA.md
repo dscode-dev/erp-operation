@@ -7,7 +7,7 @@ demonstrations. The application does not depend on it and operates normally with
 disabled.
 
 It uses existing production entities for organization, users, preferences and customers.
-Dashboard, schedule, finance and equipment snapshots remain under reserved `SystemSetting` keys.
+Dashboard, schedule and finance snapshots remain under reserved `SystemSetting` keys.
 
 No migration or new database entity is required.
 
@@ -77,7 +77,6 @@ Reserved snapshot keys:
 - `demo.dashboard.v1`
 - `demo.schedule.v1`
 - `demo.finance.v1`
-- `demo.equipment.v1`
 - `demo.manifest.v1` — internal ownership manifest, never returned by the dataset endpoint
 
 ## Read from frontend
@@ -88,12 +87,16 @@ When internal demo endpoints are enabled, authenticated OWNER:
 GET /api/v1/internal/demo/dataset
 ```
 
-The result contains four remaining integration snapshots. This is a temporary demo contract, not the final
+The result contains three remaining integration snapshots. This is a temporary demo contract, not the final
 operational domain API.
 
 Customers are no longer part of this internal snapshot. Consume the production `/api/v1/customers`
 API. The seed creates four real customers, each with a primary address, primary contact and PDF
 attachment. Reset tracks and removes only demo-owned customers through the manifest.
+
+Equipment is also real. Consume `/api/v1/equipments`. The seed creates five realistic assets linked
+to real customers/addresses, with metrics, manuals and one parent/child relationship. Reset tracks
+demo-owned equipment and storage files. No `demo.equipment.v1` snapshot remains.
 
 ## Reset
 

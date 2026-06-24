@@ -1,6 +1,6 @@
 import { DocumentTemplateType, Prisma, PrismaClient, Role } from '@prisma/client';
 import * as argon2 from 'argon2';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { ARGON2_OPTIONS } from '../../infra/security/argon2.constants';
@@ -33,6 +33,8 @@ interface DemoManifest {
   createdUsernames: string[];
   createdCustomerIds: string[];
   createdAttachmentKeys: string[];
+  createdEquipmentIds: string[];
+  createdEquipmentAttachmentKeys: string[];
   organizationMode: DemoSeedResult['organization'];
   generatedAt: string;
 }
@@ -108,6 +110,7 @@ export async function seedDemoData(
   }
 
   const demoCustomers = await ensureDemoCustomers(prisma);
+  const demoEquipments = await ensureDemoEquipments(prisma);
 
   const snapshots = buildDemoSnapshots(now);
   for (const [key, value] of Object.entries(snapshots)) {
@@ -132,6 +135,15 @@ export async function seedDemoData(
       ...new Set([
         ...(previousManifest?.createdAttachmentKeys ?? []),
         ...demoCustomers.attachmentKeys,
+      ]),
+    ],
+    createdEquipmentIds: [
+      ...new Set([...(previousManifest?.createdEquipmentIds ?? []), ...demoEquipments.createdIds]),
+    ],
+    createdEquipmentAttachmentKeys: [
+      ...new Set([
+        ...(previousManifest?.createdEquipmentAttachmentKeys ?? []),
+        ...demoEquipments.attachmentKeys,
       ]),
     ],
     organizationMode: organization,
@@ -173,6 +185,21 @@ export async function resetDemoData(
   options: Omit<DemoSeedOptions, 'enabled' | 'force'> = {},
 ): Promise<DemoSeedResult> {
   const manifest = await readManifest(prisma);
+  if (manifest?.createdEquipmentAttachmentKeys.length) {
+    await Promise.all(
+      manifest.createdEquipmentAttachmentKeys.map((key) =>
+        rm(resolve(process.env.STORAGE_PATH ?? './storage', key), { force: true }),
+      ),
+    );
+  }
+  if (manifest?.createdEquipmentIds.length) {
+    await prisma.equipment.deleteMany({
+      where: {
+        id: { in: manifest.createdEquipmentIds },
+        observations: { startsWith: DEMO_MARKER },
+      },
+    });
+  }
   if (manifest?.createdAttachmentKeys.length) {
     await Promise.all(
       manifest.createdAttachmentKeys.map((key) =>
@@ -342,6 +369,14 @@ async function readManifest(prisma: PrismaClient): Promise<DemoManifest | null> 
     createdAttachmentKeys: Array.isArray(value.createdAttachmentKeys)
       ? value.createdAttachmentKeys.filter((item): item is string => typeof item === 'string')
       : [],
+    createdEquipmentIds: Array.isArray(value.createdEquipmentIds)
+      ? value.createdEquipmentIds.filter((item): item is string => typeof item === 'string')
+      : [],
+    createdEquipmentAttachmentKeys: Array.isArray(value.createdEquipmentAttachmentKeys)
+      ? value.createdEquipmentAttachmentKeys.filter(
+          (item): item is string => typeof item === 'string',
+        )
+      : [],
     organizationMode:
       value.organizationMode === 'created' || value.organizationMode === 'converted-bootstrap'
         ? value.organizationMode
@@ -452,6 +487,143 @@ async function ensureDemoCustomers(
       },
     });
     createdIds.push(customer.id);
+    attachmentKeys.push(storageKey);
+  }
+  return { createdIds, attachmentKeys };
+}
+
+async function ensureDemoEquipments(
+  prisma: PrismaClient,
+): Promise<{ createdIds: string[]; attachmentKeys: string[] }> {
+  const definitions = [
+    {
+      customer: 'Colégio Boa Viagem',
+      name: 'Split Samsung 24.000 BTU',
+      type: 'SPLIT',
+      manufacturer: 'Samsung',
+      model: 'WindFree 24K',
+      capacity: '24.000 BTU',
+      voltage: '220V',
+      tag: 'CBV-SPL-001',
+      metric: ['temperature', 22.4, '°C'],
+    },
+    {
+      customer: 'Shopping Recife',
+      name: 'Condensadora LG VRF',
+      type: 'CONDENSER',
+      manufacturer: 'LG',
+      model: 'Multi V 5',
+      capacity: '20 HP',
+      voltage: '380V',
+      tag: 'SR-VRF-001',
+      metric: ['pressure', 118.2, 'psi'],
+    },
+    {
+      customer: 'Hospital Santa Clara',
+      name: 'Chiller Trane 120 TR',
+      type: 'CHILLER',
+      manufacturer: 'Trane',
+      model: 'RTWD',
+      capacity: '120 TR',
+      voltage: '380V',
+      tag: 'HSC-CHI-001',
+      metric: ['current', 84.6, 'A'],
+    },
+    {
+      customer: 'Condomínio Atlântico Sul',
+      name: 'Inversor Fronius 8kW',
+      type: 'SOLAR_INVERTER',
+      manufacturer: 'Fronius',
+      model: 'Primo 8.2-1',
+      capacity: '8.2 kW',
+      voltage: '220V',
+      tag: 'CAS-INV-001',
+      metric: ['voltage', 223.8, 'V'],
+    },
+    {
+      customer: 'Shopping Recife',
+      name: 'Evaporadora LG VRF Loja 114',
+      type: 'EVAPORATOR',
+      manufacturer: 'LG',
+      model: 'ARNU24',
+      capacity: '24.000 BTU',
+      voltage: '220V',
+      tag: 'SR-EVA-114',
+      metric: ['temperature', 20.8, '°C'],
+      parentTag: 'SR-VRF-001',
+    },
+  ] as const;
+  const createdIds: string[] = [];
+  const attachmentKeys: string[] = [];
+
+  for (const definition of definitions) {
+    const existing = await prisma.equipment.findFirst({
+      where: { tag: definition.tag },
+      select: { id: true },
+    });
+    if (existing) continue;
+    const customer = await prisma.customer.findFirst({
+      where: { name: definition.customer },
+      select: {
+        id: true,
+        addresses: { where: { isPrimary: true }, take: 1, select: { id: true } },
+      },
+    });
+    if (!customer) continue;
+    const parent =
+      'parentTag' in definition
+        ? await prisma.equipment.findFirst({
+            where: { tag: definition.parentTag },
+            select: { id: true },
+          })
+        : null;
+    const qrToken = randomUUID();
+    const equipment = await prisma.equipment.create({
+      data: {
+        customerId: customer.id,
+        addressId: customer.addresses[0]?.id,
+        parentEquipmentId: parent?.id,
+        type: definition.type,
+        status: definition.tag === 'HSC-CHI-001' ? 'MAINTENANCE' : 'ACTIVE',
+        name: definition.name,
+        tag: definition.tag,
+        manufacturer: definition.manufacturer,
+        model: definition.model,
+        serialNumber: `DEMO-${definition.tag}-2026`,
+        capacity: definition.capacity,
+        voltage: definition.voltage,
+        installationDate: new Date('2024-03-15'),
+        warrantyExpiration: new Date('2027-03-15'),
+        observations: `${DEMO_MARKER} Equipment created for development and demonstration.`,
+        qrToken,
+        qrCode: `equipment:${qrToken}`,
+        metrics: {
+          create: {
+            key: definition.metric[0],
+            value: definition.metric[1],
+            unit: definition.metric[2],
+            recordedAt: new Date(),
+          },
+        },
+      },
+      select: { id: true },
+    });
+    const storageKey = `equipments/${equipment.id}/attachments/demo-manual.pdf`;
+    const file = Buffer.from('%PDF-1.4\n% Demo equipment manual\n%%EOF\n');
+    const path = resolve(process.env.STORAGE_PATH ?? './storage', storageKey);
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, file, { flag: 'wx' });
+    await prisma.equipmentAttachment.create({
+      data: {
+        equipmentId: equipment.id,
+        storageKey,
+        fileName: 'manual-demo.pdf',
+        mimeType: 'application/pdf',
+        fileSize: file.length,
+        category: 'MANUAL',
+      },
+    });
+    createdIds.push(equipment.id);
     attachmentKeys.push(storageKey);
   }
   return { createdIds, attachmentKeys };

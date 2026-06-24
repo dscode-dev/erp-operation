@@ -89,38 +89,5 @@ export function buildDemoSnapshots(now = new Date()): Record<string, unknown> {
         },
       ],
     },
-    'demo.equipment.v1': {
-      generatedAt: now.toISOString(),
-      items: [
-        {
-          id: 'demo-equipment-01',
-          name: 'Split 12.000 BTU',
-          manufacturer: 'Daikin',
-          customerName: 'Colégio Boa Viagem',
-          state: 'OPERATIONAL',
-        },
-        {
-          id: 'demo-equipment-02',
-          name: 'Split 24.000 BTU',
-          manufacturer: 'Springer Midea',
-          customerName: 'Condomínio Atlântico Sul',
-          state: 'MAINTENANCE_DUE',
-        },
-        {
-          id: 'demo-equipment-03',
-          name: 'Condensadora',
-          manufacturer: 'Carrier',
-          customerName: 'Shopping Recife',
-          state: 'OPERATIONAL',
-        },
-        {
-          id: 'demo-equipment-04',
-          name: 'Chiller',
-          manufacturer: 'Trane',
-          customerName: 'Hospital Santa Clara',
-          state: 'IN_SERVICE',
-        },
-      ],
-    },
   };
 }
