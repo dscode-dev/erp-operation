@@ -14,6 +14,26 @@ enum Role {
   VIEWER
 }
 
+enum BrandAssetType {
+  LOGO
+  HEADER
+  FOOTER
+}
+
+enum DocumentTemplateType {
+  QUOTE
+  WORK_ORDER
+  RECEIPT
+  REPORT
+  TECHNICAL_REPORT
+  PMOC
+}
+
+enum CustomerType {
+  PERSON
+  COMPANY
+}
+
 model SystemSetting {
   id        String   @id @default(uuid()) @db.Uuid
   key       String   @unique @db.VarChar(150)
@@ -38,17 +58,26 @@ model AuditLog {
 }
 
 model User {
-  id            String         @id @default(uuid()) @db.Uuid
-  email         String         @unique @db.VarChar(254)
-  username      String         @unique @db.VarChar(50)
-  name          String         @db.VarChar(150)
-  passwordHash  String         @map("password_hash") @db.VarChar(255)
-  role          Role
-  isActive      Boolean        @default(true) @map("is_active")
-  lastLoginAt   DateTime?      @map("last_login_at") @db.Timestamptz(3)
-  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt     DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
-  refreshTokens RefreshToken[]
+  id                 String           @id @default(uuid()) @db.Uuid
+  email              String           @unique @db.VarChar(254)
+  username           String           @unique @db.VarChar(50)
+  name               String           @db.VarChar(150)
+  passwordHash       String           @map("password_hash") @db.VarChar(255)
+  role               Role
+  avatarAssetId      String?          @unique @map("avatar_asset_id") @db.Uuid
+  phone              String?          @db.VarChar(30)
+  jobTitle           String?          @map("job_title") @db.VarChar(100)
+  notes              String?          @db.Text
+  mustChangePassword Boolean          @default(false) @map("must_change_password")
+  isActive           Boolean          @default(true) @map("is_active")
+  disabledAt         DateTime?        @map("disabled_at") @db.Timestamptz(3)
+  lastLoginAt        DateTime?        @map("last_login_at") @db.Timestamptz(3)
+  createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+  refreshTokens      RefreshToken[]
+  preferences        UserPreferences?
+  permission         UserPermission?
+  avatarAsset        UserAvatarAsset? @relation(fields: [avatarAssetId], references: [id], onDelete: SetNull)
 
   @@map("users")
 }
@@ -65,4 +94,191 @@ model RefreshToken {
   @@index([userId, revokedAt])
   @@index([expiresAt])
   @@map("refresh_tokens")
+}
+
+model Organization {
+  id             String                @id @default(uuid()) @db.Uuid
+  legalName      String                @map("legal_name") @db.VarChar(180)
+  tradeName      String                @map("trade_name") @db.VarChar(120)
+  cnpj           String                @db.VarChar(18)
+  email          String                @db.VarChar(254)
+  phone          String                @db.VarChar(30)
+  city           String                @db.VarChar(100)
+  state          String                @db.VarChar(2)
+  primaryColor   String                @map("primary_color") @db.VarChar(7)
+  secondaryColor String                @map("secondary_color") @db.VarChar(7)
+  segment        String?               @db.VarChar(80)
+  isActive       Boolean               @default(true) @map("is_active")
+  createdAt      DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+  settings       OrganizationSettings?
+  assets         BrandAsset[]
+  templates      DocumentTemplate[]
+
+  @@map("organizations")
+}
+
+model OrganizationSettings {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @unique @map("organization_id") @db.Uuid
+  language       String       @db.VarChar(10)
+  timezone       String       @db.VarChar(80)
+  currency       String       @db.VarChar(3)
+  documentPrefix String       @map("document_prefix") @db.VarChar(20)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("organization_settings")
+}
+
+model BrandAsset {
+  id               String         @id @default(uuid()) @db.Uuid
+  organizationId   String         @map("organization_id") @db.Uuid
+  type             BrandAssetType
+  storageKey       String         @map("storage_key") @db.VarChar(255)
+  mimeType         String         @map("mime_type") @db.VarChar(100)
+  originalFileName String         @map("original_file_name") @db.VarChar(255)
+  fileSize         Int            @map("file_size")
+  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  organization     Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, type])
+  @@map("brand_assets")
+}
+
+model DocumentTemplate {
+  id             String               @id @default(uuid()) @db.Uuid
+  organizationId String               @map("organization_id") @db.Uuid
+  type           DocumentTemplateType
+  name           String               @db.VarChar(120)
+  headerContent  String               @map("header_content") @db.Text
+  footerContent  String               @map("footer_content") @db.Text
+  observations   String               @db.Text
+  isDefault      Boolean              @default(false) @map("is_default")
+  isSystem       Boolean              @default(false) @map("is_system")
+  createdAt      DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
+  organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, type])
+  @@index([organizationId, isDefault])
+  @@map("document_templates")
+}
+
+model UserPreferences {
+  id                   String   @id @default(uuid()) @db.Uuid
+  userId               String   @unique @map("user_id") @db.Uuid
+  theme                String   @default("SYSTEM") @db.VarChar(20)
+  notificationsEnabled Boolean  @default(true) @map("notifications_enabled")
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_preferences")
+}
+
+model UserPermission {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @unique @map("user_id") @db.Uuid
+  canFinancial Boolean  @default(false) @map("can_financial")
+  canUsers     Boolean  @default(false) @map("can_users")
+  canReports   Boolean  @default(false) @map("can_reports")
+  canSchedules Boolean  @default(false) @map("can_schedules")
+  canTemplates Boolean  @default(false) @map("can_templates")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_permissions")
+}
+
+model UserAvatarAsset {
+  id               String   @id @default(uuid()) @db.Uuid
+  storageKey       String   @unique @map("storage_key") @db.VarChar(255)
+  mimeType         String   @map("mime_type") @db.VarChar(100)
+  originalFileName String   @map("original_file_name") @db.VarChar(255)
+  fileSize         Int      @map("file_size")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  user             User?
+
+  @@map("user_avatar_assets")
+}
+
+model Customer {
+  id             String               @id @default(uuid()) @db.Uuid
+  type           CustomerType
+  name           String               @db.VarChar(180)
+  tradeName      String?              @map("trade_name") @db.VarChar(180)
+  cpf            String?              @unique @db.VarChar(14)
+  cnpj           String?              @unique @db.VarChar(18)
+  email          String?              @db.VarChar(254)
+  phone          String?              @db.VarChar(30)
+  secondaryPhone String?              @map("secondary_phone") @db.VarChar(30)
+  notes          String?              @db.Text
+  isActive       Boolean              @default(true) @map("is_active")
+  disabledAt     DateTime?            @map("disabled_at") @db.Timestamptz(3)
+  createdAt      DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
+  addresses      CustomerAddress[]
+  contacts       CustomerContact[]
+  attachments    CustomerAttachment[]
+
+  @@index([name])
+  @@index([email])
+  @@index([phone])
+  @@index([isActive, type])
+  @@map("customers")
+}
+
+model CustomerAddress {
+  id         String   @id @default(uuid()) @db.Uuid
+  customerId String   @map("customer_id") @db.Uuid
+  name       String   @db.VarChar(100)
+  zipCode    String   @map("zip_code") @db.VarChar(9)
+  street     String   @db.VarChar(180)
+  number     String   @db.VarChar(20)
+  complement String?  @db.VarChar(120)
+  district   String   @db.VarChar(100)
+  city       String   @db.VarChar(100)
+  state      String   @db.VarChar(2)
+  isPrimary  Boolean  @default(false) @map("is_primary")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId, isPrimary])
+  @@map("customer_addresses")
+}
+
+model CustomerContact {
+  id         String   @id @default(uuid()) @db.Uuid
+  customerId String   @map("customer_id") @db.Uuid
+  name       String   @db.VarChar(150)
+  role       String?  @db.VarChar(100)
+  phone      String?  @db.VarChar(30)
+  email      String?  @db.VarChar(254)
+  notes      String?  @db.Text
+  isPrimary  Boolean  @default(false) @map("is_primary")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId, isPrimary])
+  @@map("customer_contacts")
+}
+
+model CustomerAttachment {
+  id         String   @id @default(uuid()) @db.Uuid
+  customerId String   @map("customer_id") @db.Uuid
+  storageKey String   @unique @map("storage_key") @db.VarChar(255)
+  fileName   String   @map("file_name") @db.VarChar(255)
+  mimeType   String   @map("mime_type") @db.VarChar(100)
+  fileSize   Int      @map("file_size")
+  category   String   @db.VarChar(80)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId, createdAt])
+  @@map("customer_attachments")
 }

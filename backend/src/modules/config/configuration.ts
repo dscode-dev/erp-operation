@@ -1,4 +1,9 @@
-import { STORAGE_PROVIDERS, type StorageProvider } from '../../infra/storage/storage-provider.type';
+import {
+  STORAGE_DRIVERS,
+  STORAGE_PROVIDERS,
+  type StorageDriver,
+  type StorageProvider,
+} from '../../infra/storage/storage-provider.type';
 
 export interface EnvironmentVariables {
   NODE_ENV: 'development' | 'test' | 'production';
@@ -13,9 +18,13 @@ export interface EnvironmentVariables {
   JWT_AUDIENCE: string;
   CORS_ORIGINS: string[];
   STORAGE_PROVIDER: StorageProvider;
+  STORAGE_DRIVER: StorageDriver;
+  STORAGE_PATH: string;
   RATE_LIMIT_TTL_MS: number;
   RATE_LIMIT_MAX: number;
   LOG_LEVEL: 'debug' | 'info' | 'warn' | 'error';
+  ENABLE_DEMO_DATA: boolean;
+  ENABLE_DEMO_ENDPOINTS: boolean;
 }
 
 const REQUIRED_VARIABLES = [
@@ -30,6 +39,8 @@ const REQUIRED_VARIABLES = [
   'APP_PORT',
   'CORS_ORIGINS',
   'STORAGE_PROVIDER',
+  'STORAGE_DRIVER',
+  'STORAGE_PATH',
 ] as const;
 
 function requireString(config: Record<string, unknown>, key: string): string {
@@ -67,6 +78,16 @@ function parsePositiveInteger(value: string, key: string, maximum?: number): num
     );
   }
   return parsed;
+}
+
+function parseBoolean(value: string, key: string): boolean {
+  if (value === 'true') {
+    return true;
+  }
+  if (value === 'false') {
+    return false;
+  }
+  throw new Error(`Environment variable ${key} must be true or false`);
 }
 
 function parseCorsOrigins(rawOrigins: string): string[] {
@@ -116,10 +137,28 @@ export function validateEnvironment(config: Record<string, unknown>): Environmen
   if (!STORAGE_PROVIDERS.includes(storageProvider as StorageProvider)) {
     throw new Error('STORAGE_PROVIDER must be local or s3');
   }
+  const storageDriver = requireString(config, 'STORAGE_DRIVER');
+  if (!STORAGE_DRIVERS.includes(storageDriver as StorageDriver)) {
+    throw new Error('STORAGE_DRIVER must be local');
+  }
+  if (storageProvider !== storageDriver) {
+    throw new Error('STORAGE_PROVIDER and STORAGE_DRIVER must have the same value');
+  }
 
   const logLevel = optionalString(config, 'LOG_LEVEL', 'info');
   if (!['debug', 'info', 'warn', 'error'].includes(logLevel)) {
     throw new Error('LOG_LEVEL must be debug, info, warn, or error');
+  }
+  const enableDemoData = parseBoolean(
+    optionalString(config, 'ENABLE_DEMO_DATA', 'false'),
+    'ENABLE_DEMO_DATA',
+  );
+  const enableDemoEndpoints = parseBoolean(
+    optionalString(config, 'ENABLE_DEMO_ENDPOINTS', 'false'),
+    'ENABLE_DEMO_ENDPOINTS',
+  );
+  if (nodeEnv === 'production' && (enableDemoData || enableDemoEndpoints)) {
+    throw new Error('Demo data and demo endpoints must be disabled in production');
   }
 
   return {
@@ -143,6 +182,8 @@ export function validateEnvironment(config: Record<string, unknown>): Environmen
     JWT_AUDIENCE: requireString(config, 'JWT_AUDIENCE'),
     CORS_ORIGINS: parseCorsOrigins(requireString(config, 'CORS_ORIGINS')),
     STORAGE_PROVIDER: storageProvider as EnvironmentVariables['STORAGE_PROVIDER'],
+    STORAGE_DRIVER: storageDriver as EnvironmentVariables['STORAGE_DRIVER'],
+    STORAGE_PATH: requireString(config, 'STORAGE_PATH'),
     RATE_LIMIT_TTL_MS: parsePositiveInteger(
       optionalString(config, 'RATE_LIMIT_TTL_MS', '60000'),
       'RATE_LIMIT_TTL_MS',
@@ -152,5 +193,7 @@ export function validateEnvironment(config: Record<string, unknown>): Environmen
       'RATE_LIMIT_MAX',
     ),
     LOG_LEVEL: logLevel as EnvironmentVariables['LOG_LEVEL'],
+    ENABLE_DEMO_DATA: enableDemoData,
+    ENABLE_DEMO_ENDPOINTS: enableDemoEndpoints,
   };
 }

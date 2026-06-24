@@ -14,6 +14,7 @@ function contextFor(role: Role): ExecutionContext {
       name: 'User',
       role,
       isActive: true,
+      mustChangePassword: false,
     },
   } as RequestWithId;
 

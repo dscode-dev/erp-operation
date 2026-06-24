@@ -46,6 +46,14 @@ export class AppConfigService {
     return this.configService.get('JWT_AUDIENCE', { infer: true });
   }
 
+  get storageDriver(): EnvironmentVariables['STORAGE_DRIVER'] {
+    return this.configService.get('STORAGE_DRIVER', { infer: true });
+  }
+
+  get storagePath(): string {
+    return this.configService.get('STORAGE_PATH', { infer: true });
+  }
+
   get rateLimitTtlMs(): number {
     return this.configService.get('RATE_LIMIT_TTL_MS', { infer: true });
   }
@@ -56,5 +64,17 @@ export class AppConfigService {
 
   get logLevel(): EnvironmentVariables['LOG_LEVEL'] {
     return this.configService.get('LOG_LEVEL', { infer: true });
+  }
+
+  get nodeEnv(): EnvironmentVariables['NODE_ENV'] {
+    return this.configService.get('NODE_ENV', { infer: true });
+  }
+
+  get enableDemoData(): boolean {
+    return this.configService.get('ENABLE_DEMO_DATA', { infer: true });
+  }
+
+  get enableDemoEndpoints(): boolean {
+    return this.configService.get('ENABLE_DEMO_ENDPOINTS', { infer: true });
   }
 }

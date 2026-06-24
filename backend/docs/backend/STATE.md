@@ -2,56 +2,40 @@
 
 ## Current milestone
 
-**Sprint 1 — Auth, RBAC e Controle de Acesso**
-Status: concluída em 19 de junho de 2026.
+**Sprint 4 — Customer Domain Foundation**  
+Status: concluída em 24 de junho de 2026.
 
-A foundation da Sprint 0 foi preservada. O backend agora possui identidade, sessões, autorização
-por papel e auditoria de autenticação. Nenhum módulo de negócio do ERP foi criado.
+As Sprints 0, 1, 2 e 3 foram preservadas. Nenhuma entidade, migration ou regra operacional foi
+adicionada.
+
+Sprint 4 introduz o primeiro domínio operacional de produção: Customer. Organization continua
+representando a empresa dona da instalação; Customer representa o cliente atendido por ela.
 
 ## Architecture
 
-- NestJS 11 e TypeScript estrito.
+- NestJS 11, TypeScript estrito, PostgreSQL e Prisma.
 - API versionada em `/api/v1`.
-- PostgreSQL e Prisma.
-- JWT HS256 com issuer, audience, tipo de token, `jti` e expiração validados.
-- Senhas e refresh tokens protegidos com Argon2id.
-- `JwtAuthGuard` e `RoleGuard` registrados globalmente.
-- Autorização deny-by-default: rotas são protegidas, exceto quando marcadas com `@Public()`.
-- Decorators disponíveis:
-  - `@Public()`;
-  - `@CurrentUser()`;
-  - `@Roles(...)`.
-- Access tokens são vinculados à sessão persistida pelo claim `sid`.
-- Refresh rotation é transacional.
-- Reutilização de refresh token revogado invalida todas as sessões ativas do usuário.
-- Auditoria persistente em `AuditLog`.
+- JWT com refresh rotation, Argon2id, guards globais e RBAC.
+- Novo `UsersModule` para equipe, perfil, preferências, permissões e avatar.
+- Storage local reutilizado por abstração para avatares.
+- Senha temporária com troca obrigatória aplicada por guard global.
+- Respostas preservam os envelopes globais de sucesso e erro.
+- Demo dataset opcional em `src/seeds/demo`.
+- Módulo interno local-only para leitura/reset do dataset de integração.
 
-Módulos atuais:
+Módulos:
 
 ```text
 src/modules/
 ├── auth/
 ├── config/
+├── customers/
 ├── database/
-└── health/
+├── health/
+├── internal-demo/
+├── organization/
+└── users/
 ```
-
-Somente `auth` e `health` expõem endpoints.
-
-## Environment
-
-Variáveis JWT obrigatórias:
-
-- `JWT_SECRET`
-- `JWT_REFRESH_SECRET`
-- `JWT_ACCESS_EXPIRES_IN_SECONDS` — recomendado e usado no exemplo: `900`
-- `JWT_REFRESH_EXPIRES_IN_SECONDS` — recomendado e usado no exemplo: `2592000`
-- `JWT_ISSUER`
-- `JWT_AUDIENCE`
-
-`OWNER_EMAIL` é exigida apenas na execução do seed inicial.
-
-Os demais contratos de ambiente da Sprint 0 permanecem válidos. Consulte `.env.example`.
 
 ## Persistence
 
@@ -59,141 +43,287 @@ Migrations:
 
 1. `20260619090000_foundation`
 2. `20260619130000_auth_rbac`
+3. `20260623140000_organization_foundation`
+4. `20260624110000_user_team_foundation`
+5. `20260624160000_customer_domain_foundation`
 
-### Enum `Role`
+Sprint 3.5 não criou migrations e não alterou `schema.prisma`.
 
-- `OWNER`
-- `MANAGER`
-- `OPERATOR`
-- `VIEWER`
+### Customer Domain
 
-### `users`
+Entidades:
 
-- `id` UUID;
-- `email` único;
-- `username` único;
-- `name`;
-- `password_hash`;
-- `role`;
-- `is_active`;
-- `last_login_at`;
-- `created_at`;
-- `updated_at`.
+- `Customer`, com enum `PERSON`/`COMPANY`, CPF/CNPJ opcionais e soft delete;
+- `CustomerAddress`;
+- `CustomerContact`;
+- `CustomerAttachment`, com binário no StorageProvider.
 
-### `refresh_tokens`
+Busca parcial cobre nome, nome fantasia, telefone, e-mail, CPF e CNPJ. Listagem usa `page`, `limit`
+e `search`. Endereço e contato principal são únicos por cliente por regra transacional.
 
-- `id` UUID, também usado como `jti`;
-- `user_id`, FK para `users` com cascade delete;
-- `token_hash`;
-- `expires_at`;
-- `revoked_at`;
-- `created_at`.
+RBAC:
 
-Somente o hash Argon2id do refresh token é persistido.
+- OWNER: acesso total;
+- MANAGER: criar, editar, visualizar e gerenciar sub-recursos;
+- OPERATOR/VIEWER: leitura;
+- exclusão lógica do Customer e exclusão de anexos: somente OWNER.
 
-### `audit_logs`
+Upload de anexos: PDF/PNG/JPG/JPEG, 5 MiB, validação de extensão, MIME e assinatura binária.
 
-Estrutura da Sprint 0 foi preservada. Eventos implementados:
+Demo:
 
-- `LOGIN_SUCCESS`
-- `LOGIN_FAILURE`
-- `LOGOUT`
-- `TOKEN_REFRESH`
+- Hospital Santa Clara;
+- Condomínio Atlântico Sul;
+- Shopping Recife;
+- Colégio Boa Viagem.
 
-`actor` recebe o UUID do usuário quando conhecido. `metadata` registra request ID, IP, user agent e
-contexto mínimo da sessão. Senhas e tokens nunca são auditados.
+Os clientes demo agora usam exclusivamente as entidades reais, com endereço, contato e anexo.
+`demo.customers.v1` foi removido.
 
-## Endpoints
+Endpoints: CRUD/status/stats de customers; CRUD de addresses/contacts; upload/read/delete de
+attachments.
 
-| Method | Path                   | Public | Purpose                       |
-| ------ | ---------------------- | ------ | ----------------------------- |
-| GET    | `/api/v1/health`       | Sim    | Readiness da API e PostgreSQL |
-| POST   | `/api/v1/auth/login`   | Sim    | Criar sessão                  |
-| POST   | `/api/v1/auth/refresh` | Sim    | Rotacionar sessão             |
-| POST   | `/api/v1/auth/logout`  | Sim    | Revogar sessão por refresh    |
-| GET    | `/api/v1/auth/me`      | Não    | Identidade autenticada        |
+Validação em PostgreSQL 17 confirmou migration, CRUD, busca, paginação, stats, soft delete, RBAC,
+anexos, idempotência do seed e os 13 eventos de auditoria.
 
-O logout é público no guard de access token porque deve continuar utilizável quando o access token
-expirar. Ele exige e valida o refresh token no body.
+### Stage 0
 
-## Seed OWNER
+`Organization` recebeu:
 
-O seed cria uma única conta inicial:
+- `segment String?`
 
-- username: `ninja`;
-- name: `Darlan Simplicio`;
-- role: `OWNER`;
-- email: valor de `OWNER_EMAIL`.
+`DocumentTemplate` recebeu:
 
-Execução após build/migrations:
+- `isSystem Boolean @default(false)`
 
-```bash
-docker compose exec api npm run prisma:seed
-```
+Templates default existentes são migrados para `isSystem=true`. Templates de sistema podem ser
+editados, mas não excluídos.
 
-Na primeira execução, uma senha aleatória forte é impressa uma única vez. Execuções posteriores são
-idempotentes e não alteram nem reexibem credenciais.
+### User expandido
 
-## Security decisions
+Campos adicionados:
 
-- Access token padrão: 15 minutos, configurável.
-- Refresh token padrão: 30 dias, configurável.
-- Segredos de access e refresh obrigatoriamente distintos.
-- Algoritmo JWT fixado em HS256 na assinatura e verificação.
-- Claims de refresh não são aceitos como access tokens, e vice-versa.
-- Usuário e sessão são consultados no banco em cada uso de access token.
-- Desativação do usuário, logout e rotação têm efeito imediato sobre access tokens.
-- Login usa verificação Argon2 dummy para reduzir diferença temporal entre usuário existente e
-  inexistente.
-- Login: 10 tentativas por minuto.
-- Refresh e logout: 20 requisições por minuto.
-- DTOs rejeitam propriedades desconhecidas, formatos inválidos e entradas excessivamente longas.
-- O RoleGuard nunca confia no papel presente no request do cliente; usa o usuário carregado do
-  banco.
+- `avatarAssetId`
+- `phone`
+- `jobTitle`
+- `notes`
+- `mustChangePassword`
+- `disabledAt`
 
-Consulte `SECURITY.md` para a matriz oficial de permissões.
+### Novas entidades
+
+`UserPreferences`:
+
+- `id`
+- `userId` único
+- `theme`: `SYSTEM`, `LIGHT` ou `DARK`
+- `notificationsEnabled`
+- timestamps
+
+`UserPermission`:
+
+- `id`
+- `userId` único
+- `canFinancial`
+- `canUsers`
+- `canReports`
+- `canSchedules`
+- `canTemplates`
+- timestamps
+
+`UserAvatarAsset`:
+
+- metadados do arquivo de avatar;
+- relação opcional um-para-um com `User`;
+- storage key independente dos assets organizacionais.
+
+Não foi criado campo de idioma, locale ou infraestrutura i18n para usuários.
+
+## Access model
+
+- `OWNER`: lista, consulta, cria, edita, desativa, ativa, remove por soft delete e redefine senha.
+- `MANAGER`: lista e consulta equipe.
+- `VIEWER`: lista e consulta equipe em modo leitura.
+- `OPERATOR`: somente perfil, preferências, senha e avatar próprios.
+- Todos os papéis podem gerenciar suas próprias preferências, senha e avatar.
+
+Permissões granulares complementam o papel:
+
+- OWNER recebe todas efetivamente como `true`;
+- MANAGER possui valores configuráveis pelo OWNER;
+- OPERATOR e VIEWER permanecem com os cinco flags administrativos em `false`.
+
+## Password lifecycle
+
+- Criação e reset geram senha aleatória de 32 caracteres base64url.
+- A senha temporária é retornada uma única vez na resposta.
+- `mustChangePassword=true` é obrigatório em criação/reset.
+- Guard global bloqueia rotas normais com `PASSWORD_CHANGE_REQUIRED`.
+- Permanecem acessíveis durante bootstrap: login, `/auth/me`, `/users/me` e troca de senha.
+- Troca e reset revogam todas as sessões ativas.
+- Troca rejeita senha atual inválida e reutilização da senha corrente.
+
+## Soft delete and owner safety
+
+- `DELETE /users/:id` não remove registro.
+- Soft delete define `isActive=false` e `disabledAt`.
+- Disable/delete revogam sessões imediatamente.
+- OWNER não pode desativar ou excluir a própria conta.
+- O último OWNER ativo não pode ser desativado, removido ou rebaixado.
+
+## Avatar security
+
+- Extensões: `png`, `jpg`, `jpeg`.
+- MIME: `image/png`, `image/jpeg`.
+- Limite: 2 MiB.
+- Assinatura binária PNG/JPEG é validada.
+- Nome de storage usa UUID em `users/avatar/`.
+- Nome original é apenas metadado sanitizado.
+- Substituição remove o asset anterior.
+
+## Endpoints added
+
+| Method | Path                               | Access                      |
+| ------ | ---------------------------------- | --------------------------- |
+| GET    | `/api/v1/users`                    | OWNER, MANAGER, VIEWER      |
+| GET    | `/api/v1/users/:id`                | OWNER, MANAGER, VIEWER      |
+| POST   | `/api/v1/users`                    | OWNER                       |
+| PATCH  | `/api/v1/users/:id`                | OWNER                       |
+| DELETE | `/api/v1/users/:id`                | OWNER                       |
+| PATCH  | `/api/v1/users/:id/disable`        | OWNER                       |
+| PATCH  | `/api/v1/users/:id/enable`         | OWNER                       |
+| PATCH  | `/api/v1/users/:id/reset-password` | OWNER                       |
+| PATCH  | `/api/v1/users/change-password`    | Todos, para a própria conta |
+| GET    | `/api/v1/users/me/preferences`     | Todos, para a própria conta |
+| PATCH  | `/api/v1/users/me/preferences`     | Todos, para a própria conta |
+| GET    | `/api/v1/users/me`                 | Todos, para a própria conta |
+| POST   | `/api/v1/users/avatar`             | Todos, para a própria conta |
+| GET    | `/api/v1/users/avatar/:id`         | Todos os autenticados       |
+| DELETE | `/api/v1/users/avatar`             | Todos, para a própria conta |
+
+`GET /users` aceita `page`, `limit` e `search`.
+
+## Audit events
+
+- `USER_CREATED`
+- `USER_UPDATED`
+- `USER_DISABLED`
+- `USER_ENABLED`
+- `USER_DELETED`
+- `PASSWORD_RESET`
+- `PASSWORD_CHANGED`
+- `AVATAR_UPDATED`
+- `PREFERENCES_UPDATED`
+
+Senhas, hashes, tokens e conteúdo base64 não são registrados.
+
+## Seed
+
+O seed continua idempotente e agora:
+
+- cria preferências e permissões completas para o OWNER;
+- corrige esses registros quando o OWNER já existe;
+- marca os seis templates padrão como `isSystem=true`.
 
 ## Verification performed
 
-- `npm run build`: aprovado.
-- `npm run lint`: aprovado.
-- `npm test`: 3 testes do RoleGuard aprovados.
-- `npm run prisma:validate`: aprovado.
-- `npm audit`: zero vulnerabilidades, incluindo dependências de desenvolvimento.
-- Build Docker multi-stage: aprovado.
-- PostgreSQL e API em containers: saudáveis.
-- Migrations executadas do zero: aprovadas.
-- Seed OWNER inicial e reexecução idempotente: aprovados.
-- Login válido e inválido: aprovados.
-- `GET /auth/me` com e sem token: aprovado.
-- Rotação de refresh token: aprovada.
-- Access e refresh antigos rejeitados após rotação: aprovados.
-- Logout e invalidação imediata do access token: aprovados.
-- Detecção de replay com revogação das sessões ativas: aprovada.
-- Auditoria dos quatro eventos: verificada diretamente no PostgreSQL.
-- Hashes Argon2id e ausência de JWT puro no banco: verificados.
+- Prisma schema válido e client gerado.
+- Quatro migrations executadas do zero em PostgreSQL 17.
+- Build Docker aprovado.
+- Health check com banco conectado.
+- Build TypeScript aprovado.
+- ESLint aprovado.
+- 2 suítes e 6 testes aprovados.
+- Fluxos reais validados em container:
+  - login OWNER;
+  - profile agregado;
+  - segment organizacional;
+  - proteção de template de sistema;
+  - criação de MANAGER;
+  - bloqueio por troca obrigatória;
+  - troca de senha e revogação da sessão anterior;
+  - paginação/busca;
+  - leitura MANAGER e escrita negada;
+  - preferências;
+  - upload/leitura/exclusão de avatar;
+  - disable/enable;
+  - reset de senha;
+  - soft delete;
+  - proteção contra auto-desativação.
 
 ## Explicitly not implemented
 
-- CRUD de usuários;
-- recuperação ou alteração de senha;
-- envio de e-mail;
-- MFA;
-- clientes;
-- equipamentos;
-- catálogos;
-- orçamentos;
-- ordens de serviço;
-- documentos, uploads e PDFs;
-- dashboards ou relatórios funcionais.
+- convites ou recuperação por e-mail;
+- MFA, SSO ou notificações reais;
+- idioma/locale/i18n de usuário;
+- clientes, equipamentos, produtos, serviços, agenda, orçamentos, OS, relatórios operacionais ou
+  financeiro.
 
 ## Future work
 
-- CRUD administrativo de usuários somente em sprint autorizada.
-- Recuperação de senha e MFA.
-- Política de limpeza de refresh tokens expirados/revogados.
-- Permissões granulares além dos papéis oficiais, caso uma sprint futura exija.
-- Configuração explícita de trusted proxies antes de deploy atrás de proxy reverso.
+- Sprint 4 pode iniciar o primeiro módulo operacional.
+- Aplicar os flags granulares em módulos futuros por decorators/guards específicos do recurso.
+- Considerar streaming/binário de avatar quando cache HTTP for necessário.
+- Adicionar política automática para limpeza de sessões expiradas e arquivos órfãos.
 
-Toda sprint futura deve preservar os envelopes HTTP, versionamento, guards globais e documentação
-obrigatória.
+## Sprint 3.5 demo environment
+
+Variáveis:
+
+- `ENABLE_DEMO_DATA=false` por padrão;
+- `ENABLE_DEMO_ENDPOINTS=false` por padrão.
+
+Produção rejeita startup se qualquer flag estiver habilitada.
+
+Seed:
+
+- `src/seeds/demo/demo.seed.ts`;
+- executável por `npm run prisma:seed:demo`;
+- também invocado pelo seed principal quando habilitado;
+- idempotente;
+- gera senhas aleatórias somente para usuários efetivamente criados;
+- não sobrescreve usuários ou organizações personalizadas.
+
+Dados reais nas entidades existentes:
+
+- organização Climatize Nordeste em instalação vazia/bootstrap;
+- usuários `ninja`, `ricardo`, `joao`, `maria`, `financeiro`;
+- preferências e permissões para contas criadas.
+
+Snapshots temporários em `SystemSetting`:
+
+- dashboard;
+- agenda;
+- financeiro;
+- equipamentos;
+- manifesto interno.
+
+Esses snapshots não representam modelagem final dos módulos.
+
+Endpoints internos:
+
+| Method | Path                            | Access |
+| ------ | ------------------------------- | ------ |
+| GET    | `/api/v1/internal/demo/dataset` | OWNER  |
+| POST   | `/api/v1/internal/demo/reset`   | OWNER  |
+
+Ambos exigem ambiente development e os dois flags demo. Quando desabilitados respondem 404.
+
+Documentação adicionada:
+
+- `docs/backend/DEMO_DATA.md`;
+- `docs/backend/OPUS_INTEGRATION.md`.
+
+Verificações específicas:
+
+- ambiente sem demo mantém flags false;
+- execução sem demo criou zero chaves `demo.*`;
+- desenvolvimento aceita demo;
+- produção rejeita demo;
+- snapshots são determinísticos para uma data fixa;
+- nomes realistas e equipamentos esperados validados em testes.
+- seed executado duas vezes sem duplicar usuários ou reemitir senhas;
+- reset interno recriou apenas registros demo;
+- resultado validado: 5 usuários, 5 preferências e 6 settings reservados;
+- dataset interno retornou 4 clientes e 4 equipamentos;
+- endpoint interno retornou 404 quando flags estavam desligadas.

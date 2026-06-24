@@ -7,4 +7,5 @@ export interface AuthenticatedUser {
   name: string;
   role: Role;
   isActive: boolean;
+  mustChangePassword: boolean;
 }

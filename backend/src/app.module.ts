@@ -8,8 +8,13 @@ import { AppConfigService } from './modules/config/app-config.service';
 import { DatabaseModule } from './modules/database/database.module';
 import { HealthModule } from './modules/health/health.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { OrganizationModule } from './modules/organization/organization.module';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
 import { RoleGuard } from './modules/auth/guards/role.guard';
+import { PasswordChangeRequiredGuard } from './modules/auth/guards/password-change-required.guard';
+import { UsersModule } from './modules/users/users.module';
+import { InternalDemoModule } from './modules/internal-demo/internal-demo.module';
+import { CustomersModule } from './modules/customers/customers.module';
 import { GlobalExceptionFilter } from './shared/filters/global-exception.filter';
 import { RequestLoggingInterceptor } from './shared/interceptors/request-logging.interceptor';
 import { ResponseEnvelopeInterceptor } from './shared/interceptors/response-envelope.interceptor';
@@ -30,6 +35,10 @@ import { ResponseEnvelopeInterceptor } from './shared/interceptors/response-enve
     LoggerModule,
     DatabaseModule,
     AuthModule,
+    OrganizationModule,
+    UsersModule,
+    InternalDemoModule,
+    CustomersModule,
     HealthModule,
   ],
   providers: [
@@ -44,6 +53,10 @@ import { ResponseEnvelopeInterceptor } from './shared/interceptors/response-enve
     {
       provide: APP_GUARD,
       useClass: RoleGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: PasswordChangeRequiredGuard,
     },
     {
       provide: APP_INTERCEPTOR,

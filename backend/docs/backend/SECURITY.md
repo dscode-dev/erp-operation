@@ -5,6 +5,14 @@
 Cada cliente opera instalação, banco, storage e configuração isolados. Não existe multi-tenancy
 compartilhada. A autenticação e autorização seguem deny-by-default.
 
+Sprint 2 adiciona a fundação organizacional single-company. A organização representa a empresa dona
+da instalação, não um tenant compartilhado.
+
+Sprint 3 adiciona gestão de equipe, permissões granulares, senha temporária obrigatória e avatares.
+
+Sprint 3.5 adiciona somente infraestrutura opcional de desenvolvimento e demonstração, sem novas
+entidades ou regras operacionais.
+
 ## Official roles V1
 
 Somente estes papéis existem:
@@ -25,8 +33,77 @@ Somente estes papéis existem:
 | OS           | Sim   | Sim     | Sim      | Leitura |
 | Relatórios   | Sim   | Sim     | Leitura  | Leitura |
 
-Essa matriz é normativa para módulos futuros. Nesta sprint, esses módulos não foram implementados.
-Operadores não podem acessar financeiro nem configurações administrativas.
+Essa matriz é normativa para módulos futuros. Operadores não podem acessar financeiro nem
+configurações administrativas.
+
+## Organization permissions
+
+Fundação organizacional da Sprint 2:
+
+| Recurso                       | OWNER | MANAGER | OPERATOR | VIEWER |
+| ----------------------------- | ----- | ------- | -------- | ------ |
+| Organização                   | Total | Leitura | Não      | Não    |
+| Configurações organizacionais | Total | Leitura | Não      | Não    |
+| Templates de documento        | Total | Leitura | Não      | Não    |
+| Assets de branding            | Total | Leitura | Não      | Não    |
+
+Implementação:
+
+- `GET` permitido para `OWNER` e `MANAGER`;
+- `PATCH`, `POST` e `DELETE` permitidos somente para `OWNER`;
+- `OPERATOR` e `VIEWER` recebem HTTP 403 em todos os endpoints de organização.
+
+## Team permissions
+
+| Recurso/ação                       | OWNER | MANAGER | OPERATOR | VIEWER  |
+| ---------------------------------- | ----- | ------- | -------- | ------- |
+| Listar/consultar equipe            | Sim   | Leitura | Não      | Leitura |
+| Criar/editar/desativar/remover     | Sim   | Não     | Não      | Não     |
+| Resetar senha de terceiros         | Sim   | Não     | Não      | Não     |
+| Perfil/preferências/senha próprios | Sim   | Sim     | Sim      | Sim     |
+| Avatar próprio                     | Sim   | Sim     | Sim      | Sim     |
+
+Somente OWNER pode criar, remover por soft delete ou redefinir senha de terceiros.
+
+## Customer permissions
+
+| Ação                                    | OWNER | MANAGER | OPERATOR | VIEWER  |
+| --------------------------------------- | ----- | ------- | -------- | ------- |
+| Listar, stats, detalhes e baixar anexos | Sim   | Sim     | Leitura  | Leitura |
+| Criar/editar/enable/disable             | Sim   | Sim     | Não      | Não     |
+| Gerenciar endereços/contatos            | Sim   | Sim     | Não      | Não     |
+| Soft delete de customer                 | Sim   | Não     | Não      | Não     |
+| Excluir anexo                           | Sim   | Não     | Não      | Não     |
+
+CPF/CNPJ são únicos quando informados. Soft delete não remove dados relacionados.
+
+Anexos usam UUID no storage, path `customers/<customerId>/attachments/`, limite 5 MiB e validação de
+extensão, MIME e assinatura PDF/PNG/JPEG. Conteúdo de arquivo/base64 nunca entra no AuditLog.
+
+Eventos auditados: `CUSTOMER_CREATED`, `CUSTOMER_UPDATED`, `CUSTOMER_DISABLED`,
+`CUSTOMER_ENABLED`, `CUSTOMER_DELETED`, os eventos CREATE/UPDATE/DELETE de address/contact e
+UPLOAD/DELETE de attachment.
+
+Proteções administrativas:
+
+- OWNER não pode desativar ou excluir a própria conta;
+- último OWNER ativo não pode ser desativado, removido ou rebaixado;
+- disable/delete revogam sessões ativas;
+- soft delete preserva rastreabilidade com `isActive=false` e `disabledAt`.
+
+## Granular permissions
+
+`UserPermission` complementa RBAC:
+
+- `canFinancial`;
+- `canUsers`;
+- `canReports`;
+- `canSchedules`;
+- `canTemplates`.
+
+OWNER sempre recebe permissões efetivas completas. MANAGER pode ser configurado por OWNER.
+OPERATOR e VIEWER não recebem flags administrativas. Os módulos operacionais futuros devem aplicar
+decorators/guards próprios aos flags relevantes; o papel continua sendo a primeira barreira.
 
 ## Password hashing
 
@@ -42,6 +119,32 @@ bcrypt no projeto.
 
 Login com email inexistente executa verificação contra um hash dummy gerado no startup, reduzindo
 diferença temporal que poderia facilitar enumeração.
+
+## Temporary passwords and mandatory change
+
+Criação e reset:
+
+- geram senha aleatória com 24 bytes criptograficamente seguros, codificada em base64url;
+- retornam a senha somente na resposta da operação;
+- nunca persistem ou auditam texto puro;
+- definem `mustChangePassword=true`;
+- reset revoga todas as sessões do usuário.
+
+`PasswordChangeRequiredGuard` é global. Quando o flag está ativo:
+
+- login é permitido;
+- `/auth/me`, `/users/me` e `/users/change-password` são permitidos;
+- recursos normais retornam HTTP 403 `PASSWORD_CHANGE_REQUIRED`.
+
+Troca de senha:
+
+- exige senha atual;
+- exige nova senha entre 12 e 128 caracteres;
+- rejeita reutilização da senha corrente;
+- usa Argon2id;
+- limpa `mustChangePassword`;
+- revoga todas as sessões, inclusive a atual;
+- obriga nova autenticação.
 
 ## JWT
 
@@ -83,13 +186,11 @@ Fluxo de rotação:
 5. Emitir novo access token ligado ao novo `sid`.
 6. Auditar `TOKEN_REFRESH`.
 
-O token anterior deixa de funcionar imediatamente. Access tokens vinculados à sessão anterior
-também são recusados.
+O token anterior deixa de funcionar imediatamente. Access tokens vinculados à sessão anterior também
+são recusados.
 
 Se um refresh já revogado for reutilizado, o sistema assume possível comprometimento e revoga todas
 as sessões ativas daquele usuário.
-
-Logout valida o refresh token e preenche `revokedAt`. É idempotente para o mesmo token válido.
 
 ## Global guards
 
@@ -98,6 +199,7 @@ Ordem global:
 1. `ThrottlerGuard`;
 2. `JwtAuthGuard`;
 3. `RoleGuard`.
+4. `PasswordChangeRequiredGuard`.
 
 `JwtAuthGuard` protege todas as rotas, salvo `@Public()`. Rotas públicas atuais:
 
@@ -109,19 +211,83 @@ Ordem global:
 `RoleGuard` lê `@Roles(...)` e compara com o papel atualizado vindo do banco. Ausência de permissão
 retorna HTTP 403.
 
-`GET /auth/me` declara os quatro papéis oficiais, exercitando a cadeia completa de guards.
-
 ## Input validation
 
 O `ValidationPipe` global:
 
-- remove implicitamente a possibilidade de campos extras ao rejeitá-los;
+- rejeita propriedades desconhecidas;
 - transforma valores declarados;
-- valida email;
-- limita comprimento de email, senha e token;
+- valida email, enum, UUID, cores hexadecimais e tamanhos máximos;
 - rejeita refresh fora do formato JWT.
 
-Emails de login recebem trim e lowercase. Senhas nunca são transformadas ou logadas.
+Validações adicionadas:
+
+- `state`: 2 caracteres;
+- `currency`: 3 caracteres;
+- `documentPrefix`: letras/números/`_`/`-`;
+- `:id` de templates/assets: UUID v4;
+- `DocumentTemplateType` e `BrandAssetType`: enums oficiais.
+- email e username únicos;
+- username normalizado e restrito a letras minúsculas, números, `.`, `_` e `-`;
+- telefone aceita formato internacional básico, com 8 a 30 caracteres válidos;
+- senha nova: 12 a 128 caracteres;
+- paginação: page >= 1 e limit entre 1 e 100;
+- tema: `SYSTEM`, `LIGHT` ou `DARK`;
+- idioma/locale/i18n de usuário não existe na V1.
+
+## Upload security
+
+Uploads de branding exigem autenticação e papel `OWNER`.
+
+Controles:
+
+- `multipart/form-data` com campo `file`;
+- limite de tamanho: 5 MiB;
+- extensões permitidas: `png`, `jpg`, `jpeg`, `svg`, `pdf`;
+- MIME types permitidos:
+  - `image/png`;
+  - `image/jpeg`;
+  - `image/svg+xml`;
+  - `application/pdf`;
+- nomes originais nunca são usados como path de storage;
+- storage key usa UUID;
+- nome original é sanitizado apenas para metadado;
+- path final segue `organization/<tipo>/<uuid>.<ext>`;
+- provider local impede path traversal ao resolver `storageKey`;
+- escrita usa flag sem sobrescrita acidental.
+
+O backend não executa conversão ou renderização de arquivos. O frontend deve tratar SVG/PDF com
+cuidado e nunca injetar conteúdo arbitrário como HTML confiável.
+
+### Avatar upload
+
+Avatares exigem autenticação e pertencem ao próprio usuário.
+
+Controles:
+
+- limite hard de 2 MiB no multipart;
+- somente `png`, `jpg` e `jpeg`;
+- somente `image/png` e `image/jpeg`;
+- assinatura binária PNG/JPEG validada contra o MIME declarado;
+- storage key em `users/avatar/<uuid>.<ext>`;
+- nomes originais nunca formam paths;
+- nome original sanitizado somente para metadado;
+- substituição remove registro e arquivo anteriores;
+- leitura exige autenticação.
+
+## Storage
+
+Driver real nesta sprint: `local`.
+
+Variáveis:
+
+- `STORAGE_PROVIDER=local` preservada por compatibilidade;
+- `STORAGE_DRIVER=local`;
+- `STORAGE_PATH=./storage` fora do Docker;
+- `STORAGE_PATH=/app/storage` no container via Compose.
+
+`docker-compose.yml` usa volume nomeado `api_storage`. Cada instalação white label deve ter storage
+próprio.
 
 ## Rate limiting
 
@@ -134,25 +300,50 @@ Trusted proxy deve ser configurado explicitamente antes de produção atrás de 
 
 ## Audit
 
-Eventos persistidos:
+Eventos persistidos da Sprint 1:
 
 - `LOGIN_SUCCESS`;
 - `LOGIN_FAILURE`;
 - `LOGOUT`;
 - `TOKEN_REFRESH`.
 
+Eventos persistidos da Sprint 2:
+
+- `ORGANIZATION_UPDATED`;
+- `SETTINGS_UPDATED`;
+- `TEMPLATE_CREATED`;
+- `TEMPLATE_UPDATED`;
+- `TEMPLATE_DELETED`;
+- `ASSET_UPLOADED`;
+- `ASSET_DELETED`.
+
+Eventos persistidos da Sprint 3:
+
+- `USER_CREATED`;
+- `USER_UPDATED`;
+- `USER_DISABLED`;
+- `USER_ENABLED`;
+- `USER_DELETED`;
+- `PASSWORD_RESET`;
+- `PASSWORD_CHANGED`;
+- `AVATAR_UPDATED`;
+- `PREFERENCES_UPDATED`.
+
 Cada evento contém:
 
-- `actor`: UUID quando o usuário é conhecido;
+- `actor`: UUID do usuário autenticado;
 - `action`;
-- `resource=AUTH_SESSION`;
+- `resource`;
 - timestamp;
-- metadata com request ID, IP, user agent e identificadores de sessão quando aplicável.
+- metadata com request ID, IP, user agent e IDs relevantes.
 
-Falha de login registra email normalizado e motivo interno controlado. Nenhum audit log contém
-senha, access token, refresh token ou hash.
+Nenhum audit log contém senha, access token, refresh token, hash ou conteúdo binário/base64 de
+asset.
 
-## Initial OWNER seed
+Eventos de usuários registram ator, usuário alvo, request ID, IP, user agent, campos alterados e
+operação pertinente. Senhas temporárias e nomes de senha nunca são incluídos.
+
+## Initial seed
 
 Configurar:
 
@@ -166,18 +357,17 @@ Após subir a stack:
 docker compose exec api npm run prisma:seed
 ```
 
-Primeira execução:
+O seed:
 
-- cria `ninja`;
-- nome `Darlan Simplicio`;
-- papel `OWNER`;
-- gera senha com 24 bytes aleatórios (`base64url`);
-- imprime a senha somente nessa execução;
-- persiste apenas Argon2id.
+- cria o OWNER `ninja` quando ausente;
+- imprime a senha aleatória somente na primeira criação do OWNER;
+- cria uma organização padrão quando ausente;
+- cria settings padrão;
+- garante templates vazios padrão para todos os tipos oficiais.
+- garante preferências e permissões completas para o OWNER;
+- marca templates padrão como `isSystem=true`.
 
-Armazene imediatamente a senha em gerenciador de segredos e remova-a do histórico/terminal
-compartilhado. Reexecutar o seed não redefine senha e não a reexibe. Não existe recuperação de senha
-nesta sprint.
+Reexecutar o seed não redefine senha e não reexibe credenciais.
 
 ## Existing platform controls
 
@@ -193,15 +383,50 @@ Permanecem ativos:
 - migrations antes do startup;
 - shutdown gracioso.
 
+## Demo environment isolation
+
+Flags:
+
+- `ENABLE_DEMO_DATA`;
+- `ENABLE_DEMO_ENDPOINTS`.
+
+Ambas assumem `false` quando ausentes. Em `NODE_ENV=production`, qualquer uma com valor `true`
+interrompe o startup por configuração insegura.
+
+O seed demo:
+
+- não roda quando `ENABLE_DEMO_DATA=false`;
+- falha explicitamente quando executado com demo habilitado em produção;
+- cria somente usuários ausentes;
+- nunca troca senha, papel ou perfil de usuário real existente;
+- usa marker e manifesto para reconhecer registros que ele próprio criou;
+- usa somente chaves reservadas `demo.*` em `SystemSetting`;
+- não altera chaves reais;
+- só converte a organização quando ela corresponde exatamente ao placeholder bootstrap conhecido;
+- preserva qualquer organização personalizada.
+
+Endpoints internos:
+
+- exigem ambiente `development`;
+- exigem os dois flags habilitados;
+- exigem JWT válido e papel `OWNER`;
+- retornam 404 quando desabilitados;
+- não expõem o manifesto interno;
+- reset remove somente usuários registrados no manifesto e ainda marcados como demo.
+
+Senhas demo são geradas com `randomBytes(24)`, armazenadas somente como Argon2id e exibidas apenas no
+log da execução que cria a conta. O endpoint HTTP de reset nunca retorna senhas.
+
 ## Dependency security
 
-Em 19 de junho de 2026:
+Em 23 de junho de 2026:
 
 - `npm audit`: zero vulnerabilidades;
-- `multer` fixado em `2.2.0`;
-- `js-yaml` fixado em `4.2.0`.
+- `multer` continua fixado por override em `2.2.0`;
+- `js-yaml` continua fixado por override em `4.2.0`;
+- `@types/multer` adicionado apenas como dependência de desenvolvimento para tipagem do upload.
 
-Overrides tratam dependências transitivas dos adapters e ferramentas de teste.
+Em 24 de junho de 2026, a Sprint 3.5 não adicionou dependências.
 
 ## Frontend security requirements
 
@@ -209,16 +434,26 @@ Overrides tratam dependências transitivas dos adapters e ferramentas de teste.
 - Nunca registrar tokens.
 - Implementar refresh single-flight.
 - Limpar tokens em `AUTH_SESSION_REVOKED`, `AUTH_USER_INACTIVE` ou falha de refresh.
-- Evitar armazenamento persistente inseguro; em PWA nativa, usar storage seguro.
 - Não enviar tokens em query string.
+- Validar tamanho/formato no cliente antes do upload para UX, mas confiar na validação do backend.
+- Não renderizar SVG recebido como HTML confiável.
+- Não persistir senha temporária no frontend nem enviá-la a analytics.
+- Redirecionar imediatamente para troca obrigatória em `PASSWORD_CHANGE_REQUIRED`.
+- Limpar tokens após troca/reset/disable ou `AUTH_SESSION_REVOKED`.
+- Validar avatar no cliente para UX, mantendo o backend como autoridade.
 
 ## Out of scope
 
-- CRUD de usuários;
-- reset de senha;
 - e-mail;
 - MFA;
 - SSO;
-- módulos de negócio;
+- equipamentos;
+- serviços/produtos;
+- orçamentos;
+- ordens de serviço;
+- financeiro;
+- QR Code;
+- geração de PDFs;
+- storage S3/remoto;
 - cookies HttpOnly/BFF;
 - limpeza agendada de sessões expiradas.

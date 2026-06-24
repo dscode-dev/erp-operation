@@ -100,6 +100,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       [HttpStatus.UNAUTHORIZED]: ERROR_CODES.UNAUTHORIZED,
       [HttpStatus.FORBIDDEN]: ERROR_CODES.FORBIDDEN,
       [HttpStatus.NOT_FOUND]: ERROR_CODES.NOT_FOUND,
+      [HttpStatus.PAYLOAD_TOO_LARGE]: ERROR_CODES.UPLOAD_FILE_TOO_LARGE,
       [HttpStatus.TOO_MANY_REQUESTS]: ERROR_CODES.RATE_LIMIT_EXCEEDED,
     };
     return codes[status] ?? `HTTP_${status}`;

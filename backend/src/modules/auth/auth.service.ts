@@ -24,6 +24,7 @@ const USER_PUBLIC_SELECT = {
   name: true,
   role: true,
   isActive: true,
+  mustChangePassword: true,
 } satisfies Prisma.UserSelect;
 
 @Injectable()
@@ -260,7 +261,14 @@ export class AuthService {
   }
 
   me(user: AuthenticatedUser): MeResponseDto {
-    return user;
+    return {
+      id: user.id,
+      email: user.email,
+      username: user.username,
+      name: user.name,
+      role: user.role,
+      isActive: user.isActive,
+    };
   }
 
   private async issueTokenPair(user: User): Promise<{

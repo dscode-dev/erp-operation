@@ -18,6 +18,7 @@ ENV NODE_ENV=production
 WORKDIR /app
 
 RUN apk add --no-cache dumb-init
+RUN mkdir -p /app/storage && chown -R node:node /app/storage
 
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force

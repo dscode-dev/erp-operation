@@ -11,6 +11,7 @@ import { Roles } from '../../shared/decorators/roles.decorator';
 import type { AuthenticatedUser } from '../../shared/types/authenticated-user.type';
 import type { RequestWithId } from '../../shared/types/request-with-id.type';
 import type { AuthRequestContext } from './types/jwt-payload.type';
+import { AllowPasswordChangeRequired } from '../../shared/decorators/allow-password-change-required.decorator';
 
 @Controller('auth')
 export class AuthController {
@@ -44,6 +45,7 @@ export class AuthController {
   }
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR, Role.VIEWER)
+  @AllowPasswordChangeRequired()
   @Get('me')
   me(@CurrentUser() user: AuthenticatedUser): MeResponseDto {
     return this.auth.me(user);
