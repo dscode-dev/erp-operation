@@ -596,3 +596,176 @@ export const equipmentDetails: Record<string, EquipmentDetail> = {
 export function getEquipmentById(id: string): EquipmentDetail | undefined {
   return equipmentDetails[id];
 }
+
+/* ============ Ordens de Serviço ============ */
+
+export type WorkOrderType = "corretiva" | "preventiva" | "instalacao" | "diagnostico";
+
+export type WorkOrder = {
+  id: string;
+  number: string;
+  title: string;
+  client: string;
+  equipmentTag: string;
+  type: WorkOrderType;
+  openedAt: string;
+  scheduledFor: string;
+  operator: string;
+  value: string;
+  sla: { label: string; tone: "ok" | "warn" | "late" };
+  status: Status;
+  priority?: "alta" | "média" | "baixa";
+};
+
+export const workOrderMetrics: Metric[] = [
+  { label: "OS abertas",        value: "32",        delta: "+4",  trend: "up",   icon: "ClipboardList" },
+  { label: "Em execução",       value: "12",        delta: "+1",  trend: "up",   icon: "Wrench" },
+  { label: "Aguardando peça",   value: "5",         delta: "—",   trend: "flat", icon: "Package" },
+  { label: "Atrasadas",         value: "3",         delta: "+1",  trend: "up",   icon: "AlertTriangle" },
+  { label: "Fechadas no mês",   value: "187",       delta: "+22", trend: "up",   icon: "CheckCircle2" },
+  { label: "Ticket médio",      value: "R$ 1.420",  delta: "+6%", trend: "up",   icon: "Wallet" },
+];
+
+export const workOrders: WorkOrder[] = [
+  { id: "w1",  number: "OS-2381", title: "Manutenção preventiva — Refrigerador", client: "Restaurante Aurora", equipmentTag: "EQP-031", type: "preventiva",  openedAt: "25/06 · 07:40", scheduledFor: "Hoje · 08:30",  operator: "Ana S.",    value: "R$ 480",   sla: { label: "no prazo",       tone: "ok"   }, status: "in_progress" },
+  { id: "w2",  number: "OS-2382", title: "Instalação de câmera IP",              client: "Clínica VitaCare",   equipmentTag: "—",       type: "instalacao",  openedAt: "24/06 · 16:10", scheduledFor: "Hoje · 09:15",  operator: "Carlos L.", value: "R$ 1.200", sla: { label: "no prazo",       tone: "ok"   }, status: "scheduled" },
+  { id: "w3",  number: "OS-2383", title: "Troca de compressor",                  client: "Mercado Central",    equipmentTag: "EQP-389", type: "corretiva",   openedAt: "25/06 · 06:55", scheduledFor: "Hoje · 10:00",  operator: "Marina R.", value: "R$ 3.850", sla: { label: "alta urgência",  tone: "warn" }, status: "in_progress", priority: "alta" },
+  { id: "w4",  number: "OS-2384", title: "Diagnóstico elétrico",                 client: "Edifício Solar",     equipmentTag: "EQP-621", type: "diagnostico", openedAt: "24/06 · 18:30", scheduledFor: "Hoje · 11:30",  operator: "João P.",   value: "R$ 320",   sla: { label: "no prazo",       tone: "ok"   }, status: "scheduled" },
+  { id: "w5",  number: "OS-2385", title: "Reparo emergencial",                   client: "Hotel Mirante",      equipmentTag: "EQP-145", type: "corretiva",   openedAt: "25/06 · 11:00", scheduledFor: "Hoje · 12:00",  operator: "Renato O.", value: "R$ 2.100", sla: { label: "atrasada 25min", tone: "late" }, status: "pending",    priority: "alta" },
+  { id: "w6",  number: "OS-2386", title: "Vistoria mensal",                       client: "Indústria Beta",     equipmentTag: "EQP-077", type: "preventiva",  openedAt: "20/06 · 09:00", scheduledFor: "Hoje · 14:00",  operator: "Sofia M.",  value: "R$ 760",   sla: { label: "concluída",      tone: "ok"   }, status: "done" },
+  { id: "w7",  number: "OS-2387", title: "Substituição de painel elétrico",      client: "Edifício Solar",     equipmentTag: "—",       type: "corretiva",   openedAt: "23/06 · 14:00", scheduledFor: "Hoje · 15:00",  operator: "João P.",   value: "R$ 4.300", sla: { label: "no prazo",       tone: "ok"   }, status: "scheduled" },
+  { id: "w8",  number: "OS-2388", title: "Limpeza de evaporadora",               client: "Clínica VitaCare",   equipmentTag: "EQP-512", type: "preventiva",  openedAt: "22/06 · 10:00", scheduledFor: "Hoje · 16:30",  operator: "Ana S.",    value: "R$ 280",   sla: { label: "no prazo",       tone: "ok"   }, status: "scheduled" },
+  { id: "w9",  number: "OS-2390", title: "Visita técnica — Chiller",             client: "Hospital Norte",     equipmentTag: "EQP-118", type: "diagnostico", openedAt: "25/06 · 09:50", scheduledFor: "Hoje · 10:30",  operator: "Marina R.", value: "R$ 0",     sla: { label: "alta urgência",  tone: "warn" }, status: "in_progress", priority: "alta" },
+  { id: "w10", number: "OS-2370", title: "Manutenção gerador",                    client: "Centro Lumière",     equipmentTag: "EQP-204", type: "preventiva",  openedAt: "02/06 · 08:00", scheduledFor: "02/06 · 09:00", operator: "Renato O.", value: "R$ 1.640", sla: { label: "concluída",      tone: "ok"   }, status: "done" },
+];
+
+export type WorkOrderEvent = {
+  id: string;
+  at: string;
+  who: string;
+  action: string;
+  detail?: string;
+  tone?: "ok" | "warn" | "late" | "info";
+};
+
+export type WorkOrderItem = { id: string; label: string; qty: number; unit: string; price: string };
+
+export type WorkOrderDetail = WorkOrder & {
+  description: string;
+  address: string;
+  contact: { name: string; role: string; phone: string };
+  checklist: { id: string; label: string; done: boolean }[];
+  items: WorkOrderItem[];
+  timeline: WorkOrderEvent[];
+  attachments: { id: string; label: string; kind: string; size: string }[];
+  totals: { labor: string; parts: string; total: string };
+};
+
+export const workOrderDetails: Record<string, WorkOrderDetail> = {
+  w3: {
+    ...workOrders[2],
+    description: "Substituir compressor com falha intermitente diagnosticada em vistoria anterior. Cliente já aprovou orçamento ORC-114. Garantir limpeza do circuito e teste de estanqueidade pós-troca.",
+    address: "R. XV de Novembro, 1200 — Curitiba/PR",
+    contact: { name: "Paulo Henrique", role: "Gerente operacional", phone: "(41) 99876-1122" },
+    checklist: [
+      { id: "k1", label: "Conferir EPI e desligar circuito",  done: true  },
+      { id: "k2", label: "Recolher gás refrigerante",         done: true  },
+      { id: "k3", label: "Substituir compressor",             done: false },
+      { id: "k4", label: "Recarga e teste de estanqueidade",  done: false },
+      { id: "k5", label: "Coletar assinatura do cliente",     done: false },
+    ],
+    items: [
+      { id: "i1", label: "Compressor Embraco FFI12HBX 1HP", qty: 1, unit: "un", price: "R$ 2.380" },
+      { id: "i2", label: "Gás refrigerante R-134a",         qty: 2, unit: "kg", price: "R$ 240"   },
+      { id: "i3", label: "Filtro secador 1/4\"",            qty: 1, unit: "un", price: "R$ 85"    },
+      { id: "i4", label: "Mão de obra técnica",             qty: 4, unit: "h",  price: "R$ 1.145" },
+    ],
+    timeline: [
+      { id: "t1", at: "25/06 · 06:55", who: "Sistema",   action: "OS criada a partir de chamado #CH-1182" },
+      { id: "t2", at: "25/06 · 07:10", who: "Marina R.", action: "Aceitou atribuição",            tone: "ok" },
+      { id: "t3", at: "25/06 · 09:48", who: "Marina R.", action: "Check-in no local",             detail: "GPS confirmado", tone: "info" },
+      { id: "t4", at: "25/06 · 10:00", who: "Marina R.", action: "Iniciou execução",              tone: "ok" },
+      { id: "t5", at: "25/06 · 10:42", who: "Marina R.", action: "Solicitou peça adicional",      detail: "Filtro secador 1/4\"", tone: "warn" },
+    ],
+    attachments: [
+      { id: "a1", label: "Foto antes — compressor", kind: "Imagem", size: "1,2 MB" },
+      { id: "a2", label: "Orçamento ORC-114",       kind: "PDF",    size: "184 KB" },
+      { id: "a3", label: "Manual técnico FFI12HBX", kind: "PDF",    size: "3,4 MB" },
+    ],
+    totals: { labor: "R$ 1.145", parts: "R$ 2.705", total: "R$ 3.850" },
+  },
+  w1: {
+    ...workOrders[0],
+    description: "Manutenção preventiva trimestral da câmara fria: troca de gaxetas, limpeza de evaporadora e teste de termostato.",
+    address: "R. Augusta, 1480 — Consolação, São Paulo/SP",
+    contact: { name: "Mariana Castro", role: "Gerente", phone: "(11) 98876-2310" },
+    checklist: [
+      { id: "k1", label: "Limpeza de evaporadora", done: true  },
+      { id: "k2", label: "Troca de gaxetas",       done: false },
+      { id: "k3", label: "Teste de termostato",    done: false },
+      { id: "k4", label: "Relatório fotográfico",  done: false },
+    ],
+    items: [
+      { id: "i1", label: "Kit gaxeta câmara fria", qty: 1, unit: "kit", price: "R$ 180" },
+      { id: "i2", label: "Mão de obra técnica",    qty: 2, unit: "h",   price: "R$ 300" },
+    ],
+    timeline: [
+      { id: "t1", at: "25/06 · 07:40", who: "Sistema", action: "OS criada pelo plano de manutenção" },
+      { id: "t2", at: "25/06 · 08:25", who: "Ana S.",  action: "Check-in no local", tone: "ok" },
+      { id: "t3", at: "25/06 · 08:30", who: "Ana S.",  action: "Iniciou execução",  tone: "ok" },
+    ],
+    attachments: [
+      { id: "a1", label: "Plano preventivo PM-2026-Q2", kind: "PDF", size: "210 KB" },
+    ],
+    totals: { labor: "R$ 300", parts: "R$ 180", total: "R$ 480" },
+  },
+  w5: {
+    ...workOrders[4],
+    description: "Falha completa no VRF do andar 12. Hóspedes deslocados. Acionado plantão para diagnóstico e reparo emergencial.",
+    address: "Av. Atlântica, 1500 — Copacabana, Rio de Janeiro/RJ",
+    contact: { name: "Beatriz Lima", role: "Gerente de manutenção", phone: "(21) 99700-3344" },
+    checklist: [
+      { id: "k1", label: "Diagnóstico de falha", done: false },
+      { id: "k2", label: "Reparo emergencial",   done: false },
+      { id: "k3", label: "Teste em carga",       done: false },
+    ],
+    items: [
+      { id: "i1", label: "Hora técnica plantão", qty: 3, unit: "h",  price: "R$ 1.350" },
+      { id: "i2", label: "Deslocamento urgente", qty: 1, unit: "un", price: "R$ 320"   },
+    ],
+    timeline: [
+      { id: "t1", at: "25/06 · 11:00", who: "Beatriz Lima", action: "Abriu chamado emergencial" },
+      { id: "t2", at: "25/06 · 11:08", who: "Sistema",      action: "OS gerada e atribuída ao plantão", tone: "info" },
+      { id: "t3", at: "25/06 · 12:25", who: "Sistema",      action: "SLA estourado em 25 min",          tone: "late" },
+    ],
+    attachments: [],
+    totals: { labor: "R$ 1.350", parts: "R$ 750", total: "R$ 2.100" },
+  },
+};
+
+function buildFallbackWorkOrder(base: WorkOrder): WorkOrderDetail {
+  return {
+    ...base,
+    description: "Ordem de serviço sem detalhamento expandido nesta versão mockada.",
+    address: "Endereço não cadastrado",
+    contact: { name: "—", role: "—", phone: "—" },
+    checklist: [
+      { id: "k1", label: "Check-in no local",  done: base.status === "in_progress" || base.status === "done" },
+      { id: "k2", label: "Executar atividade", done: base.status === "done" },
+      { id: "k3", label: "Coletar assinatura", done: base.status === "done" },
+    ],
+    items: [{ id: "i1", label: "Mão de obra técnica", qty: 1, unit: "h", price: base.value }],
+    timeline: [
+      { id: "t1", at: base.openedAt,     who: "Sistema",     action: "OS criada" },
+      { id: "t2", at: base.scheduledFor, who: base.operator, action: "Atribuída", tone: "info" },
+    ],
+    attachments: [],
+    totals: { labor: base.value, parts: "R$ 0", total: base.value },
+  };
+}
+
+export function getWorkOrderById(id: string): WorkOrderDetail | undefined {
+  if (workOrderDetails[id]) return workOrderDetails[id];
+  const base = workOrders.find((w) => w.id === id);
+  return base ? buildFallbackWorkOrder(base) : undefined;
+}

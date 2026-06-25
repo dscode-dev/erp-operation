@@ -13,11 +13,13 @@ Rota raiz `/` abre a **Plataforma**. Não existe tela de seleção de ambiente.
 | `/equipamentos` | `src/app/(platform)/equipamentos/page.tsx` | Inventário de equipamentos |
 | `/equipamentos/[id]` | `src/app/(platform)/equipamentos/[id]/page.tsx` | Detalhe do equipamento |
 | `/agenda` | `src/app/(platform)/agenda/page.tsx` | Agenda semanal estilo Google Calendar (grade horária + sidebar de próximos) |
+| `/ordens` | `src/app/(platform)/ordens/page.tsx` | **NOVO** — Ordens de Serviço: indicadores, filtros e tabela completa (nº, tipo, SLA, valor, status) |
+| `/ordens/[id]` | `src/app/(platform)/ordens/[id]/page.tsx` | **NOVO** — Detalhe da OS: resumo, checklist com progresso, itens/mão de obra, linha do tempo e anexos |
 | `/financial` | `src/app/(platform)/financial/page.tsx` | **NOVO** — Dashboard financeiro (mockado) com indicadores, gráfico SVG, recebíveis e despesas |
 
 Layout: `src/app/(platform)/layout.tsx` — Sidebar agrupada (Operação · Cadastros · Gestão · Sistema) + Topbar.
 
-> Placeholders na sidebar (badge "em breve", sem rota ainda): Ordens de Serviço, Produtos, Serviços, Relatórios, Usuários, Configurações, Perfil.
+> Placeholders na sidebar (badge "em breve", sem rota ainda): Produtos, Serviços, Relatórios, Usuários, Configurações, Perfil.
 
 ## Operador (mobile-first)
 

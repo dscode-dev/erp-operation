@@ -39,7 +39,7 @@ const groups: NavGroup[] = [
       { label: "Dashboard", href: "/", icon: LayoutDashboard },
       { label: "Agenda", href: "/agenda", icon: Calendar },
       { label: "Atendimentos", href: "/servicos", icon: Briefcase },
-      { label: "Ordens de Serviço", href: "#", icon: ClipboardList, soon: true },
+      { label: "Ordens de Serviço", href: "/ordens", icon: ClipboardList },
     ],
   },
   {
