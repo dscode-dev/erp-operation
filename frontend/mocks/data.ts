@@ -100,39 +100,32 @@ export const equipments: Equipment[] = [
   { id: "eq8", tag: "EQP-621", name: "Bomba centrífuga 7,5cv",      client: "Edifício Solar",    location: "Casa de máquinas",     lastService: "22/05/2026", nextService: "22/08/2026", status: "done" },
 ];
 
-export type EventKind = "service" | "maintenance" | "visit" | "urgent";
-
-export const eventKindMeta: Record<EventKind, { label: string; color: string }> = {
-  service:     { label: "Atendimento", color: "var(--color-event-service)" },
-  maintenance: { label: "Manutenção",  color: "var(--color-event-maintenance)" },
-  visit:       { label: "Visita",      color: "var(--color-event-visit)" },
-  urgent:      { label: "Urgência",    color: "var(--color-event-urgent)" },
-};
+export type AgendaEventKind = "atendimento" | "manutencao" | "visita" | "urgencia";
 
 export type AgendaEvent = {
   id: string;
   day: 1 | 2 | 3 | 4 | 5 | 6 | 7;
   time: string;
-  durationMin: number;
+  endTime: string;
   title: string;
   client: string;
   operator: string;
-  kind: EventKind;
   status: Status;
+  kind: AgendaEventKind;
 };
 
 export const weekAgenda: AgendaEvent[] = [
-  { id: "w1",  day: 1, time: "08:30", durationMin: 90,  title: "Manutenção preventiva", client: "Restaurante Aurora", operator: "Ana S.",   kind: "maintenance", status: "in_progress" },
-  { id: "w2",  day: 1, time: "10:30", durationMin: 120, title: "Troca de compressor",   client: "Mercado Central",    operator: "Marina R.",kind: "service",     status: "in_progress" },
-  { id: "w3",  day: 1, time: "14:00", durationMin: 60,  title: "Vistoria mensal",       client: "Indústria Beta",     operator: "Sofia M.", kind: "visit",       status: "done" },
-  { id: "w4",  day: 2, time: "09:00", durationMin: 120, title: "Instalação câmera IP",  client: "Clínica VitaCare",   operator: "Carlos L.",kind: "service",     status: "scheduled" },
-  { id: "w5",  day: 2, time: "13:30", durationMin: 90,  title: "Treinamento NR-10",     client: "Interno",            operator: "Equipe",   kind: "visit",       status: "scheduled" },
-  { id: "w6",  day: 3, time: "08:00", durationMin: 90,  title: "Diagnóstico elétrico",  client: "Edifício Solar",     operator: "João P.",  kind: "service",     status: "scheduled" },
-  { id: "w7",  day: 3, time: "15:00", durationMin: 60,  title: "Reparo emergencial",    client: "Hotel Mirante",      operator: "Renato O.",kind: "urgent",      status: "pending" },
-  { id: "w8",  day: 4, time: "10:30", durationMin: 90,  title: "Visita técnica",        client: "Hospital Norte",     operator: "Marina R.",kind: "visit",       status: "scheduled" },
-  { id: "w9",  day: 5, time: "09:00", durationMin: 60,  title: "Limpeza evaporadora",   client: "Clínica VitaCare",   operator: "Ana S.",   kind: "maintenance", status: "scheduled" },
-  { id: "w10", day: 5, time: "14:00", durationMin: 120, title: "Substituição painel",   client: "Edifício Solar",     operator: "João P.",  kind: "service",     status: "scheduled" },
-  { id: "w11", day: 6, time: "11:00", durationMin: 90,  title: "Inspeção câmara fria",  client: "Restaurante Aurora", operator: "Sofia M.", kind: "maintenance", status: "scheduled" },
+  { id: "w1",  day: 1, time: "08:30", endTime: "10:00", title: "Manutenção preventiva", client: "Restaurante Aurora", operator: "Ana S.",   status: "in_progress", kind: "manutencao" },
+  { id: "w2",  day: 1, time: "10:00", endTime: "12:00", title: "Troca de compressor",   client: "Mercado Central",    operator: "Marina R.",status: "in_progress", kind: "manutencao" },
+  { id: "w3",  day: 1, time: "14:00", endTime: "15:30", title: "Vistoria mensal",       client: "Indústria Beta",     operator: "Sofia M.", status: "done",        kind: "atendimento" },
+  { id: "w4",  day: 2, time: "09:00", endTime: "11:00", title: "Instalação câmera IP",  client: "Clínica VitaCare",   operator: "Carlos L.",status: "scheduled",   kind: "atendimento" },
+  { id: "w5",  day: 2, time: "13:30", endTime: "16:00", title: "Treinamento NR-10",     client: "Interno",            operator: "Equipe",   status: "scheduled",   kind: "visita" },
+  { id: "w6",  day: 3, time: "08:00", endTime: "10:30", title: "Diagnóstico elétrico",  client: "Edifício Solar",     operator: "João P.",  status: "scheduled",   kind: "atendimento" },
+  { id: "w7",  day: 3, time: "15:00", endTime: "17:00", title: "Reparo emergencial",    client: "Hotel Mirante",      operator: "Renato O.",status: "pending",     kind: "urgencia" },
+  { id: "w8",  day: 4, time: "10:30", endTime: "12:00", title: "Visita técnica",        client: "Hospital Norte",     operator: "Marina R.",status: "scheduled",   kind: "visita" },
+  { id: "w9",  day: 5, time: "09:00", endTime: "10:00", title: "Limpeza evaporadora",   client: "Clínica VitaCare",   operator: "Ana S.",   status: "scheduled",   kind: "manutencao" },
+  { id: "w10", day: 5, time: "14:00", endTime: "16:00", title: "Substituição painel",   client: "Edifício Solar",     operator: "João P.",  status: "scheduled",   kind: "atendimento" },
+  { id: "w11", day: 6, time: "11:00", endTime: "12:00", title: "Inspeção câmara fria",  client: "Restaurante Aurora", operator: "Sofia M.", status: "scheduled",   kind: "manutencao" },
 ];
 
 export const weekDays = [
@@ -144,6 +137,57 @@ export const weekDays = [
   { d: 6, label: "Sáb", date: "27/06" },
   { d: 7, label: "Dom", date: "28/06" },
 ] as const;
+
+/* ============ Equipe / Alertas (dashboard) ============ */
+
+export const teamOnline: { id: string; name: string; role: string; status: "online" | "em_servico" | "offline"; current?: string }[] = [
+  { id: "t1", name: "Ana Souza",    role: "Refrigeração",   status: "em_servico", current: "OS-2381 · Aurora" },
+  { id: "t2", name: "Marina Reis",  role: "Refrigeração",   status: "em_servico", current: "OS-2383 · Mercado Central" },
+  { id: "t3", name: "Carlos Lima",  role: "Elétrica/CFTV",  status: "online" },
+  { id: "t4", name: "João Pedro",   role: "Elétrica",       status: "em_servico", current: "OS-2384 · Edifício Solar" },
+  { id: "t5", name: "Sofia Mendes", role: "Industrial",     status: "online" },
+  { id: "t6", name: "Renato O.",    role: "Geradores",      status: "offline" },
+];
+
+export const operationalAlerts: { id: string; title: string; detail: string; severity: "danger" | "warning" | "info" }[] = [
+  { id: "al1", title: "OS-2385 atrasada em 25min", detail: "Hotel Mirante · Renato O.", severity: "danger" },
+  { id: "al2", title: "Chiller 200TR — alarme de baixa pressão", detail: "EQP-118 · Hospital Norte", severity: "danger" },
+  { id: "al3", title: "Contrato vence em 12 dias", detail: "Indústria Beta · renovar SLA",        severity: "warning" },
+  { id: "al4", title: "Estoque baixo — filtro secador", detail: "Restam 3 unidades",              severity: "warning" },
+];
+
+/* ============ Financeiro (mockado) ============ */
+
+export const financialMetrics: Metric[] = [
+  { label: "Receita do mês",    value: "R$ 184.220", delta: "+12%", trend: "up",   icon: "TrendingUp" },
+  { label: "Despesas do mês",   value: "R$ 92.480",  delta: "+4%",  trend: "up",   icon: "TrendingDown" },
+  { label: "Lucro estimado",    value: "R$ 91.740",  delta: "+18%", trend: "up",   icon: "Wallet" },
+  { label: "Previsão fim mês",  value: "R$ 235.000", delta: "+8%",  trend: "up",   icon: "LineChart" },
+];
+
+export const financialMonthly: { month: string; receita: number; despesa: number }[] = [
+  { month: "Jan", receita: 142000, despesa: 78000 },
+  { month: "Fev", receita: 158000, despesa: 81000 },
+  { month: "Mar", receita: 167000, despesa: 84000 },
+  { month: "Abr", receita: 171000, despesa: 87000 },
+  { month: "Mai", receita: 176000, despesa: 90000 },
+  { month: "Jun", receita: 184220, despesa: 92480 },
+];
+
+export const financialReceivables: { id: string; client: string; due: string; amount: string; status: Status }[] = [
+  { id: "r1", client: "Hospital Norte",        due: "Hoje",       amount: "R$ 18.400", status: "pending" },
+  { id: "r2", client: "Indústria Beta",        due: "Em 3 dias",  amount: "R$ 24.900", status: "scheduled" },
+  { id: "r3", client: "Centro Lumière",        due: "Em 7 dias",  amount: "R$ 12.300", status: "scheduled" },
+  { id: "r4", client: "Restaurante Aurora",    due: "Atrasado",   amount: "R$ 3.800",  status: "danger" },
+];
+
+export const financialExpenses: { id: string; label: string; category: string; amount: string }[] = [
+  { id: "e1", label: "Folha de pagamento",  category: "Pessoal",        amount: "R$ 48.200" },
+  { id: "e2", label: "Combustível frota",   category: "Operacional",    amount: "R$ 11.400" },
+  { id: "e3", label: "Peças e insumos",     category: "Estoque",        amount: "R$ 18.700" },
+  { id: "e4", label: "Aluguel / utilities", category: "Estrutural",     amount: "R$ 9.600"  },
+  { id: "e5", label: "Softwares e taxas",   category: "Administrativo", amount: "R$ 4.580"  },
+];
 
 /* ============ Operador ============ */
 

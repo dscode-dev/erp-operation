@@ -1,4 +1,4 @@
-# ROUTES — Sprint 1.b
+# ROUTES — Sprint 0.A
 
 Rota raiz `/` abre a **Plataforma**. Não existe tela de seleção de ambiente.
 
@@ -6,19 +6,18 @@ Rota raiz `/` abre a **Plataforma**. Não existe tela de seleção de ambiente.
 
 | Path | Arquivo | Descrição |
 |---|---|---|
-| `/` | `src/app/(platform)/page.tsx` | Dashboard operacional (home) |
+| `/` | `src/app/(platform)/page.tsx` | Dashboard operacional (saudação + Hoje + Serviços + Atividade + Agenda + Equipe + Alertas) |
 | `/servicos` | `src/app/(platform)/servicos/page.tsx` | Lista completa de atendimentos do dia |
 | `/clientes` | `src/app/(platform)/clientes/page.tsx` | Carteira de clientes |
-| `/clientes/[id]` | `src/app/(platform)/clientes/[id]/page.tsx` | Detalhe do cliente (dados, contatos, atendimentos, equipamentos) |
+| `/clientes/[id]` | `src/app/(platform)/clientes/[id]/page.tsx` | Detalhe do cliente |
 | `/equipamentos` | `src/app/(platform)/equipamentos/page.tsx` | Inventário de equipamentos |
-| `/equipamentos/[id]` | `src/app/(platform)/equipamentos/[id]/page.tsx` | Detalhe do equipamento (identificação, specs, histórico) |
-| `/agenda` | `src/app/(platform)/agenda/page.tsx` | Visão semanal (kanban de 7 colunas) |
+| `/equipamentos/[id]` | `src/app/(platform)/equipamentos/[id]/page.tsx` | Detalhe do equipamento |
+| `/agenda` | `src/app/(platform)/agenda/page.tsx` | Agenda semanal estilo Google Calendar (grade horária + sidebar de próximos) |
+| `/financial` | `src/app/(platform)/financial/page.tsx` | **NOVO** — Dashboard financeiro (mockado) com indicadores, gráfico SVG, recebíveis e despesas |
 
-Layout: `src/app/(platform)/layout.tsx` — Sidebar colapsável + Topbar (busca global, notificações, seletor de empresa, menu do usuário).
+Layout: `src/app/(platform)/layout.tsx` — Sidebar agrupada (Operação · Cadastros · Gestão · Sistema) + Topbar.
 
-As linhas das tabelas `/clientes` e `/equipamentos` agora são clicáveis e navegam para o detalhe via prop `rowHref` do `DataTable`.
-
-> Pendente para próxima sprint: `/configuracoes`, formulário "Novo serviço", middleware de subdomínios.
+> Placeholders na sidebar (badge "em breve", sem rota ainda): Ordens de Serviço, Produtos, Serviços, Relatórios, Usuários, Configurações, Perfil.
 
 ## Operador (mobile-first)
 
@@ -26,7 +25,7 @@ As linhas das tabelas `/clientes` e `/equipamentos` agora são clicáveis e nave
 |---|---|---|
 | `/operator` | `src/app/operator/page.tsx` | Home (próximo atendimento + ações rápidas) |
 | `/operator/services` | `src/app/operator/services/page.tsx` | Fila de atendimentos |
-| `/operator/services/[id]` | `src/app/operator/services/[id]/page.tsx` | Detalhe do atendimento (checklist, cliente, equipamento, CTA) |
+| `/operator/services/[id]` | `src/app/operator/services/[id]/page.tsx` | Detalhe do atendimento |
 | `/operator/documents` | `src/app/operator/documents/page.tsx` | Documentos |
 | `/operator/profile` | `src/app/operator/profile/page.tsx` | Perfil |
 

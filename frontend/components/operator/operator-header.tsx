@@ -1,13 +1,11 @@
 import { Bell } from "lucide-react";
 
 export function OperatorHeader({ name }: { name: string }) {
-  const hour = new Date().getHours();
-  const greet = hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite";
   return (
     <header className="flex items-center justify-between">
-      <div>
-        <p className="text-caption">{greet},</p>
-        <h1 className="text-heading">{name}</h1>
+      <div className="min-w-0">
+        <p className="text-[10px] uppercase tracking-[0.12em] text-[var(--color-muted-foreground)]">Segunda · 22 jun</p>
+        <h1 className="text-[22px] font-semibold tracking-tight leading-tight">Olá, {name}.</h1>
       </div>
       <button
         type="button"

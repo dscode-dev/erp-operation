@@ -1,38 +1,41 @@
-# COMPONENTS — Sprint 1.c
+# COMPONENTS — Sprint 0.A
 
 ## `components/platform/` (desktop-first)
 
 | Componente | Arquivo | Descrição |
 |---|---|---|
-| `PlatformSidebar` | `sidebar.tsx` | Sidebar colapsável com indicador ativo |
-| `PlatformTopbar` | `topbar.tsx` | Empresa, busca global, notificações, theme toggle, avatar |
-| `PageHeader` | `page-header.tsx` | Cabeçalho de rota (eyebrow/título/descrição aceitam `ReactNode`) |
-| `Breadcrumbs` | `breadcrumbs.tsx` | Trilha de navegação para drill-down (`items: { label, href? }[]`) |
-| `FilterBar` | `filter-bar.tsx` | Campo de busca + chips de filtro + slot direito |
-| `DataTable` | `data-table.tsx` | Tabela genérica `<T>` — agora aceita `rowHref?: (row) => string` para linhas clicáveis (renderiza `<Link>` por célula, SSR-friendly) |
-| `InfoCard` / `InfoRow` | `info-card.tsx` | Cartão de seção com header + linhas label/value para detalhes |
-| `MetricCard` | `metric-card.tsx` | Card de indicador operacional |
+| `PlatformSidebar` | `sidebar.tsx` | **Sidebar agrupada** em 4 categorias (Operação · Cadastros · Gestão · Sistema), grupos recolhíveis, item ativo com barra lateral e fundo `primary/10`, badge "em breve", tooltips quando colapsada |
+| `PlatformTopbar` | `topbar.tsx` | Empresa ativa · busca global (⌘K) · notificações · theme toggle · avatar |
+| `PageHeader` | `page-header.tsx` | Título reduzido para `text-page-title` (28px), eyebrow/description aceitam `ReactNode` |
+| `GreetingHeader` | `greeting-header.tsx` | **NOVO** — saudação discreta ("Olá, {nome}.") + data + contador de pendências |
+| `Breadcrumbs` | `breadcrumbs.tsx` | Trilha de navegação para drill-down |
+| `FilterBar` | `filter-bar.tsx` | Busca + chips + slot direito |
+| `DataTable` | `data-table.tsx` | Tabela genérica `<T>` com `rowHref?` |
+| `InfoCard` / `InfoRow` | `info-card.tsx` | Cartão label/value para detalhes |
+| `MetricCard` | `metric-card.tsx` | **Reprojetado** — valor 22px, ícone em quadrado, pill de tendência com seta colorida, hover sobe o card |
 | `ActivityFeed` | `activity-feed.tsx` | Lista de atividade recente |
-| `DashboardSection` | `dashboard-section.tsx` | Wrapper de seção |
-| `NewServiceButton` | `new-service-button.tsx` | Botão client que abre o sheet de criação |
-| `NewServiceSheet` | `new-service-sheet.tsx` | Sheet lateral multi-step (Cliente → Equipamento → Tarefas → Agendamento → Resumo) |
+| `AlertCard` | `alert-card.tsx` | **NOVO** — alerta operacional com severidade (`danger`/`warning`/`info`) e ring tonal |
+| `TeamStatusList` | `team-status-list.tsx` | **NOVO** — operadores com avatar, status (online/em_servico/offline) e OS atual |
+| `RevenueChart` | `revenue-chart.tsx` | **NOVO** — gráfico SVG linha + área (receita vs despesa, 6 meses) sem dependências |
+| `DashboardSection` | `dashboard-section.tsx` | Wrapper de seção (label 11px uppercase) |
+| `NewServiceButton` / `NewServiceSheet` | … | Sheet multi-step de criação de serviço |
 
 ## `components/operator/` (mobile-first)
 
 | Componente | Arquivo | Descrição |
 |---|---|---|
-| `OperatorBottomNav` | `bottom-nav.tsx` | Nav inferior, 5 itens, botão central QR elevado |
-| `OperatorHeader` | `operator-header.tsx` | Saudação + notificações |
-| `QuickAction` | `quick-action.tsx` | Botão grande de ação rápida |
-| `ServiceCard` | `service-card.tsx` | Card de atendimento → `/operator/services/[id]` |
-| `ScheduleCard` | `schedule-card.tsx` | Item compacto de agenda → detalhe |
+| `OperatorBottomNav` | `bottom-nav.tsx` | Nav inferior, 5 itens, botão QR elevado |
+| `OperatorHeader` | `operator-header.tsx` | **Reprojetado** — "Olá, {nome}." + data discreta, sem cabeçalho gigante |
+| `QuickAction` | `quick-action.tsx` | **Reprojetado** — gradient bg, min-h 88px, 3 tons (`primary`/`accent`/`success`), feedback tátil |
+| `ServiceCard` | `service-card.tsx` | Card de atendimento |
+| `ScheduleCard` | `schedule-card.tsx` | Item de agenda |
 
 ## `components/shared/`
 
 | Componente | Arquivo | Descrição |
 |---|---|---|
-| `CommandPaletteProvider` / `useCommandPalette` | `command-palette.tsx` | Ctrl/⌘+K global mockado |
-| `EmptyState` | `empty-state.tsx` | Estado vazio padrão |
+| `CommandPaletteProvider` / `useCommandPalette` | `command-palette.tsx` | ⌘K global |
+| `EmptyState` | `empty-state.tsx` | Estado vazio com ícone + descrição |
 | `StatusPill` | `status-pill.tsx` | Pill semântica por estado |
 | `SkeletonLine` / `SkeletonCard` / `SkeletonList` | `skeletons.tsx` | Placeholders shimmer |
 
@@ -40,10 +43,12 @@
 
 | Componente | Arquivo | Descrição |
 |---|---|---|
-| `ThemeProvider` | `theme-provider.tsx` | `next-themes` |
-| `ThemeToggle` | `theme-toggle.tsx` | Toggle light/dark |
+| `ThemeProvider` / `ThemeToggle` | `theme/*` | Light/Dark via classe `.dark` |
 
-## Utilitários
+## Padrões de uso
 
-- `lib/utils.ts` — `cn()`.
-- `mocks/data.ts` — agora exporta também: `clientDetails`, `getClientById`, `equipmentDetails`, `getEquipmentById` e tipos `ClientDetail`, `ClientServiceRow`, `ClientEquipmentRow`, `ClientContact`, `EquipmentDetail`, `EquipmentHistoryRow`.
+- **Saudação do dashboard**: sempre `GreetingHeader` com `name` + `pending`.
+- **Métricas de topo**: grid `grid-cols-2 lg:grid-cols-6` para Plataforma, `grid-cols-2 lg:grid-cols-4` para Financeiro.
+- **Eventos da Agenda**: usar `kind` (`atendimento`/`manutencao`/`visita`/`urgencia`) com tokens `--color-event-*`.
+- **Alertas**: usar `AlertCard` para qualquer aviso operacional; severidade define ring + dot.
+- **Ações rápidas (Operador)**: 3 colunas, tons alternados (`primary`/`accent`/`success`).

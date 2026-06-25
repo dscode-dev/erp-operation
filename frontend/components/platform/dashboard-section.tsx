@@ -15,7 +15,7 @@ export function DashboardSection({
   return (
     <section className={cn("space-y-3", className)}>
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)]">
+        <h2 className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--color-muted-foreground)]">
           {title}
         </h2>
         {action}
