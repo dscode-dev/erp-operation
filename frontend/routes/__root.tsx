@@ -9,7 +9,9 @@ import {
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
 
+// @ts-ignore
 import appCss from "../styles.css?url";
+// @ts-ignore
 import { reportLovableError } from "../lib/lovable-error-reporting";
 
 function NotFoundComponent() {
