@@ -1,33 +1,22 @@
-import { FileText } from "lucide-react";
-import { EmptyState } from "@/components/shared/empty-state";
-import { operatorDocuments } from "@/mocks/data";
+import { ComingSoonState } from "@/components/shared/states";
 
+/**
+ * Documentos do operador — a geração de documentos (OS, orçamento, recibo,
+ * laudo) é responsabilidade do backend e ainda não há endpoint. A arquitetura
+ * de visualização (Preview/Review/Download em components/documents) já está
+ * pronta para o fluxo futuro: formulário → assinatura → backend → PDF.
+ */
 export default function OperatorDocuments() {
   return (
     <div className="px-4 pt-6 space-y-4">
       <header>
-        <h1 className="text-heading">Documentos</h1>
-        <p className="text-[var(--color-muted-foreground)] text-sm">OS, orçamentos e termos assinados.</p>
+        <h1 className="text-section-title">Documentos</h1>
+        <p className="text-[var(--color-muted-foreground)] text-sm">OS, orçamentos e termos.</p>
       </header>
-      {operatorDocuments.length === 0 ? (
-        <EmptyState
-          icon={FileText}
-          title="Nenhum documento"
-          description="Documentos gerados em atendimentos aparecem aqui."
-        />
-      ) : (
-        <ul className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] shadow-[var(--shadow-card)] divide-y divide-[var(--color-border)]">
-          {operatorDocuments.map((d) => (
-            <li key={d.id} className="flex items-center gap-3 p-3">
-              <FileText className="h-5 w-5 text-[var(--color-muted-foreground)]" />
-              <div className="flex-1 min-w-0">
-                <div className="font-medium truncate">{d.title}</div>
-                <div className="text-caption">{d.kind} · {d.date}</div>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
+      <ComingSoonState
+        title="Documentos em breve"
+        description="A geração de documentos é feita pelo backend (escopo futuro). A pré-visualização e o download já estão preparados na arquitetura."
+      />
     </div>
   );
 }

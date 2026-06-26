@@ -1,8 +1,10 @@
+"use client";
+
 import { Calendar, CheckCircle2 } from "lucide-react";
+import { formatLongDate } from "@/lib/format";
 
 export function GreetingHeader({ name, pending }: { name: string; pending: number }) {
-  // Data mockada — Sprint 0.A
-  const dateLabel = "Segunda-feira, 22 de junho";
+  const dateLabel = formatLongDate();
   return (
     <header className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
       <div className="space-y-1 min-w-0">

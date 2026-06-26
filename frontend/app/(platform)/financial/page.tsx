@@ -1,115 +1,170 @@
-import { Wallet, TrendingUp, TrendingDown, Download } from "lucide-react";
+"use client";
+
+import { useMemo, useState } from "react";
+import { Wallet, TrendingUp, TrendingDown, ArrowDownCircle, ArrowUpCircle } from "lucide-react";
 import { PageHeader } from "@/components/platform/page-header";
 import { DashboardSection } from "@/components/platform/dashboard-section";
 import { MetricCard } from "@/components/platform/metric-card";
-import { StatusPill } from "@/components/shared/status-pill";
-import { RevenueChart } from "@/components/platform/revenue-chart";
-import {
-  financialMetrics,
-  financialMonthly,
-  financialReceivables,
-  financialExpenses,
-} from "@/mocks/data";
+import { ExportButton } from "@/components/platform/export-button";
+import { SkeletonCard } from "@/components/shared/skeletons";
+import { ComingSoonState, ErrorState } from "@/components/shared/states";
+import { Gate } from "@/components/auth/gate";
+import { financialApi, useQuery, type FinancialData } from "@/lib/api";
+import { formatCurrencyBRL } from "@/lib/format";
+
+const PERIODS = ["7 dias", "30 dias", "90 dias"] as const;
 
 export default function FinancialPage() {
-  const totalReceitas = financialReceivables.reduce((acc, r) => acc + parseFloat(r.amount.replace(/[^\d,]/g, "").replace(",", ".") || "0"), 0);
+  const [period, setPeriod] = useState<(typeof PERIODS)[number]>("30 dias");
+  const fin = useQuery<FinancialData>((signal) => financialApi.getFinancial({ signal }), []);
+
+  const finance = fin.data?.finance;
+  const entries = useMemo(() => finance?.entries ?? [], [finance]);
+  const lucro = finance ? finance.summary.entradas - finance.summary.saidas - finance.summary.despesas : 0;
 
   return (
-    <div className="space-y-8 max-w-[1440px]">
-      <PageHeader
-        eyebrow={<span className="inline-flex items-center gap-1.5"><Wallet className="h-3 w-3" /> Visão financeira</span>}
-        title="Financeiro"
-        description="Indicadores de receita, despesa e projeção do mês — visão simplificada do gestor."
-        actions={
-          <>
-            <button className="inline-flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 h-9 text-sm hover:bg-[var(--color-muted)]">
-              Junho · 2026
-            </button>
-            <button className="inline-flex items-center gap-2 rounded-[var(--radius-md)] bg-[var(--color-primary)] text-[var(--color-primary-foreground)] px-3 h-9 text-sm font-medium shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-hover)]">
-              <Download className="h-4 w-4" /> Exportar
-            </button>
-          </>
-        }
-      />
-
-      <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
-        {financialMetrics.map((m) => (
-          <MetricCard key={m.label} {...m} />
-        ))}
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-3">
-        <DashboardSection title="Receita vs Despesa (6 meses)" className="lg:col-span-2">
-          <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-5 shadow-[var(--shadow-card)]">
-            <RevenueChart data={financialMonthly} />
-            <div className="mt-4 flex items-center gap-5 text-caption">
-              <span className="inline-flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-[var(--color-primary)]" /> Receita
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-[var(--color-danger)]/70" /> Despesa
-              </span>
-            </div>
-          </div>
-        </DashboardSection>
-
-        <DashboardSection title="Despesas por categoria">
-          <ul className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] shadow-[var(--shadow-card)] divide-y divide-[var(--color-border)]">
-            {financialExpenses.map((e) => (
-              <li key={e.id} className="flex items-center justify-between p-3">
-                <div className="min-w-0">
-                  <div className="text-sm font-medium truncate">{e.label}</div>
-                  <div className="text-caption">{e.category}</div>
-                </div>
-                <span className="font-mono text-sm tabular-nums">{e.amount}</span>
-              </li>
-            ))}
-          </ul>
-        </DashboardSection>
-      </div>
-
-      <DashboardSection
-        title="Recebíveis"
-        action={<span className="text-caption">total previsto · <span className="font-mono text-[var(--color-foreground)]">R$ {totalReceitas.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span></span>}
-      >
-        <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] shadow-[var(--shadow-card)] overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-[var(--color-muted)]/40 text-[var(--color-muted-foreground)] text-[11px] uppercase tracking-wider">
-              <tr>
-                <th className="text-left font-medium px-4 py-2.5">Cliente</th>
-                <th className="text-left font-medium px-4 py-2.5">Vencimento</th>
-                <th className="text-right font-medium px-4 py-2.5">Valor</th>
-                <th className="text-right font-medium px-4 py-2.5">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--color-border)]">
-              {financialReceivables.map((r) => (
-                <tr key={r.id} className="hover:bg-[var(--color-muted)]/30">
-                  <td className="px-4 py-3 font-medium">{r.client}</td>
-                  <td className="px-4 py-3 text-[var(--color-muted-foreground)]">{r.due}</td>
-                  <td className="px-4 py-3 text-right font-mono tabular-nums">{r.amount}</td>
-                  <td className="px-4 py-3 text-right"><div className="inline-flex"><StatusPill status={r.status} /></div></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+    <Gate
+      roles={["OWNER", "MANAGER"]}
+      permission="canFinancial"
+      fallback={
+        <div className="max-w-[1440px]">
+          <PageHeader eyebrow="Visão financeira" title="Financeiro" description="Acesso restrito." />
+          <ComingSoonState title="Sem permissão" description="Seu perfil não tem acesso às informações financeiras." />
         </div>
-      </DashboardSection>
+      }
+    >
+      <div className="space-y-8 max-w-[1440px]">
+        <PageHeader
+          eyebrow={<span className="inline-flex items-center gap-1.5"><Wallet className="h-3 w-3" /> Visão financeira</span>}
+          title="Financeiro"
+          description="Indicadores consumidos do Demo Dataset (domínio financeiro definitivo é escopo futuro)."
+          actions={
+            <>
+              <div className="inline-flex rounded-[var(--radius-md)] border border-[var(--color-border)] overflow-hidden">
+                {PERIODS.map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setPeriod(p)}
+                    className={`px-3 h-9 text-sm transition-colors ${
+                      period === p ? "bg-[var(--color-primary)] text-[var(--color-primary-foreground)]" : "hover:bg-[var(--color-muted)]"
+                    }`}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
+              <ExportButton
+                label="Exportar"
+                fileName="financeiro-lancamentos"
+                rows={entries.map((e) => ({
+                  tipo: e.kind === "ENTRY" ? "Entrada" : "Despesa",
+                  descricao: e.description,
+                  valor: e.amount,
+                }))}
+              />
+            </>
+          }
+        />
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Trend label="Tendência de receita" value="+12%" tone="up" />
-        <Trend label="Ticket médio" value="R$ 1.840" tone="flat" />
-        <Trend label="Inadimplência" value="2,1%" tone="down" />
+        {fin.loading && !fin.data ? (
+          <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">{Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)}</div>
+        ) : fin.error && !fin.data ? (
+          <ErrorState error={fin.error} onRetry={fin.refetch} />
+        ) : fin.data?.disabled ? (
+          <ComingSoonState
+            title="Financeiro em breve"
+            description="O Demo Dataset está desabilitado e ainda não existe domínio financeiro de produção. Ative o Demo Dataset para visualizar dados de desenvolvimento."
+          />
+        ) : finance ? (
+          <>
+            <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+              <MetricCard label="Entradas" value={formatCurrencyBRL(finance.summary.entradas)} delta={period} trend="up" icon="TrendingUp" />
+              <MetricCard label="Saídas" value={formatCurrencyBRL(finance.summary.saidas)} delta={period} trend="down" icon="TrendingDown" />
+              <MetricCard label="Despesas" value={formatCurrencyBRL(finance.summary.despesas)} delta={period} trend="down" icon="Wallet" />
+              <MetricCard label="Projeção 30 dias" value={formatCurrencyBRL(finance.summary.projecao30Dias)} delta="estimativa" trend="up" icon="LineChart" />
+            </div>
+
+            <div className="grid gap-6 lg:grid-cols-3">
+              <DashboardSection title="Comparativo do período" className="lg:col-span-2">
+                <ComparativeChart
+                  entradas={finance.summary.entradas}
+                  saidas={finance.summary.saidas}
+                  despesas={finance.summary.despesas}
+                />
+              </DashboardSection>
+
+              <DashboardSection title="Resultado">
+                <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-5 shadow-[var(--shadow-card)] space-y-4">
+                  <Indicator label="Lucro estimado" value={formatCurrencyBRL(lucro)} tone={lucro >= 0 ? "up" : "down"} />
+                  <Indicator
+                    label="Margem"
+                    value={finance.summary.entradas > 0 ? `${Math.round((lucro / finance.summary.entradas) * 100)}%` : "—"}
+                    tone={lucro >= 0 ? "up" : "down"}
+                  />
+                  <Indicator label="Cobertura de despesas" value={finance.summary.despesas > 0 ? `${Math.round((finance.summary.entradas / finance.summary.despesas) * 100)}%` : "—"} tone="up" />
+                </div>
+              </DashboardSection>
+            </div>
+
+            <DashboardSection title={`Lançamentos (${entries.length})`}>
+              {entries.length === 0 ? (
+                <ComingSoonState title="Sem lançamentos" description="Nenhum lançamento no período." />
+              ) : (
+                <ul className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] shadow-[var(--shadow-card)] divide-y divide-[var(--color-border)]">
+                  {entries.map((e) => (
+                    <li key={e.id} className="flex items-center gap-3 p-3.5">
+                      {e.kind === "ENTRY" ? (
+                        <ArrowUpCircle className="h-5 w-5 text-[var(--color-success)]" />
+                      ) : (
+                        <ArrowDownCircle className="h-5 w-5 text-[var(--color-danger)]" />
+                      )}
+                      <span className="text-sm font-medium flex-1 truncate">{e.description}</span>
+                      <span className={`font-mono text-sm tabular-nums ${e.kind === "ENTRY" ? "text-[var(--color-success)]" : "text-[var(--color-danger)]"}`}>
+                        {e.kind === "ENTRY" ? "+" : "-"}{formatCurrencyBRL(e.amount)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </DashboardSection>
+          </>
+        ) : null}
+      </div>
+    </Gate>
+  );
+}
+
+function ComparativeChart({ entradas, saidas, despesas }: { entradas: number; saidas: number; despesas: number }) {
+  const max = Math.max(entradas, saidas, despesas, 1);
+  const bars = [
+    { label: "Entradas", value: entradas, color: "var(--color-success)" },
+    { label: "Saídas", value: saidas, color: "var(--color-danger)" },
+    { label: "Despesas", value: despesas, color: "var(--color-warning)" },
+  ];
+  return (
+    <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-5 shadow-[var(--shadow-card)]">
+      <div className="flex items-end gap-6 h-48">
+        {bars.map((b) => (
+          <div key={b.label} className="flex-1 flex flex-col items-center justify-end gap-2 h-full">
+            <span className="font-mono text-xs tabular-nums text-[var(--color-muted-foreground)]">{formatCurrencyBRL(b.value)}</span>
+            <div
+              className="w-full max-w-[80px] rounded-t-[var(--radius-sm)] transition-all"
+              style={{ height: `${(b.value / max) * 100}%`, backgroundColor: b.color, minHeight: 4 }}
+            />
+            <span className="text-caption">{b.label}</span>
+          </div>
+        ))}
       </div>
     </div>
   );
 }
 
-function Trend({ label, value, tone }: { label: string; value: string; tone: "up" | "down" | "flat" }) {
-  const Icon = tone === "up" ? TrendingUp : tone === "down" ? TrendingDown : TrendingUp;
-  const color = tone === "up" ? "text-[var(--color-success)]" : tone === "down" ? "text-[var(--color-danger)]" : "text-[var(--color-muted-foreground)]";
+function Indicator({ label, value, tone }: { label: string; value: string; tone: "up" | "down" }) {
+  const Icon = tone === "up" ? TrendingUp : TrendingDown;
+  const color = tone === "up" ? "text-[var(--color-success)]" : "text-[var(--color-danger)]";
   return (
-    <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 shadow-[var(--shadow-card)] flex items-center justify-between">
+    <div className="flex items-center justify-between">
       <div>
         <div className="text-caption">{label}</div>
         <div className="text-section-title mt-0.5">{value}</div>

@@ -23,12 +23,18 @@ import {
   Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/components/auth/auth-provider";
+import type { Role, UserPermissions } from "@/lib/api";
 
 type NavItem = {
   label: string;
   href: string;
   icon: typeof LayoutDashboard;
   soon?: boolean;
+  /** Visible only to these roles (when omitted, all authenticated roles). */
+  roles?: Role[];
+  /** Visible only when this permission flag is true. */
+  permission?: keyof UserPermissions;
 };
 type NavGroup = { label: string; items: NavItem[] };
 
@@ -47,33 +53,46 @@ const groups: NavGroup[] = [
     items: [
       { label: "Clientes", href: "/clientes", icon: Users },
       { label: "Equipamentos", href: "/equipamentos", icon: Wrench },
-      { label: "Produtos", href: "#", icon: Package, soon: true },
+      { label: "Produtos", href: "/produtos", icon: Package },
       { label: "Serviços", href: "#", icon: Sparkles, soon: true },
     ],
   },
   {
     label: "Gestão",
     items: [
-      { label: "Relatórios", href: "#", icon: BarChart3, soon: true },
-      { label: "Financeiro", href: "/financial", icon: Wallet },
-      { label: "Usuários", href: "#", icon: Shield, soon: true },
+      { label: "Relatórios", href: "/reports", icon: BarChart3, permission: "canReports" },
+      { label: "Financeiro", href: "/financial", icon: Wallet, permission: "canFinancial" },
+      { label: "Usuários", href: "/usuarios", icon: Shield, roles: ["OWNER", "MANAGER", "VIEWER"] },
     ],
   },
   {
     label: "Sistema",
     items: [
-      { label: "Configurações", href: "#", icon: Settings, soon: true },
-      { label: "Perfil", href: "#", icon: User, soon: true },
+      { label: "Configurações", href: "/settings", icon: Settings, roles: ["OWNER", "MANAGER"] },
+      { label: "Perfil", href: "/profile", icon: User },
     ],
   },
 ];
 
 export function PlatformSidebar() {
   const pathname = usePathname();
+  const { can, hasRole } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(
     Object.fromEntries(groups.map((g) => [g.label, true])),
   );
+
+  // RBAC: hide menus the current session cannot access (visual layer only).
+  const visibleGroups = groups
+    .map((g) => ({
+      ...g,
+      items: g.items.filter(
+        (item) =>
+          (!item.roles || hasRole(...item.roles)) &&
+          (!item.permission || can(item.permission)),
+      ),
+    }))
+    .filter((g) => g.items.length > 0);
 
   return (
     <aside
@@ -97,7 +116,7 @@ export function PlatformSidebar() {
 
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto py-3 space-y-4">
-        {groups.map((group, idx) => {
+        {visibleGroups.map((group, idx) => {
           const isOpen = openGroups[group.label] ?? true;
           return (
             <div key={group.label} className="px-2">

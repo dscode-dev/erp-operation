@@ -1,115 +1,161 @@
-// Dashboard operacional — Sprint 0.A
+"use client";
+
+// Dashboard operacional — Sprint 2 (widgets integrados ao backend).
+import Link from "next/link";
+import { CalendarClock, Wallet } from "lucide-react";
 import { DashboardSection } from "@/components/platform/dashboard-section";
 import { MetricCard } from "@/components/platform/metric-card";
-import { ActivityFeed } from "@/components/platform/activity-feed";
-import { StatusPill } from "@/components/shared/status-pill";
 import { GreetingHeader } from "@/components/platform/greeting-header";
-import { AlertCard } from "@/components/platform/alert-card";
 import { TeamStatusList } from "@/components/platform/team-status-list";
+import { StatusPill, type Status } from "@/components/shared/status-pill";
+import { SkeletonCard } from "@/components/shared/skeletons";
+import { EmptyState } from "@/components/shared/empty-state";
+import { ComingSoonState, ErrorState } from "@/components/shared/states";
+import { useAuth } from "@/components/auth/auth-provider";
+import { Gate } from "@/components/auth/gate";
 import {
-  recentActivity,
-  todayServices,
-  agenda,
-  teamOnline,
-  operationalAlerts,
-} from "@/mocks/data";
+  dashboardApi, usersApi, customersApi, financialApi, useQuery,
+  type DashboardData, type DemoScheduleState, type FinancialData,
+} from "@/lib/api";
+import { firstName, formatNumber, formatCurrencyBRL } from "@/lib/format";
+
+const SCHEDULE_STATUS: Record<DemoScheduleState, Status> = {
+  OVERDUE: "danger",
+  IN_PROGRESS: "in_progress",
+  SCHEDULED: "scheduled",
+};
+
+const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
 
 export default function PlatformHome() {
-  const pending = todayServices.filter((s) => s.status !== "done").length;
-  const inProgress = todayServices.filter((s) => s.status === "in_progress").length;
-  const done = todayServices.filter((s) => s.status === "done").length;
-  const operatorsActive = teamOnline.filter((t) => t.status !== "offline").length;
-  const criticalAlerts = operationalAlerts.filter((a) => a.severity === "danger").length;
+  const { session, can, hasRole } = useAuth();
+  const canSeeTeam = hasRole("OWNER", "MANAGER", "VIEWER");
+
+  const dash = useQuery<DashboardData>((signal) => dashboardApi.getDashboard({ signal }), []);
+  const users = useQuery(
+    (signal) => (canSeeTeam ? usersApi.listUsers({ limit: 100, signal }) : Promise.resolve(null)),
+    [canSeeTeam],
+  );
+  const customers = useQuery((signal) => customersApi.listCustomers({ limit: 100, signal }), []);
+
+  const counters = dash.data?.demo?.["demo.dashboard.v1"].counters;
+  const schedule = dash.data?.demo?.["demo.schedule.v1"].items ?? [];
+  const pending = counters?.ordensPendentes ?? 0;
+
+  const activeUsers = users.data ? users.data.items.filter((u) => u.isActive).length : null;
+  const newCustomers = customers.data
+    ? customers.data.items.filter((c) => Date.now() - new Date(c.createdAt).getTime() <= THIRTY_DAYS).length
+    : null;
 
   return (
     <div className="space-y-8 max-w-[1440px]">
-      <GreetingHeader name="Darlan" pending={pending} />
+      <GreetingHeader name={firstName(session?.user.name ?? "Equipe")} pending={pending} />
 
-      {/* Hoje */}
-      <DashboardSection title="Hoje">
-        <div className="grid gap-3 grid-cols-2 lg:grid-cols-6">
-          <MetricCard label="Atendimentos" value={String(todayServices.length)} delta="+6 vs ontem" trend="up" icon="Briefcase" />
-          <MetricCard label="Em andamento" value={String(inProgress)} delta="agora" trend="flat" icon="Activity" />
-          <MetricCard label="Concluídos"   value={String(done)} delta={`${Math.round((done/todayServices.length)*100)}%`} trend="up" icon="CheckCircle2" />
-          <MetricCard label="Pendências"   value={String(pending)} delta="-3" trend="down" icon="AlertCircle" />
-          <MetricCard label="Operadores"   value={`${operatorsActive}/${teamOnline.length}`} delta="ativos" trend="flat" icon="Users" />
-          <MetricCard label="Críticos"     value={String(criticalAlerts)} delta="atenção" trend={criticalAlerts ? "up" : "flat"} icon="AlertTriangle" />
-        </div>
+      {/* Widgets */}
+      <DashboardSection title="Visão geral">
+        {dash.loading && !dash.data ? (
+          <div className="grid gap-3 grid-cols-2 lg:grid-cols-6">{Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}</div>
+        ) : dash.error && !dash.data ? (
+          <ErrorState error={dash.error} onRetry={dash.refetch} />
+        ) : (
+          <div className="grid gap-3 grid-cols-2 lg:grid-cols-6">
+            <MetricCard label="Atendimentos hoje" value={String(counters?.atendimentosHoje ?? "—")} delta="hoje" trend="flat" icon="Briefcase" />
+            <MetricCard label="Em andamento" value={String(counters?.servicosEmAndamento ?? "—")} delta="agora" trend="flat" icon="Activity" />
+            <MetricCard label="Ordens pendentes" value={String(pending)} delta="abertas" trend={pending ? "up" : "flat"} icon="ClipboardList" />
+            <MetricCard label="Usuários ativos" value={activeUsers !== null ? formatNumber(activeUsers) : "—"} delta="equipe" trend="flat" icon="UserCheck" />
+            <MetricCard label="Equip. em manutenção" value={dash.data?.equipments ? formatNumber(dash.data.equipments.maintenance) : "—"} delta={dash.data?.equipments ? `${dash.data.equipments.total} no total` : "—"} trend={dash.data?.equipments?.maintenance ? "up" : "flat"} icon="Wrench" />
+            <MetricCard label="Clientes novos" value={newCustomers !== null ? formatNumber(newCustomers) : "—"} delta="30 dias" trend={newCustomers ? "up" : "flat"} icon="UserPlus" />
+          </div>
+        )}
       </DashboardSection>
 
-      {/* Linha principal: serviços + atividade */}
+      {/* Indicadores financeiros (gated) */}
+      <Gate roles={["OWNER", "MANAGER"]} permission="canFinancial">
+        <FinancialWidgets />
+      </Gate>
+
       <div className="grid gap-6 lg:grid-cols-3">
         <DashboardSection
-          title="Serviços do dia"
-          action={
-            <a href="/servicos" className="text-xs font-medium text-[var(--color-primary)] hover:underline">
-              ver todos
-            </a>
-          }
+          title="Próximos atendimentos"
+          action={<Link href="/agenda" className="text-xs font-medium text-[var(--color-primary)] hover:underline">agenda</Link>}
           className="lg:col-span-2"
         >
-          <ul className="divide-y divide-[var(--color-border)] rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] shadow-[var(--shadow-card)] overflow-hidden">
-            {todayServices.slice(0, 6).map((s) => (
-              <li key={s.id} className="flex items-center gap-4 p-3.5 hover:bg-[var(--color-muted)]/40 transition-colors">
-                <span className="font-mono text-[11px] text-[var(--color-muted-foreground)] w-16 shrink-0">{s.time}</span>
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm font-medium truncate">{s.title}</div>
-                  <div className="text-caption truncate">
-                    {s.client} · {s.operator}
-                  </div>
-                </div>
-                <StatusPill status={s.status} />
-              </li>
-            ))}
-          </ul>
+          {dash.loading && !dash.data ? (
+            <div className="space-y-2">{Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)}</div>
+          ) : dash.data?.demoDisabled ? (
+            <ComingSoonState title="Agenda em breve" description="O domínio de Agendamento ainda não está disponível na API." />
+          ) : schedule.length === 0 ? (
+            <EmptyState icon={CalendarClock} title="Sem compromissos" description="Nenhum agendamento próximo." />
+          ) : (
+            <ul className="divide-y divide-[var(--color-border)] rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] shadow-[var(--shadow-card)] overflow-hidden">
+              {schedule.slice(0, 6).map((item) => {
+                const at = new Date(item.startsAt);
+                return (
+                  <li key={item.id} className="flex items-center gap-4 p-3.5 hover:bg-[var(--color-muted)]/40 transition-colors">
+                    <span className="font-mono text-[11px] text-[var(--color-muted-foreground)] w-16 shrink-0">
+                      {Number.isNaN(at.getTime()) ? "—" : at.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium truncate">{item.title}</div>
+                      <div className="text-caption truncate">{item.customer} · {item.operator}</div>
+                    </div>
+                    <StatusPill status={SCHEDULE_STATUS[item.state]} />
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </DashboardSection>
 
-        <DashboardSection title="Atividade recente">
-          <ActivityFeed items={recentActivity} />
-        </DashboardSection>
-      </div>
-
-      {/* Segunda linha: agenda + equipe + alertas */}
-      <div className="grid gap-6 lg:grid-cols-3">
-        <DashboardSection
-          title="Próximos compromissos"
-          action={
-            <a href="/agenda" className="text-xs font-medium text-[var(--color-primary)] hover:underline">
-              agenda
-            </a>
-          }
-        >
-          <ul className="space-y-2">
-            {agenda.map((a) => (
-              <li
-                key={a.id}
-                className="flex items-center gap-3 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-hover)] transition-shadow"
-              >
-                <div className="flex flex-col items-center justify-center w-12 shrink-0 border-r border-[var(--color-border)] pr-3">
-                  <span className="font-mono text-sm font-medium tabular-nums">{a.time}</span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium truncate">{a.title}</div>
-                  <div className="text-caption truncate">{a.where}</div>
-                </div>
-                <StatusPill status={a.status} />
-              </li>
-            ))}
-          </ul>
-        </DashboardSection>
-
-        <DashboardSection title="Equipe">
-          <TeamStatusList team={teamOnline} />
-        </DashboardSection>
-
-        <DashboardSection title="Alertas">
-          <ul className="space-y-2">
-            {operationalAlerts.map((a) => (
-              <AlertCard key={a.id} {...a} />
-            ))}
-          </ul>
-        </DashboardSection>
+        {canSeeTeam && (
+          <DashboardSection title="Equipe">
+            <TeamSection />
+          </DashboardSection>
+        )}
       </div>
     </div>
   );
+}
+
+function FinancialWidgets() {
+  const fin = useQuery<FinancialData>((signal) => financialApi.getFinancial({ signal }), []);
+  const f = fin.data?.finance;
+  if (fin.loading && !fin.data) {
+    return <DashboardSection title="Indicadores financeiros"><div className="grid gap-3 grid-cols-2 lg:grid-cols-4">{Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)}</div></DashboardSection>;
+  }
+  if (fin.data?.disabled || !f) {
+    return (
+      <DashboardSection title="Indicadores financeiros">
+        <ComingSoonState title="Financeiro em breve" description="Ative o Demo Dataset para visualizar indicadores financeiros." />
+      </DashboardSection>
+    );
+  }
+  return (
+    <DashboardSection title="Indicadores financeiros" action={<Link href="/financial" className="text-xs font-medium text-[var(--color-primary)] hover:underline">ver financeiro</Link>}>
+      <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+        <MetricCard label="Entradas" value={formatCurrencyBRL(f.summary.entradas)} delta="período" trend="up" icon="TrendingUp" />
+        <MetricCard label="Saídas" value={formatCurrencyBRL(f.summary.saidas)} delta="período" trend="down" icon="TrendingDown" />
+        <MetricCard label="Despesas" value={formatCurrencyBRL(f.summary.despesas)} delta="período" trend="down" icon="Wallet" />
+        <MetricCard label="Projeção 30 dias" value={formatCurrencyBRL(f.summary.projecao30Dias)} delta="estimativa" trend="up" icon="LineChart" />
+      </div>
+    </DashboardSection>
+  );
+}
+
+function TeamSection() {
+  const team = useQuery((signal) => usersApi.listUsers({ limit: 6, signal }), []);
+  if (team.loading && !team.data) {
+    return <div className="space-y-2">{Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)}</div>;
+  }
+  if (team.error && !team.data) {
+    return <ErrorState error={team.error} onRetry={team.refetch} title="Equipe indisponível" />;
+  }
+  const members = (team.data?.items ?? []).map((u) => ({
+    id: u.id,
+    name: u.name,
+    role: u.jobTitle ?? u.role,
+    status: (u.isActive ? "online" : "offline") as "online" | "offline",
+  }));
+  if (members.length === 0) return <EmptyState icon={Wallet} title="Sem usuários" description="Nenhum membro cadastrado." />;
+  return <TeamStatusList team={members} />;
 }

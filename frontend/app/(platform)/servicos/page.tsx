@@ -1,69 +1,136 @@
-import { Download } from "lucide-react";
-import { PageHeader } from "@/components/platform/page-header";
-import { FilterBar } from "@/components/platform/filter-bar";
-import { DataTable, type Column } from "@/components/platform/data-table";
-import { StatusPill } from "@/components/shared/status-pill";
-import { NewServiceButton } from "@/components/platform/new-service-button";
-import { todayServices, type ServiceRow } from "@/mocks/data";
+"use client";
 
-const columns: Column<ServiceRow>[] = [
-  {
-    key: "code",
-    header: "Código",
-    className: "w-[110px]",
-    cell: (s) => <span className="font-mono text-xs text-[var(--color-muted-foreground)]">{s.code}</span>,
-  },
-  {
-    key: "title",
-    header: "Atendimento",
-    cell: (s) => (
-      <div className="min-w-0">
-        <div className="font-medium truncate">{s.title}</div>
-        <div className="text-caption truncate">{s.client}</div>
-      </div>
-    ),
-  },
-  { key: "operator", header: "Operador", className: "w-[140px]", cell: (s) => <span className="text-sm">{s.operator}</span> },
-  { key: "time", header: "Horário", className: "w-[90px]", cell: (s) => <span className="font-mono text-sm">{s.time}</span> },
-  {
-    key: "priority",
-    header: "Prioridade",
-    className: "w-[110px]",
-    cell: (s) =>
-      s.priority === "alta" ? (
-        <span className="text-[10px] font-bold uppercase rounded px-1.5 py-0.5 bg-[var(--color-danger)]/10 text-[var(--color-danger)]">
-          urgente
-        </span>
-      ) : (
-        <span className="text-caption">—</span>
-      ),
-  },
-  { key: "status", header: "Status", className: "w-[140px]", cell: (s) => <StatusPill status={s.status} /> },
-];
+import { useMemo, useState } from "react";
+import { Briefcase, Search } from "lucide-react";
+import { PageHeader } from "@/components/platform/page-header";
+import { DataTable, type Column } from "@/components/platform/data-table";
+import { ExportButton } from "@/components/platform/export-button";
+import { StatusPill, type Status } from "@/components/shared/status-pill";
+import { SkeletonList } from "@/components/shared/skeletons";
+import { EmptyState } from "@/components/shared/empty-state";
+import { ComingSoonState, ErrorState } from "@/components/shared/states";
+import { NewServiceButton } from "@/components/platform/new-service-button";
+import { ServiceDetailDrawer } from "@/components/platform/service-detail-drawer";
+import { financialApi, useQuery, type DemoScheduleState, type ScheduleData } from "@/lib/api";
+import { cn } from "@/lib/utils";
+
+const STATE_PILL: Record<DemoScheduleState, Status> = {
+  OVERDUE: "danger",
+  IN_PROGRESS: "in_progress",
+  SCHEDULED: "scheduled",
+};
+const STATE_LABEL: Record<DemoScheduleState, string> = {
+  OVERDUE: "Atrasado",
+  IN_PROGRESS: "Em andamento",
+  SCHEDULED: "Agendado",
+};
+
+type ServiceItem = {
+  id: string;
+  title: string;
+  customer: string;
+  operator: string;
+  startsAt: string;
+  state: DemoScheduleState;
+};
+
+const FILTERS = ["Todos", "Em andamento", "Agendados", "Atrasados"] as const;
 
 export default function ServicosPage() {
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState<(typeof FILTERS)[number]>("Todos");
+  const [detail, setDetail] = useState<ServiceItem | null>(null);
+  const sched = useQuery<ScheduleData>((signal) => financialApi.getSchedule({ signal }), []);
+
+  const rows = useMemo<ServiceItem[]>(() => {
+    let items = (sched.data?.items ?? []) as ServiceItem[];
+    if (filter === "Em andamento") items = items.filter((i) => i.state === "IN_PROGRESS");
+    else if (filter === "Agendados") items = items.filter((i) => i.state === "SCHEDULED");
+    else if (filter === "Atrasados") items = items.filter((i) => i.state === "OVERDUE");
+    const q = search.trim().toLowerCase();
+    if (q) items = items.filter((i) => [i.title, i.customer, i.operator].join(" ").toLowerCase().includes(q));
+    return items;
+  }, [sched.data, filter, search]);
+
+  const columns: Column<ServiceItem>[] = [
+    {
+      key: "title",
+      header: "Atendimento",
+      cell: (s) => (
+        <div className="min-w-0">
+          <div className="font-medium truncate">{s.title}</div>
+          <div className="text-caption truncate">{s.customer}</div>
+        </div>
+      ),
+    },
+    { key: "operator", header: "Operador", className: "w-[160px]", cell: (s) => <span className="text-sm">{s.operator}</span> },
+    {
+      key: "time",
+      header: "Horário",
+      className: "w-[120px]",
+      cell: (s) => {
+        const at = new Date(s.startsAt);
+        return <span className="font-mono text-xs">{Number.isNaN(at.getTime()) ? "—" : at.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>;
+      },
+    },
+    { key: "status", header: "Status", className: "w-[150px]", cell: (s) => <StatusPill status={STATE_PILL[s.state]} label={STATE_LABEL[s.state]} /> },
+  ];
+
   return (
     <div className="space-y-6 max-w-[1400px]">
       <PageHeader
         eyebrow="Operação"
-        title="Serviços"
-        description="Fila completa de atendimentos do dia, ativos e agendados."
+        title="Atendimentos"
+        description="Fila de atendimentos consumida do Demo Dataset (domínio de Serviços é escopo futuro)."
         actions={
           <>
-            <button className="inline-flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 h-9 text-sm hover:bg-[var(--color-muted)]">
-              <Download className="h-4 w-4" /> Exportar
-            </button>
+            <ExportButton
+              label="Exportar"
+              fileName="atendimentos"
+              rows={rows.map((r) => ({ atendimento: r.title, cliente: r.customer, operador: r.operator, inicio: r.startsAt, status: STATE_LABEL[r.state] }))}
+            />
             <NewServiceButton />
           </>
         }
       />
 
-      <FilterBar
-        placeholder="Buscar por código, cliente ou operador…"
-        chips={["Todos", "Em andamento", "Agendados", "Pendentes", "Concluídos"]}
-      />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 h-9 w-full max-w-[360px]">
+          <Search className="h-4 w-4 text-[var(--color-muted-foreground)]" />
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por atendimento, cliente ou operador…" className="flex-1 bg-transparent outline-none text-sm placeholder:text-[var(--color-muted-foreground)]" />
+        </div>
+        <div className="flex items-center gap-1">
+          {FILTERS.map((f) => (
+            <button
+              key={f}
+              type="button"
+              onClick={() => setFilter(f)}
+              className={cn(
+                "h-8 rounded-full border px-3 text-xs whitespace-nowrap transition-colors",
+                filter === f
+                  ? "border-[var(--color-primary)]/40 bg-[var(--color-primary)]/10 text-[var(--color-primary)]"
+                  : "border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)]",
+              )}
+            >
+              {f}
+            </button>
+          ))}
+        </div>
+      </div>
 
-      <DataTable columns={columns} rows={todayServices} />
+      {sched.loading && !sched.data ? (
+        <SkeletonList rows={6} />
+      ) : sched.error && !sched.data ? (
+        <ErrorState error={sched.error} onRetry={sched.refetch} />
+      ) : sched.data?.disabled ? (
+        <ComingSoonState title="Atendimentos em breve" description="O domínio de Serviços ainda não existe na API. Ative o Demo Dataset para visualizar dados de desenvolvimento." />
+      ) : rows.length === 0 ? (
+        <EmptyState icon={Briefcase} title="Nenhum atendimento" description={search || filter !== "Todos" ? "Ajuste os filtros." : "Sem atendimentos no período."} />
+      ) : (
+        <DataTable columns={columns} rows={rows} onRowClick={(s) => setDetail(s)} />
+      )}
+
+      <ServiceDetailDrawer service={detail} open={detail !== null} onClose={() => setDetail(null)} />
     </div>
   );
 }

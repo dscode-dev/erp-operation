@@ -1,10 +1,13 @@
+"use client";
+
 import { Bell } from "lucide-react";
+import { formatLongDate } from "@/lib/format";
 
 export function OperatorHeader({ name }: { name: string }) {
   return (
     <header className="flex items-center justify-between">
       <div className="min-w-0">
-        <p className="text-[10px] uppercase tracking-[0.12em] text-[var(--color-muted-foreground)]">Segunda · 22 jun</p>
+        <p className="text-[10px] uppercase tracking-[0.12em] text-[var(--color-muted-foreground)]">{formatLongDate()}</p>
         <h1 className="text-[22px] font-semibold tracking-tight leading-tight">Olá, {name}.</h1>
       </div>
       <button

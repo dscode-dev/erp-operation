@@ -1,107 +1,134 @@
+"use client";
+
+import { use } from "react";
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { QrCode, Plus, MapPin, Calendar, ShieldCheck, Tag } from "lucide-react";
+import { Activity } from "lucide-react";
 import { Breadcrumbs } from "@/components/platform/breadcrumbs";
 import { PageHeader } from "@/components/platform/page-header";
 import { InfoCard, InfoRow } from "@/components/platform/info-card";
-import { DataTable, type Column } from "@/components/platform/data-table";
+import { QrFoundation } from "@/components/platform/qr-foundation";
 import { StatusPill } from "@/components/shared/status-pill";
-import { getEquipmentById, type EquipmentHistoryRow } from "@/mocks/data";
+import { SkeletonCard } from "@/components/shared/skeletons";
+import { AsyncBoundary } from "@/components/shared/states";
+import { equipmentsApi, useQuery, type EquipmentDetail } from "@/lib/api";
+import { formatDate, formatDateTime } from "@/lib/format";
+import {
+  EQUIPMENT_STATUS_LABEL,
+  EQUIPMENT_STATUS_PILL,
+  EQUIPMENT_TYPE_LABEL,
+} from "@/lib/equipment-display";
 
-const historyCols: Column<EquipmentHistoryRow>[] = [
-  { key: "code", header: "Código", className: "w-[110px]", cell: (h) => <span className="font-mono text-xs text-[var(--color-muted-foreground)]">{h.code}</span> },
-  { key: "title", header: "Atendimento", cell: (h) => <div className="font-medium truncate">{h.title}</div> },
-  { key: "date", header: "Data", className: "w-[160px]", cell: (h) => <span className="font-mono text-xs">{h.date}</span> },
-  { key: "op", header: "Operador", className: "w-[140px]", cell: (h) => <span className="text-sm">{h.operator}</span> },
-  { key: "status", header: "Status", className: "w-[140px]", cell: (h) => <StatusPill status={h.status} /> },
-];
-
-export default async function EquipamentoDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  const eq = getEquipmentById(id);
-  if (!eq) notFound();
+export default function EquipamentoDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
+  const detail = useQuery<EquipmentDetail>((signal) => equipmentsApi.getEquipment(id, { signal }), [id]);
 
   return (
     <div className="space-y-6 max-w-[1400px]">
-      <Breadcrumbs items={[{ label: "Equipamentos", href: "/equipamentos" }, { label: eq.name }]} />
+      <Breadcrumbs items={[{ label: "Equipamentos", href: "/equipamentos" }, { label: detail.data?.name ?? "…" }]} />
 
-      <PageHeader
-        eyebrow={
-          <span className="inline-flex items-center gap-1.5 uppercase tracking-wider">
-            <Tag className="h-3 w-3" />
-            <span className="font-mono">{eq.tag}</span>
-          </span>
-        }
-        title={eq.name}
-        description={`${eq.brand} ${eq.model} · ${eq.client}`}
-        actions={
+      <AsyncBoundary
+        loading={detail.loading}
+        error={detail.error}
+        data={detail.data}
+        onRetry={detail.refetch}
+        skeleton={<div className="grid gap-3 lg:grid-cols-3">{Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)}</div>}
+      >
+        {(e) => (
           <>
-            <button className="inline-flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 h-9 text-sm hover:bg-[var(--color-muted)]">
-              <QrCode className="h-4 w-4" /> Gerar QR
-            </button>
-            <button className="inline-flex items-center gap-2 rounded-[var(--radius-md)] bg-[var(--color-primary)] text-[var(--color-primary-foreground)] px-3 h-9 text-sm font-medium shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-hover)]">
-              <Plus className="h-4 w-4" /> Abrir serviço
-            </button>
+            <PageHeader
+              eyebrow={EQUIPMENT_TYPE_LABEL[e.type]}
+              title={e.name}
+              description={e.customer?.name ?? undefined}
+              actions={<StatusPill status={EQUIPMENT_STATUS_PILL[e.status]} label={EQUIPMENT_STATUS_LABEL[e.status]} />}
+            />
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <div className="lg:col-span-2 space-y-4">
+                <InfoCard title="Ficha técnica">
+                  <InfoRow label="Tag" value={e.tag ?? "—"} />
+                  <InfoRow label="Fabricante" value={e.manufacturer ?? "—"} />
+                  <InfoRow label="Modelo" value={e.model ?? "—"} />
+                  <InfoRow label="Nº de série" value={<span className="font-mono text-xs">{e.serialNumber ?? "—"}</span>} />
+                  <InfoRow label="Capacidade" value={e.capacity ?? "—"} />
+                  <InfoRow label="Tensão" value={e.voltage ?? "—"} />
+                  <InfoRow label="Instalação" value={formatDate(e.installationDate)} />
+                  <InfoRow label="Garantia até" value={formatDate(e.warrantyExpiration)} />
+                  <InfoRow label="Local" value={e.address?.name ?? e.address?.city ?? "—"} />
+                  {e.observations && <InfoRow label="Observações" value={e.observations} />}
+                </InfoCard>
+
+                <InfoCard title={`Métricas recentes (${e.metrics.length})`}>
+                  {e.metrics.length === 0 ? (
+                    <p className="text-sm text-[var(--color-muted-foreground)]">Nenhuma métrica registrada.</p>
+                  ) : (
+                    <ul className="space-y-1.5">
+                      {e.metrics.map((m) => (
+                        <li key={m.id} className="flex items-center gap-3 rounded-[var(--radius-md)] border border-[var(--color-border)] p-3">
+                          <Activity className="h-4 w-4 text-[var(--color-muted-foreground)]" />
+                          <span className="text-sm font-medium capitalize">{m.key}</span>
+                          <span className="ml-auto font-mono text-sm tabular-nums">{m.value} {m.unit ?? ""}</span>
+                          <span className="text-caption w-28 text-right">{formatDateTime(m.recordedAt)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </InfoCard>
+
+                <InfoCard title="Hierarquia">
+                  <div className="space-y-3">
+                    <div>
+                      <div className="text-caption uppercase tracking-wider mb-1">Equipamento pai</div>
+                      {e.parent ? (
+                        <Link href={`/equipamentos/${e.parent.id}`} className="text-sm font-medium hover:text-[var(--color-primary)]">
+                          {e.parent.name}{e.parent.tag ? ` · ${e.parent.tag}` : ""}
+                        </Link>
+                      ) : (
+                        <span className="text-sm text-[var(--color-muted-foreground)]">Sem equipamento pai.</span>
+                      )}
+                    </div>
+                    <div>
+                      <div className="text-caption uppercase tracking-wider mb-2">Filhos ({e.children.length})</div>
+                      {e.children.length === 0 ? (
+                        <span className="text-sm text-[var(--color-muted-foreground)]">Nenhum equipamento filho.</span>
+                      ) : (
+                        <ul className="space-y-1.5">
+                          {e.children.map((child) => (
+                            <li key={child.id}>
+                              <Link href={`/equipamentos/${child.id}`} className="flex items-center justify-between text-sm hover:text-[var(--color-primary)]">
+                                <span>{child.name}</span>
+                                <StatusPill status={EQUIPMENT_STATUS_PILL[child.status]} label={EQUIPMENT_STATUS_LABEL[child.status]} />
+                              </Link>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+                </InfoCard>
+              </div>
+
+              <div className="space-y-4">
+                <QrFoundation qrCode={e.qrCode} qrToken={e.qrToken} />
+
+                <InfoCard title={`Anexos (${e.attachments.length})`}>
+                  {e.attachments.length === 0 ? (
+                    <p className="text-sm text-[var(--color-muted-foreground)]">Nenhum anexo.</p>
+                  ) : (
+                    <ul className="space-y-2 text-sm">
+                      {e.attachments.map((at) => (
+                        <li key={at.id} className="flex items-center justify-between gap-2">
+                          <span className="truncate">{at.originalFileName}</span>
+                          <span className="text-caption">{at.category}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </InfoCard>
+              </div>
+            </div>
           </>
-        }
-      />
-
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 shadow-[var(--shadow-card)]">
-          <div className="flex items-center justify-between"><span className="text-caption">Status</span></div>
-          <div className="mt-2"><StatusPill status={eq.status} /></div>
-        </div>
-        <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 shadow-[var(--shadow-card)]">
-          <div className="flex items-center justify-between"><span className="text-caption">Última manutenção</span><Calendar className="h-4 w-4 text-[var(--color-muted-foreground)]" /></div>
-          <div className="mt-2 text-base font-medium font-mono">{eq.lastService}</div>
-        </div>
-        <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 shadow-[var(--shadow-card)]">
-          <div className="flex items-center justify-between"><span className="text-caption">Próxima</span><Calendar className="h-4 w-4 text-[var(--color-muted-foreground)]" /></div>
-          <div className="mt-2 text-base font-medium font-mono">{eq.nextService}</div>
-        </div>
-        <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 shadow-[var(--shadow-card)]">
-          <div className="flex items-center justify-between"><span className="text-caption">Garantia até</span><ShieldCheck className="h-4 w-4 text-[var(--color-muted-foreground)]" /></div>
-          <div className="mt-2 text-base font-medium font-mono">{eq.warrantyUntil}</div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 space-y-4">
-          <InfoCard title="Histórico de manutenções" action={<Link href="/servicos" className="text-caption hover:text-[var(--color-foreground)]">Ver fila</Link>}>
-            <DataTable columns={historyCols} rows={eq.history} />
-          </InfoCard>
-
-          <InfoCard title="Especificações técnicas">
-            <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6">
-              {eq.specs.map((s) => (
-                <div key={s.label} className="flex items-center justify-between py-2 border-b last:border-0 border-[var(--color-border)]/60">
-                  <dt className="text-caption">{s.label}</dt>
-                  <dd className="text-sm font-medium">{s.value}</dd>
-                </div>
-              ))}
-            </dl>
-          </InfoCard>
-        </div>
-
-        <div className="space-y-4">
-          <InfoCard title="Identificação">
-            <div className="space-y-0">
-              <InfoRow label="Tag" value={<span className="font-mono text-xs">{eq.tag}</span>} />
-              <InfoRow label="Fabricante" value={eq.brand} />
-              <InfoRow label="Modelo" value={<span className="font-mono text-xs">{eq.model}</span>} />
-              <InfoRow label="Série" value={<span className="font-mono text-xs">{eq.serial}</span>} />
-              <InfoRow label="Instalado em" value={<span className="font-mono text-xs">{eq.installedAt}</span>} />
-            </div>
-          </InfoCard>
-
-          <InfoCard title="Localização">
-            <div className="space-y-0">
-              <InfoRow label="Cliente" value={eq.client} />
-              <InfoRow label="Local" value={<span className="inline-flex items-center gap-1.5"><MapPin className="h-3 w-3 opacity-70" /> {eq.location}</span>} />
-            </div>
-          </InfoCard>
-        </div>
-      </div>
+        )}
+      </AsyncBoundary>
     </div>
   );
 }
