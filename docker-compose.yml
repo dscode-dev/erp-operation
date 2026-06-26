@@ -65,7 +65,7 @@ services:
       dockerfile: Dockerfile
       args:
         # NEXT_PUBLIC_* são embutidos no build (acessados pelo navegador).
-        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:${APP_PORT:-4040}/api/v1}
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-https://erp.allblue-labs.com:${APP_PORT:-4040}/api/v1}
         NEXT_PUBLIC_ENABLE_DEMO: ${NEXT_PUBLIC_ENABLE_DEMO:-true}
     restart: unless-stopped
     environment:
