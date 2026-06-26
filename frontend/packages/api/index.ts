@@ -27,6 +27,9 @@ export * as dashboardApi from "./dashboard";
 export * as financialApi from "./financial";
 export * as demoApi from "./demo";
 
+export * as operationsApi from "./operations";
+
 export { isDemoDisabled, DemoUnavailableError } from "./demo";
 export type { DashboardData } from "./dashboard";
 export type { FinancialData, ScheduleData } from "./financial";
+export type { OrdersData, ProductsData, DocumentsData, ServicesData } from "./operations";

@@ -1,136 +1,132 @@
 "use client";
 
+/**
+ * Serviços — histórico operacional (timeline). Cada serviço reúne cliente,
+ * equipamento, operador, tipo, data, documentos e histórico de eventos.
+ * Consome o Demo Dataset; preparado para a futura Ordem de Serviço.
+ */
 import { useMemo, useState } from "react";
-import { Briefcase, Search } from "lucide-react";
+import { Briefcase, FileText } from "lucide-react";
 import { PageHeader } from "@platform/components/page-header";
 import { DataTable, type Column } from "@platform/components/data-table";
 import { ExportButton } from "@platform/components/export-button";
-import { StatusPill, type Status } from "@erp/ui/status-pill";
+import { FilterBar, FilterChip } from "@erp/ui/filter-bar";
+import { StatusChip, type ChipTone } from "@erp/ui/status-chip";
 import { SkeletonList } from "@erp/ui/skeletons";
-import { EmptyState } from "@erp/ui/empty-state";
 import { ComingSoonState, ErrorState } from "@erp/ui/states";
-import { NewServiceButton } from "@platform/components/new-service-button";
-import { ServiceDetailDrawer } from "@platform/components/service-detail-drawer";
-import { financialApi, useQuery, type DemoScheduleState, type ScheduleData } from "@erp/api";
-import { cn } from "@erp/utils";
+import { EmptyState } from "@erp/ui/empty-state";
+import { Drawer } from "@erp/ui/drawer";
+import { Timeline, type TimelineEvent } from "@erp/ui/timeline";
+import { operationsApi, useQuery, type DemoService, type DemoServiceStatus, type DemoOrderType, type ServicesData } from "@erp/api";
+import { formatDate } from "@erp/utils";
 
-const STATE_PILL: Record<DemoScheduleState, Status> = {
-  OVERDUE: "danger",
-  IN_PROGRESS: "in_progress",
-  SCHEDULED: "scheduled",
+const STATUS: Record<DemoServiceStatus, { tone: ChipTone; label: string }> = {
+  SCHEDULED: { tone: "info", label: "Agendado" },
+  IN_PROGRESS: { tone: "primary", label: "Em andamento" },
+  DONE: { tone: "success", label: "Concluído" },
 };
-const STATE_LABEL: Record<DemoScheduleState, string> = {
-  OVERDUE: "Atrasado",
-  IN_PROGRESS: "Em andamento",
-  SCHEDULED: "Agendado",
+const TYPE_LABEL: Record<DemoOrderType, string> = {
+  PREVENTIVA: "Preventiva",
+  CORRETIVA: "Corretiva",
+  INSTALACAO: "Instalação",
+  PROJETO: "Projeto",
 };
-
-type ServiceItem = {
-  id: string;
-  title: string;
-  customer: string;
-  operator: string;
-  startsAt: string;
-  state: DemoScheduleState;
-};
-
-const FILTERS = ["Todos", "Em andamento", "Agendados", "Atrasados"] as const;
 
 export default function ServicosPage() {
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<(typeof FILTERS)[number]>("Todos");
-  const [detail, setDetail] = useState<ServiceItem | null>(null);
-  const sched = useQuery<ScheduleData>((signal) => financialApi.getSchedule({ signal }), []);
+  const [status, setStatus] = useState<"all" | DemoServiceStatus>("all");
+  const [detail, setDetail] = useState<DemoService | null>(null);
+  const services = useQuery<ServicesData>((s) => operationsApi.getServices({ signal: s }), []);
 
-  const rows = useMemo<ServiceItem[]>(() => {
-    let items = (sched.data?.items ?? []) as ServiceItem[];
-    if (filter === "Em andamento") items = items.filter((i) => i.state === "IN_PROGRESS");
-    else if (filter === "Agendados") items = items.filter((i) => i.state === "SCHEDULED");
-    else if (filter === "Atrasados") items = items.filter((i) => i.state === "OVERDUE");
+  const rows = useMemo(() => {
+    let items = services.data?.items ?? [];
+    if (status !== "all") items = items.filter((s) => s.status === status);
     const q = search.trim().toLowerCase();
-    if (q) items = items.filter((i) => [i.title, i.customer, i.operator].join(" ").toLowerCase().includes(q));
+    if (q) items = items.filter((s) => [s.customer, s.equipment, s.operator].join(" ").toLowerCase().includes(q));
     return items;
-  }, [sched.data, filter, search]);
+  }, [services.data, status, search]);
 
-  const columns: Column<ServiceItem>[] = [
+  const columns: Column<DemoService>[] = [
     {
-      key: "title",
-      header: "Atendimento",
-      cell: (s) => (
-        <div className="min-w-0">
-          <div className="font-medium truncate">{s.title}</div>
-          <div className="text-caption truncate">{s.customer}</div>
-        </div>
-      ),
+      key: "customer", header: "Cliente", sortAccessor: (s) => s.customer,
+      cell: (s) => <div className="min-w-0"><div className="font-medium truncate">{s.customer}</div><div className="text-caption truncate">{s.equipment}</div></div>,
     },
-    { key: "operator", header: "Operador", className: "w-[160px]", cell: (s) => <span className="text-sm">{s.operator}</span> },
-    {
-      key: "time",
-      header: "Horário",
-      className: "w-[120px]",
-      cell: (s) => {
-        const at = new Date(s.startsAt);
-        return <span className="font-mono text-xs">{Number.isNaN(at.getTime()) ? "—" : at.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>;
-      },
-    },
-    { key: "status", header: "Status", className: "w-[150px]", cell: (s) => <StatusPill status={STATE_PILL[s.state]} label={STATE_LABEL[s.state]} /> },
+    { key: "type", header: "Tipo", className: "w-[130px]", cell: (s) => <span className="text-sm">{TYPE_LABEL[s.type]}</span> },
+    { key: "operator", header: "Operador", className: "w-[150px]", cell: (s) => <span className="text-sm">{s.operator}</span> },
+    { key: "date", header: "Data", className: "w-[120px]", sortAccessor: (s) => s.date, cell: (s) => <span className="font-mono text-xs">{formatDate(s.date)}</span> },
+    { key: "status", header: "Status", className: "w-[140px]", sortAccessor: (s) => s.status, cell: (s) => <StatusChip tone={STATUS[s.status].tone} dot>{STATUS[s.status].label}</StatusChip> },
   ];
 
   return (
     <div className="space-y-6 max-w-[1400px]">
       <PageHeader
         eyebrow="Operação"
-        title="Atendimentos"
-        description="Fila de atendimentos consumida do Demo Dataset (domínio de Serviços é escopo futuro)."
+        title="Serviços"
+        description="Histórico operacional consolidado (Demo Dataset). Base para a futura Ordem de Serviço."
         actions={
-          <>
-            <ExportButton
-              label="Exportar"
-              fileName="atendimentos"
-              rows={rows.map((r) => ({ atendimento: r.title, cliente: r.customer, operador: r.operator, inicio: r.startsAt, status: STATE_LABEL[r.state] }))}
-            />
-            <NewServiceButton />
-          </>
+          <ExportButton
+            label="Exportar"
+            fileName="servicos"
+            rows={rows.map((s) => ({ cliente: s.customer, equipamento: s.equipment, tipo: TYPE_LABEL[s.type], operador: s.operator, data: formatDate(s.date), status: STATUS[s.status].label }))}
+          />
         }
       />
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 h-9 w-full max-w-[360px]">
-          <Search className="h-4 w-4 text-[var(--color-muted-foreground)]" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por atendimento, cliente ou operador…" className="flex-1 bg-transparent outline-none text-sm placeholder:text-[var(--color-muted-foreground)]" />
-        </div>
-        <div className="flex items-center gap-1">
-          {FILTERS.map((f) => (
-            <button
-              key={f}
-              type="button"
-              onClick={() => setFilter(f)}
-              className={cn(
-                "h-8 rounded-full border px-3 text-xs whitespace-nowrap transition-colors",
-                filter === f
-                  ? "border-[var(--color-primary)]/40 bg-[var(--color-primary)]/10 text-[var(--color-primary)]"
-                  : "border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)]",
-              )}
-            >
-              {f}
-            </button>
-          ))}
-        </div>
-      </div>
+      <FilterBar search={search} onSearch={setSearch} searchPlaceholder="Buscar por cliente, equipamento, operador…">
+        <FilterChip active={status === "all"} onClick={() => setStatus("all")}>Todos</FilterChip>
+        <FilterChip active={status === "IN_PROGRESS"} onClick={() => setStatus("IN_PROGRESS")}>Em andamento</FilterChip>
+        <FilterChip active={status === "SCHEDULED"} onClick={() => setStatus("SCHEDULED")}>Agendados</FilterChip>
+        <FilterChip active={status === "DONE"} onClick={() => setStatus("DONE")}>Concluídos</FilterChip>
+      </FilterBar>
 
-      {sched.loading && !sched.data ? (
+      {services.loading && !services.data ? (
         <SkeletonList rows={6} />
-      ) : sched.error && !sched.data ? (
-        <ErrorState error={sched.error} onRetry={sched.refetch} />
-      ) : sched.data?.disabled ? (
-        <ComingSoonState title="Atendimentos em breve" description="O domínio de Serviços ainda não existe na API. Ative o Demo Dataset para visualizar dados de desenvolvimento." />
+      ) : services.error && !services.data ? (
+        <ErrorState error={services.error} onRetry={services.refetch} />
+      ) : services.data?.disabled ? (
+        <ComingSoonState title="Serviços em breve" description="Ative o Demo Dataset para visualizar o histórico operacional." />
       ) : rows.length === 0 ? (
-        <EmptyState icon={Briefcase} title="Nenhum atendimento" description={search || filter !== "Todos" ? "Ajuste os filtros." : "Sem atendimentos no período."} />
+        <EmptyState icon={Briefcase} title="Nenhum serviço" description="Ajuste os filtros." />
       ) : (
         <DataTable columns={columns} rows={rows} onRowClick={(s) => setDetail(s)} />
       )}
 
-      <ServiceDetailDrawer service={detail} open={detail !== null} onClose={() => setDetail(null)} />
+      <Drawer open={detail !== null} onClose={() => setDetail(null)} eyebrow="Serviço" title={detail ? `${detail.customer}` : ""} width="max-w-xl">
+        {detail && <ServiceDetail service={detail} />}
+      </Drawer>
+    </div>
+  );
+}
+
+function ServiceDetail({ service }: { service: DemoService }) {
+  const events: TimelineEvent[] = service.history.map((h, i) => ({ id: `${service.id}-${i}`, at: h.at, kind: h.kind, label: h.label }));
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <StatusChip tone="primary">{TYPE_LABEL[service.type]}</StatusChip>
+        <StatusChip tone={STATUS[service.status].tone} dot>{STATUS[service.status].label}</StatusChip>
+      </div>
+      <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 space-y-2">
+        <Row label="Equipamento" value={service.equipment} />
+        <Row label="Operador" value={service.operator} />
+        <Row label="Data" value={formatDate(service.date)} />
+        <Row label="Documentos" value={`${service.documents.length}`} />
+      </div>
+      <div>
+        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)] mb-2 flex items-center gap-1.5"><FileText className="h-3.5 w-3.5" /> Histórico</h3>
+        <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
+          <Timeline events={events} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Row({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-1.5 border-b last:border-0 border-[var(--color-border)]/60">
+      <span className="text-caption">{label}</span>
+      <span className="text-sm text-right">{value}</span>
     </div>
   );
 }

@@ -13,35 +13,35 @@
   --color-muted-foreground: hsl(220 9% 46%);
   --color-card: hsl(0 0% 100%);
   --color-card-foreground: hsl(222 47% 11%);
-  --color-border: hsl(220 13% 91%);
-  --color-input: hsl(220 13% 91%);
-  --color-ring: hsl(221 83% 53%);
-  --color-surface: hsl(220 24% 99%);
+  --color-border: hsl(214 20% 90%);
+  --color-input: hsl(214 20% 90%);
+  --color-ring: hsl(214 84% 48%);
+  --color-surface: hsl(210 30% 99%);
 
-  /* Marca / acentos */
-  --color-primary: hsl(221 83% 53%);
+  /* Marca / acentos — paleta corporativa azul & branco */
+  --color-primary: hsl(214 84% 48%);
   --color-primary-foreground: hsl(0 0% 100%);
-  --color-primary-soft: hsl(221 83% 53% / 0.1);
-  --color-accent: hsl(262 83% 58%);
+  --color-primary-soft: hsl(214 84% 48% / 0.1);
+  --color-accent: hsl(216 65% 36%);
   --color-accent-foreground: hsl(0 0% 100%);
 
-  /* Estados */
-  --color-success: hsl(142 71% 40%);
+  /* Estados (saturação moderada para ambiente corporativo) */
+  --color-success: hsl(152 58% 38%);
   --color-success-foreground: hsl(0 0% 100%);
-  --color-warning: hsl(38 92% 50%);
+  --color-warning: hsl(36 90% 48%);
   --color-warning-foreground: hsl(20 14% 10%);
-  --color-danger: hsl(0 84% 60%);
+  --color-danger: hsl(2 72% 52%);
   --color-danger-foreground: hsl(0 0% 100%);
-  --color-info: hsl(199 89% 48%);
+  --color-info: hsl(205 82% 46%);
   --color-info-foreground: hsl(0 0% 100%);
-  --color-pending: hsl(38 92% 50%);
-  --color-offline: hsl(220 9% 46%);
+  --color-pending: hsl(36 90% 48%);
+  --color-offline: hsl(215 16% 50%);
 
-  /* Tipos de evento da agenda */
-  --color-event-atendimento: hsl(221 83% 53%);
-  --color-event-manutencao:  hsl(160 70% 40%);
-  --color-event-visita:      hsl(262 83% 58%);
-  --color-event-urgencia:    hsl(0 84% 60%);
+  /* Tipos de evento da agenda (tons de azul/corporativo) */
+  --color-event-atendimento: hsl(214 84% 48%);
+  --color-event-manutencao:  hsl(190 70% 38%);
+  --color-event-visita:      hsl(224 60% 52%);
+  --color-event-urgencia:    hsl(2 72% 52%);
 
   /* Espaçamentos */
   --space-xs: 0.25rem;
@@ -85,13 +85,13 @@
   --color-card-foreground: hsl(210 40% 98%);
   --color-border: hsl(217 33% 16%);
   --color-input: hsl(217 33% 16%);
-  --color-ring: hsl(217 91% 60%);
+  --color-ring: hsl(213 90% 62%);
   --color-surface: hsl(222 47% 6%);
-  --color-primary: hsl(217 91% 60%);
+  --color-primary: hsl(213 90% 62%);
   --color-primary-foreground: hsl(222 47% 6%);
-  --color-primary-soft: hsl(217 91% 60% / 0.15);
-  --color-accent: hsl(263 90% 66%);
-  --color-accent-foreground: hsl(222 47% 6%);
+  --color-primary-soft: hsl(213 90% 62% / 0.15);
+  --color-accent: hsl(214 70% 50%);
+  --color-accent-foreground: hsl(0 0% 100%);
 
   --shadow-card:     0 1px 2px hsl(0 0% 0% / 0.4);
   --shadow-hover:    0 4px 14px hsl(0 0% 0% / 0.5);

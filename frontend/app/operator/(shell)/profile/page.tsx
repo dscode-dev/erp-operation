@@ -1,8 +1,9 @@
 "use client";
 
-import { LogOut, ShieldCheck, Building2, Loader2 } from "lucide-react";
+import { LogOut, ShieldCheck, Building2, Loader2, Smartphone } from "lucide-react";
 import { ThemeToggle } from "@erp/ui/theme/theme-toggle";
 import { useAuth } from "@erp/ui/auth/auth-provider";
+import { InstallButton } from "@erp/ui/pwa/install-button";
 import { initials } from "@erp/utils";
 
 const ROLE_LABEL: Record<string, string> = {
@@ -64,6 +65,13 @@ export default function OperatorProfile() {
             ))}
           </div>
         )}
+      </section>
+
+      <section className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 shadow-[var(--shadow-card)] space-y-3">
+        <div className="flex items-center gap-2 text-caption uppercase tracking-wider">
+          <Smartphone className="h-3.5 w-3.5" /> Aplicativo
+        </div>
+        <InstallButton />
       </section>
 
       <section className="flex items-center justify-between rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 shadow-[var(--shadow-card)]">

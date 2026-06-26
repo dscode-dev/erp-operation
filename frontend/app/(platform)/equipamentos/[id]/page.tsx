@@ -10,7 +10,8 @@ import { QrFoundation } from "@platform/components/qr-foundation";
 import { StatusPill } from "@erp/ui/status-pill";
 import { SkeletonCard } from "@erp/ui/skeletons";
 import { AsyncBoundary } from "@erp/ui/states";
-import { equipmentsApi, useQuery, type EquipmentDetail } from "@erp/api";
+import { Timeline, type TimelineEvent } from "@erp/ui/timeline";
+import { equipmentsApi, operationsApi, useQuery, type EquipmentDetail, type ServicesData } from "@erp/api";
 import { formatDate, formatDateTime } from "@erp/utils";
 import {
   EQUIPMENT_STATUS_LABEL,
@@ -18,9 +19,18 @@ import {
   EQUIPMENT_TYPE_LABEL,
 } from "@platform/equipment-display";
 
+function equipmentTimeline(data: ServicesData | null, equipmentName: string): TimelineEvent[] {
+  if (!data) return [];
+  return data.items
+    .filter((s) => s.equipment === equipmentName)
+    .flatMap((s) => s.history.map((h, i) => ({ id: `${s.id}-${i}`, at: h.at, kind: h.kind, label: h.label, meta: s.operator })))
+    .sort((a, b) => b.at.localeCompare(a.at));
+}
+
 export default function EquipamentoDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const detail = useQuery<EquipmentDetail>((signal) => equipmentsApi.getEquipment(id, { signal }), [id]);
+  const services = useQuery<ServicesData>((signal) => operationsApi.getServices({ signal }), []);
 
   return (
     <div className="space-y-6 max-w-[1400px]">
@@ -104,6 +114,10 @@ export default function EquipamentoDetailPage({ params }: { params: Promise<{ id
                       )}
                     </div>
                   </div>
+                </InfoCard>
+
+                <InfoCard title="Histórico">
+                  <Timeline events={equipmentTimeline(services.data, e.name)} />
                 </InfoCard>
               </div>
 

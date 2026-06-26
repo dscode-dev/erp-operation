@@ -1,25 +1,148 @@
-import { PageHeader } from "@platform/components/page-header";
-import { ComingSoonState } from "@erp/ui/states";
+"use client";
 
-/**
- * Ordens de Serviço — o domínio de Work Order ainda não existe na API e não há
- * snapshot no Demo Dataset. Conforme a sprint ("não criar lógica fake"), a tela
- * apresenta um estado honesto de preparação. Filtros, paginação, drawer de
- * detalhes e exportação serão ligados aos endpoints reais quando existirem
- * (a arquitetura — DataTable, Pagination, Drawer, ExportButton — já está pronta).
- */
+import { useMemo, useState } from "react";
+import { ClipboardList } from "lucide-react";
+import { PageHeader } from "@platform/components/page-header";
+import { DataTable, type Column } from "@platform/components/data-table";
+import { ExportButton } from "@platform/components/export-button";
+import { FilterBar, FilterChip } from "@erp/ui/filter-bar";
+import { StatusPill, type Status } from "@erp/ui/status-pill";
+import { StatusChip } from "@erp/ui/status-chip";
+import { SkeletonList } from "@erp/ui/skeletons";
+import { ComingSoonState, ErrorState } from "@erp/ui/states";
+import { EmptyState } from "@erp/ui/empty-state";
+import { Drawer } from "@erp/ui/drawer";
+import { DocumentViewer } from "@erp/ui/documents/document-viewer";
+import { operationsApi, useQuery, type DemoOrder, type DemoOrderStatus, type OrdersData } from "@erp/api";
+import type { GeneratedDocument } from "@erp/types";
+import { formatCurrencyBRL, formatDateTime } from "@erp/utils";
+
+const STATUS_PILL: Record<DemoOrderStatus, Status> = {
+  OVERDUE: "danger",
+  IN_PROGRESS: "in_progress",
+  SCHEDULED: "scheduled",
+  DONE: "success",
+};
+const STATUS_LABEL: Record<DemoOrderStatus, string> = {
+  OVERDUE: "Atrasada",
+  IN_PROGRESS: "Em execução",
+  SCHEDULED: "Agendada",
+  DONE: "Concluída",
+};
+const TYPE_LABEL: Record<DemoOrder["type"], string> = {
+  PREVENTIVA: "Preventiva",
+  CORRETIVA: "Corretiva",
+  INSTALACAO: "Instalação",
+  PROJETO: "Projeto",
+};
+
+const FILTERS: Array<{ key: "all" | DemoOrderStatus; label: string }> = [
+  { key: "all", label: "Todas" },
+  { key: "IN_PROGRESS", label: "Em execução" },
+  { key: "SCHEDULED", label: "Agendadas" },
+  { key: "OVERDUE", label: "Atrasadas" },
+  { key: "DONE", label: "Concluídas" },
+];
+
 export default function OrdensPage() {
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState<"all" | DemoOrderStatus>("all");
+  const [detail, setDetail] = useState<DemoOrder | null>(null);
+  const orders = useQuery<OrdersData>((signal) => operationsApi.getOrders({ signal }), []);
+
+  const rows = useMemo(() => {
+    let items = orders.data?.items ?? [];
+    if (filter !== "all") items = items.filter((o) => o.status === filter);
+    const q = search.trim().toLowerCase();
+    if (q) items = items.filter((o) => [o.number, o.title, o.customer, o.operator].join(" ").toLowerCase().includes(q));
+    return items;
+  }, [orders.data, filter, search]);
+
+  const columns: Column<DemoOrder>[] = [
+    { key: "number", header: "OS", className: "w-[110px]", sortAccessor: (o) => o.number, cell: (o) => <span className="font-mono text-xs">{o.number}</span> },
+    {
+      key: "title", header: "Serviço", sortAccessor: (o) => o.title,
+      cell: (o) => <div className="min-w-0"><div className="font-medium truncate">{o.title}</div><div className="text-caption truncate">{o.customer}</div></div>,
+    },
+    { key: "type", header: "Tipo", className: "w-[130px]", cell: (o) => <span className="text-sm">{TYPE_LABEL[o.type]}</span> },
+    { key: "value", header: "Valor", className: "w-[120px]", sortAccessor: (o) => o.value, cell: (o) => <span className="font-mono text-sm tabular-nums">{formatCurrencyBRL(o.value)}</span> },
+    { key: "status", header: "Status", className: "w-[140px]", sortAccessor: (o) => o.status, cell: (o) => <StatusPill status={STATUS_PILL[o.status]} label={STATUS_LABEL[o.status]} /> },
+  ];
+
   return (
     <div className="space-y-6 max-w-[1400px]">
       <PageHeader
         eyebrow="Operação"
         title="Ordens de Serviço"
-        description="Indicadores, filtros, paginação, detalhe e exportação serão integrados ao domínio de OS."
+        description="Acompanhamento das OS (Demo Dataset — domínio de OS é escopo futuro)."
+        actions={
+          <ExportButton
+            label="Exportar"
+            fileName="ordens-servico"
+            rows={rows.map((o) => ({ os: o.number, servico: o.title, cliente: o.customer, tipo: TYPE_LABEL[o.type], valor: o.value, status: STATUS_LABEL[o.status] }))}
+          />
+        }
       />
-      <ComingSoonState
-        title="Domínio de Ordens de Serviço em breve"
-        description="A API de OS é escopo futuro. A arquitetura de listagem (filtros, paginação, drawer e exportação) já está pronta e será conectada assim que os endpoints existirem — sem dados fictícios até lá."
-      />
+
+      <FilterBar search={search} onSearch={setSearch} searchPlaceholder="Buscar por OS, serviço, cliente…">
+        {FILTERS.map((f) => (
+          <FilterChip key={f.key} active={filter === f.key} onClick={() => setFilter(f.key)}>{f.label}</FilterChip>
+        ))}
+      </FilterBar>
+
+      {orders.loading && !orders.data ? (
+        <SkeletonList rows={6} />
+      ) : orders.error && !orders.data ? (
+        <ErrorState error={orders.error} onRetry={orders.refetch} />
+      ) : orders.data?.disabled ? (
+        <ComingSoonState title="Ordens em breve" description="Ative o Demo Dataset para visualizar as ordens de serviço." />
+      ) : rows.length === 0 ? (
+        <EmptyState icon={ClipboardList} title="Nenhuma OS" description="Ajuste os filtros." />
+      ) : (
+        <DataTable columns={columns} rows={rows} onRowClick={(o) => setDetail(o)} />
+      )}
+
+      <Drawer open={detail !== null} onClose={() => setDetail(null)} eyebrow="Ordem de Serviço" title={detail ? `${detail.number} · ${detail.title}` : ""} width="max-w-2xl">
+        {detail && <OrderDetail order={detail} />}
+      </Drawer>
+    </div>
+  );
+}
+
+function OrderDetail({ order }: { order: DemoOrder }) {
+  const doc: GeneratedDocument = { id: `os-${order.id}`, kind: "WORK_ORDER", title: `OS ${order.number}`, status: "draft" };
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <StatusChip tone="primary">{TYPE_LABEL[order.type]}</StatusChip>
+        <StatusPill status={STATUS_PILL[order.status]} label={STATUS_LABEL[order.status]} />
+      </div>
+      <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 space-y-2">
+        <Row label="Cliente" value={order.customer} />
+        <Row label="Operador" value={order.operator} />
+        <Row label="Agendada para" value={formatDateTime(order.scheduledFor)} />
+        <Row label="Valor" value={formatCurrencyBRL(order.value)} />
+      </div>
+      <div>
+        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)] mb-2">Documento</h3>
+        <DocumentViewer
+          document={doc}
+          reviewFields={[
+            { label: "Cliente", value: order.customer },
+            { label: "Tipo", value: TYPE_LABEL[order.type] },
+            { label: "Valor", value: formatCurrencyBRL(order.value) },
+          ]}
+        />
+      </div>
+    </div>
+  );
+}
+
+function Row({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-1.5 border-b last:border-0 border-[var(--color-border)]/60">
+      <span className="text-caption">{label}</span>
+      <span className="text-sm text-right">{value}</span>
     </div>
   );
 }

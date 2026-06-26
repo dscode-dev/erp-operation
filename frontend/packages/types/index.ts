@@ -460,6 +460,84 @@ export type DemoDataset = {
       amount: number;
     }>;
   };
+  /** Commercial-demo snapshots (no production domain yet). */
+  "demo.orders.v1": {
+    generatedAt: string;
+    items: DemoOrder[];
+  };
+  "demo.products.v1": {
+    generatedAt: string;
+    items: DemoProduct[];
+  };
+  "demo.documents.v1": {
+    generatedAt: string;
+    items: DemoDocument[];
+  };
+  "demo.services.v1": {
+    generatedAt: string;
+    items: DemoService[];
+  };
+};
+
+export type DemoOrderStatus = "OVERDUE" | "IN_PROGRESS" | "SCHEDULED" | "DONE";
+export type DemoOrderType = "PREVENTIVA" | "CORRETIVA" | "INSTALACAO" | "PROJETO";
+
+export type DemoOrder = {
+  id: string;
+  number: string;
+  title: string;
+  customer: string;
+  type: DemoOrderType;
+  operator: string;
+  value: number;
+  scheduledFor: string;
+  status: DemoOrderStatus;
+};
+
+export type DemoProductStatus = "ok" | "low" | "out";
+
+export type DemoProduct = {
+  id: string;
+  sku: string;
+  name: string;
+  category: string;
+  unit: string;
+  stock: number;
+  minStock: number;
+  price: number;
+  status: DemoProductStatus;
+};
+
+export type DemoDocumentStatus = "DRAFT" | "READY" | "VALIDATED" | "SENT";
+
+export type DemoDocument = {
+  id: string;
+  /** Maps to DocumentTemplateType (WORK_ORDER, TECHNICAL_REPORT, PMOC, REPORT, QUOTE, RECEIPT). */
+  kind: DocumentTemplateType;
+  number: string;
+  customer: string;
+  equipment: string;
+  operator: string;
+  date: string;
+  status: DemoDocumentStatus;
+  value: number;
+};
+
+export type DemoServiceStatus = "SCHEDULED" | "IN_PROGRESS" | "DONE";
+export type DemoTimelineKind = "INSTALL" | "MAINTENANCE" | "VISIT" | "DOCUMENT" | "NOTE";
+
+export type DemoServiceEvent = { at: string; kind: DemoTimelineKind; label: string };
+
+export type DemoService = {
+  id: string;
+  customer: string;
+  equipment: string;
+  operator: string;
+  type: DemoOrderType;
+  date: string;
+  status: DemoServiceStatus;
+  documents: string[];
+  history: DemoServiceEvent[];
 };
 
 export * from "./documents";

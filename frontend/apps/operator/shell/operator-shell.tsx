@@ -7,19 +7,17 @@
  * different from the Platform layout; the two apps share only the design system.
  */
 import type { ReactNode } from "react";
-import { HardHat } from "lucide-react";
 import { OperatorBottomNav } from "@operator/components/bottom-nav";
 import { useAuth } from "@erp/ui/auth/auth-provider";
+import { BrandLogo } from "@erp/ui/brand";
 import { firstName } from "@erp/utils";
 
 function OperatorTopBar() {
   const { session } = useAuth();
-  const org = session?.organization.tradeName || session?.organization.legalName || "Operação";
   return (
-    <header className="sticky top-0 z-30 flex h-12 items-center gap-2 border-b border-[var(--color-border)] bg-[var(--color-primary)] px-4 text-white">
-      <HardHat className="h-4 w-4" />
-      <span className="text-sm font-semibold truncate">{org}</span>
-      <span className="ml-auto text-[11px] opacity-90 truncate">
+    <header className="sticky top-0 z-30 flex h-12 items-center gap-2 border-b border-[var(--color-border)] bg-[var(--color-card)] px-4">
+      <BrandLogo height={24} />
+      <span className="ml-auto text-[11px] font-medium text-[var(--color-muted-foreground)] truncate">
         {session ? firstName(session.user.name) : "Campo"}
       </span>
     </header>

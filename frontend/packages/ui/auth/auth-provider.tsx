@@ -59,10 +59,17 @@ export function useAuth(): AuthContextValue {
 
 const HEX = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
 
-function applyBranding(primary?: string, secondary?: string) {
+/**
+ * Apply white-label branding (organization colors) to the live theme.
+ * Exported so the Settings screen can preview/persist changes instantly.
+ */
+export function applyBranding(primary?: string, secondary?: string) {
   if (typeof document === "undefined") return;
   const root = document.documentElement;
-  if (primary && HEX.test(primary)) root.style.setProperty("--color-primary", primary);
+  if (primary && HEX.test(primary)) {
+    root.style.setProperty("--color-primary", primary);
+    root.style.setProperty("--color-ring", primary);
+  }
   if (secondary && HEX.test(secondary)) root.style.setProperty("--color-accent", secondary);
 }
 

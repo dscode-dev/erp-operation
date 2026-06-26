@@ -20,7 +20,17 @@ export default function FinancialPage() {
 
   const finance = fin.data?.finance;
   const entries = useMemo(() => finance?.entries ?? [], [finance]);
-  const lucro = finance ? finance.summary.entradas - finance.summary.saidas - finance.summary.despesas : 0;
+
+  const metrics = useMemo(() => {
+    if (!finance) return null;
+    const { entradas, saidas, despesas, projecao30Dias } = finance.summary;
+    const lucro = entradas - saidas - despesas;
+    const entryCount = entries.filter((e) => e.kind === "ENTRY").length;
+    const ticketMedio = entryCount > 0 ? entradas / entryCount : 0;
+    const margem = entradas > 0 ? (lucro / entradas) * 100 : 0;
+    const cobertura = despesas > 0 ? (entradas / despesas) * 100 : 0;
+    return { entradas, saidas, despesas, projecao30Dias, lucro, ticketMedio, margem, cobertura };
+  }, [finance, entries]);
 
   return (
     <Gate
@@ -46,9 +56,7 @@ export default function FinancialPage() {
                     key={p}
                     type="button"
                     onClick={() => setPeriod(p)}
-                    className={`px-3 h-9 text-sm transition-colors ${
-                      period === p ? "bg-[var(--color-primary)] text-[var(--color-primary-foreground)]" : "hover:bg-[var(--color-muted)]"
-                    }`}
+                    className={`px-3 h-9 text-sm transition-colors ${period === p ? "bg-[var(--color-primary)] text-[var(--color-primary-foreground)]" : "hover:bg-[var(--color-muted)]"}`}
                   >
                     {p}
                   </button>
@@ -57,52 +65,45 @@ export default function FinancialPage() {
               <ExportButton
                 label="Exportar"
                 fileName="financeiro-lancamentos"
-                rows={entries.map((e) => ({
-                  tipo: e.kind === "ENTRY" ? "Entrada" : "Despesa",
-                  descricao: e.description,
-                  valor: e.amount,
-                }))}
+                rows={entries.map((e) => ({ tipo: e.kind === "ENTRY" ? "Entrada" : "Despesa", descricao: e.description, valor: e.amount }))}
               />
             </>
           }
         />
 
         {fin.loading && !fin.data ? (
-          <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">{Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)}</div>
+          <div className="grid gap-3 grid-cols-2 lg:grid-cols-6">{Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}</div>
         ) : fin.error && !fin.data ? (
           <ErrorState error={fin.error} onRetry={fin.refetch} />
-        ) : fin.data?.disabled ? (
+        ) : fin.data?.disabled || !metrics ? (
           <ComingSoonState
             title="Financeiro em breve"
             description="O Demo Dataset está desabilitado e ainda não existe domínio financeiro de produção. Ative o Demo Dataset para visualizar dados de desenvolvimento."
           />
-        ) : finance ? (
+        ) : (
           <>
-            <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
-              <MetricCard label="Entradas" value={formatCurrencyBRL(finance.summary.entradas)} delta={period} trend="up" icon="TrendingUp" />
-              <MetricCard label="Saídas" value={formatCurrencyBRL(finance.summary.saidas)} delta={period} trend="down" icon="TrendingDown" />
-              <MetricCard label="Despesas" value={formatCurrencyBRL(finance.summary.despesas)} delta={period} trend="down" icon="Wallet" />
-              <MetricCard label="Projeção 30 dias" value={formatCurrencyBRL(finance.summary.projecao30Dias)} delta="estimativa" trend="up" icon="LineChart" />
+            <div className="grid gap-3 grid-cols-2 lg:grid-cols-6">
+              <MetricCard label="Receita recebida" value={formatCurrencyBRL(metrics.entradas)} delta={period} trend="up" icon="TrendingUp" />
+              <MetricCard label="Saídas" value={formatCurrencyBRL(metrics.saidas)} delta={period} trend="down" icon="TrendingDown" />
+              <MetricCard label="Despesas" value={formatCurrencyBRL(metrics.despesas)} delta={period} trend="down" icon="Wallet" />
+              <MetricCard label="Receita prevista" value={formatCurrencyBRL(metrics.projecao30Dias)} delta="30 dias" trend="up" icon="LineChart" />
+              <MetricCard label="Ticket médio" value={formatCurrencyBRL(metrics.ticketMedio)} delta="por entrada" trend="flat" icon="Receipt" />
+              <MetricCard label="Margem operacional" value={`${Math.round(metrics.margem)}%`} delta="resultado" trend={metrics.margem >= 0 ? "up" : "down"} icon="Percent" />
             </div>
 
-            <div className="grid gap-6 lg:grid-cols-3">
+            {/* Comparativo + Resultado — mesma altura lado a lado */}
+            <div className="grid gap-6 lg:grid-cols-3 items-stretch">
               <DashboardSection title="Comparativo do período" className="lg:col-span-2">
-                <ComparativeChart
-                  entradas={finance.summary.entradas}
-                  saidas={finance.summary.saidas}
-                  despesas={finance.summary.despesas}
-                />
+                <div className="h-full rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-5 shadow-[var(--shadow-card)] flex flex-col">
+                  <ComparativeChart entradas={metrics.entradas} saidas={metrics.saidas} despesas={metrics.despesas} />
+                </div>
               </DashboardSection>
 
               <DashboardSection title="Resultado">
-                <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-5 shadow-[var(--shadow-card)] space-y-4">
-                  <Indicator label="Lucro estimado" value={formatCurrencyBRL(lucro)} tone={lucro >= 0 ? "up" : "down"} />
-                  <Indicator
-                    label="Margem"
-                    value={finance.summary.entradas > 0 ? `${Math.round((lucro / finance.summary.entradas) * 100)}%` : "—"}
-                    tone={lucro >= 0 ? "up" : "down"}
-                  />
-                  <Indicator label="Cobertura de despesas" value={finance.summary.despesas > 0 ? `${Math.round((finance.summary.entradas / finance.summary.despesas) * 100)}%` : "—"} tone="up" />
+                <div className="h-full rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-5 shadow-[var(--shadow-card)] flex flex-col justify-center gap-5">
+                  <Indicator label="Lucro estimado" value={formatCurrencyBRL(metrics.lucro)} tone={metrics.lucro >= 0 ? "up" : "down"} />
+                  <Indicator label="Margem" value={`${Math.round(metrics.margem)}%`} tone={metrics.margem >= 0 ? "up" : "down"} />
+                  <Indicator label="Cobertura de despesas" value={`${Math.round(metrics.cobertura)}%`} tone="up" />
                 </div>
               </DashboardSection>
             </div>
@@ -129,7 +130,7 @@ export default function FinancialPage() {
               )}
             </DashboardSection>
           </>
-        ) : null}
+        )}
       </div>
     </Gate>
   );
@@ -143,19 +144,14 @@ function ComparativeChart({ entradas, saidas, despesas }: { entradas: number; sa
     { label: "Despesas", value: despesas, color: "var(--color-warning)" },
   ];
   return (
-    <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-5 shadow-[var(--shadow-card)]">
-      <div className="flex items-end gap-6 h-48">
-        {bars.map((b) => (
-          <div key={b.label} className="flex-1 flex flex-col items-center justify-end gap-2 h-full">
-            <span className="font-mono text-xs tabular-nums text-[var(--color-muted-foreground)]">{formatCurrencyBRL(b.value)}</span>
-            <div
-              className="w-full max-w-[80px] rounded-t-[var(--radius-sm)] transition-all"
-              style={{ height: `${(b.value / max) * 100}%`, backgroundColor: b.color, minHeight: 4 }}
-            />
-            <span className="text-caption">{b.label}</span>
-          </div>
-        ))}
-      </div>
+    <div className="flex-1 flex items-end gap-6 min-h-[200px]">
+      {bars.map((b) => (
+        <div key={b.label} className="flex-1 flex flex-col items-center justify-end gap-2 h-full">
+          <span className="font-mono text-xs tabular-nums text-[var(--color-muted-foreground)]">{formatCurrencyBRL(b.value)}</span>
+          <div className="w-full max-w-[80px] rounded-t-[var(--radius-sm)] transition-all" style={{ height: `${(b.value / max) * 100}%`, backgroundColor: b.color, minHeight: 4 }} />
+          <span className="text-caption">{b.label}</span>
+        </div>
+      ))}
     </div>
   );
 }

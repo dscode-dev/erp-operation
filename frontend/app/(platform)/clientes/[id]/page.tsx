@@ -14,13 +14,16 @@ import { EmptyState } from "@erp/ui/empty-state";
 import { Gate } from "@erp/ui/auth/gate";
 import { CustomerFormDrawer } from "@platform/components/customer-form-drawer";
 import { ExportButton } from "@platform/components/export-button";
+import { Timeline, type TimelineEvent } from "@erp/ui/timeline";
 import {
   customersApi,
   equipmentsApi,
+  operationsApi,
   useQuery,
   type CustomerDetail,
   type EquipmentStatus,
   type EquipmentSummary,
+  type ServicesData,
 } from "@erp/api";
 import { formatDate, maskCep } from "@erp/utils";
 
@@ -38,11 +41,21 @@ const equipmentCols: Column<EquipmentSummary>[] = [
   { key: "status", header: "Status", className: "w-[140px]", cell: (e) => <StatusPill status={EQUIPMENT_STATUS[e.status]} /> },
 ];
 
+/** Flatten demo services of a customer into timeline events (newest first). */
+function customerTimeline(data: ServicesData | null, customerName: string): TimelineEvent[] {
+  if (!data) return [];
+  return data.items
+    .filter((s) => s.customer === customerName)
+    .flatMap((s) => s.history.map((h, i) => ({ id: `${s.id}-${i}`, at: h.at, kind: h.kind, label: h.label, meta: s.equipment })))
+    .sort((a, b) => b.at.localeCompare(a.at));
+}
+
 export default function ClienteDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [editing, setEditing] = useState(false);
 
   const detail = useQuery<CustomerDetail>((signal) => customersApi.getCustomer(id, { signal }), [id]);
+  const services = useQuery<ServicesData>((signal) => operationsApi.getServices({ signal }), []);
   const equipments = useQuery(
     (signal) => equipmentsApi.listEquipments({ customerId: id, limit: 50, signal }),
     [id],
@@ -99,6 +112,10 @@ export default function ClienteDetailPage({ params }: { params: Promise<{ id: st
                   ) : (
                     <EmptyState icon={Wrench} title="Sem equipamentos" description="Nenhum equipamento vinculado a este cliente." />
                   )}
+                </InfoCard>
+
+                <InfoCard title="Histórico">
+                  <Timeline events={customerTimeline(services.data, c.name)} />
                 </InfoCard>
 
                 {c.addresses.length > 0 && (

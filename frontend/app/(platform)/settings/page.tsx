@@ -7,7 +7,7 @@ import { SectionCard } from "@erp/ui/section-card";
 import { StatusChip } from "@erp/ui/status-chip";
 import { SkeletonCard } from "@erp/ui/skeletons";
 import { AsyncBoundary } from "@erp/ui/states";
-import { useAuth } from "@erp/ui/auth/auth-provider";
+import { useAuth, applyBranding } from "@erp/ui/auth/auth-provider";
 import {
   organizationApi,
   useQuery,
@@ -126,6 +126,7 @@ function AssetUploader({ type, label, icon: Icon, canEdit }: { type: BrandAssetT
 /* ---------- Organization ---------- */
 
 function OrganizationSection({ org, canEdit, onSaved }: { org: Organization; canEdit: boolean; onSaved: () => void }) {
+  const { refresh } = useAuth();
   const [form, setForm] = useState(org);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -133,6 +134,15 @@ function OrganizationSection({ org, canEdit, onSaved }: { org: Organization; can
 
   useEffect(() => setForm(org), [org]);
   function set<K extends keyof Organization>(k: K, v: Organization[K]) { setForm((f) => ({ ...f, [k]: v })); }
+
+  // Live branding preview while editing brand colors.
+  function setColor(key: "primaryColor" | "secondaryColor", value: string) {
+    set(key, value);
+    applyBranding(
+      key === "primaryColor" ? value : form.primaryColor,
+      key === "secondaryColor" ? value : form.secondaryColor,
+    );
+  }
 
   async function save() {
     setSaving(true); setError(null); setSaved(false);
@@ -142,7 +152,10 @@ function OrganizationSection({ org, canEdit, onSaved }: { org: Organization; can
         phone: form.phone, city: form.city, state: form.state,
         primaryColor: form.primaryColor, secondaryColor: form.secondaryColor,
       });
+      applyBranding(form.primaryColor, form.secondaryColor);
       onSaved();
+      // Re-bootstrap the session so the persisted colors apply app-wide.
+      await refresh();
       setSaved(true);
       setTimeout(() => setSaved(false), 1500);
     } catch (err) {
@@ -165,8 +178,8 @@ function OrganizationSection({ org, canEdit, onSaved }: { org: Organization; can
           <Input label="Cidade" value={form.city} onChange={(v) => set("city", v)} disabled={!canEdit} />
           <Input label="UF" value={form.state} onChange={(v) => set("state", v)} disabled={!canEdit} />
         </div>
-        <ColorInput label="Cor primária" value={form.primaryColor} onChange={(v) => set("primaryColor", v)} disabled={!canEdit} />
-        <ColorInput label="Cor secundária" value={form.secondaryColor} onChange={(v) => set("secondaryColor", v)} disabled={!canEdit} />
+        <ColorInput label="Cor primária" value={form.primaryColor} onChange={(v) => setColor("primaryColor", v)} disabled={!canEdit} />
+        <ColorInput label="Cor secundária" value={form.secondaryColor} onChange={(v) => setColor("secondaryColor", v)} disabled={!canEdit} />
       </div>
     </SectionCard>
   );

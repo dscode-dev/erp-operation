@@ -1,6 +1,7 @@
 "use client";
 
-import { Briefcase } from "lucide-react";
+import Link from "next/link";
+import { Briefcase, Plus } from "lucide-react";
 import { ServiceCard } from "@operator/components/service-card";
 import { SkeletonList } from "@erp/ui/skeletons";
 import { EmptyState } from "@erp/ui/empty-state";
@@ -26,10 +27,15 @@ export default function OperatorServices() {
   }
 
   return (
-    <div className="px-4 pt-6 space-y-6">
-      <header>
-        <h1 className="text-section-title">Atendimentos</h1>
-        <p className="text-[var(--color-muted-foreground)] text-sm">Sua fila de campo.</p>
+    <div className="px-4 pt-4 pb-24 space-y-6">
+      <header className="flex items-end justify-between gap-3">
+        <div>
+          <h1 className="text-[22px] font-semibold tracking-tight">Atendimentos</h1>
+          <p className="text-[var(--color-muted-foreground)] text-sm">Sua fila de campo.</p>
+        </div>
+        <Link href="/operator/atendimento" className="inline-flex items-center gap-1.5 rounded-[var(--radius-md)] bg-[var(--color-primary)] text-white px-3 h-10 text-sm font-semibold active:scale-[0.98] shrink-0">
+          <Plus className="h-4 w-4" /> Novo
+        </Link>
       </header>
 
       {sched.loading && !sched.data ? (

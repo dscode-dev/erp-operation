@@ -11,7 +11,6 @@ import {
   Users,
   Wrench,
   Package,
-  Sparkles,
   BarChart3,
   Wallet,
   Shield,
@@ -20,9 +19,11 @@ import {
   ChevronsLeft,
   ChevronsRight,
   ChevronDown,
-  Zap,
+  FileText,
+  Presentation,
 } from "lucide-react";
 import { cn } from "@erp/utils";
+import { BrandLogo } from "@erp/ui/brand";
 import { useAuth } from "@erp/ui/auth/auth-provider";
 import type { Role, UserPermissions } from "@erp/api";
 
@@ -44,8 +45,9 @@ const groups: NavGroup[] = [
     items: [
       { label: "Dashboard", href: "/", icon: LayoutDashboard },
       { label: "Agenda", href: "/agenda", icon: Calendar },
-      { label: "Atendimentos", href: "/servicos", icon: Briefcase },
+      { label: "Serviços", href: "/servicos", icon: Briefcase },
       { label: "Ordens de Serviço", href: "/ordens", icon: ClipboardList },
+      { label: "Documentos", href: "/documentos", icon: FileText },
     ],
   },
   {
@@ -54,7 +56,6 @@ const groups: NavGroup[] = [
       { label: "Clientes", href: "/clientes", icon: Users },
       { label: "Equipamentos", href: "/equipamentos", icon: Wrench },
       { label: "Produtos", href: "/produtos", icon: Package },
-      { label: "Serviços", href: "#", icon: Sparkles, soon: true },
     ],
   },
   {
@@ -70,6 +71,7 @@ const groups: NavGroup[] = [
     items: [
       { label: "Configurações", href: "/settings", icon: Settings, roles: ["OWNER", "MANAGER"] },
       { label: "Perfil", href: "/profile", icon: User },
+      { label: "Modo demo", href: "/demo-ready", icon: Presentation, roles: ["OWNER", "MANAGER"] },
     ],
   },
 ];
@@ -103,13 +105,10 @@ export function PlatformSidebar() {
     >
       {/* Brand */}
       <div className="flex items-center gap-2.5 px-4 h-14 border-b border-[var(--color-border)]">
-        <div className="h-8 w-8 rounded-[var(--radius-md)] bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-accent)] grid place-items-center text-white shadow-[var(--shadow-card)]">
-          <Zap className="h-4 w-4" />
-        </div>
+        <BrandLogo height={collapsed ? 28 : 32} />
         {!collapsed && (
           <div className="min-w-0">
-            <div className="text-sm font-semibold tracking-tight leading-tight">Operacional</div>
-            <div className="text-[10px] text-[var(--color-muted-foreground)] uppercase tracking-wider">ERP de campo</div>
+            <div className="text-[10px] text-[var(--color-muted-foreground)] uppercase tracking-wider">ERP Operacional</div>
           </div>
         )}
       </div>

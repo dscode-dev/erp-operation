@@ -8,8 +8,9 @@
  */
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Loader2, LogIn, Zap, HardHat } from "lucide-react";
+import { Loader2, LogIn } from "lucide-react";
 import { useAuth } from "./auth-provider";
+import { BrandLogo } from "../brand";
 import { ApiClientError } from "@erp/api";
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -21,18 +22,16 @@ const ERROR_MESSAGES: Record<string, string> = {
 
 type Variant = "platform" | "operator";
 
-const COPY: Record<Variant, { title: string; subtitle: string; icon: typeof Zap; home: string; change: string }> = {
+const COPY: Record<Variant, { title: string; subtitle: string; home: string; change: string }> = {
   platform: {
     title: "Acessar plataforma",
     subtitle: "Gestão · OWNER e MANAGER.",
-    icon: Zap,
     home: "/",
     change: "/trocar-senha",
   },
   operator: {
     title: "Operador de campo",
     subtitle: "Acesse para iniciar seus atendimentos.",
-    icon: HardHat,
     home: "/operator",
     change: "/operator/trocar-senha",
   },
@@ -68,18 +67,15 @@ function LoginForm({ variant }: { variant: Variant }) {
     }
   }
 
-  const Icon = copy.icon;
   const isOperator = variant === "operator";
 
   return (
     <div className="min-h-dvh grid place-items-center bg-[var(--color-background)] px-4 py-10">
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center text-center mb-8">
-          <div className={`h-14 w-14 rounded-[var(--radius-lg)] grid place-items-center text-white shadow-[var(--shadow-hover)] ${isOperator ? "bg-[var(--color-primary)]" : "bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-accent)]"}`}>
-            <Icon className="h-7 w-7" />
-          </div>
-          <h1 className="text-page-title mt-4">{copy.title}</h1>
-          <p className="text-sm text-[var(--color-muted-foreground)] mt-1">{copy.subtitle}</p>
+          <BrandLogo height={56} className="rounded-[var(--radius-lg)]" />
+          <h1 className="text-page-title mt-5">{copy.title}</h1>
+          <p className="text-sm text-[var(--color-muted-foreground)] mt-1">{copy.subtitle}{isOperator ? " · app de campo" : ""}</p>
         </div>
 
         <form onSubmit={onSubmit} className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-6 shadow-[var(--shadow-card)] space-y-4">
