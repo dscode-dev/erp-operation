@@ -1,54 +1,56 @@
-# COMPONENTS — Sprint 0.A
+# COMPONENTS — Sprint 2
 
-## `components/platform/` (desktop-first)
+## Camada de API (`lib/api/`)
 
-| Componente | Arquivo | Descrição |
-|---|---|---|
-| `PlatformSidebar` | `sidebar.tsx` | **Sidebar agrupada** em 4 categorias (Operação · Cadastros · Gestão · Sistema), grupos recolhíveis, item ativo com barra lateral e fundo `primary/10`, badge "em breve", tooltips quando colapsada |
-| `PlatformTopbar` | `topbar.tsx` | Empresa ativa · busca global (⌘K) · notificações · theme toggle · avatar |
-| `PageHeader` | `page-header.tsx` | Título reduzido para `text-page-title` (28px), eyebrow/description aceitam `ReactNode` |
-| `GreetingHeader` | `greeting-header.tsx` | **NOVO** — saudação discreta ("Olá, {nome}.") + data + contador de pendências |
-| `Breadcrumbs` | `breadcrumbs.tsx` | Trilha de navegação para drill-down |
-| `FilterBar` | `filter-bar.tsx` | Busca + chips + slot direito |
-| `DataTable` | `data-table.tsx` | Tabela genérica `<T>` com `rowHref?` |
-| `InfoCard` / `InfoRow` | `info-card.tsx` | Cartão label/value para detalhes |
-| `MetricCard` | `metric-card.tsx` | **Reprojetado** — valor 22px, ícone em quadrado, pill de tendência com seta colorida, hover sobe o card |
-| `ActivityFeed` | `activity-feed.tsx` | Lista de atividade recente |
-| `AlertCard` | `alert-card.tsx` | **NOVO** — alerta operacional com severidade (`danger`/`warning`/`info`) e ring tonal |
-| `TeamStatusList` | `team-status-list.tsx` | **NOVO** — operadores com avatar, status (online/em_servico/offline) e OS atual |
-| `RevenueChart` | `revenue-chart.tsx` | **NOVO** — gráfico SVG linha + área (receita vs despesa, 6 meses) sem dependências |
-| `DashboardSection` | `dashboard-section.tsx` | Wrapper de seção (label 11px uppercase) |
-| `NewServiceButton` / `NewServiceSheet` | … | Sheet multi-step de criação de serviço |
+Sprint 2 estendeu os domínios:
 
-## `components/operator/` (mobile-first)
+- `users.ts`: `getUser`, `createUser`, `updateUser`, `disableUser`, `enableUser`, `deleteUser`, `resetPassword`, `uploadAvatar`, `deleteAvatar` (além de `getMe`, `changePassword`, preferences, `listUsers`).
+- `organization.ts`: `updateOrganizationSettings`, `createTemplate`/`updateTemplate`/`deleteTemplate`, `uploadAsset`/`deleteAsset` (além de get/update organization e settings/templates read).
+- `types.ts`: `CreateUserPayload`, `UpdateUserPayload`, `CreateUserResult`, `ResetPasswordResult`, `AvatarMeta`, `BrandAsset`, payloads de organização/settings/templates.
+
+Helpers: `lib/user-display.ts` (papéis/permissões), reaproveita `lib/format.ts`, `lib/export.ts`, `lib/equipment-display.ts`.
+
+## Componentes compartilhados (`components/shared/`) — NOVOS
 
 | Componente | Arquivo | Descrição |
 |---|---|---|
-| `OperatorBottomNav` | `bottom-nav.tsx` | Nav inferior, 5 itens, botão QR elevado |
-| `OperatorHeader` | `operator-header.tsx` | **Reprojetado** — "Olá, {nome}." + data discreta, sem cabeçalho gigante |
-| `QuickAction` | `quick-action.tsx` | **Reprojetado** — gradient bg, min-h 88px, 3 tons (`primary`/`accent`/`success`), feedback tátil |
-| `ServiceCard` | `service-card.tsx` | Card de atendimento |
-| `ScheduleCard` | `schedule-card.tsx` | Item de agenda |
+| `ConfirmDialog` | `confirm-dialog.tsx` | Modal de confirmação (async, variante `danger`) |
+| `SearchInput` | `search-input.tsx` | Input de busca controlado com limpar |
+| `StatusChip` | `status-chip.tsx` | Chip semântico genérico (tons) |
+| `SectionCard` | `section-card.tsx` | Card com header (ícone/título/ação) |
+| `EmptyIllustration` | `empty-illustration.tsx` | Empty state ilustrado |
+| `FilterBar` / `FilterChip` | `filter-bar.tsx` | Toolbar de lista composável (substitui a antiga de platform) |
+| `MetricCard` | `metric-card.tsx` | Re-export do MetricCard de plataforma |
+| `DrawerTabs` | `drawer-tabs.tsx` | Abas padronizadas para drawers de entidade |
 
-## `components/shared/`
+## Drawers de entidade (padronizados)
 
-| Componente | Arquivo | Descrição |
-|---|---|---|
-| `CommandPaletteProvider` / `useCommandPalette` | `command-palette.tsx` | ⌘K global |
-| `EmptyState` | `empty-state.tsx` | Estado vazio com ícone + descrição |
-| `StatusPill` | `status-pill.tsx` | Pill semântica por estado |
-| `SkeletonLine` / `SkeletonCard` / `SkeletonList` | `skeletons.tsx` | Placeholders shimmer |
+`Customer`, `Equipment`, `User` e `Service` usam o mesmo padrão: `shared/Drawer` + `DrawerTabs` + `StatusChip`.
 
-## `components/theme/`
+| Drawer | Arquivo |
+|---|---|
+| `UserFormDrawer` | `platform/user-form-drawer.tsx` (criar/editar + senha temporária) |
+| `UserDetailDrawer` | `platform/user-detail-drawer.tsx` (ações OWNER + abas + avatar) |
+| `ServiceDetailDrawer` | `platform/service-detail-drawer.tsx` (atendimento + documento) |
+| `CustomerDetailDrawer` / `CustomerFormDrawer` | `platform/customer-*` (migrados p/ `DrawerTabs`) |
+| `EquipmentDetailDrawer` | `platform/equipment-detail-drawer.tsx` (migrado p/ `DrawerTabs`) |
 
-| Componente | Arquivo | Descrição |
-|---|---|---|
-| `ThemeProvider` / `ThemeToggle` | `theme/*` | Light/Dark via classe `.dark` |
+## DataTable (refinada)
 
-## Padrões de uso
+`platform/data-table.tsx`: `rowHref`, `onRowClick`, **ordenação** (`Column.sortAccessor`) e **seleção** (`selectable`, `selectedIds`, `onSelectedChange`).
 
-- **Saudação do dashboard**: sempre `GreetingHeader` com `name` + `pending`.
-- **Métricas de topo**: grid `grid-cols-2 lg:grid-cols-6` para Plataforma, `grid-cols-2 lg:grid-cols-4` para Financeiro.
-- **Eventos da Agenda**: usar `kind` (`atendimento`/`manutencao`/`visita`/`urgencia`) com tokens `--color-event-*`.
-- **Alertas**: usar `AlertCard` para qualquer aviso operacional; severidade define ring + dot.
-- **Ações rápidas (Operador)**: 3 colunas, tons alternados (`primary`/`accent`/`success`).
+## Documentos (`components/documents/`)
+
+`DocumentPreview`, `DocumentDownload`, `DocumentViewer` (Sprint 1) + **`SignaturePad`** (captura visual de assinatura). Geração permanece no backend.
+
+## Plataforma — outros
+
+`Pagination`, `ExportButton`, `QrFoundation`, `NewServiceSheet`, `sidebar` (RBAC com novas rotas), `topbar` (usuário + logout), `MetricCard`, `DataTable`.
+
+## Padrões consolidados
+
+- Toda lista: loading (skeleton) · empty (EmptyState/EmptyIllustration) · error (retry) · coming-soon.
+- Toda entidade: drawer padronizado (`Drawer` + `DrawerTabs`).
+- Ações destrutivas: `ConfirmDialog` (danger).
+- RBAC: `<Gate>` + sidebar filtrada; 401/403 do backend são autoridade final.
+- Dados: sempre via `@/lib/api`; nunca `fetch` direto, nunca mocks locais.

@@ -1,38 +1,42 @@
-# ROUTES — Sprint 0.A
+# ROUTES — Sprint 2
 
-Rota raiz `/` abre a **Plataforma**. Não existe tela de seleção de ambiente.
+`/` abre a **Plataforma** (protegida por `RequireAuth`). Não autenticado → `/login`; senha temporária → `/trocar-senha`.
 
-## Plataforma (desktop-first) — route group `(platform)`
-
-| Path | Arquivo | Descrição |
-|---|---|---|
-| `/` | `src/app/(platform)/page.tsx` | Dashboard operacional (saudação + Hoje + Serviços + Atividade + Agenda + Equipe + Alertas) |
-| `/servicos` | `src/app/(platform)/servicos/page.tsx` | Lista completa de atendimentos do dia |
-| `/clientes` | `src/app/(platform)/clientes/page.tsx` | Carteira de clientes |
-| `/clientes/[id]` | `src/app/(platform)/clientes/[id]/page.tsx` | Detalhe do cliente |
-| `/equipamentos` | `src/app/(platform)/equipamentos/page.tsx` | Inventário de equipamentos |
-| `/equipamentos/[id]` | `src/app/(platform)/equipamentos/[id]/page.tsx` | Detalhe do equipamento |
-| `/agenda` | `src/app/(platform)/agenda/page.tsx` | Agenda semanal estilo Google Calendar (grade horária + sidebar de próximos) |
-| `/ordens` | `src/app/(platform)/ordens/page.tsx` | **NOVO** — Ordens de Serviço: indicadores, filtros e tabela completa (nº, tipo, SLA, valor, status) |
-| `/ordens/[id]` | `src/app/(platform)/ordens/[id]/page.tsx` | **NOVO** — Detalhe da OS: resumo, checklist com progresso, itens/mão de obra, linha do tempo e anexos |
-| `/financial` | `src/app/(platform)/financial/page.tsx` | **NOVO** — Dashboard financeiro (mockado) com indicadores, gráfico SVG, recebíveis e despesas |
-
-Layout: `src/app/(platform)/layout.tsx` — Sidebar agrupada (Operação · Cadastros · Gestão · Sistema) + Topbar.
-
-> Placeholders na sidebar (badge "em breve", sem rota ainda): Produtos, Serviços, Relatórios, Usuários, Configurações, Perfil.
-
-## Operador (mobile-first)
+## Autenticação (root layout, sem shell)
 
 | Path | Arquivo | Descrição |
 |---|---|---|
-| `/operator` | `src/app/operator/page.tsx` | Home (próximo atendimento + ações rápidas) |
-| `/operator/services` | `src/app/operator/services/page.tsx` | Fila de atendimentos |
-| `/operator/services/[id]` | `src/app/operator/services/[id]/page.tsx` | Detalhe do atendimento |
-| `/operator/documents` | `src/app/operator/documents/page.tsx` | Documentos |
-| `/operator/profile` | `src/app/operator/profile/page.tsx` | Perfil |
+| `/login` | `app/login/page.tsx` | Login (`POST /auth/login` → `GET /users/me`) |
+| `/trocar-senha` | `app/trocar-senha/page.tsx` | Troca obrigatória de senha |
 
-Layout: `src/app/operator/layout.tsx` — Container centralizado `max-w-[640px]` + `OperatorBottomNav`.
+## Plataforma — route group `(platform)`
+
+| Path | Arquivo | Backend | Novo na Sprint 2 |
+|---|---|---|---|
+| `/` | `app/(platform)/page.tsx` | stats + users + customers + finance | widgets |
+| `/agenda` | `agenda/page.tsx` | Demo schedule | — |
+| `/servicos` | `servicos/page.tsx` | Demo schedule + ServiceDetailDrawer | drawer |
+| `/ordens` (+`/[id]`) | `ordens/...` | — (coming-soon) | — |
+| `/clientes` (+`/[id]`) | `clientes/...` | `/customers` | drawer padronizado |
+| `/equipamentos` (+`/[id]`) | `equipamentos/...` | `/equipments` | drawer padronizado |
+| `/produtos` (+`/[id]`) | `produtos/...` | — (coming-soon) | — |
+| `/financial` | `financial/page.tsx` | Demo finance | — |
+| `/usuarios` | `usuarios/page.tsx` | `/users` CRUD + avatar | **NOVO** |
+| `/profile` | `profile/page.tsx` | `/users/me`, preferences, avatar, change-password | **NOVO** |
+| `/settings` | `settings/page.tsx` | organization, settings, templates, assets | **NOVO** |
+| `/reports` | `reports/page.tsx` | categorias (arquitetura) | **NOVO** |
+| `/reports/visita` | `reports/visita/page.tsx` | clientes/equipments/users reais (fluxo visual) | **NOVO** |
+
+Sidebar (filtrada por RBAC): Operação · Cadastros · Gestão (Relatórios `canReports`, Financeiro `canFinancial`, Usuários OWNER/MANAGER/VIEWER) · Sistema (Configurações OWNER/MANAGER, Perfil).
+
+## Operador (mobile-first) — `RequireAuth`
+
+| Path | Arquivo |
+|---|---|
+| `/operator` · `/operator/services` · `/operator/services/[id]` · `/operator/qr` · `/operator/documents` · `/operator/profile` | `app/operator/...` |
+
+Estável desde a Sprint 1; consome `/users/me` + Demo Dataset.
 
 ## Root
 
-`src/app/layout.tsx` — html/body, `ThemeProvider`, `CommandPaletteProvider` (Ctrl/⌘+K em qualquer rota).
+`app/layout.tsx` — `ThemeProvider` › `AuthProvider` › `CommandPaletteProvider`.
