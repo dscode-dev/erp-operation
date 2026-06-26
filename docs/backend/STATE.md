@@ -328,7 +328,7 @@ Seed:
 
 Dados reais nas entidades existentes:
 
-- organização Climatize Nordeste em instalação vazia/bootstrap;
+- organização Climatize Refrigeração em instalação vazia/bootstrap;
 - usuários `ninja`, `ricardo`, `joao`, `maria`, `financeiro`;
 - preferências e permissões para contas criadas.
 

@@ -58,7 +58,7 @@ demo user. Store them immediately. Rerunning an idempotent seed does not reset o
 
 Organization on an empty or untouched bootstrap installation:
 
-- Climatize Nordeste
+- Climatize Refrigeração
 - segment `HVAC`
 
 Users:
@@ -77,7 +77,14 @@ Reserved snapshot keys:
 - `demo.dashboard.v1`
 - `demo.schedule.v1`
 - `demo.finance.v1`
+- `demo.orders.v1` — work-order snapshot for the commercial demo (no Work Order domain yet)
+- `demo.products.v1` — product/stock snapshot for the commercial demo (no Product domain yet)
 - `demo.manifest.v1` — internal ownership manifest, never returned by the dataset endpoint
+
+> The dataset endpoint returns every `demo.*` setting dynamically (except the manifest), so new
+> snapshot keys are served automatically once seeded. They are registered in `DEMO_SETTING_KEYS` so
+> reset cleans them up. Snapshots were enriched with realistic Climatize data (week-long agenda,
+> richer finance, ordens de serviço e produtos) for the commercial demonstration.
 
 ## Read from frontend
 

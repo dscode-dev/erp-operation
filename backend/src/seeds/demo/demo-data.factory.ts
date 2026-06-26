@@ -5,13 +5,22 @@ function dateAt(base: Date, dayOffset: number, hour: number, minute = 0): string
   return value.toISOString();
 }
 
+/**
+ * Development demo snapshots (Climatize Nordeste).
+ *
+ * Stored as reserved `demo.*` SystemSetting keys and returned dynamically by
+ * GET /internal/demo/dataset. Shapes are stable contracts; values were enriched
+ * for the commercial demo. New keys are auto-served by the dataset endpoint —
+ * remember to register them in DEMO_SETTING_KEYS (demo.constants.ts) so reset
+ * cleans them up.
+ */
 export function buildDemoSnapshots(now = new Date()): Record<string, unknown> {
   return {
     'demo.dashboard.v1': {
       generatedAt: now.toISOString(),
       counters: {
-        atendimentosHoje: 8,
-        ordensPendentes: 5,
+        atendimentosHoje: 6,
+        ordensPendentes: 4,
         operadoresAtivos: 2,
         servicosEmAndamento: 3,
       },
@@ -32,15 +41,31 @@ export function buildDemoSnapshots(now = new Date()): Record<string, unknown> {
           title: 'Higienização de splits',
           customer: 'Colégio Boa Viagem',
           operator: 'maria',
-          startsAt: dateAt(now, 0, 9),
+          startsAt: dateAt(now, 0, 8, 30),
           state: 'IN_PROGRESS',
         },
         {
           id: 'demo-schedule-today-02',
-          title: 'Diagnóstico de condensadora',
+          title: 'Diagnóstico de condensadora VRF',
           customer: 'Condomínio Atlântico Sul',
           operator: 'joao',
-          startsAt: dateAt(now, 0, 15, 30),
+          startsAt: dateAt(now, 0, 11),
+          state: 'IN_PROGRESS',
+        },
+        {
+          id: 'demo-schedule-today-03',
+          title: 'Troca de compressor',
+          customer: 'Shopping Recife',
+          operator: 'maria',
+          startsAt: dateAt(now, 0, 14, 30),
+          state: 'SCHEDULED',
+        },
+        {
+          id: 'demo-schedule-today-04',
+          title: 'Recarga de gás R-410A',
+          customer: 'Hospital Santa Clara',
+          operator: 'joao',
+          startsAt: dateAt(now, 0, 16, 30),
           state: 'SCHEDULED',
         },
         {
@@ -48,7 +73,23 @@ export function buildDemoSnapshots(now = new Date()): Record<string, unknown> {
           title: 'Inspeção mensal de climatização',
           customer: 'Shopping Recife',
           operator: 'maria',
-          startsAt: dateAt(now, 1, 10),
+          startsAt: dateAt(now, 1, 9),
+          state: 'SCHEDULED',
+        },
+        {
+          id: 'demo-schedule-tomorrow-02',
+          title: 'Instalação de split inverter 24.000 BTU',
+          customer: 'Colégio Boa Viagem',
+          operator: 'joao',
+          startsAt: dateAt(now, 1, 14),
+          state: 'SCHEDULED',
+        },
+        {
+          id: 'demo-schedule-week-01',
+          title: 'PMOC — vistoria trimestral',
+          customer: 'Condomínio Atlântico Sul',
+          operator: 'maria',
+          startsAt: dateAt(now, 3, 10),
           state: 'SCHEDULED',
         },
       ],
@@ -57,35 +98,117 @@ export function buildDemoSnapshots(now = new Date()): Record<string, unknown> {
       generatedAt: now.toISOString(),
       currency: 'BRL',
       summary: {
-        entradas: 48750,
-        saidas: 18320,
-        despesas: 7650,
-        projecao30Dias: 62400,
+        entradas: 86450,
+        saidas: 24180,
+        despesas: 16340,
+        projecao30Dias: 98200,
       },
       entries: [
+        { id: 'demo-finance-in-01', kind: 'ENTRY', description: 'Contrato mensal Hospital Santa Clara', amount: 18500 },
+        { id: 'demo-finance-in-02', kind: 'ENTRY', description: 'Manutenção preventiva Shopping Recife', amount: 12800 },
+        { id: 'demo-finance-in-03', kind: 'ENTRY', description: 'Instalação VRF Colégio Boa Viagem', amount: 24600 },
+        { id: 'demo-finance-in-04', kind: 'ENTRY', description: 'Contrato Condomínio Atlântico Sul', amount: 9800 },
+        { id: 'demo-finance-in-05', kind: 'ENTRY', description: 'Recibo avulso — recarga de gás', amount: 2750 },
+        { id: 'demo-finance-out-01', kind: 'EXPENSE', description: 'Compra de filtros e insumos', amount: 4280 },
+        { id: 'demo-finance-out-02', kind: 'EXPENSE', description: 'Locação de plataforma elevatória', amount: 3370 },
+        { id: 'demo-finance-out-03', kind: 'EXPENSE', description: 'Gás refrigerante R-410A (cilindros)', amount: 5180 },
+        { id: 'demo-finance-out-04', kind: 'EXPENSE', description: 'Combustível e deslocamento da frota', amount: 3510 },
+      ],
+    },
+    'demo.orders.v1': {
+      generatedAt: now.toISOString(),
+      items: [
+        { id: 'demo-os-2401', number: 'OS-2401', title: 'Revisão preventiva do chiller', customer: 'Hospital Santa Clara', type: 'PREVENTIVA', operator: 'joao', value: 1480, scheduledFor: dateAt(now, -1, 14), status: 'OVERDUE' },
+        { id: 'demo-os-2402', number: 'OS-2402', title: 'Higienização de splits', customer: 'Colégio Boa Viagem', type: 'PREVENTIVA', operator: 'maria', value: 760, scheduledFor: dateAt(now, 0, 8, 30), status: 'IN_PROGRESS' },
+        { id: 'demo-os-2403', number: 'OS-2403', title: 'Diagnóstico de condensadora VRF', customer: 'Condomínio Atlântico Sul', type: 'CORRETIVA', operator: 'joao', value: 320, scheduledFor: dateAt(now, 0, 11), status: 'IN_PROGRESS' },
+        { id: 'demo-os-2404', number: 'OS-2404', title: 'Troca de compressor', customer: 'Shopping Recife', type: 'CORRETIVA', operator: 'maria', value: 3850, scheduledFor: dateAt(now, 0, 14, 30), status: 'SCHEDULED' },
+        { id: 'demo-os-2405', number: 'OS-2405', title: 'Instalação de split inverter', customer: 'Colégio Boa Viagem', type: 'INSTALACAO', operator: 'joao', value: 2400, scheduledFor: dateAt(now, 1, 14), status: 'SCHEDULED' },
+        { id: 'demo-os-2399', number: 'OS-2399', title: 'PMOC trimestral', customer: 'Shopping Recife', type: 'PREVENTIVA', operator: 'maria', value: 1980, scheduledFor: dateAt(now, -4, 9), status: 'DONE' },
+      ],
+    },
+    'demo.products.v1': {
+      generatedAt: now.toISOString(),
+      items: [
+        { id: 'demo-prd-0001', sku: 'PRD-0001', name: 'Compressor hermético 1HP R-410A', category: 'Peças', unit: 'un', stock: 6, minStock: 4, price: 1480, status: 'ok' },
+        { id: 'demo-prd-0002', sku: 'PRD-0002', name: 'Filtro secador 1/2"', category: 'Peças', unit: 'un', stock: 3, minStock: 8, price: 38.9, status: 'low' },
+        { id: 'demo-prd-0003', sku: 'PRD-0003', name: 'Gás refrigerante R-410A 11,3kg', category: 'Insumos', unit: 'cil', stock: 5, minStock: 3, price: 1180, status: 'ok' },
+        { id: 'demo-prd-0004', sku: 'PRD-0004', name: 'Óleo POE 32 (1L)', category: 'Insumos', unit: 'L', stock: 24, minStock: 12, price: 86, status: 'ok' },
+        { id: 'demo-prd-0005', sku: 'PRD-0005', name: 'Manifold digital R-410A', category: 'Ferramentas', unit: 'un', stock: 2, minStock: 3, price: 1020, status: 'low' },
+        { id: 'demo-prd-0006', sku: 'PRD-0006', name: 'Capacitor 45µF', category: 'Peças', unit: 'un', stock: 0, minStock: 10, price: 28.5, status: 'out' },
+      ],
+    },
+    'demo.documents.v1': {
+      generatedAt: now.toISOString(),
+      items: [
+        { id: 'demo-doc-rvt-01', kind: 'TECHNICAL_REPORT', number: 'RVT-0312', customer: 'Hospital Santa Clara', equipment: 'Chiller York YCAL', operator: 'João Henrique', date: dateAt(now, -1, 16), status: 'VALIDATED', value: 0 },
+        { id: 'demo-doc-os-01', kind: 'WORK_ORDER', number: 'OS-2402', customer: 'Colégio Boa Viagem', equipment: 'Split Samsung WindFree', operator: 'Maria Eduarda', date: dateAt(now, 0, 12), status: 'READY', value: 760 },
+        { id: 'demo-doc-pmoc-01', kind: 'PMOC', number: 'PMOC-114', customer: 'Shopping Recife', equipment: 'Sistema VRF LG', operator: 'Maria Eduarda', date: dateAt(now, -4, 11), status: 'VALIDATED', value: 1980 },
+        { id: 'demo-doc-laudo-01', kind: 'REPORT', number: 'LAU-088', customer: 'Condomínio Atlântico Sul', equipment: 'Condensadora VRF', operator: 'João Henrique', date: dateAt(now, -2, 15), status: 'READY', value: 0 },
+        { id: 'demo-doc-orc-01', kind: 'QUOTE', number: 'ORC-451', customer: 'Colégio Boa Viagem', equipment: 'Split inverter 24.000 BTU', operator: 'Ricardo Almeida', date: dateAt(now, -3, 9), status: 'SENT', value: 2400 },
+        { id: 'demo-doc-rec-01', kind: 'RECEIPT', number: 'REC-209', customer: 'Hospital Santa Clara', equipment: '—', operator: 'Ana Paula', date: dateAt(now, -5, 14), status: 'VALIDATED', value: 2750 },
+        { id: 'demo-doc-rvt-02', kind: 'TECHNICAL_REPORT', number: 'RVT-0313', customer: 'Shopping Recife', equipment: 'Fan Coil 03', operator: 'Maria Eduarda', date: dateAt(now, 0, 17), status: 'DRAFT', value: 0 },
+      ],
+    },
+    'demo.services.v1': {
+      generatedAt: now.toISOString(),
+      items: [
         {
-          id: 'demo-finance-in-01',
-          kind: 'ENTRY',
-          description: 'Contrato mensal Hospital Santa Clara',
-          amount: 18500,
+          id: 'demo-svc-01',
+          customer: 'Hospital Santa Clara',
+          equipment: 'Chiller York YCAL',
+          operator: 'João Henrique',
+          type: 'PREVENTIVA',
+          date: dateAt(now, -1, 14),
+          status: 'DONE',
+          documents: ['demo-doc-rvt-01'],
+          history: [
+            { at: dateAt(now, -1, 14), kind: 'VISIT', label: 'Visita técnica realizada' },
+            { at: dateAt(now, -1, 15), kind: 'MAINTENANCE', label: 'Manutenção preventiva do chiller' },
+            { at: dateAt(now, -1, 16), kind: 'DOCUMENT', label: 'Relatório de Visita Técnica emitido (RVT-0312)' },
+          ],
         },
         {
-          id: 'demo-finance-in-02',
-          kind: 'ENTRY',
-          description: 'Manutenção Shopping Recife',
-          amount: 12800,
+          id: 'demo-svc-02',
+          customer: 'Colégio Boa Viagem',
+          equipment: 'Split Samsung WindFree',
+          operator: 'Maria Eduarda',
+          type: 'PREVENTIVA',
+          date: dateAt(now, 0, 8, 30),
+          status: 'IN_PROGRESS',
+          documents: ['demo-doc-os-01'],
+          history: [
+            { at: dateAt(now, 0, 8, 30), kind: 'VISIT', label: 'Check-in no local' },
+            { at: dateAt(now, 0, 9), kind: 'MAINTENANCE', label: 'Higienização de splits iniciada' },
+            { at: dateAt(now, 0, 12), kind: 'DOCUMENT', label: 'OS-2402 gerada' },
+          ],
         },
         {
-          id: 'demo-finance-out-01',
-          kind: 'EXPENSE',
-          description: 'Compra de filtros e insumos',
-          amount: 4280,
+          id: 'demo-svc-03',
+          customer: 'Colégio Boa Viagem',
+          equipment: 'Split inverter 24.000 BTU',
+          operator: 'Ricardo Almeida',
+          type: 'INSTALACAO',
+          date: dateAt(now, -3, 9),
+          status: 'SCHEDULED',
+          documents: ['demo-doc-orc-01'],
+          history: [
+            { at: dateAt(now, -3, 9), kind: 'NOTE', label: 'Orçamento enviado ao cliente (ORC-451)' },
+            { at: dateAt(now, 1, 14), kind: 'INSTALL', label: 'Instalação agendada' },
+          ],
         },
         {
-          id: 'demo-finance-out-02',
-          kind: 'EXPENSE',
-          description: 'Locação de plataforma elevatória',
-          amount: 3370,
+          id: 'demo-svc-04',
+          customer: 'Shopping Recife',
+          equipment: 'Sistema VRF LG',
+          operator: 'Maria Eduarda',
+          type: 'PREVENTIVA',
+          date: dateAt(now, -4, 9),
+          status: 'DONE',
+          documents: ['demo-doc-pmoc-01'],
+          history: [
+            { at: dateAt(now, -4, 9), kind: 'VISIT', label: 'Vistoria trimestral' },
+            { at: dateAt(now, -4, 11), kind: 'DOCUMENT', label: 'PMOC-114 validado' },
+          ],
         },
       ],
     },

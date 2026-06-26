@@ -276,10 +276,10 @@ async function ensureDemoOrganization(
   await prisma.organization.update({
     where: { id: existing.id },
     data: {
-      legalName: 'Climatize Nordeste Serviços de Climatização LTDA',
-      tradeName: 'Climatize Nordeste',
+      legalName: 'Climatize Refrigeração LTDA',
+      tradeName: 'Climatize Refrigeração',
       cnpj: '27.845.316/0001-42',
-      email: 'contato@climatizenordeste.example',
+      email: 'contato@climatize.com',
       phone: '+55 81 3030-4242',
       city: 'Recife',
       state: 'PE',

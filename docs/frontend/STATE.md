@@ -1,49 +1,39 @@
-# STATE — Sprint 3.0 (Operator Mobile Foundation)
+# STATE — Sprint 5 (RC1 · Product Polish & Commercial Demo)
 
-Status: Concluída ✅ — **refatoração arquitetural** (sem novas funcionalidades). Next.js 15 · App Router · RSC.
+Status: Concluída ✅ — Release Candidate 1. Next.js 15 · App Router · RSC. `tsc` limpo (frontend e backend; exceto `routes/` legado). Sem mocks locais — backend + Demo Dataset.
 
-## Objetivo
+## STAGE 0 — Branding
 
-Separar fisicamente **Platform** (gestão) e **Operator** (campo) em dois produtos independentes que compartilham apenas backend, Design System e pacotes comuns. Ver `docs/frontend/ARCHITECTURE.md`.
+Identidade do cliente (Climatize) aplicada: `logo.PNG`/`favicon.PNG` copiados para `frontend/public/brand/` + `app/icon.png` (favicon) + `app/apple-icon.png` (iOS). Componente `@erp/ui/brand` (`BrandLogo`) usado no **login**, **sidebar** e **top bar do operador**. Tema azul/branco definitivo (Sprint 3); troca dinâmica de cores do OWNER preservada.
 
-## O que mudou
+## STAGE 1 — Relatórios → Central documental (`/reports`)
 
-### Estrutura (separação física)
+A Platform administra (não cria) documentos dos operadores. Lista RVT, Laudos, PMOC, Orçamentos, Recibos e OS (snapshot `demo.documents.v1`) com operador/cliente/equipamento/data/status, **preview** (DocumentViewer), revisar/editar (OWNER) e **download**. Filtros por tipo + busca + export.
 
-- `packages/` — compartilhado: `types` (`@erp/types`), `api` (`@erp/api`), `utils` (`@erp/utils`), `ui` (`@erp/ui/*`, inclui `auth/*`, `documents/*`, `theme/*`).
-- `apps/platform/` — componentes/utilitários exclusivos da Platform.
-- `apps/operator/` — componentes + `shell/operator-shell.tsx` exclusivos do Operator.
-- `app/` — apenas route shells finos do Next App Router.
-- Aliases novos: `@erp/types`, `@erp/api`, `@erp/utils`, `@erp/ui/*`, `@platform/*`, `@operator/*`. Todos os imports `@/lib`/`@/components` foram migrados.
-- Removidas as pastas antigas `lib/`, `components/`, `hooks/` (conteúdo movido).
+## STAGE 2 — Serviços (`/servicos`) → Histórico operacional
 
-### Autenticação isolada
+Timeline do histórico: cliente, equipamento, operador, tipo, data, documentos e eventos (snapshot `demo.services.v1`). Drawer com `Timeline`. Sidebar: "Atendimentos" renomeado para "Serviços"; placeholder removido. Preparado para a futura Ordem de Serviço.
 
-- Tokens **scope-aware** (`erp.platform.*` vs `erp.operator.*`) — sessões nunca compartilhadas.
-- `AppProviders` escolhe o `AuthProvider` (scope `platform`/`operator`) pelo pathname.
-- Telas compartilhadas `LoginScreen`/`ChangePasswordScreen` com `variant` por app.
-- `RequireAuth` deriva login/troca do escopo (`/login` vs `/operator/login`).
+## STAGE 4 — Timeline reutilizável
 
-### Layouts independentes
+`@erp/ui/timeline` (`Timeline` + `TimelineEvent`) com kinds instalação/manutenção/visita/documento/observação. Usado em **Serviço**, **Cliente** (`/clientes/[id]`) e **Equipamento** (`/equipamentos/[id]`), filtrando os serviços demo por cliente/equipamento.
 
-- Platform: mantém sidebar + topbar (sem mudança significativa).
-- Operator: novo `OperatorShell` com identidade de app de campo (brand bar + bottom nav), sob route group `app/operator/(shell)/`. `app/operator/login` e `app/operator/trocar-senha` são públicos.
+## STAGE 3 — Operator refinado
 
-### RBAC
+Home com atalhos: Escanear QR · Agenda · Clientes · Equipamentos · Documentos · Sincronizar (+ CTA Novo Atendimento). Novas rotas: `/operator/equipamentos` (busca), `/operator/documents` (lista demo, somente leitura — nunca edita finalizados), `/operator/sync` (outbox offline-ready). Mobile-first mantido.
 
-Continua 100% do backend (`/users/me`); `<Gate>` + sidebar apenas ocultam. Sem regras locais.
+## STAGE 6 — Docker
 
-## DoD
+`frontend/Dockerfile` (multi-stage, Next `output: standalone`) + `frontend/.dockerignore`. `docker-compose.yml`: serviço `frontend` (serve Platform `/` e Operator `/operator`; subdomínios via proxy em produção). `.env.example`: `FRONTEND_PORT`, `NEXT_PUBLIC_API_BASE_URL`, `NEXT_PUBLIC_ENABLE_DEMO`.
 
-- Platform e Operator separados arquiteturalmente ✅
-- Autenticação isolada (sessões/escopos distintos) ✅
-- Layouts independentes ✅
-- Componentes compartilhados organizados em `packages/` ✅
-- API Layer única (`@erp/api`) ✅
-- `ARCHITECTURE.md` criado ✅
-- Build íntegro: `tsc` limpo (exceto `routes/`, preview TanStack legado não relacionado) ✅
-- Nenhum módulo da Platform quebrado (rotas/imports preservados) ✅
+## STAGE 7 — RC1 Demo (`/demo-ready`)
 
-## Fora de escopo (Sprint 3)
+Roteiro guiado de 8 passos (Dashboard → Cliente → Equipamento → Operator → Atendimento → Serviços → Documentos → Download) + contagens ao vivo + atalho "Abrir ERP Operador". Parece um fluxo único.
 
-Novos formulários/módulos operacionais, geração de documentos, agenda funcional, OS, orçamento, PMOC, laudo, recibo.
+## Backend (aditivo)
+
+Novos snapshots `demo.documents.v1` e `demo.services.v1` na factory (+ `DEMO_SETTING_KEYS`). Servidos dinamicamente pelo `/internal/demo/dataset`.
+
+## Pendências para a 1.0
+
+Domínios reais (Agenda, Serviços, Ordem de Serviço, Documentos) substituindo o Demo Dataset; geração real de PDF + assinatura embarcada; encoder de QR scannable + scanner de câmera; sync real do outbox + service worker (cache offline); ícones PNG multi-resolução; rodar `next build`/seed e `docker compose` no ambiente real (validado por `tsc`).

@@ -1,37 +1,32 @@
-# ROUTES — Sprint 3.0
+# ROUTES — Sprint 3
 
-Dois apps no mesmo runtime Next, separados por pathname. A sessão é escolhida por `app/app-providers.tsx` (platform vs operator). Detalhes em `docs/frontend/ARCHITECTURE.md`.
-
-## Root
-
-`app/layout.tsx` — html/body + `ThemeProvider` + `AppProviders` (seleciona o AuthProvider escopado pelo pathname).
+Dois apps no mesmo runtime Next, separados por pathname (`app/app-providers.tsx`). Ver `ARCHITECTURE.md`.
 
 ## Platform (gestão · desktop-first)
 
-| Path | Arquivo | Sessão |
-|---|---|---|
-| `/login` | `app/login/page.tsx` → `LoginScreen variant="platform"` | platform |
-| `/trocar-senha` | `app/trocar-senha/page.tsx` | platform |
-| `/` e demais | `app/(platform)/…` (shell autenticado: sidebar + topbar) | platform |
-
-Rotas do shell (inalteradas): `/`, `/agenda`, `/servicos`, `/ordens` (+`/[id]`), `/clientes` (+`/[id]`), `/equipamentos` (+`/[id]`), `/produtos` (+`/[id]`), `/financial`, `/usuarios`, `/profile`, `/settings`, `/reports` (+`/visita`). Layout: `app/(platform)/layout.tsx` (`RequireAuth` scope platform).
+`/login`, `/trocar-senha` (escopo platform) + shell autenticado em `app/(platform)/…`:
+`/`, `/agenda`, `/servicos`, `/ordens`, `/clientes` (+`/[id]`), `/equipamentos` (+`/[id]`), `/produtos`, `/financial`, `/usuarios`, `/profile`, `/settings`, `/reports` (+`/visita`), `/documentos` (**novo** — visibilidade demo de documentos), `/demo-ready` (**novo** — modo apresentação). Sprint 4: Ordens e Produtos passam a consumir o Demo Dataset (`demo.orders.v1`/`demo.products.v1`).
 
 ## Operator (campo · mobile-first)
 
-| Path | Arquivo | Sessão |
+Sessão escopo `operator`. Três zonas sob `app/operator/`:
+
+| Zona | Layout | Rotas |
 |---|---|---|
-| `/operator/login` | `app/operator/login/page.tsx` → `LoginScreen variant="operator"` | operator |
-| `/operator/trocar-senha` | `app/operator/trocar-senha/page.tsx` | operator |
-| `/operator` | `app/operator/(shell)/page.tsx` | operator |
-| `/operator/services` (+`/[id]`) | `app/operator/(shell)/services/…` | operator |
-| `/operator/qr` | `app/operator/(shell)/qr/page.tsx` | operator |
-| `/operator/documents` | `app/operator/(shell)/documents/page.tsx` | operator |
-| `/operator/profile` | `app/operator/(shell)/profile/page.tsx` | operator |
+| Público | `operator/layout.tsx` (mínimo) | `/operator/login`, `/operator/trocar-senha` |
+| Shell (nav inferior) | `operator/(shell)/layout.tsx` (`RequireAuth` + `OperatorShell`) | `/operator` (Home), `/operator/agenda`, `/operator/services` (+`/[id]`), `/operator/clientes` (+`/[id]`), `/operator/equipamentos` (+`/[id]`), `/operator/qr`, `/operator/documents`, `/operator/sync`, `/operator/profile` |
+| Full-screen | `operator/(full)/layout.tsx` (`RequireAuth`, sem nav) | `/operator/atendimento` (Wizard) |
 
-Layouts: `app/operator/layout.tsx` (container mínimo público) + `app/operator/(shell)/layout.tsx` (`RequireAuth` scope operator + `OperatorShell`). O route group `(shell)` não altera as URLs.
+Navegação inferior: Início · Agenda · Atendimentos · Clientes · Perfil.
 
-## Notas
+### Wizard de atendimento (`/operator/atendimento`)
 
-- `/login` e `/operator/login` mantêm sessões independentes (escopos de token distintos).
-- O mesmo usuário pode autenticar nos dois apps; nenhum estado é compartilhado.
-- Em produção: `erp.empresa.com.br` → Platform, `operator.empresa.com.br` → Operator, ambos consumindo `api.empresa.com.br`.
+10 etapas: Cliente → Endereço → Equipamento → Tipo → Checklist → Observações → Fotos → Assinatura → Resumo → Enviar (sucesso). Full-screen, fora do shell (sem bottom nav).
+
+## PWA
+
+`app/manifest.ts` gera `/manifest.webmanifest` (app instalável = Operator, `start_url`/`scope` `/operator`). Instalação via Perfil do operador (`@erp/ui/pwa/install-button`).
+
+## Produção (deploy futuro)
+
+`erp.empresa.com.br` → Platform · `operator.empresa.com.br` → Operator · ambos consomem `api.empresa.com.br`.

@@ -34,7 +34,7 @@ Login payload:
 
 ```json
 {
-  "email": "ricardo@climatizenordeste.example",
+  "email": "ricardo@climatize.com",
   "password": "<password printed by demo seed>"
 }
 ```
@@ -153,10 +153,41 @@ type DemoDataset = {
       amount: number;
     }>;
   };
+  // Commercial-demo snapshots (no production domain yet):
+  'demo.orders.v1': {
+    generatedAt: string;
+    items: Array<{
+      id: string;
+      number: string;
+      title: string;
+      customer: string;
+      type: 'PREVENTIVA' | 'CORRETIVA' | 'INSTALACAO' | 'PROJETO';
+      operator: string;
+      value: number;
+      scheduledFor: string;
+      status: 'OVERDUE' | 'IN_PROGRESS' | 'SCHEDULED' | 'DONE';
+    }>;
+  };
+  'demo.products.v1': {
+    generatedAt: string;
+    items: Array<{
+      id: string;
+      sku: string;
+      name: string;
+      category: string;
+      unit: string;
+      stock: number;
+      minStock: number;
+      price: number;
+      status: 'ok' | 'low' | 'out';
+    }>;
+  };
 };
 ```
 
-Amounts are BRL decimal values, not cents. Dates are ISO 8601.
+Amounts are BRL decimal values, not cents. Dates are ISO 8601. The dataset endpoint returns every
+`demo.*` snapshot dynamically; `demo.orders.v1` and `demo.products.v1` feed the commercial demo
+screens (Ordens de Serviço e Produtos) until their production domains exist.
 
 ## UX states
 

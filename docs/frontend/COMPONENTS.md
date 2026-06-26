@@ -1,45 +1,62 @@
-# COMPONENTS — Sprint 3.0
+# COMPONENTS — Sprint 3
 
-Componentes agora vivem em **pacotes compartilhados** (`packages/*`) ou em
-**apps** (`apps/platform`, `apps/operator`). Ver `docs/frontend/ARCHITECTURE.md`.
+Pacotes compartilhados (`@erp/*`) + apps (`@platform/*`, `@operator/*`). Ver `ARCHITECTURE.md`.
 
-## Compartilhado — `@erp/*`
+## Compartilhado — `@erp/ui` (Design System)
 
-### `@erp/types` (`packages/types`)
-Contratos da API (`index.ts`) e de documentos (`documents.ts`: `GeneratedDocument`, `DocumentKind`, `DocumentStatus`, `DOCUMENT_KIND_LABEL`, `toDataUrl`).
+Primitivos (Sprint 2): `status-pill`, `status-chip`, `skeletons`, `empty-state`, `empty-illustration`, `states`, `drawer`, `drawer-tabs`, `confirm-dialog`, `search-input`, `filter-bar`, `section-card`, `metric-card`. `auth/*` (provider scope-aware, gate, require-auth, login/change-password screens). `theme/*`, `base/*`.
 
-### `@erp/api` (`packages/api`)
-Cliente HTTP único + `tokens` (scope-aware: `setSessionScope`/`getSessionScope`), domínios (`authApi`, `usersApi`, `organizationApi`, `customersApi`, `equipmentsApi`, `dashboardApi`, `financialApi`, `demoApi`) e `useQuery`.
-
-### `@erp/utils` (`packages/utils`)
-`cn`, `format` (datas/moeda/máscaras/iniciais), `export` (CSV), `useDebounce`.
-
-### `@erp/ui` (`packages/ui`) — Design System
-| Grupo | Itens |
-|---|---|
-| Primitivos | `status-pill`, `status-chip`, `skeletons`, `empty-state`, `empty-illustration`, `states` (AsyncBoundary/Error/ComingSoon), `drawer`, `drawer-tabs`, `confirm-dialog`, `search-input`, `filter-bar`, `section-card`, `metric-card` |
-| `auth/*` | `auth-provider` (scope-aware), `gate`, `require-auth`, `login-screen`, `change-password-screen` |
-| `documents/*` | `document-preview`, `document-download`, `document-viewer`, `signature-pad` |
-| `theme/*` | `theme-provider`, `theme-toggle` |
-| `base/*` | `badge`, `card` |
-
-> Componentes novos da sprint: `LoginScreen`, `ChangePasswordScreen` (auth compartilhada com `variant`).
-
-## Platform — `@platform/*` (`apps/platform`)
-
-`components/*`: `sidebar`, `topbar`, `page-header`, `data-table`, `pagination`, `export-button`, `command-palette`, drawers de entidade (`customer-*`, `equipment-detail-drawer`, `user-*`, `service-detail-drawer`), `new-service-*`, `qr-foundation`, `dashboard-section`, `greeting-header`, `team-status-list`, `info-card`, `breadcrumbs`, `revenue-chart`, `activity-feed`, `alert-card`. Utilitários de domínio: `equipment-display.ts`, `user-display.ts`.
+### Novos na Sprint 3
+| Componente | Arquivo | Uso |
+|---|---|---|
+| `Stepper` | `wizard/stepper.tsx` | progresso segmentado |
+| `WizardProgressHeader` | `wizard/progress-header.tsx` | header sticky (etapa X/N) |
+| `WizardFooter` | `wizard/step-footer.tsx` | controles voltar/continuar/enviar |
+| `PhotoInput` | `photo-input.tsx` | captura multi-foto (preview/remover/reordenar) |
+| `SignaturePad` | `documents/signature-pad.tsx` | **refinado**: desfazer/limpar/confirmar/indicador |
+| `applyBranding` | `auth/auth-provider.tsx` | aplica cores da empresa ao tema (export) |
 
 ## Operator — `@operator/*` (`apps/operator`)
 
-`shell/operator-shell.tsx` (**novo** — chrome de app de campo: brand bar + bottom nav). `components/*`: `bottom-nav`, `operator-header`, `quick-action`, `service-card`, `schedule-card`.
+| Item | Arquivo |
+|---|---|
+| `OperatorShell` | `shell/operator-shell.tsx` (brand bar + bottom nav) |
+| `OperatorBottomNav` | `components/bottom-nav.tsx` (Início/Agenda/Atend./Clientes/Perfil) |
+| `OperatorHome` | `features/home/operator-home.tsx` |
+| `AtendimentoWizard` | `features/atendimento/atendimento-wizard.tsx` (10 etapas + pickers) |
+| Config/serviços | `lib/service-types.ts` (tipos + checklists HVAC) |
+| Outbox offline | `lib/offline-queue.ts` (fila local + status + flush placeholder) |
+| Submissão | `lib/atendimento.ts` (`AtendimentoDraft`, `submitAtendimento` → outbox) |
 
-## App shells (`app/`)
+Componentes herdados: `service-card`, `schedule-card`, `quick-action`, `operator-header`.
 
-`app-providers.tsx` (**novo** — seleciona sessão por pathname), `layout.tsx` (ThemeProvider + AppProviders). Páginas de auth: `login`, `trocar-senha` (platform), `operator/login`, `operator/trocar-senha` (operator).
+## Platform — `@platform/*`
+
+Inalterado em estrutura; ajustes: Financeiro (métricas + grid de alturas iguais) e Settings (cores dinâmicas via `applyBranding` + `refresh`). `equipment-display`/`user-display` continuam em `apps/platform` (reutilizados também pelo Operator via `@platform/equipment-display`).
+
+## Sprint 4 — novos
+
+| Item | Local | Uso |
+|---|---|---|
+| `useInstallPrompt` / `InstallButton` | `@erp/ui/pwa` | instalação do PWA (Chromium + fallback iOS) |
+| `QrFoundation` (atualizado) | `@platform/components/qr-foundation` | QR + copiar código + baixar PNG |
+| `operationsApi` (`getOrders`/`getProducts`) | `@erp/api/operations` | snapshots demo de OS e Produtos |
+| `app/manifest.ts` + `public/icons/operator-icon.svg` | `app/` | manifest PWA + ícone |
+
+Telas demo: `/documentos` (DocumentViewer + RBAC), `/demo-ready` (apresentação), Ordens/Produtos (Demo Dataset), QR do operador (`/operator/qr`).
+
+## Sprint 5 — novos
+
+| Item | Local | Uso |
+|---|---|---|
+| `BrandLogo` | `@erp/ui/brand` | logo do cliente (login/sidebar/operator) |
+| `Timeline` / `TimelineEvent` | `@erp/ui/timeline` | histórico (Serviço/Cliente/Equipamento) |
+| `operationsApi.getDocuments`/`getServices` | `@erp/api/operations` | snapshots `demo.documents.v1`/`demo.services.v1` |
+
+Telas: `/reports` (central documental), `/servicos` (histórico timeline), `/operator/{equipamentos,documents,sync}`, `/demo-ready` (roteiro guiado). Docker: `frontend/Dockerfile` + serviço `frontend` no compose.
 
 ## Regras
 
-- Componentes consomem dados via `@erp/api`; nunca `fetch` direto, nunca mocks.
-- Sessões isoladas por app (escopo de token); RBAC sempre do backend (`<Gate>` apenas oculta).
-- `packages/*` nunca importa `apps/*`; `apps/platform` e `apps/operator` nunca se importam.
-- Layouts completos não são compartilhados; apenas o Design System.
+- Dados via `@erp/api`; nunca `fetch` direto, nunca mocks. Operator escreve no outbox local até o backend de Serviços existir.
+- Reutilizáveis ficam em `packages/ui`; layouts completos não são compartilhados.
+- RBAC sempre do backend; sessões Platform/Operator isoladas por escopo.

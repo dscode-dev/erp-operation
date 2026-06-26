@@ -55,6 +55,31 @@ services:
     networks:
       - backend
 
+  # Frontend Next.js 15 — serves BOTH apps from a single image:
+  #   Platform  → /            (erp.empresa.com.br em produção)
+  #   Operator  → /operator    (operator.empresa.com.br em produção)
+  # Em produção, um reverse proxy roteia os subdomínios para este serviço.
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # NEXT_PUBLIC_* são embutidos no build (acessados pelo navegador).
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:${APP_PORT:-3000}/api/v1}
+        NEXT_PUBLIC_ENABLE_DEMO: ${NEXT_PUBLIC_ENABLE_DEMO:-true}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: ${FRONTEND_PORT:-4000}
+      HOSTNAME: 0.0.0.0
+    ports:
+      - '${FRONTEND_PORT:-4000}:${FRONTEND_PORT:-4000}'
+    depends_on:
+      - api
+    init: true
+    networks:
+      - backend
+
 volumes:
   postgres_data:
   api_storage:

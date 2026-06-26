@@ -6,6 +6,10 @@ export const DEMO_SETTING_KEYS = [
   'demo.dashboard.v1',
   'demo.schedule.v1',
   'demo.finance.v1',
+  'demo.orders.v1',
+  'demo.products.v1',
+  'demo.documents.v1',
+  'demo.services.v1',
 ] as const;
 
 export const DEMO_USER_DEFINITIONS = [

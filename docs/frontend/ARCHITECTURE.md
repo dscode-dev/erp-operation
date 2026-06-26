@@ -103,6 +103,47 @@ theme). **Layouts completos não são compartilhados**: Platform e Operator têm
 shells próprios (`apps/platform/components/{sidebar,topbar}` vs
 `apps/operator/shell/operator-shell`).
 
+## Operator workflow (Sprint 3)
+
+Fluxo de campo em `apps/operator` + `app/operator/*`, mobile-first:
+
+- **Navegação**: bottom nav (Início/Agenda/Atendimentos/Clientes/Perfil); sem menus laterais.
+- **Wizard de atendimento** (`/operator/atendimento`, route group `(full)`, sem shell): Cliente → Endereço → Equipamento → Tipo → Checklist → Observações → Fotos → Assinatura → Resumo → Enviar. Construído com `@erp/ui/wizard/*`, `@erp/ui/photo-input`, `@erp/ui/documents/signature-pad`.
+- **Leitura** de clientes/equipamentos via `@erp/api` (real); agenda/serviços via Demo Dataset (`getSchedule`).
+- **Documentos**: o Operator só coleta dados + assinatura; geração/visualização ficam na Platform/Backend.
+
+### Offline-ready (arquitetura, sem sync nesta sprint)
+
+`apps/operator/lib/offline-queue.ts` é o **outbox** local (localStorage `erp.operator.outbox`) com `status` (`pending/syncing/sent/error`), `attempts` e `flushOutbox()` placeholder. `submitAtendimento` enfileira a submissão. Quando o backend de Serviços existir, `flushOutbox` vira POST + transições de status + retry/backoff — sem refatorar a UI.
+
+### Branding dinâmico
+
+`@erp/ui/auth` exporta `applyBranding(primary, secondary)`. A Settings aplica ao vivo na edição e persiste via `PATCH /organization`; o `AuthProvider` reaplica no bootstrap (`GET /users/me`), propagando as cores a toda a app.
+
+## Preparação para Backend Sprint 6 (Scheduling Domain)
+
+A agenda do Operator consome `financialApi.getSchedule` (hoje Demo Dataset `demo.schedule.v1`). Ao surgir o domínio real, basta apontar essa função para o novo endpoint em `packages/api` — Home, Agenda e a lista de atendimentos passam a ser funcionais sem mudança de UI. O Wizard já produz uma submissão estruturada (`AtendimentoSubmission`) pronta para o POST de criação de OS.
+
+## PWA (Sprint 4)
+
+O app instalável é o **Operator**. `app/manifest.ts` define identidade azul/branco, `display: standalone` e `start_url`/`scope` `/operator`. `@erp/ui/pwa` provê `useInstallPrompt` (beforeinstallprompt + detecção iOS/standalone) e `InstallButton` (Perfil do operador), com fallback iOS "Adicionar à Tela de Início". Service worker / cache offline ficam para o futuro (offline-ready já estruturado no outbox).
+
+## Demo dataset → telas (Sprint 4)
+
+O endpoint `/internal/demo/dataset` retorna todo `demo.*` dinamicamente. Além de dashboard/schedule/finance, foram adicionados `demo.orders.v1` e `demo.products.v1` — consumidos por `@erp/api/operations` (`getOrders`/`getProducts`) nas telas de Ordens e Produtos. Quando os domínios reais existirem, troca-se a implementação em `packages/api/operations.ts` sem mudar as telas.
+
+## QR (Sprint 4)
+
+Platform exibe o QR (matriz visual determinística + código real) com copiar/baixar PNG. Operator resolve por simular/colar/selecionar (sem scanner nativo ainda). Um encoder de QR real e a resolução pública por scan são escopo futuro do backend.
+
+## RC1 (Sprint 5)
+
+- **Branding**: `@erp/ui/brand` (BrandLogo) + `public/brand/*` + `app/icon.png`/`apple-icon.png`. Tema azul/branco definitivo; cores dinâmicas do OWNER preservadas.
+- **Central documental** (`/reports`) e **Serviços/histórico** (`/servicos`) consomem `demo.documents.v1`/`demo.services.v1` via `@erp/api/operations`.
+- **Timeline** (`@erp/ui/timeline`) reutilizada em Serviço/Cliente/Equipamento.
+- **Docker**: `frontend/Dockerfile` (Next `output: standalone`) + serviço `frontend` no compose (serve Platform e Operator; subdomínios via proxy em produção). Vars: `FRONTEND_PORT`, `NEXT_PUBLIC_API_BASE_URL`, `NEXT_PUBLIC_ENABLE_DEMO`.
+- **Demo guiado** (`/demo-ready`): roteiro comercial de ponta a ponta.
+
 ## Subdomínios / deploy futuro
 
 Promoção a monorepo real: mover `app/(platform)+login+trocar-senha` para
