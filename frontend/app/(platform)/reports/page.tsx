@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { ClipboardList, FileBarChart, Wrench, ClipboardCheck, ArrowRight } from "lucide-react";
-import { PageHeader } from "@/components/platform/page-header";
-import { SectionCard } from "@/components/shared/section-card";
-import { StatusChip } from "@/components/shared/status-chip";
-import { Gate } from "@/components/auth/gate";
+import { PageHeader } from "@platform/components/page-header";
+import { SectionCard } from "@erp/ui/section-card";
+import { StatusChip } from "@erp/ui/status-chip";
+import { Gate } from "@erp/ui/auth/gate";
 
 /**
  * Relatórios — arquitetura de categorias. Geração de documentos é escopo do

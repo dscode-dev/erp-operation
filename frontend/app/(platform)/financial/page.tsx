@@ -2,15 +2,15 @@
 
 import { useMemo, useState } from "react";
 import { Wallet, TrendingUp, TrendingDown, ArrowDownCircle, ArrowUpCircle } from "lucide-react";
-import { PageHeader } from "@/components/platform/page-header";
-import { DashboardSection } from "@/components/platform/dashboard-section";
-import { MetricCard } from "@/components/platform/metric-card";
-import { ExportButton } from "@/components/platform/export-button";
-import { SkeletonCard } from "@/components/shared/skeletons";
-import { ComingSoonState, ErrorState } from "@/components/shared/states";
-import { Gate } from "@/components/auth/gate";
-import { financialApi, useQuery, type FinancialData } from "@/lib/api";
-import { formatCurrencyBRL } from "@/lib/format";
+import { PageHeader } from "@platform/components/page-header";
+import { DashboardSection } from "@platform/components/dashboard-section";
+import { MetricCard } from "@erp/ui/metric-card";
+import { ExportButton } from "@platform/components/export-button";
+import { SkeletonCard } from "@erp/ui/skeletons";
+import { ComingSoonState, ErrorState } from "@erp/ui/states";
+import { Gate } from "@erp/ui/auth/gate";
+import { financialApi, useQuery, type FinancialData } from "@erp/api";
+import { formatCurrencyBRL } from "@erp/utils";
 
 const PERIODS = ["7 dias", "30 dias", "90 dias"] as const;
 

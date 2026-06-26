@@ -2,11 +2,11 @@
 
 import { useMemo } from "react";
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Users, Video } from "lucide-react";
-import { PageHeader } from "@/components/platform/page-header";
-import { SkeletonCard } from "@/components/shared/skeletons";
-import { EmptyState } from "@/components/shared/empty-state";
-import { ComingSoonState, ErrorState } from "@/components/shared/states";
-import { financialApi, useQuery, type DemoScheduleState, type ScheduleData } from "@/lib/api";
+import { PageHeader } from "@platform/components/page-header";
+import { SkeletonCard } from "@erp/ui/skeletons";
+import { EmptyState } from "@erp/ui/empty-state";
+import { ComingSoonState, ErrorState } from "@erp/ui/states";
+import { financialApi, useQuery, type DemoScheduleState, type ScheduleData } from "@erp/api";
 
 /* Visual mapping from the demo schedule state to the agenda event style. */
 const STATE_STYLE: Record<DemoScheduleState, { bar: string; bg: string; text: string; label: string }> = {

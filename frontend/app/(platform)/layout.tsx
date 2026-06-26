@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
-import { PlatformSidebar } from "@/components/platform/sidebar";
-import { PlatformTopbar } from "@/components/platform/topbar";
-import { RequireAuth } from "@/components/auth/require-auth";
+import { PlatformSidebar } from "@platform/components/sidebar";
+import { PlatformTopbar } from "@platform/components/topbar";
+import { RequireAuth } from "@erp/ui/auth/require-auth";
 
 export default function PlatformLayout({ children }: { children: ReactNode }) {
   return (

@@ -3,21 +3,21 @@
 // Dashboard operacional — Sprint 2 (widgets integrados ao backend).
 import Link from "next/link";
 import { CalendarClock, Wallet } from "lucide-react";
-import { DashboardSection } from "@/components/platform/dashboard-section";
-import { MetricCard } from "@/components/platform/metric-card";
-import { GreetingHeader } from "@/components/platform/greeting-header";
-import { TeamStatusList } from "@/components/platform/team-status-list";
-import { StatusPill, type Status } from "@/components/shared/status-pill";
-import { SkeletonCard } from "@/components/shared/skeletons";
-import { EmptyState } from "@/components/shared/empty-state";
-import { ComingSoonState, ErrorState } from "@/components/shared/states";
-import { useAuth } from "@/components/auth/auth-provider";
-import { Gate } from "@/components/auth/gate";
+import { DashboardSection } from "@platform/components/dashboard-section";
+import { MetricCard } from "@erp/ui/metric-card";
+import { GreetingHeader } from "@platform/components/greeting-header";
+import { TeamStatusList } from "@platform/components/team-status-list";
+import { StatusPill, type Status } from "@erp/ui/status-pill";
+import { SkeletonCard } from "@erp/ui/skeletons";
+import { EmptyState } from "@erp/ui/empty-state";
+import { ComingSoonState, ErrorState } from "@erp/ui/states";
+import { useAuth } from "@erp/ui/auth/auth-provider";
+import { Gate } from "@erp/ui/auth/gate";
 import {
   dashboardApi, usersApi, customersApi, financialApi, useQuery,
   type DashboardData, type DemoScheduleState, type FinancialData,
-} from "@/lib/api";
-import { firstName, formatNumber, formatCurrencyBRL } from "@/lib/format";
+} from "@erp/api";
+import { firstName, formatNumber, formatCurrencyBRL } from "@erp/utils";
 
 const SCHEDULE_STATUS: Record<DemoScheduleState, Status> = {
   OVERDUE: "danger",

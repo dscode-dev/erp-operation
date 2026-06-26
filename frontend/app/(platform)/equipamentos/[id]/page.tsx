@@ -3,20 +3,20 @@
 import { use } from "react";
 import Link from "next/link";
 import { Activity } from "lucide-react";
-import { Breadcrumbs } from "@/components/platform/breadcrumbs";
-import { PageHeader } from "@/components/platform/page-header";
-import { InfoCard, InfoRow } from "@/components/platform/info-card";
-import { QrFoundation } from "@/components/platform/qr-foundation";
-import { StatusPill } from "@/components/shared/status-pill";
-import { SkeletonCard } from "@/components/shared/skeletons";
-import { AsyncBoundary } from "@/components/shared/states";
-import { equipmentsApi, useQuery, type EquipmentDetail } from "@/lib/api";
-import { formatDate, formatDateTime } from "@/lib/format";
+import { Breadcrumbs } from "@platform/components/breadcrumbs";
+import { PageHeader } from "@platform/components/page-header";
+import { InfoCard, InfoRow } from "@platform/components/info-card";
+import { QrFoundation } from "@platform/components/qr-foundation";
+import { StatusPill } from "@erp/ui/status-pill";
+import { SkeletonCard } from "@erp/ui/skeletons";
+import { AsyncBoundary } from "@erp/ui/states";
+import { equipmentsApi, useQuery, type EquipmentDetail } from "@erp/api";
+import { formatDate, formatDateTime } from "@erp/utils";
 import {
   EQUIPMENT_STATUS_LABEL,
   EQUIPMENT_STATUS_PILL,
   EQUIPMENT_TYPE_LABEL,
-} from "@/lib/equipment-display";
+} from "@platform/equipment-display";
 
 export default function EquipamentoDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);

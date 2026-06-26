@@ -2,12 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Loader2, Check, Upload, FileText, Image as ImageIcon, Palette, Building2, SlidersHorizontal } from "lucide-react";
-import { PageHeader } from "@/components/platform/page-header";
-import { SectionCard } from "@/components/shared/section-card";
-import { StatusChip } from "@/components/shared/status-chip";
-import { SkeletonCard } from "@/components/shared/skeletons";
-import { AsyncBoundary } from "@/components/shared/states";
-import { useAuth } from "@/components/auth/auth-provider";
+import { PageHeader } from "@platform/components/page-header";
+import { SectionCard } from "@erp/ui/section-card";
+import { StatusChip } from "@erp/ui/status-chip";
+import { SkeletonCard } from "@erp/ui/skeletons";
+import { AsyncBoundary } from "@erp/ui/states";
+import { useAuth } from "@erp/ui/auth/auth-provider";
 import {
   organizationApi,
   useQuery,
@@ -16,8 +16,8 @@ import {
   type DocumentTemplate,
   type Organization,
   type OrganizationSettings,
-} from "@/lib/api";
-import { DOCUMENT_KIND_LABEL } from "@/lib/documents/types";
+} from "@erp/api";
+import { DOCUMENT_KIND_LABEL } from "@erp/types";
 
 export default function SettingsPage() {
   const { hasRole } = useAuth();

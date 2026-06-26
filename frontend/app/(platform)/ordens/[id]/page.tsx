@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { PageHeader } from "@/components/platform/page-header";
-import { ComingSoonState } from "@/components/shared/states";
+import { PageHeader } from "@platform/components/page-header";
+import { ComingSoonState } from "@erp/ui/states";
 
 /** Detalhe de OS — aguardando o domínio de Work Order no backend. */
 export default function OrdemDetailPage() {

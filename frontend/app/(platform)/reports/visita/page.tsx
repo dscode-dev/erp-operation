@@ -3,12 +3,12 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Camera, X, Info } from "lucide-react";
-import { PageHeader } from "@/components/platform/page-header";
-import { SectionCard } from "@/components/shared/section-card";
-import { DocumentViewer } from "@/components/documents/document-viewer";
-import { SignaturePad } from "@/components/documents/signature-pad";
-import { customersApi, equipmentsApi, usersApi, useQuery } from "@/lib/api";
-import type { GeneratedDocument } from "@/lib/documents/types";
+import { PageHeader } from "@platform/components/page-header";
+import { SectionCard } from "@erp/ui/section-card";
+import { DocumentViewer } from "@erp/ui/documents/document-viewer";
+import { SignaturePad } from "@erp/ui/documents/signature-pad";
+import { customersApi, equipmentsApi, usersApi, useQuery } from "@erp/api";
+import type { GeneratedDocument } from "@erp/types";
 
 /**
  * Relatório de Visita Técnica — fluxo VISUAL (Sprint 2).

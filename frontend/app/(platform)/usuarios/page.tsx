@@ -2,22 +2,22 @@
 
 import { useMemo, useState } from "react";
 import { Plus, Users } from "lucide-react";
-import { PageHeader } from "@/components/platform/page-header";
-import { DataTable, type Column } from "@/components/platform/data-table";
-import { Pagination } from "@/components/platform/pagination";
-import { ExportButton } from "@/components/platform/export-button";
-import { FilterBar, FilterChip } from "@/components/shared/filter-bar";
-import { StatusChip } from "@/components/shared/status-chip";
-import { SkeletonList } from "@/components/shared/skeletons";
-import { EmptyIllustration } from "@/components/shared/empty-illustration";
-import { ErrorState } from "@/components/shared/states";
-import { Gate } from "@/components/auth/gate";
-import { UserFormDrawer } from "@/components/platform/user-form-drawer";
-import { UserDetailDrawer } from "@/components/platform/user-detail-drawer";
-import { usersApi, useQuery, type Role, type TeamUser } from "@/lib/api";
-import { useDebounce } from "@/hooks/use-debounce";
-import { initials } from "@/lib/format";
-import { ROLE_LABEL, ROLE_TONE, ROLES } from "@/lib/user-display";
+import { PageHeader } from "@platform/components/page-header";
+import { DataTable, type Column } from "@platform/components/data-table";
+import { Pagination } from "@platform/components/pagination";
+import { ExportButton } from "@platform/components/export-button";
+import { FilterBar, FilterChip } from "@erp/ui/filter-bar";
+import { StatusChip } from "@erp/ui/status-chip";
+import { SkeletonList } from "@erp/ui/skeletons";
+import { EmptyIllustration } from "@erp/ui/empty-illustration";
+import { ErrorState } from "@erp/ui/states";
+import { Gate } from "@erp/ui/auth/gate";
+import { UserFormDrawer } from "@platform/components/user-form-drawer";
+import { UserDetailDrawer } from "@platform/components/user-detail-drawer";
+import { usersApi, useQuery, type Role, type TeamUser } from "@erp/api";
+import { useDebounce } from "@erp/utils";
+import { initials } from "@erp/utils";
+import { ROLE_LABEL, ROLE_TONE, ROLES } from "@platform/user-display";
 
 type StatusFilter = "all" | "active" | "inactive";
 

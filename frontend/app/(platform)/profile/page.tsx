@@ -4,13 +4,13 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { Camera, Loader2, Trash2, KeyRound, Check, ShieldCheck, Building2 } from "lucide-react";
-import { PageHeader } from "@/components/platform/page-header";
-import { SectionCard } from "@/components/shared/section-card";
-import { StatusChip } from "@/components/shared/status-chip";
-import { useAuth } from "@/components/auth/auth-provider";
-import { usersApi, ApiClientError, type UserTheme } from "@/lib/api";
-import { initials } from "@/lib/format";
-import { ROLE_LABEL, ROLE_TONE, PERMISSION_KEYS, PERMISSION_LABEL } from "@/lib/user-display";
+import { PageHeader } from "@platform/components/page-header";
+import { SectionCard } from "@erp/ui/section-card";
+import { StatusChip } from "@erp/ui/status-chip";
+import { useAuth } from "@erp/ui/auth/auth-provider";
+import { usersApi, ApiClientError, type UserTheme } from "@erp/api";
+import { initials } from "@erp/utils";
+import { ROLE_LABEL, ROLE_TONE, PERMISSION_KEYS, PERMISSION_LABEL } from "@platform/user-display";
 
 const THEME_OPTIONS: { value: UserTheme; label: string }[] = [
   { value: "SYSTEM", label: "Sistema" },

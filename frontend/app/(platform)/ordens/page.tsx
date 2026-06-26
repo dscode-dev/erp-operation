@@ -1,5 +1,5 @@
-import { PageHeader } from "@/components/platform/page-header";
-import { ComingSoonState } from "@/components/shared/states";
+import { PageHeader } from "@platform/components/page-header";
+import { ComingSoonState } from "@erp/ui/states";
 
 /**
  * Ordens de Serviço — o domínio de Work Order ainda não existe na API e não há

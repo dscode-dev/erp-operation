@@ -1,55 +1,49 @@
-# STATE — Sprint 2
+# STATE — Sprint 3.0 (Operator Mobile Foundation)
 
-Status: Concluída ✅ — **Plataforma Administrativa consolidada** (Next.js 15 · App Router · RSC). Continuação direta da Sprint 1 (backend real como fonte única; sem novos mocks).
+Status: Concluída ✅ — **refatoração arquitetural** (sem novas funcionalidades). Next.js 15 · App Router · RSC.
 
-## Foco da sprint
+## Objetivo
 
-Entregar módulos administrativos realmente utilizáveis por OWNER/MANAGER, priorizando produtividade (drawers, wizards, cards, estados) em vez de CRUD genérico. Tudo consome **API real** ou **Demo Dataset**.
+Separar fisicamente **Platform** (gestão) e **Operator** (campo) em dois produtos independentes que compartilham apenas backend, Design System e pacotes comuns. Ver `docs/frontend/ARCHITECTURE.md`.
 
-## Módulos entregues
+## O que mudou
 
-| Módulo | Rota | Backend | Acesso |
-|---|---|---|---|
-| Usuários | `/usuarios` | `/users` CRUD + avatar | OWNER edita · MANAGER/VIEWER leem |
-| Perfil | `/profile` | `/users/me`, preferences, avatar, change-password | todos |
-| Configurações | `/settings` | organization, settings, templates, assets | OWNER edita · MANAGER lê |
-| Serviços (Atendimentos) | `/servicos` | Demo `demo.schedule.v1` + ServiceDetailDrawer | todos |
-| Relatórios | `/reports` | categorias (arquitetura) | `canReports` |
-| Visita Técnica | `/reports/visita` | fluxo visual (clientes/equipments/users reais) | `canReports` |
-| Dashboard | `/` | stats + users + customers + finance (demo) | todos (financeiro gated) |
+### Estrutura (separação física)
 
-### Usuários (completo)
-Listagem, busca (debounce), filtros (papel/status), paginação server-side, ordenação, **drawer de detalhes** (dados/permissões/preferências + avatar), criação (senha temporária exibida uma única vez e copiável), edição, ativar/desativar, excluir (soft), **reset de senha**, proteção de auto-ação e último OWNER. Troca obrigatória de senha continua no fluxo `/trocar-senha`.
+- `packages/` — compartilhado: `types` (`@erp/types`), `api` (`@erp/api`), `utils` (`@erp/utils`), `ui` (`@erp/ui/*`, inclui `auth/*`, `documents/*`, `theme/*`).
+- `apps/platform/` — componentes/utilitários exclusivos da Platform.
+- `apps/operator/` — componentes + `shell/operator-shell.tsx` exclusivos do Operator.
+- `app/` — apenas route shells finos do Next App Router.
+- Aliases novos: `@erp/types`, `@erp/api`, `@erp/utils`, `@erp/ui/*`, `@platform/*`, `@operator/*`. Todos os imports `@/lib`/`@/components` foram migrados.
+- Removidas as pastas antigas `lib/`, `components/`, `hooks/` (conteúdo movido).
 
-### Perfil
-Avatar (upload/remover, 2 MiB), troca de senha voluntária (revoga sessões → relogin), preferências (tema sincronizado com next-themes + notificações), identidade e organização.
+### Autenticação isolada
 
-### Configurações
-Identidade visual (upload de LOGO/HEADER/FOOTER com preview), dados da organização (edição OWNER, cores aplicadas ao tema), parâmetros (idioma/timezone/moeda/prefixo), modelos de documento (listagem; editor é escopo futuro).
+- Tokens **scope-aware** (`erp.platform.*` vs `erp.operator.*`) — sessões nunca compartilhadas.
+- `AppProviders` escolhe o `AuthProvider` (scope `platform`/`operator`) pelo pathname.
+- Telas compartilhadas `LoginScreen`/`ChangePasswordScreen` com `variant` por app.
+- `RequireAuth` deriva login/troca do escopo (`/login` vs `/operator/login`).
 
-### Relatórios + Visita Técnica
-Três categorias (Operacionais, Técnicos, Visita Técnica). Visita Técnica tem **fluxo visual** completo: cliente, equipamento, operador (dados reais), observações, fotos (preview local), assinatura (canvas). **Sem geração de PDF** — montagem do documento é do backend (Sprint 3), reusando a arquitetura `GeneratedDocument → Preview → Review → Download`.
+### Layouts independentes
 
-## RBAC
+- Platform: mantém sidebar + topbar (sem mudança significativa).
+- Operator: novo `OperatorShell` com identidade de app de campo (brand bar + bottom nav), sob route group `app/operator/(shell)/`. `app/operator/login` e `app/operator/trocar-senha` são públicos.
 
-Aplicado em toda a aplicação via `useAuth().can/hasRole` e `<Gate>`: sidebar filtra itens; páginas sensíveis (Relatórios, Financeiro, Configurações, Usuários) escondem ações/redirecionam; 401/403 do backend continuam sendo a autoridade final.
+### RBAC
 
-## Componentes compartilhados (novos)
+Continua 100% do backend (`/users/me`); `<Gate>` + sidebar apenas ocultam. Sem regras locais.
 
-`components/shared/`: `ConfirmDialog`, `SearchInput`, `StatusChip`, `SectionCard`, `EmptyIllustration`, `FilterBar` (+`FilterChip`), `MetricCard` (re-export), `DrawerTabs`. Drawers de Customer/Equipment/User/Service padronizados sobre `Drawer` + `DrawerTabs`.
+## DoD
 
-## DataTable refinada
-
-`onRowClick`, **ordenação client-side** (colunas com `sortAccessor`), **seleção** (checkbox por linha + selecionar todos), além de `rowHref`. Exportação CSV em todas as listas; PDF segue como ação "via backend".
-
-## Arquitetura documental
-
-Mantida e estendida: `SignaturePad` (captura visual de assinatura) adicionado. Geração permanece exclusiva do backend.
-
-## Mobile
-
-`/operator` validado e estável (sem novos módulos): consome `/users/me` + Demo Dataset, rotas íntegras desde a Sprint 1.
+- Platform e Operator separados arquiteturalmente ✅
+- Autenticação isolada (sessões/escopos distintos) ✅
+- Layouts independentes ✅
+- Componentes compartilhados organizados em `packages/` ✅
+- API Layer única (`@erp/api`) ✅
+- `ARCHITECTURE.md` criado ✅
+- Build íntegro: `tsc` limpo (exceto `routes/`, preview TanStack legado não relacionado) ✅
+- Nenhum módulo da Platform quebrado (rotas/imports preservados) ✅
 
 ## Fora de escopo (Sprint 3)
 
-Ordem de Serviço completa · Orçamento · PMOC · Recibo · Laudo Técnico · Assinatura (envio/embed) · Workflow Operador → Backend → Documento final.
+Novos formulários/módulos operacionais, geração de documentos, agenda funcional, OS, orçamento, PMOC, laudo, recibo.

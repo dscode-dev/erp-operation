@@ -3,17 +3,17 @@
 import { use, useState } from "react";
 import Link from "next/link";
 import { Phone, Mail, MapPin, FileText, Wrench, Building2, Pencil } from "lucide-react";
-import { Breadcrumbs } from "@/components/platform/breadcrumbs";
-import { PageHeader } from "@/components/platform/page-header";
-import { InfoCard, InfoRow } from "@/components/platform/info-card";
-import { DataTable, type Column } from "@/components/platform/data-table";
-import { StatusPill, type Status } from "@/components/shared/status-pill";
-import { SkeletonCard } from "@/components/shared/skeletons";
-import { AsyncBoundary } from "@/components/shared/states";
-import { EmptyState } from "@/components/shared/empty-state";
-import { Gate } from "@/components/auth/gate";
-import { CustomerFormDrawer } from "@/components/platform/customer-form-drawer";
-import { ExportButton } from "@/components/platform/export-button";
+import { Breadcrumbs } from "@platform/components/breadcrumbs";
+import { PageHeader } from "@platform/components/page-header";
+import { InfoCard, InfoRow } from "@platform/components/info-card";
+import { DataTable, type Column } from "@platform/components/data-table";
+import { StatusPill, type Status } from "@erp/ui/status-pill";
+import { SkeletonCard } from "@erp/ui/skeletons";
+import { AsyncBoundary } from "@erp/ui/states";
+import { EmptyState } from "@erp/ui/empty-state";
+import { Gate } from "@erp/ui/auth/gate";
+import { CustomerFormDrawer } from "@platform/components/customer-form-drawer";
+import { ExportButton } from "@platform/components/export-button";
 import {
   customersApi,
   equipmentsApi,
@@ -21,8 +21,8 @@ import {
   type CustomerDetail,
   type EquipmentStatus,
   type EquipmentSummary,
-} from "@/lib/api";
-import { formatDate, maskCep } from "@/lib/format";
+} from "@erp/api";
+import { formatDate, maskCep } from "@erp/utils";
 
 const EQUIPMENT_STATUS: Record<EquipmentStatus, Status> = {
   ACTIVE: "success",

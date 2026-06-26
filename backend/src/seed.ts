@@ -53,8 +53,8 @@ async function seedOwner(email: string): Promise<void> {
   const owner = await prisma.user.create({
     data: {
       email,
-      username: 'ninja',
-      name: 'Darlan Simplicio',
+      username: 'daniel',
+      name: 'Daniel',
       passwordHash,
       role: Role.OWNER,
       isActive: true,
@@ -133,8 +133,8 @@ async function seedOrganization(): Promise<void> {
         phone: '+55 00 00000-0000',
         city: 'Recife',
         state: 'PE',
-        primaryColor: '#0F172A',
-        secondaryColor: '#2563EB',
+        primaryColor: '#2A6ED1',
+        secondaryColor: '#2A629D',
         segment: null,
         isActive: true,
       },

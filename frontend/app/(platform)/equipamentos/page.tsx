@@ -3,25 +3,25 @@
 import { Suspense, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Search, Wrench } from "lucide-react";
-import { PageHeader } from "@/components/platform/page-header";
-import { DataTable, type Column } from "@/components/platform/data-table";
-import { Pagination } from "@/components/platform/pagination";
-import { MetricCard } from "@/components/platform/metric-card";
-import { ExportButton } from "@/components/platform/export-button";
-import { StatusPill } from "@/components/shared/status-pill";
-import { SkeletonList, SkeletonCard } from "@/components/shared/skeletons";
-import { EmptyState } from "@/components/shared/empty-state";
-import { ErrorState } from "@/components/shared/states";
-import { EquipmentDetailDrawer } from "@/components/platform/equipment-detail-drawer";
-import { equipmentsApi, useQuery, type EquipmentSummary, type EquipmentStatus, type EquipmentType } from "@/lib/api";
-import { useDebounce } from "@/hooks/use-debounce";
-import { cn } from "@/lib/utils";
+import { PageHeader } from "@platform/components/page-header";
+import { DataTable, type Column } from "@platform/components/data-table";
+import { Pagination } from "@platform/components/pagination";
+import { MetricCard } from "@erp/ui/metric-card";
+import { ExportButton } from "@platform/components/export-button";
+import { StatusPill } from "@erp/ui/status-pill";
+import { SkeletonList, SkeletonCard } from "@erp/ui/skeletons";
+import { EmptyState } from "@erp/ui/empty-state";
+import { ErrorState } from "@erp/ui/states";
+import { EquipmentDetailDrawer } from "@platform/components/equipment-detail-drawer";
+import { equipmentsApi, useQuery, type EquipmentSummary, type EquipmentStatus, type EquipmentType } from "@erp/api";
+import { useDebounce } from "@erp/utils";
+import { cn } from "@erp/utils";
 import {
   EQUIPMENT_STATUSES,
   EQUIPMENT_STATUS_LABEL,
   EQUIPMENT_STATUS_PILL,
   EQUIPMENT_TYPE_LABEL,
-} from "@/lib/equipment-display";
+} from "@platform/equipment-display";
 
 function EquipamentosInner() {
   const params = useSearchParams();

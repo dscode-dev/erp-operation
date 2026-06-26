@@ -19,7 +19,16 @@
       }
     ],
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "@erp/api": ["./packages/api/index.ts"],
+      "@erp/api/*": ["./packages/api/*"],
+      "@erp/types": ["./packages/types/index.ts"],
+      "@erp/types/*": ["./packages/types/*"],
+      "@erp/utils": ["./packages/utils/index.ts"],
+      "@erp/utils/*": ["./packages/utils/*"],
+      "@erp/ui/*": ["./packages/ui/*"],
+      "@platform/*": ["./apps/platform/*"],
+      "@operator/*": ["./apps/operator/*"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],

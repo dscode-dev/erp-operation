@@ -2,17 +2,17 @@
 
 import { useMemo, useState } from "react";
 import { Briefcase, Search } from "lucide-react";
-import { PageHeader } from "@/components/platform/page-header";
-import { DataTable, type Column } from "@/components/platform/data-table";
-import { ExportButton } from "@/components/platform/export-button";
-import { StatusPill, type Status } from "@/components/shared/status-pill";
-import { SkeletonList } from "@/components/shared/skeletons";
-import { EmptyState } from "@/components/shared/empty-state";
-import { ComingSoonState, ErrorState } from "@/components/shared/states";
-import { NewServiceButton } from "@/components/platform/new-service-button";
-import { ServiceDetailDrawer } from "@/components/platform/service-detail-drawer";
-import { financialApi, useQuery, type DemoScheduleState, type ScheduleData } from "@/lib/api";
-import { cn } from "@/lib/utils";
+import { PageHeader } from "@platform/components/page-header";
+import { DataTable, type Column } from "@platform/components/data-table";
+import { ExportButton } from "@platform/components/export-button";
+import { StatusPill, type Status } from "@erp/ui/status-pill";
+import { SkeletonList } from "@erp/ui/skeletons";
+import { EmptyState } from "@erp/ui/empty-state";
+import { ComingSoonState, ErrorState } from "@erp/ui/states";
+import { NewServiceButton } from "@platform/components/new-service-button";
+import { ServiceDetailDrawer } from "@platform/components/service-detail-drawer";
+import { financialApi, useQuery, type DemoScheduleState, type ScheduleData } from "@erp/api";
+import { cn } from "@erp/utils";
 
 const STATE_PILL: Record<DemoScheduleState, Status> = {
   OVERDUE: "danger",

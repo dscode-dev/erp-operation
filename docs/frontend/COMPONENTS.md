@@ -1,56 +1,45 @@
-# COMPONENTS — Sprint 2
+# COMPONENTS — Sprint 3.0
 
-## Camada de API (`lib/api/`)
+Componentes agora vivem em **pacotes compartilhados** (`packages/*`) ou em
+**apps** (`apps/platform`, `apps/operator`). Ver `docs/frontend/ARCHITECTURE.md`.
 
-Sprint 2 estendeu os domínios:
+## Compartilhado — `@erp/*`
 
-- `users.ts`: `getUser`, `createUser`, `updateUser`, `disableUser`, `enableUser`, `deleteUser`, `resetPassword`, `uploadAvatar`, `deleteAvatar` (além de `getMe`, `changePassword`, preferences, `listUsers`).
-- `organization.ts`: `updateOrganizationSettings`, `createTemplate`/`updateTemplate`/`deleteTemplate`, `uploadAsset`/`deleteAsset` (além de get/update organization e settings/templates read).
-- `types.ts`: `CreateUserPayload`, `UpdateUserPayload`, `CreateUserResult`, `ResetPasswordResult`, `AvatarMeta`, `BrandAsset`, payloads de organização/settings/templates.
+### `@erp/types` (`packages/types`)
+Contratos da API (`index.ts`) e de documentos (`documents.ts`: `GeneratedDocument`, `DocumentKind`, `DocumentStatus`, `DOCUMENT_KIND_LABEL`, `toDataUrl`).
 
-Helpers: `lib/user-display.ts` (papéis/permissões), reaproveita `lib/format.ts`, `lib/export.ts`, `lib/equipment-display.ts`.
+### `@erp/api` (`packages/api`)
+Cliente HTTP único + `tokens` (scope-aware: `setSessionScope`/`getSessionScope`), domínios (`authApi`, `usersApi`, `organizationApi`, `customersApi`, `equipmentsApi`, `dashboardApi`, `financialApi`, `demoApi`) e `useQuery`.
 
-## Componentes compartilhados (`components/shared/`) — NOVOS
+### `@erp/utils` (`packages/utils`)
+`cn`, `format` (datas/moeda/máscaras/iniciais), `export` (CSV), `useDebounce`.
 
-| Componente | Arquivo | Descrição |
-|---|---|---|
-| `ConfirmDialog` | `confirm-dialog.tsx` | Modal de confirmação (async, variante `danger`) |
-| `SearchInput` | `search-input.tsx` | Input de busca controlado com limpar |
-| `StatusChip` | `status-chip.tsx` | Chip semântico genérico (tons) |
-| `SectionCard` | `section-card.tsx` | Card com header (ícone/título/ação) |
-| `EmptyIllustration` | `empty-illustration.tsx` | Empty state ilustrado |
-| `FilterBar` / `FilterChip` | `filter-bar.tsx` | Toolbar de lista composável (substitui a antiga de platform) |
-| `MetricCard` | `metric-card.tsx` | Re-export do MetricCard de plataforma |
-| `DrawerTabs` | `drawer-tabs.tsx` | Abas padronizadas para drawers de entidade |
-
-## Drawers de entidade (padronizados)
-
-`Customer`, `Equipment`, `User` e `Service` usam o mesmo padrão: `shared/Drawer` + `DrawerTabs` + `StatusChip`.
-
-| Drawer | Arquivo |
+### `@erp/ui` (`packages/ui`) — Design System
+| Grupo | Itens |
 |---|---|
-| `UserFormDrawer` | `platform/user-form-drawer.tsx` (criar/editar + senha temporária) |
-| `UserDetailDrawer` | `platform/user-detail-drawer.tsx` (ações OWNER + abas + avatar) |
-| `ServiceDetailDrawer` | `platform/service-detail-drawer.tsx` (atendimento + documento) |
-| `CustomerDetailDrawer` / `CustomerFormDrawer` | `platform/customer-*` (migrados p/ `DrawerTabs`) |
-| `EquipmentDetailDrawer` | `platform/equipment-detail-drawer.tsx` (migrado p/ `DrawerTabs`) |
+| Primitivos | `status-pill`, `status-chip`, `skeletons`, `empty-state`, `empty-illustration`, `states` (AsyncBoundary/Error/ComingSoon), `drawer`, `drawer-tabs`, `confirm-dialog`, `search-input`, `filter-bar`, `section-card`, `metric-card` |
+| `auth/*` | `auth-provider` (scope-aware), `gate`, `require-auth`, `login-screen`, `change-password-screen` |
+| `documents/*` | `document-preview`, `document-download`, `document-viewer`, `signature-pad` |
+| `theme/*` | `theme-provider`, `theme-toggle` |
+| `base/*` | `badge`, `card` |
 
-## DataTable (refinada)
+> Componentes novos da sprint: `LoginScreen`, `ChangePasswordScreen` (auth compartilhada com `variant`).
 
-`platform/data-table.tsx`: `rowHref`, `onRowClick`, **ordenação** (`Column.sortAccessor`) e **seleção** (`selectable`, `selectedIds`, `onSelectedChange`).
+## Platform — `@platform/*` (`apps/platform`)
 
-## Documentos (`components/documents/`)
+`components/*`: `sidebar`, `topbar`, `page-header`, `data-table`, `pagination`, `export-button`, `command-palette`, drawers de entidade (`customer-*`, `equipment-detail-drawer`, `user-*`, `service-detail-drawer`), `new-service-*`, `qr-foundation`, `dashboard-section`, `greeting-header`, `team-status-list`, `info-card`, `breadcrumbs`, `revenue-chart`, `activity-feed`, `alert-card`. Utilitários de domínio: `equipment-display.ts`, `user-display.ts`.
 
-`DocumentPreview`, `DocumentDownload`, `DocumentViewer` (Sprint 1) + **`SignaturePad`** (captura visual de assinatura). Geração permanece no backend.
+## Operator — `@operator/*` (`apps/operator`)
 
-## Plataforma — outros
+`shell/operator-shell.tsx` (**novo** — chrome de app de campo: brand bar + bottom nav). `components/*`: `bottom-nav`, `operator-header`, `quick-action`, `service-card`, `schedule-card`.
 
-`Pagination`, `ExportButton`, `QrFoundation`, `NewServiceSheet`, `sidebar` (RBAC com novas rotas), `topbar` (usuário + logout), `MetricCard`, `DataTable`.
+## App shells (`app/`)
 
-## Padrões consolidados
+`app-providers.tsx` (**novo** — seleciona sessão por pathname), `layout.tsx` (ThemeProvider + AppProviders). Páginas de auth: `login`, `trocar-senha` (platform), `operator/login`, `operator/trocar-senha` (operator).
 
-- Toda lista: loading (skeleton) · empty (EmptyState/EmptyIllustration) · error (retry) · coming-soon.
-- Toda entidade: drawer padronizado (`Drawer` + `DrawerTabs`).
-- Ações destrutivas: `ConfirmDialog` (danger).
-- RBAC: `<Gate>` + sidebar filtrada; 401/403 do backend são autoridade final.
-- Dados: sempre via `@/lib/api`; nunca `fetch` direto, nunca mocks locais.
+## Regras
+
+- Componentes consomem dados via `@erp/api`; nunca `fetch` direto, nunca mocks.
+- Sessões isoladas por app (escopo de token); RBAC sempre do backend (`<Gate>` apenas oculta).
+- `packages/*` nunca importa `apps/*`; `apps/platform` e `apps/operator` nunca se importam.
+- Layouts completos não são compartilhados; apenas o Design System.

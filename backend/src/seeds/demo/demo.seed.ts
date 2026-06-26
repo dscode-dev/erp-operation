@@ -238,15 +238,15 @@ async function ensureDemoOrganization(
   if (!existing) {
     const organization = await prisma.organization.create({
       data: {
-        legalName: 'Climatize Nordeste Serviços de Climatização LTDA',
-        tradeName: 'Climatize Nordeste',
-        cnpj: '27.845.316/0001-42',
-        email: 'contato@climatizenordeste.example',
+        legalName: 'Climatize Refrigeração LTDA',
+        tradeName: 'Climatize Refrigeração',
+        cnpj: '21.505.237/0001-02',
+        email: 'contato@climatize.com',
         phone: '+55 81 3030-4242',
         city: 'Recife',
         state: 'PE',
-        primaryColor: '#0F4C5C',
-        secondaryColor: '#2A9D8F',
+        primaryColor: '#2A6ED1',
+        secondaryColor: '#2A629D',
         segment: 'HVAC',
         isActive: true,
         settings: {

@@ -1,5 +1,5 @@
-import { PageHeader } from "@/components/platform/page-header";
-import { ComingSoonState } from "@/components/shared/states";
+import { PageHeader } from "@platform/components/page-header";
+import { ComingSoonState } from "@erp/ui/states";
 
 /**
  * Produtos — não há endpoint de produtos nem snapshot no Demo Dataset nesta

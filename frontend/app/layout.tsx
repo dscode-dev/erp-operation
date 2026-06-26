@@ -1,12 +1,11 @@
 import type { Metadata } from "next";
-import { ThemeProvider } from "@/components/theme/theme-provider";
-import { CommandPaletteProvider } from "@/components/shared/command-palette";
-import { AuthProvider } from "@/components/auth/auth-provider";
+import { ThemeProvider } from "@erp/ui/theme/theme-provider";
+import { AppProviders } from "./app-providers";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Plataforma Operacional",
-  description: "Plataforma para empresas prestadoras de serviço.",
+  title: "ERP Operation",
+  description: "Plataforma de gestão e operação de campo.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -14,9 +13,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="pt-BR" suppressHydrationWarning>
       <body>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-          <AuthProvider>
-            <CommandPaletteProvider>{children}</CommandPaletteProvider>
-          </AuthProvider>
+          <AppProviders>{children}</AppProviders>
         </ThemeProvider>
       </body>
     </html>

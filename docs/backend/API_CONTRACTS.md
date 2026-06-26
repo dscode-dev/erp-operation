@@ -130,8 +130,8 @@ Response 200:
   "data": {
     "id": "f33e0c47-1cb8-4bc9-b4c7-97356ff8749e",
     "email": "owner@example.com",
-    "username": "ninja",
-    "name": "Darlan Simplicio",
+    "username": "daniel",
+    "name": "Daniel",
     "role": "OWNER",
     "isActive": true
   }

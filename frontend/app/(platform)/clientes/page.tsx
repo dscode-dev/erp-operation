@@ -2,18 +2,18 @@
 
 import { useMemo, useState } from "react";
 import { Plus, Search, Users } from "lucide-react";
-import { PageHeader } from "@/components/platform/page-header";
-import { DataTable, type Column } from "@/components/platform/data-table";
-import { Pagination } from "@/components/platform/pagination";
-import { StatusPill } from "@/components/shared/status-pill";
-import { SkeletonList } from "@/components/shared/skeletons";
-import { EmptyState } from "@/components/shared/empty-state";
-import { ErrorState } from "@/components/shared/states";
-import { Gate } from "@/components/auth/gate";
-import { CustomerFormDrawer } from "@/components/platform/customer-form-drawer";
-import { CustomerDetailDrawer } from "@/components/platform/customer-detail-drawer";
-import { customersApi, useQuery, type Customer } from "@/lib/api";
-import { useDebounce } from "@/hooks/use-debounce";
+import { PageHeader } from "@platform/components/page-header";
+import { DataTable, type Column } from "@platform/components/data-table";
+import { Pagination } from "@platform/components/pagination";
+import { StatusPill } from "@erp/ui/status-pill";
+import { SkeletonList } from "@erp/ui/skeletons";
+import { EmptyState } from "@erp/ui/empty-state";
+import { ErrorState } from "@erp/ui/states";
+import { Gate } from "@erp/ui/auth/gate";
+import { CustomerFormDrawer } from "@platform/components/customer-form-drawer";
+import { CustomerDetailDrawer } from "@platform/components/customer-detail-drawer";
+import { customersApi, useQuery, type Customer } from "@erp/api";
+import { useDebounce } from "@erp/utils";
 
 export default function ClientesPage() {
   const [search, setSearch] = useState("");
