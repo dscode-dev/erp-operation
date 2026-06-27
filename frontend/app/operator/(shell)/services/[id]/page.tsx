@@ -16,11 +16,13 @@ const STATE_PILL: Record<DemoScheduleState, Status> = {
   OVERDUE: "danger",
   IN_PROGRESS: "in_progress",
   SCHEDULED: "scheduled",
+  DONE: "done",
 };
 const STATE_LABEL: Record<DemoScheduleState, string> = {
   OVERDUE: "Atrasado",
   IN_PROGRESS: "Em andamento",
   SCHEDULED: "Agendado",
+  DONE: "Concluído",
 };
 
 export default function OperatorServiceDetail() {

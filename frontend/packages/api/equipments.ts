@@ -34,6 +34,11 @@ export function getEquipment(id: string, opts?: { signal?: AbortSignal }): Promi
   return api.get<EquipmentDetail>(`/equipments/${id}`, opts);
 }
 
+/** Resolve an equipment by its QR identifier (qrCode or qrToken). */
+export function lookupByQr(qrCode: string, opts?: { signal?: AbortSignal }): Promise<EquipmentDetail> {
+  return api.get<EquipmentDetail>(`/equipments/lookup/${encodeURIComponent(qrCode)}`, opts);
+}
+
 export function createEquipment(payload: CreateEquipmentPayload): Promise<EquipmentDetail> {
   return api.post<EquipmentDetail>("/equipments", payload);
 }

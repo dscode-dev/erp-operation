@@ -99,6 +99,35 @@ export class EquipmentsService {
     return this.equipmentOrThrow(id);
   }
 
+  /**
+   * Look up an equipment by its QR identifier. The QR encodes `qrCode`
+   * (`equipment:<qrToken>`); `qrToken` is also accepted for resilience and to
+   * prepare for future signed/tokenized QR formats. Returns the same full
+   * detail payload as `get`.
+   */
+  async lookupByQrCode(qrCode: string): Promise<unknown> {
+    const value = (qrCode ?? '').trim();
+    if (!value) {
+      throw new ApplicationException(
+        ERROR_CODES.VALIDATION_ERROR,
+        'QR code is required',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const equipment = await this.prisma.equipment.findFirst({
+      where: { OR: [{ qrCode: value }, { qrToken: value }] },
+      include: EQUIPMENT_INCLUDE,
+    });
+    if (!equipment) {
+      throw new ApplicationException(
+        ERROR_CODES.EQUIPMENT_NOT_FOUND,
+        'Equipment was not found for the provided QR code',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    return equipment;
+  }
+
   async stats(): Promise<Record<string, unknown>> {
     const [total, active, maintenance, inactive, retired, byType] = await this.prisma.$transaction([
       this.prisma.equipment.count(),

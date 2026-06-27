@@ -36,3 +36,30 @@ export async function getSchedule(opts?: { signal?: AbortSignal }): Promise<Sche
     return { items: [], disabled: isDemoDisabled(err) };
   }
 }
+
+/**
+ * Schedule filtered by an inclusive date range [from, to].
+ *
+ * Every calendar navigation calls the backend (the dataset is re-fetched) and
+ * the range filter is applied to `startsAt`. When the real Scheduling domain
+ * ships, this maps to `GET /schedule?from=&to=` with no UI change — the
+ * `from`/`to` arguments are already the contract.
+ */
+export async function getScheduleRange(
+  from: Date,
+  to: Date,
+  opts?: { signal?: AbortSignal },
+): Promise<ScheduleData> {
+  const fromMs = from.getTime();
+  const toMs = to.getTime();
+  try {
+    const dataset = await getDemoDataset(opts);
+    const items = dataset["demo.schedule.v1"].items.filter((it) => {
+      const t = new Date(it.startsAt).getTime();
+      return !Number.isNaN(t) && t >= fromMs && t <= toMs;
+    });
+    return { items, disabled: false };
+  } catch (err) {
+    return { items: [], disabled: isDemoDisabled(err) };
+  }
+}

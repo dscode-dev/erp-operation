@@ -22,7 +22,6 @@ import { Gate } from "@erp/ui/auth/gate";
 import { organizationApi, operationsApi, useQuery } from "@erp/api";
 import type { DocumentKind, GeneratedDocument } from "@erp/types";
 import { DOCUMENT_KIND_LABEL } from "@erp/types";
-import { formatCurrencyBRL } from "@erp/utils";
 
 const KINDS: { kind: DocumentKind; description: string }[] = [
   { kind: "WORK_ORDER", description: "Registro do serviço executado em campo." },

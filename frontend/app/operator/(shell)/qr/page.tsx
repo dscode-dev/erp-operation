@@ -1,9 +1,8 @@
 "use client";
 
 /**
- * Operator QR flow (demo). A real camera scanner is future scope, so resolution
- * is done by: selecionar equipamento, colar código (qrCode/qrToken) ou simular
- * leitura. Resolved equipments open the operator equipment consult page.
+ * Operator QR flow. Câmera real (PWA) via QrScanner → GET /equipments/lookup/:qrCode.
+ * Alternativas: colar código (qrCode/qrToken) ou selecionar equipamento.
  */
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -13,7 +12,8 @@ import { SkeletonList } from "@erp/ui/skeletons";
 import { EmptyState } from "@erp/ui/empty-state";
 import { ErrorState } from "@erp/ui/states";
 import { StatusPill } from "@erp/ui/status-pill";
-import { equipmentsApi, useQuery } from "@erp/api";
+import { QrScanner } from "@erp/ui/qr-scanner";
+import { equipmentsApi, useQuery, ApiClientError } from "@erp/api";
 import { useDebounce } from "@erp/utils";
 import { EQUIPMENT_STATUS_LABEL, EQUIPMENT_STATUS_PILL } from "@platform/equipment-display";
 
@@ -24,6 +24,7 @@ export default function OperatorQrPage() {
   const [code, setCode] = useState("");
   const [resolving, setResolving] = useState(false);
   const [resolveError, setResolveError] = useState<string | null>(null);
+  const [scanOpen, setScanOpen] = useState(false);
 
   const list = useQuery(
     (signal) => equipmentsApi.listEquipments({ limit: 20, search: debounced || undefined, signal }),
@@ -34,25 +35,38 @@ export default function OperatorQrPage() {
     router.push(`/operator/equipamentos/${id}`);
   }
 
-  function simulate() {
-    const first = list.data?.items[0];
-    if (first) open(first.id);
+  function mapError(err: unknown): string {
+    if (err instanceof ApiClientError && err.code === "EQUIPMENT_NOT_FOUND") return "Nenhum equipamento encontrado para este QR Code.";
+    if (err instanceof ApiClientError && err.status === 400) return "QR Code inválido.";
+    return "Falha ao resolver o código.";
   }
 
-  // Resolve a pasted code (qrCode/qrToken) against equipment details.
+  // Real camera read → backend lookup → open equipment.
+  async function handleScan(text: string) {
+    setScanOpen(false);
+    setResolving(true);
+    setResolveError(null);
+    try {
+      const eq = await equipmentsApi.lookupByQr(text.trim());
+      open(eq.id);
+    } catch (err) {
+      setResolveError(mapError(err));
+    } finally {
+      setResolving(false);
+    }
+  }
+
+  // Resolve a pasted code (qrCode/qrToken) via the backend lookup endpoint.
   async function resolveCode() {
     const value = code.trim();
     if (!value) return;
     setResolving(true);
     setResolveError(null);
     try {
-      const page = await equipmentsApi.listEquipments({ limit: 10 });
-      const details = await Promise.all(page.items.map((e) => equipmentsApi.getEquipment(e.id).catch(() => null)));
-      const match = details.find((d) => d && (d.qrCode === value || d.qrToken === value));
-      if (match) open(match.id);
-      else setResolveError("Nenhum equipamento encontrado para este código.");
-    } catch {
-      setResolveError("Falha ao resolver o código.");
+      const eq = await equipmentsApi.lookupByQr(value);
+      open(eq.id);
+    } catch (err) {
+      setResolveError(mapError(err));
     } finally {
       setResolving(false);
     }
@@ -65,20 +79,25 @@ export default function OperatorQrPage() {
         <h1 className="text-[22px] font-semibold tracking-tight">Escanear QR</h1>
       </header>
 
-      {/* Simular leitura */}
+      {/* Escanear com a câmera */}
       <button
         type="button"
-        onClick={simulate}
-        disabled={!list.data?.items.length}
+        onClick={() => { setResolveError(null); setScanOpen(true); }}
+        disabled={resolving}
         className="w-full flex items-center gap-3 rounded-[var(--radius-xl)] bg-[var(--color-primary)] text-white p-4 shadow-[var(--shadow-hover)] active:scale-[0.99] transition-transform disabled:opacity-50"
       >
-        <span className="h-11 w-11 rounded-[var(--radius-lg)] bg-white/20 grid place-items-center"><ScanLine className="h-6 w-6" /></span>
+        <span className="h-11 w-11 rounded-[var(--radius-lg)] bg-white/20 grid place-items-center">
+          {resolving ? <Loader2 className="h-6 w-6 animate-spin" /> : <ScanLine className="h-6 w-6" />}
+        </span>
         <span className="flex-1 text-left">
-          <span className="block font-semibold">Simular leitura</span>
-          <span className="block text-[12px] opacity-90">Abre o primeiro equipamento (demo)</span>
+          <span className="block font-semibold">Escanear QR Code</span>
+          <span className="block text-[12px] opacity-90">Use a câmera do dispositivo</span>
         </span>
         <ChevronRight className="h-5 w-5 opacity-90" />
       </button>
+      {resolveError && <p className="text-[12px] text-[var(--color-danger)] -mt-2">{resolveError}</p>}
+
+      <QrScanner open={scanOpen} onClose={() => setScanOpen(false)} onResult={handleScan} />
 
       {/* Colar código */}
       <section className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 shadow-[var(--shadow-card)] space-y-2">
@@ -94,7 +113,7 @@ export default function OperatorQrPage() {
 
       {/* Selecionar QR demo */}
       <section className="space-y-2">
-        <div className="text-caption uppercase tracking-wider">Selecionar equipamento (QR demo)</div>
+        <div className="text-caption uppercase tracking-wider">Selecionar equipamento</div>
         <SearchInput value={search} onChange={setSearch} placeholder="Buscar equipamento…" className="w-full" />
         {list.loading && !list.data ? (
           <SkeletonList rows={5} />

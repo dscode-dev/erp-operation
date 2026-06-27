@@ -707,3 +707,26 @@ remain visible after soft delete.
 
 Errors to map: `EQUIPMENT_NOT_FOUND`, `CUSTOMER_NOT_FOUND`, `EQUIPMENT_ADDRESS_MISMATCH`,
 `EQUIPMENT_HIERARCHY_INVALID`, validation and upload codes.
+
+## Agenda (calendário mensal)
+
+A Agenda da Platform é um calendário mensal de produção. Cada navegação
+(mês anterior/próximo, seleção de mês/ano, "Hoje") consulta o backend para o
+intervalo visível da grade (`getScheduleRange(from, to)`), hoje sobre o snapshot
+`demo.schedule.v1` (enriquecido com `equipment`, `serviceType`, `endsAt`,
+`notes` e estado `DONE`). Eventos são clicáveis e abrem um Drawer lateral com
+cliente, equipamento, operador, tipo, data/horário, status e observações; ações
+de edição/reagendamento são gated por RBAC e pertencem ao domínio futuro de
+Agenda. Quando `GET /schedule?from=&to=` existir, troca-se apenas a
+implementação de `getScheduleRange` — a UI permanece igual.
+
+## QR Code operacional
+
+O QR é o identificador oficial do equipamento. No fluxo do Operador
+(Novo Atendimento → Buscar Equipamento) há o botão "Escanear QR Code" que abre
+a câmera real (PWA, `@zxing/browser` — apenas QR), lê o código e chama
+`GET /equipments/lookup/:qrCode`. O equipamento retornado é pré-selecionado no
+wizard (mostrando nome, cliente, endereço, patrimônio, série, status e foto)
+e o fluxo avança sem nova busca. A página `/operator/qr` usa o mesmo scanner +
+lookup. Tratamentos: permissão negada, câmera indisponível, QR inválido (400),
+equipamento inexistente (404). O formato do QR não muda.

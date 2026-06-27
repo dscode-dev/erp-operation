@@ -60,3 +60,20 @@ Telas: `/reports` (central documental), `/servicos` (histórico timeline), `/ope
 - Dados via `@erp/api`; nunca `fetch` direto, nunca mocks. Operator escreve no outbox local até o backend de Serviços existir.
 - Reutilizáveis ficam em `packages/ui`; layouts completos não são compartilhados.
 - RBAC sempre do backend; sessões Platform/Operator isoladas por escopo.
+
+## Backlog #001 — Agenda
+
+| Item | Local | Uso |
+|---|---|---|
+| `AgendaEventDrawer` | `@platform/components/agenda-event-drawer` | detalhe lateral do evento + ações RBAC |
+| `financialApi.getScheduleRange(from,to)` | `@erp/api` | schedule por intervalo (navegação do calendário) |
+| `DemoScheduleItem` | `@erp/types` | item de agenda enriquecido (equipment/serviceType/endsAt/notes) |
+
+## Backlog #002 — QR Code
+
+| Item | Local | Uso |
+|---|---|---|
+| `QrScanner` | `@erp/ui/qr-scanner` | leitura real de QR pela câmera (PWA, `@zxing/browser`) |
+| `equipmentsApi.lookupByQr` | `@erp/api` | resolve equipamento por `GET /equipments/lookup/:qrCode` |
+
+Biblioteca de QR: `@zxing/browser` + `@zxing/library` (`BrowserQRCodeReader`, somente QR).

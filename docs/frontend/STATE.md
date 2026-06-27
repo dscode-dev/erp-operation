@@ -37,3 +37,18 @@ Novos snapshots `demo.documents.v1` e `demo.services.v1` na factory (+ `DEMO_SET
 ## Pendências para a 1.0
 
 Domínios reais (Agenda, Serviços, Ordem de Serviço, Documentos) substituindo o Demo Dataset; geração real de PDF + assinatura embarcada; encoder de QR scannable + scanner de câmera; sync real do outbox + service worker (cache offline); ícones PNG multi-resolução; rodar `next build`/seed e `docker compose` no ambiente real (validado por `tsc`).
+
+## Backlog #001 — Agenda (produção)
+
+- `/agenda` reescrita como **calendário mensal** (grade de 6 semanas, segunda-first), com células de altura fixa — nenhum evento ultrapassa os limites; excedente vira "+N mais" (drawer do dia).
+- Navegação completa: mês anterior/próximo, seletor de mês, seletor de ano, botão **Hoje**. Cada navegação **consulta o backend** via `financialApi.getScheduleRange(from, to)` (intervalo da grade visível).
+- Eventos **clicáveis** → `AgendaEventDrawer` (lateral) com cliente, equipamento, operador, tipo, data/horário, status, observações e ações gated por RBAC (reagendar/editar — escopo futuro).
+- UX: loading (skeleton nas células + spinner na toolbar), erro + retry, empty state ("Nenhum agendamento no mês"), transição suave entre meses (`animate-fade-in` por mês).
+- Build de produção desbloqueado: `routes/` (preview TanStack legado) excluído do `tsconfig` (quebrava `next build`).
+
+## Backlog #002 — QR Code operacional (produção)
+
+- Scanner real de câmera (PWA) com `@zxing/browser` (apenas QR): `packages/ui/qr-scanner.tsx` — câmera traseira por padrão, troca de câmera, cancelar, loading, guia de enquadramento + linha de leitura (`animate-scanline`), e tratamento de permissão negada / câmera indisponível / QR inválido / equipamento inexistente.
+- Botão "Escanear QR Code" no fluxo Novo Atendimento → Buscar Equipamento: lê o QR → `GET /equipments/lookup/:qrCode` → card do equipamento (nome, cliente, endereço, patrimônio, série, status, foto) → confirma → **pré-seleciona no wizard e avança** (sem nova busca).
+- `/operator/qr` passou a usar o scanner real + `lookupByQr` (sem simulação).
+- API: `equipmentsApi.lookupByQr(qrCode)`; backend `GET /equipments/lookup/:qrCode`.

@@ -12,21 +12,24 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Loader2, Building2, MapPin, Wrench, ClipboardList, Check, CheckCircle2,
-  Camera, PenLine, FileText, Send, ChevronRight, Circle,
+  Camera, PenLine, FileText, Send, ChevronRight, Circle, QrCode, X,
 } from "lucide-react";
 import { WizardProgressHeader } from "@erp/ui/wizard/progress-header";
 import { WizardFooter } from "@erp/ui/wizard/step-footer";
 import { SearchInput } from "@erp/ui/search-input";
 import { StatusChip } from "@erp/ui/status-chip";
+import { StatusPill } from "@erp/ui/status-pill";
 import { SkeletonList } from "@erp/ui/skeletons";
 import { EmptyState } from "@erp/ui/empty-state";
 import { ErrorState } from "@erp/ui/states";
 import { PhotoInput, type CapturedPhoto } from "@erp/ui/photo-input";
 import { SignaturePad } from "@erp/ui/documents/signature-pad";
+import { QrScanner } from "@erp/ui/qr-scanner";
 import {
-  customersApi, equipmentsApi, useQuery,
-  type Customer, type CustomerDetail, type EquipmentSummary,
+  customersApi, equipmentsApi, useQuery, ApiClientError,
+  type Customer, type CustomerDetail, type EquipmentSummary, type EquipmentDetail,
 } from "@erp/api";
+import { EQUIPMENT_STATUS_LABEL, EQUIPMENT_STATUS_PILL } from "@platform/equipment-display";
 import { useDebounce } from "@erp/utils";
 import { SERVICE_TYPES, serviceTypeLabel, type ServiceTypeKey } from "../../lib/service-types";
 import { submitAtendimento } from "../../lib/atendimento";
@@ -156,7 +159,14 @@ export function AtendimentoWizard({
       <div className="flex-1 overflow-y-auto p-4">
         {step === 0 && <ClienteStep selected={customer} onSelect={(c) => { setCustomer(c); setAddress(null); setEquipment(null); }} />}
         {step === 1 && customer && <EnderecoStep customerId={customer.id} selected={address} onSelect={setAddress} />}
-        {step === 2 && customer && <EquipamentoStep customerId={customer.id} selected={equipment} onSelect={setEquipment} />}
+        {step === 2 && customer && (
+          <EquipamentoStep
+            customerId={customer.id}
+            selected={equipment}
+            onSelect={setEquipment}
+            onScanSelect={(eq) => { setEquipment(eq); setStep(3); }}
+          />
+        )}
         {step === 3 && <TipoStep selected={serviceType} onSelect={pickServiceType} />}
         {step === 4 && <ChecklistStep items={checklist} onToggle={(i) => setChecklist((arr) => arr.map((it, idx) => idx === i ? { ...it, done: !it.done } : it))} />}
         {step === 5 && <NotesStep value={notes} onChange={setNotes} />}
@@ -250,20 +260,83 @@ function EnderecoStep({ customerId, selected, onSelect }: { customerId: string; 
   );
 }
 
-function EquipamentoStep({ customerId, selected, onSelect }: { customerId: string; selected: EquipmentSummary | null; onSelect: (e: EquipmentSummary | null) => void }) {
+function EquipamentoStep({
+  customerId,
+  selected,
+  onSelect,
+  onScanSelect,
+}: {
+  customerId: string;
+  selected: EquipmentSummary | null;
+  onSelect: (e: EquipmentSummary | null) => void;
+  onScanSelect: (e: EquipmentSummary) => void;
+}) {
   const [search, setSearch] = useState("");
   const debounced = useDebounce(search, 300);
+  const [scanOpen, setScanOpen] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [scanError, setScanError] = useState<string | null>(null);
+  const [scanned, setScanned] = useState<EquipmentDetail | null>(null);
   const list = useQuery(
     (signal) => equipmentsApi.listEquipments({ customerId, limit: 12, search: debounced || undefined, signal }),
     [customerId, debounced],
   );
+
+  async function handleScan(text: string) {
+    setScanOpen(false);
+    setScanning(true);
+    setScanError(null);
+    try {
+      const eq = await equipmentsApi.lookupByQr(text.trim());
+      setScanned(eq);
+    } catch (err) {
+      setScanError(
+        err instanceof ApiClientError && err.code === "EQUIPMENT_NOT_FOUND"
+          ? "Nenhum equipamento encontrado para este QR Code."
+          : err instanceof ApiClientError && err.status === 400
+            ? "QR Code inválido."
+            : "Não foi possível ler o QR Code. Tente novamente.",
+      );
+    } finally {
+      setScanning(false);
+    }
+  }
+
+  // After scan + confirm, equipment is auto-selected and the wizard advances.
+  if (scanned) {
+    return (
+      <ScannedEquipmentCard
+        equipment={scanned}
+        onConfirm={() => onScanSelect(scanned)}
+        onCancel={() => setScanned(null)}
+      />
+    );
+  }
+
   return (
     <div className="space-y-3">
-      <p className="text-sm text-[var(--color-muted-foreground)]">Busque por nome, código ou número de série. (Opcional)</p>
+      <button
+        type="button"
+        onClick={() => { setScanError(null); setScanOpen(true); }}
+        disabled={scanning}
+        className="w-full inline-flex items-center justify-center gap-2 rounded-[var(--radius-md)] bg-[var(--color-primary)] text-[var(--color-primary-foreground)] h-12 text-sm font-semibold active:scale-[0.99] disabled:opacity-60"
+      >
+        {scanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <QrCode className="h-5 w-5" />}
+        Escanear QR Code
+      </button>
+      {scanError && <p className="text-[12px] text-[var(--color-danger)] text-center">{scanError}</p>}
+
+      <div className="flex items-center gap-2 text-caption">
+        <span className="h-px flex-1 bg-[var(--color-border)]" /> ou busque <span className="h-px flex-1 bg-[var(--color-border)]" />
+      </div>
+
       <SearchInput value={search} onChange={setSearch} placeholder="Buscar equipamento…" className="w-full" />
       <button type="button" onClick={() => onSelect(null)} className={`w-full text-left rounded-[var(--radius-md)] border p-3 text-sm ${selected === null ? "border-[var(--color-primary)] bg-[var(--color-primary)]/5 text-[var(--color-primary)]" : "border-[var(--color-border)]"}`}>
         Sem equipamento específico
       </button>
+
+      <QrScanner open={scanOpen} onClose={() => setScanOpen(false)} onResult={handleScan} />
+
       {list.loading && !list.data ? (
         <SkeletonList rows={4} />
       ) : list.error && !list.data ? (
@@ -286,6 +359,71 @@ function EquipamentoStep({ customerId, selected, onSelect }: { customerId: strin
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+function ScannedEquipmentCard({
+  equipment,
+  onConfirm,
+  onCancel,
+}: {
+  equipment: EquipmentDetail;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const [photo, setPhoto] = useState<string | null>(null);
+
+  useEffect(() => {
+    const att = equipment.attachments?.find((a) => a.category === "PHOTO");
+    if (!att) return;
+    let active = true;
+    equipmentsApi.getEquipmentAttachment(att.id)
+      .then((c) => { if (active) setPhoto(`data:${c.mimeType};base64,${c.contentBase64}`); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [equipment]);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-success)]/30 bg-[var(--color-success)]/10 px-3 py-2 text-sm text-[var(--color-success)]">
+        <CheckCircle2 className="h-4 w-4 shrink-0" /> Equipamento lido com sucesso
+      </div>
+
+      <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] overflow-hidden">
+        {photo && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={photo} alt={equipment.name} className="h-40 w-full object-cover" />
+        )}
+        <div className="p-4 space-y-2">
+          <div className="flex items-start justify-between gap-3">
+            <h2 className="text-section-title leading-tight">{equipment.name}</h2>
+            <StatusPill status={EQUIPMENT_STATUS_PILL[equipment.status]} label={EQUIPMENT_STATUS_LABEL[equipment.status]} />
+          </div>
+          <Row label="Cliente" value={equipment.customer?.name} />
+          <Row label="Endereço" value={equipment.address?.name ?? equipment.address?.city} />
+          <Row label="Patrimônio" value={equipment.tag} />
+          <Row label="Nº de série" value={equipment.serialNumber} />
+        </div>
+      </div>
+
+      <div className="flex gap-2">
+        <button type="button" onClick={onCancel} className="inline-flex items-center justify-center gap-1.5 rounded-[var(--radius-md)] border border-[var(--color-border)] px-4 h-12 text-sm font-medium hover:bg-[var(--color-muted)]">
+          <X className="h-4 w-4" /> Cancelar
+        </button>
+        <button type="button" onClick={onConfirm} className="flex-1 inline-flex items-center justify-center gap-2 rounded-[var(--radius-md)] bg-[var(--color-primary)] text-[var(--color-primary-foreground)] h-12 text-sm font-semibold active:scale-[0.99]">
+          <Check className="h-4 w-4" /> Confirmar e continuar
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function Row({ label, value }: { label: string; value?: string | null }) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-1 border-b last:border-0 border-[var(--color-border)]/60">
+      <span className="text-caption">{label}</span>
+      <span className="text-sm text-right">{value || "—"}</span>
     </div>
   );
 }

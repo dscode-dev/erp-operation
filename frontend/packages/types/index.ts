@@ -421,7 +421,21 @@ export type CreateEquipmentPayload = {
 
 /* ============ Demo bridge (dashboard / schedule / finance) ============ */
 
-export type DemoScheduleState = "OVERDUE" | "IN_PROGRESS" | "SCHEDULED";
+export type DemoScheduleState = "OVERDUE" | "IN_PROGRESS" | "SCHEDULED" | "DONE";
+
+export type DemoScheduleItem = {
+  id: string;
+  title: string;
+  customer: string;
+  operator: string;
+  startsAt: string;
+  state: DemoScheduleState;
+  /** Enriched fields (optional for backward compatibility). */
+  equipment?: string;
+  serviceType?: DemoOrderType;
+  endsAt?: string;
+  notes?: string;
+};
 
 export type DemoDataset = {
   "demo.dashboard.v1": {
@@ -435,14 +449,7 @@ export type DemoDataset = {
   };
   "demo.schedule.v1": {
     generatedAt: string;
-    items: Array<{
-      id: string;
-      title: string;
-      customer: string;
-      operator: string;
-      startsAt: string;
-      state: DemoScheduleState;
-    }>;
+    items: DemoScheduleItem[];
   };
   "demo.finance.v1": {
     generatedAt: string;

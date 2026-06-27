@@ -1173,3 +1173,64 @@ DELETE `/equipments/:id/metrics/:metricId`: OWNER/MANAGER.
 
 Errors: `EQUIPMENT_NOT_FOUND`, `EQUIPMENT_ADDRESS_MISMATCH`, `EQUIPMENT_HIERARCHY_INVALID`,
 `CUSTOMER_NOT_FOUND`, `NOT_FOUND`, validation/upload/common protected errors.
+
+## Schedule (Agenda)
+
+> Domínio operacional de Agenda é escopo futuro. Hoje o frontend consome o
+> snapshot `demo.schedule.v1` via o bridge `/internal/demo/dataset` e aplica o
+> filtro de intervalo no cliente. Quando o domínio existir, expor:
+
+```http
+GET /api/v1/schedule?from=<ISO>&to=<ISO>
+```
+
+Query (todos opcionais; combinam com AND):
+
+- `from` / `to`: intervalo ISO 8601 (inclusive) — usado pela navegação do calendário;
+- `month` (1–12) + `year`: alternativa ao intervalo;
+- `operatorId`, `customerId`, `status`: filtros;
+- `page` / `limit`: paginação quando o volume exigir.
+
+Item (alinhado ao snapshot demo, campos enriquecidos opcionais):
+
+```ts
+type ScheduleItem = {
+  id: string;
+  title: string;
+  customer: string;        // futuramente customerId + nome
+  operator: string;        // futuramente operatorId + nome
+  startsAt: string;        // ISO 8601
+  endsAt?: string;
+  state: 'OVERDUE' | 'IN_PROGRESS' | 'SCHEDULED' | 'DONE';
+  equipment?: string;
+  serviceType?: 'PREVENTIVA' | 'CORRETIVA' | 'INSTALACAO' | 'PROJETO';
+  notes?: string;
+};
+```
+
+O calendário mensal consulta o backend a cada navegação (mês/ano/Hoje) usando
+`from`/`to` da grade visível (6 semanas). Drag-and-drop, criação e edição
+pertencem ao domínio operacional (fora do escopo desta entrega).
+
+## Equipment lookup by QR
+
+### GET `/api/v1/equipments/lookup/:qrCode`
+
+Roles: `OWNER`, `MANAGER`, `OPERATOR`, `VIEWER`.
+
+Localiza o equipamento pelo identificador do QR. `:qrCode` deve vir
+URL-encoded (o valor inclui `:`, ex.: `equipment%3A<uuid>`). Aceita tanto o
+`qrCode` (`equipment:<qrToken>`) quanto o `qrToken`, preparando o terreno para
+formatos futuros de QR assinado/tokenizado — sem alterar o formato atual.
+
+Response 200: mesmo payload de `GET /equipments/:id` (equipamento completo com
+customer, address, parent, children, attachments e métricas).
+
+Errors:
+
+| HTTP | Code                  | Condition                          |
+| ---- | --------------------- | ---------------------------------- |
+| 400  | `VALIDATION_ERROR`    | QR vazio/ausente                   |
+| 404  | `EQUIPMENT_NOT_FOUND` | Nenhum equipamento para o QR       |
+
+> O formato do QR exibido na Platform não muda; o QR codifica o `qrCode`.

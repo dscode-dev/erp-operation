@@ -134,7 +134,12 @@ type DemoDataset = {
       customer: string;
       operator: string;
       startsAt: string;
-      state: 'OVERDUE' | 'IN_PROGRESS' | 'SCHEDULED';
+      state: 'OVERDUE' | 'IN_PROGRESS' | 'SCHEDULED' | 'DONE';
+      // Enriched for the production Agenda (optional, backward compatible):
+      equipment?: string;
+      serviceType?: 'PREVENTIVA' | 'CORRETIVA' | 'INSTALACAO' | 'PROJETO';
+      endsAt?: string;
+      notes?: string;
     }>;
   };
   'demo.finance.v1': {
@@ -349,3 +354,11 @@ identifiers, not access credentials. A scan-resolution endpoint is future scope.
 Real `/equipments` returns Samsung split, LG VRF condenser/evaporator, Trane chiller and Fronius
 inverter linked to demo customers and addresses. Each includes a metric and manual. Remove the
 equipment demo snapshot/mock.
+
+## Equipment QR lookup
+
+`GET /equipments/lookup/:qrCode` (todas as roles) resolve o equipamento pelo
+identificador do QR (aceita `qrCode` ou `qrToken`) e retorna o mesmo payload de
+`GET /equipments/:id`. O frontend lê o QR pela câmera (PWA, `@zxing/browser`) e
+seleciona o equipamento automaticamente no wizard de atendimento. Erros:
+`VALIDATION_ERROR` (400) e `EQUIPMENT_NOT_FOUND` (404).

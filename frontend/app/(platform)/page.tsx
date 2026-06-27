@@ -23,12 +23,13 @@ const SCHEDULE_STATUS: Record<DemoScheduleState, Status> = {
   OVERDUE: "danger",
   IN_PROGRESS: "in_progress",
   SCHEDULED: "scheduled",
+  DONE: "done",
 };
 
 const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
 
 export default function PlatformHome() {
-  const { session, can, hasRole } = useAuth();
+  const { session, hasRole } = useAuth();
   const canSeeTeam = hasRole("OWNER", "MANAGER", "VIEWER");
 
   const dash = useQuery<DashboardData>((signal) => dashboardApi.getDashboard({ signal }), []);

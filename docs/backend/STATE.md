@@ -368,3 +368,13 @@ Verificações específicas:
 - resultado validado: 5 usuários, 5 preferências e 6 settings reservados;
 - dataset interno retornou 4 clientes e 4 equipamentos;
 - endpoint interno retornou 404 quando flags estavam desligadas.
+
+## Backlog #001 — Agenda (produção)
+
+- `demo.schedule.v1` enriquecido (equipment, serviceType, endsAt, notes, estado `DONE`) e distribuído por meses adjacentes para a navegação do calendário; sem novos snapshots.
+- Contrato futuro `GET /schedule?from=&to=&month=&year=` documentado (API_CONTRACTS) — o frontend já consulta por intervalo a cada navegação.
+
+## Backlog #002 — QR Code operacional
+
+- Novo endpoint `GET /equipments/lookup/:qrCode` (service `lookupByQrCode`) — aceita `qrCode`/`qrToken`, retorna o equipamento completo, 404 quando inexistente, 400 para QR vazio. Formato do QR inalterado.
+- Documentado em API_CONTRACTS / FRONTEND_INTEGRATION / OPUS_INTEGRATION.

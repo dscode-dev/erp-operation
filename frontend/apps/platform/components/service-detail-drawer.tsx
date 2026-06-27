@@ -23,10 +23,11 @@ export type ServiceItem = {
   state: DemoScheduleState;
 };
 
-const STATE: Record<DemoScheduleState, { tone: "danger" | "info" | "primary"; label: string }> = {
+const STATE: Record<DemoScheduleState, { tone: "danger" | "info" | "primary" | "success"; label: string }> = {
   OVERDUE: { tone: "danger", label: "Atrasado" },
   IN_PROGRESS: { tone: "primary", label: "Em andamento" },
   SCHEDULED: { tone: "info", label: "Agendado" },
+  DONE: { tone: "success", label: "Concluído" },
 };
 
 export function ServiceDetailDrawer({

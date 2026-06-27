@@ -145,6 +145,12 @@ export class EquipmentsController {
   }
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR, Role.VIEWER)
+  @Get('lookup/:qrCode')
+  lookup(@Param('qrCode') qrCode: string): Promise<unknown> {
+    return this.equipments.lookupByQrCode(decodeURIComponent(qrCode));
+  }
+
+  @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR, Role.VIEWER)
   @Get(':id')
   get(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string): Promise<unknown> {
     return this.equipments.get(id);
