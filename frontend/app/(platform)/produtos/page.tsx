@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Package } from "lucide-react";
+import { Package, Plus } from "lucide-react";
 import { PageHeader } from "@platform/components/page-header";
 import { DataTable, type Column } from "@platform/components/data-table";
 import { ExportButton } from "@platform/components/export-button";
@@ -11,6 +11,8 @@ import { StatusChip, type ChipTone } from "@erp/ui/status-chip";
 import { SkeletonList, SkeletonCard } from "@erp/ui/skeletons";
 import { ComingSoonState, ErrorState } from "@erp/ui/states";
 import { EmptyState } from "@erp/ui/empty-state";
+import { Gate } from "@erp/ui/auth/gate";
+import { ProductFormDrawer } from "@platform/components/product-form-drawer";
 import { operationsApi, useQuery, type DemoProduct, type DemoProductStatus, type ProductsData } from "@erp/api";
 import { formatCurrencyBRL } from "@erp/utils";
 
@@ -30,6 +32,7 @@ const FILTERS: Array<{ key: "all" | DemoProductStatus; label: string }> = [
 export default function ProdutosPage() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | DemoProductStatus>("all");
+  const [formOpen, setFormOpen] = useState(false);
   const products = useQuery<ProductsData>((signal) => operationsApi.getProducts({ signal }), []);
 
   const all = products.data?.items ?? [];
@@ -63,11 +66,21 @@ export default function ProdutosPage() {
         title="Produtos"
         description="Catálogo de peças e insumos (Demo Dataset — domínio de Produtos é escopo futuro)."
         actions={
-          <ExportButton
-            label="Exportar"
-            fileName="produtos"
-            rows={rows.map((p) => ({ sku: p.sku, produto: p.name, categoria: p.category, estoque: p.stock, preco: p.price, situacao: STOCK[p.status].label }))}
-          />
+          <div className="flex items-center gap-2">
+            <ExportButton
+              label="Exportar"
+              fileName="produtos"
+              rows={rows.map((p) => ({ sku: p.sku, produto: p.name, categoria: p.category, estoque: p.stock, preco: p.price, situacao: STOCK[p.status].label }))}
+            />
+            <Gate roles={["OWNER", "MANAGER"]}>
+              <button
+                onClick={() => setFormOpen(true)}
+                className="inline-flex items-center gap-2 rounded-[var(--radius-md)] bg-[var(--color-primary)] text-[var(--color-primary-foreground)] px-3 h-9 text-sm font-medium shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-hover)]"
+              >
+                <Plus className="h-4 w-4" /> Novo produto
+              </button>
+            </Gate>
+          </div>
         }
       />
 
@@ -99,6 +112,8 @@ export default function ProdutosPage() {
       ) : (
         <DataTable columns={columns} rows={rows} />
       )}
+
+      <ProductFormDrawer open={formOpen} onClose={() => setFormOpen(false)} />
     </div>
   );
 }

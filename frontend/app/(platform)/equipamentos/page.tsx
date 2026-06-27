@@ -2,7 +2,7 @@
 
 import { Suspense, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Search, Wrench } from "lucide-react";
+import { Plus, Search, Wrench } from "lucide-react";
 import { PageHeader } from "@platform/components/page-header";
 import { DataTable, type Column } from "@platform/components/data-table";
 import { Pagination } from "@platform/components/pagination";
@@ -12,7 +12,9 @@ import { StatusPill } from "@erp/ui/status-pill";
 import { SkeletonList, SkeletonCard } from "@erp/ui/skeletons";
 import { EmptyState } from "@erp/ui/empty-state";
 import { ErrorState } from "@erp/ui/states";
+import { Gate } from "@erp/ui/auth/gate";
 import { EquipmentDetailDrawer } from "@platform/components/equipment-detail-drawer";
+import { EquipmentFormDrawer } from "@platform/components/equipment-form-drawer";
 import { equipmentsApi, useQuery, type EquipmentSummary, type EquipmentStatus, type EquipmentType } from "@erp/api";
 import { useDebounce } from "@erp/utils";
 import { cn } from "@erp/utils";
@@ -32,6 +34,7 @@ function EquipamentosInner() {
   const [type] = useState<EquipmentType | "">("");
   const [page, setPage] = useState(1);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
   const debounced = useDebounce(search, 300);
 
   const list = useQuery(
@@ -78,17 +81,27 @@ function EquipamentosInner() {
         title="Equipamentos"
         description="Inventário operacional consumido da API."
         actions={
-          <ExportButton
-            label="Exportar"
-            fileName="equipamentos"
-            rows={(list.data?.items ?? []).map((e) => ({
-              tag: e.tag ?? "",
-              nome: e.name,
-              tipo: EQUIPMENT_TYPE_LABEL[e.type],
-              cliente: e.customer?.name ?? "",
-              status: EQUIPMENT_STATUS_LABEL[e.status],
-            }))}
-          />
+          <div className="flex items-center gap-2">
+            <ExportButton
+              label="Exportar"
+              fileName="equipamentos"
+              rows={(list.data?.items ?? []).map((e) => ({
+                tag: e.tag ?? "",
+                nome: e.name,
+                tipo: EQUIPMENT_TYPE_LABEL[e.type],
+                cliente: e.customer?.name ?? "",
+                status: EQUIPMENT_STATUS_LABEL[e.status],
+              }))}
+            />
+            <Gate roles={["OWNER", "MANAGER"]}>
+              <button
+                onClick={() => setFormOpen(true)}
+                className="inline-flex items-center gap-2 rounded-[var(--radius-md)] bg-[var(--color-primary)] text-[var(--color-primary-foreground)] px-3 h-9 text-sm font-medium shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-hover)]"
+              >
+                <Plus className="h-4 w-4" /> Novo equipamento
+              </button>
+            </Gate>
+          </div>
         }
       />
 
@@ -145,6 +158,12 @@ function EquipamentosInner() {
       ) : null}
 
       <EquipmentDetailDrawer equipmentId={detailId} open={detailId !== null} onClose={() => setDetailId(null)} />
+      <EquipmentFormDrawer
+        open={formOpen}
+        onClose={() => setFormOpen(false)}
+        onSaved={() => { list.refetch(); stats.refetch(); }}
+        presetCustomerId={customerId}
+      />
     </div>
   );
 }
