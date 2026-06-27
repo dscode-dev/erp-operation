@@ -368,3 +368,18 @@ seleciona o equipamento automaticamente no wizard de atendimento. Erros:
 `DocumentTemplate` ganhou `isActive` (default `true`). `POST/PATCH /organization/templates`
 aceitam `isActive`; o frontend usa para ativar/desativar modelos na tela de Relatórios (Modelos).
 Migration: `20260627120000_template_is_active`.
+
+## Operations (domínio operacional central)
+
+`Operation` é o atendimento de campo — fundação única reutilizada por OS, PMOC,
+Laudo, Relatório, Visita, Orçamento e Recibo (sem implementações paralelas). Toda
+OS nasce de uma Operation; criar uma Operation gera automaticamente um
+`OperationDocument` `WORK_ORDER` em `DRAFT` (`OS-000001`).
+
+Endpoints: `GET /operations` (lista/filtros `customerId,equipmentId,operatorId,type,status,search`),
+`GET /operations/stats`, `GET /operations/:id`, `GET /operations/photos/:photoId`
+(base64), `POST /operations` (cria + OS rascunho; operador = usuário autenticado),
+`PATCH /operations/:id`. Fotos como data URL (PNG/JPEG, máx. 16 × 5 MiB);
+assinatura como data URL (texto). O histórico de equipamento/cliente é derivado de
+`/operations` por `equipmentId`/`customerId`. PDF é escopo futuro. Migration:
+`20260627150000_operation_domain_foundation`.

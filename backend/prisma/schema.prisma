@@ -60,6 +60,27 @@ enum EquipmentAttachmentCategory {
   DOCUMENT
 }
 
+enum OperationType {
+  PREVENTIVA
+  CORRETIVA
+  INSTALACAO
+  PROJETO
+}
+
+enum OperationStatus {
+  DRAFT
+  IN_PROGRESS
+  COMPLETED
+  CANCELED
+}
+
+enum OperationDocumentStatus {
+  DRAFT
+  READY
+  VALIDATED
+  SENT
+}
+
 model SystemSetting {
   id        String   @id @default(uuid()) @db.Uuid
   key       String   @unique @db.VarChar(150)
@@ -104,6 +125,7 @@ model User {
   preferences        UserPreferences?
   permission         UserPermission?
   avatarAsset        UserAvatarAsset? @relation(fields: [avatarAssetId], references: [id], onDelete: SetNull)
+  operations         Operation[]
 
   @@map("users")
 }
@@ -252,6 +274,7 @@ model Customer {
   contacts       CustomerContact[]
   attachments    CustomerAttachment[]
   equipments     Equipment[]
+  operations     Operation[]
 
   @@index([name])
   @@index([email])
@@ -276,6 +299,7 @@ model CustomerAddress {
   updatedAt  DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
   customer   Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
   equipments Equipment[]
+  operations Operation[]
 
   @@index([customerId, isPrimary])
   @@map("customer_addresses")
@@ -342,6 +366,7 @@ model Equipment {
   children           Equipment[]           @relation("EquipmentHierarchy")
   attachments        EquipmentAttachment[]
   metrics            EquipmentMetric[]
+  operations         Operation[]
 
   @@index([customerId, status])
   @@index([addressId])
@@ -380,4 +405,71 @@ model EquipmentMetric {
   @@index([equipmentId, recordedAt])
   @@index([equipmentId, key])
   @@map("equipment_metrics")
+}
+
+/// Central operational domain. A field service (atendimento) is the foundation
+/// reused by every produced document (OS, PMOC, Laudo, Relatório, Orçamento,
+/// Recibo). Each Work Order goes through exactly one Operation.
+model Operation {
+  id            String              @id @default(uuid()) @db.Uuid
+  number        Int                 @unique @default(autoincrement())
+  customerId    String              @map("customer_id") @db.Uuid
+  addressId     String?             @map("address_id") @db.Uuid
+  equipmentId   String?             @map("equipment_id") @db.Uuid
+  operatorId    String              @map("operator_id") @db.Uuid
+  type          OperationType
+  status        OperationStatus     @default(DRAFT)
+  scheduledFor  DateTime?           @map("scheduled_for") @db.Timestamptz(3)
+  startedAt     DateTime?           @map("started_at") @db.Timestamptz(3)
+  completedAt   DateTime?           @map("completed_at") @db.Timestamptz(3)
+  checklist     Json                @default("[]")
+  observations  String?             @db.Text
+  signatureData String?             @map("signature_data") @db.Text
+  signedAt      DateTime?           @map("signed_at") @db.Timestamptz(3)
+  createdAt     DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
+  customer      Customer            @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  address       CustomerAddress?    @relation(fields: [addressId], references: [id], onDelete: SetNull)
+  equipment     Equipment?          @relation(fields: [equipmentId], references: [id], onDelete: SetNull)
+  operator      User                @relation(fields: [operatorId], references: [id], onDelete: Restrict)
+  photos        OperationPhoto[]
+  documents     OperationDocument[]
+
+  @@index([customerId, createdAt])
+  @@index([equipmentId, createdAt])
+  @@index([operatorId, createdAt])
+  @@index([status, createdAt])
+  @@map("operations")
+}
+
+model OperationPhoto {
+  id          String    @id @default(uuid()) @db.Uuid
+  operationId String    @map("operation_id") @db.Uuid
+  storageKey  String    @unique @map("storage_key") @db.VarChar(255)
+  caption     String?   @db.VarChar(255)
+  mimeType    String    @map("mime_type") @db.VarChar(100)
+  fileSize    Int       @map("file_size")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  operation   Operation @relation(fields: [operationId], references: [id], onDelete: Cascade)
+
+  @@index([operationId, createdAt])
+  @@map("operation_photos")
+}
+
+/// A document produced from an Operation. The same record backs every document
+/// type via DocumentTemplateType; the Work Order is generated automatically as a
+/// DRAFT when an Operation is created. PDF generation is future scope.
+model OperationDocument {
+  id          String                  @id @default(uuid()) @db.Uuid
+  operationId String                  @map("operation_id") @db.Uuid
+  type        DocumentTemplateType
+  number      String                  @db.VarChar(40)
+  status      OperationDocumentStatus @default(DRAFT)
+  createdAt   DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
+  operation   Operation               @relation(fields: [operationId], references: [id], onDelete: Cascade)
+
+  @@unique([operationId, type])
+  @@index([type, status])
+  @@map("operation_documents")
 }

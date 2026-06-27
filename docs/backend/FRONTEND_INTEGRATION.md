@@ -737,4 +737,18 @@ equipamento inexistente (404). O formato do QR não muda.
 Responsabilidades separadas:
 
 - **Relatórios** (`/reports`): gestão de **modelos** de documento. Consome `GET /organization/templates`; OWNER cria/edita/exclui (`POST/PATCH/DELETE /organization/templates/:id`), define padrão (`isDefault`), ativa/desativa (`isActive`) e importa modelo do cliente (`POST /organization/assets`). Modelos profissionais (OS, Relatório Técnico, Visita Técnica, PMOC, Laudo, Orçamento, Recibo) compartilham identidade/cabeçalho/rodapé/tipografia e são pré-visualizados no `DocumentPaper` (preparado para a renderização dinâmica do backend).
-- **Documentos** (`/documentos`): **central** de documentos emitidos. Lista o snapshot `demo.documents.v1` com filtros cumulativos (cliente, equipamento, operador, tipo, status, período), preview estruturado (`DocumentPaper`) e download da estrutura. A geração de PDF permanece no backend.
+- **Documentos** (`/documentos`): **central** de documentos emitidos. Mescla os documentos reais gerados por Operations (`GET /operations` → `documents[]`, incluindo a OS rascunho) com o snapshot `demo.documents.v1`, com filtros cumulativos (cliente, equipamento, operador, tipo, status, período), preview estruturado (`DocumentPaper`) e download da estrutura. A geração de PDF permanece no backend.
+
+## Operations (atendimentos)
+
+Domínio operacional central. O **Operator** finaliza o wizard chamando
+`POST /operations` (cliente, endereço, equipamento, tipo, checklist, observações,
+fotos como data URL, assinatura) — o backend cria a Operation e gera a **OS em
+rascunho** automaticamente; a tela de sucesso mostra `OS #000001 criada`.
+
+A **Platform** lista em `/operacoes` (`GET /operations`) e abre um drawer com
+Timeline + Checklist + Fotos (`GET /operations/photos/:id`) + Observações +
+Assinatura + Documentos relacionados (preview via `DocumentPaper`). O histórico de
+cada equipamento/cliente é derivado de `GET /operations?equipmentId=` /
+`?customerId=` (sem duplicação de dados). API no frontend: `operationApi`
+(`@erp/api`) — distinto do `operationsApi` (snapshots de demo).

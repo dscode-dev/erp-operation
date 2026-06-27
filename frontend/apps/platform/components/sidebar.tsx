@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   Calendar,
   Briefcase,
+  ClipboardCheck,
   ClipboardList,
   Users,
   Wrench,
@@ -45,6 +46,7 @@ const groups: NavGroup[] = [
     items: [
       { label: "Dashboard", href: "/", icon: LayoutDashboard },
       { label: "Agenda", href: "/agenda", icon: Calendar },
+      { label: "Operações", href: "/operacoes", icon: ClipboardCheck },
       { label: "Serviços", href: "/servicos", icon: Briefcase },
       { label: "Ordens de Serviço", href: "/ordens", icon: ClipboardList },
       { label: "Documentos", href: "/documentos", icon: FileText },

@@ -1238,3 +1238,50 @@ Errors:
 | 404  | `EQUIPMENT_NOT_FOUND` | Nenhum equipamento para o QR       |
 
 > O formato do QR exibido na Platform não muda; o QR codifica o `qrCode`.
+
+## Operations (domínio operacional central)
+
+Uma `Operation` é o atendimento de campo — fundação reutilizada por todos os
+documentos (OS, PMOC, Laudo, Relatório, Orçamento, Recibo). Toda OS nasce de uma
+Operation. Ao criar uma Operation, o backend gera automaticamente um
+`OperationDocument` do tipo `WORK_ORDER` em `DRAFT`, com número derivado do número
+sequencial da operação (`OS-000001`).
+
+| Método | Rota                          | Roles                          | Descrição |
+| ------ | ----------------------------- | ------------------------------ | --------- |
+| GET    | `/operations`                 | OWNER/MANAGER/OPERATOR/VIEWER  | Lista paginada. Filtros: `page,limit,search,customerId,equipmentId,operatorId,type,status` |
+| GET    | `/operations/stats`           | OWNER/MANAGER/OPERATOR/VIEWER  | `{ total, byStatus }` |
+| GET    | `/operations/:id`             | OWNER/MANAGER/OPERATOR/VIEWER  | Detalhe (customer, address, equipment, operator, checklist, photos, documents, signature) |
+| GET    | `/operations/photos/:photoId` | OWNER/MANAGER/OPERATOR/VIEWER  | Foto em base64 (`{ mimeType, contentBase64, ... }`) |
+| POST   | `/operations`                 | OWNER/MANAGER/OPERATOR         | Cria a Operation (operador = usuário autenticado) + OS rascunho |
+| PATCH  | `/operations/:id`             | OWNER/MANAGER/OPERATOR         | Atualiza status/datas/checklist/observações |
+
+`POST /operations` (body):
+
+```jsonc
+{
+  "customerId": "<uuid>",          // obrigatório
+  "addressId": "<uuid>",           // opcional (deve pertencer ao cliente)
+  "equipmentId": "<uuid>",         // opcional (deve pertencer ao cliente)
+  "type": "PREVENTIVA",            // PREVENTIVA|CORRETIVA|INSTALACAO|PROJETO
+  "status": "COMPLETED",           // opcional, default DRAFT
+  "startedAt": "<iso>",
+  "completedAt": "<iso>",
+  "checklist": [{ "label": "…", "done": true, "note": null }],
+  "observations": "…",
+  "signatureData": "data:image/png;base64,…",   // texto (data URL)
+  "signedAt": "<iso>",
+  "photos": [{ "dataUrl": "data:image/jpeg;base64,…", "caption": "…" }]
+}
+```
+
+Fotos: PNG/JPEG (data URL), máx. 16 por operação, 5 MiB cada; persistidas via
+storage provider. Assinatura: data URL armazenada como texto.
+
+Errors: `CUSTOMER_NOT_FOUND` (404), `VALIDATION_ERROR` (400, endereço/equipamento
+fora do cliente), `OPERATION_PHOTO_INVALID` (400), `OPERATION_NOT_FOUND` (404),
+`OPERATION_PHOTO_NOT_FOUND` (404).
+
+Migration: `20260627150000_operation_domain_foundation` (tabelas `operations`,
+`operation_photos`, `operation_documents` + enums). Geração de PDF é escopo
+futuro.

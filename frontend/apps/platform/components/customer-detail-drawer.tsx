@@ -12,10 +12,12 @@ import { DrawerTabs } from "@erp/ui/drawer-tabs";
 import { StatusPill } from "@erp/ui/status-pill";
 import { ErrorState } from "@erp/ui/states";
 import { Gate } from "@erp/ui/auth/gate";
-import { customersApi, useQuery, type CustomerDetail } from "@erp/api";
+import { Timeline } from "@erp/ui/timeline";
+import { operationsToTimeline } from "@erp/ui/operations/operation-shared";
+import { customersApi, operationApi, useQuery, type CustomerDetail } from "@erp/api";
 import { formatDate, maskCep } from "@erp/utils";
 
-const TABS = ["Visão geral", "Endereços", "Contatos", "Anexos"] as const;
+const TABS = ["Visão geral", "Histórico", "Endereços", "Contatos", "Anexos"] as const;
 type Tab = (typeof TABS)[number];
 
 export function CustomerDetailDrawer({
@@ -32,6 +34,10 @@ export function CustomerDetailDrawer({
   const [tab, setTab] = useState<Tab>("Visão geral");
   const detail = useQuery<CustomerDetail | null>(
     (signal) => (customerId ? customersApi.getCustomer(customerId, { signal }) : Promise.resolve(null)),
+    [customerId, open],
+  );
+  const history = useQuery(
+    (signal) => (customerId ? operationApi.listOperations({ customerId, limit: 50, signal }) : Promise.resolve(null)),
     [customerId, open],
   );
   const c = detail.data;
@@ -69,10 +75,21 @@ export function CustomerDetailDrawer({
             tabs={TABS}
             active={tab}
             onChange={setTab}
-            counts={{ Endereços: c.addresses.length, Contatos: c.contacts.length, Anexos: c.attachments.length }}
+            counts={{ Histórico: history.data?.items.length ?? 0, Endereços: c.addresses.length, Contatos: c.contacts.length, Anexos: c.attachments.length }}
           />
 
           {tab === "Visão geral" && <OverviewTab c={c} />}
+          {tab === "Histórico" && (
+            <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
+              {history.loading && !history.data ? (
+                <Empty label="Carregando histórico…" />
+              ) : (history.data?.items.length ?? 0) === 0 ? (
+                <Empty label="Nenhuma operação registrada para este cliente." />
+              ) : (
+                <Timeline events={operationsToTimeline(history.data?.items ?? [])} />
+              )}
+            </div>
+          )}
           {tab === "Endereços" && <AddressesTab c={c} />}
           {tab === "Contatos" && <ContactsTab c={c} />}
           {tab === "Anexos" && <AttachmentsTab c={c} />}

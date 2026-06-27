@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(echo \"FRONTEND=$?\")",
+      "Bash(ls docs/backend docs/frontend)",
+      "Bash(tail -20 docs/backend/STATE.md)"
+    ]
+  }
+}

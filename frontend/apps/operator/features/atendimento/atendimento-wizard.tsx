@@ -32,7 +32,7 @@ import {
 import { EQUIPMENT_STATUS_LABEL, EQUIPMENT_STATUS_PILL } from "@platform/equipment-display";
 import { useDebounce } from "@erp/utils";
 import { SERVICE_TYPES, serviceTypeLabel, type ServiceTypeKey } from "../../lib/service-types";
-import { submitAtendimento } from "../../lib/atendimento";
+import { createOperationFromDraft, workOrderNumber } from "../../lib/atendimento";
 
 const STEPS = [
   "Cliente", "Endereço", "Equipamento", "Tipo", "Checklist",
@@ -61,7 +61,9 @@ export function AtendimentoWizard({
   const [signature, setSignature] = useState<string | null>(null);
 
   const [submitting, setSubmitting] = useState(false);
-  const [submittedId, setSubmittedId] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [result, setResult] = useState<{ operationId: string; osNumber: string | null } | null>(null);
+  const [startedAt] = useState(() => new Date().toISOString());
 
   // Prefill from QR / "Iniciar atendimento" deep links.
   useEffect(() => {
@@ -121,27 +123,33 @@ export function AtendimentoWizard({
       setStep((s) => s + 1);
       return;
     }
-    // Resumo → Enviar
+    // Resumo → cria a Operation real (gera a OS em rascunho no backend).
     setSubmitting(true);
-    const result = submitAtendimento({
-      customerId: customer?.id ?? null,
-      customerName: customer?.name ?? "",
-      addressId: address?.id ?? null,
-      addressLabel: address?.label ?? "",
-      equipmentId: equipment?.id ?? null,
-      equipmentName: equipment?.name ?? "",
-      serviceType,
-      checklist,
-      notes,
-      photoCount: photos.length,
-      signedAt: signature ? new Date().toISOString() : null,
-    });
-    setSubmitting(false);
-    setSubmittedId(result.id);
+    setSubmitError(null);
+    try {
+      const operation = await createOperationFromDraft({
+        customerId: customer?.id ?? null,
+        addressId: address?.id ?? null,
+        equipmentId: equipment?.id ?? null,
+        serviceType,
+        checklist,
+        notes,
+        photos,
+        signature,
+        startedAt,
+      });
+      setResult({ operationId: operation.id, osNumber: workOrderNumber(operation) });
+    } catch (err) {
+      setSubmitError(
+        err instanceof ApiClientError ? err.message : "Não foi possível registrar o atendimento. Tente novamente.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
   }
 
-  if (submittedId) {
-    return <SuccessView onDone={() => router.push("/operator")} onNew={() => window.location.reload()} />;
+  if (result) {
+    return <SuccessView osNumber={result.osNumber} onDone={() => router.push("/operator")} onNew={() => window.location.reload()} />;
   }
 
   const isLast = step === STEPS.length - 1;
@@ -178,6 +186,9 @@ export function AtendimentoWizard({
             serviceType={serviceType} checklist={checklist} notes={notes}
             photoCount={photos.length} signed={!!signature}
           />
+        )}
+        {submitError && (
+          <p className="mt-3 rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 px-3 py-2 text-sm text-[var(--color-danger)]">{submitError}</p>
         )}
       </div>
 
@@ -528,16 +539,21 @@ function ResumoStep({
   );
 }
 
-function SuccessView({ onDone, onNew }: { onDone: () => void; onNew: () => void }) {
+function SuccessView({ osNumber, onDone, onNew }: { osNumber: string | null; onDone: () => void; onNew: () => void }) {
   return (
     <div className="min-h-dvh grid place-items-center p-6 text-center">
       <div className="max-w-xs">
         <div className="mx-auto h-16 w-16 rounded-full bg-[var(--color-success)]/12 grid place-items-center text-[var(--color-success)]">
           <CheckCircle2 className="h-9 w-9" />
         </div>
-        <h1 className="text-section-title mt-4">Atendimento registrado</h1>
-        <p className="text-sm text-[var(--color-muted-foreground)] mt-1">
-          Salvo na fila de envio. Será sincronizado com o backend automaticamente quando o domínio de Serviços estiver disponível.
+        <h1 className="text-section-title mt-4">Atendimento registrado com sucesso</h1>
+        {osNumber && (
+          <p className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-[var(--color-primary)]/30 bg-[var(--color-primary)]/10 px-3 py-1 text-sm font-medium text-[var(--color-primary)]">
+            <FileText className="h-4 w-4" /> OS #{osNumber.replace(/^OS-/, "")} criada
+          </p>
+        )}
+        <p className="text-sm text-[var(--color-muted-foreground)] mt-2">
+          A operação foi registrada e a Ordem de Serviço foi gerada em rascunho.
         </p>
         <div className="mt-6 space-y-2">
           <button type="button" onClick={onNew} className="w-full rounded-[var(--radius-md)] bg-[var(--color-primary)] text-[var(--color-primary-foreground)] h-12 text-sm font-semibold active:scale-[0.99]">Novo atendimento</button>

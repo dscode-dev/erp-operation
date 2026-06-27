@@ -1,0 +1,349 @@
+import { HttpStatus, Inject, Injectable } from '@nestjs/common';
+import { DocumentTemplateType, Prisma } from '@prisma/client';
+import { randomUUID } from 'node:crypto';
+import {
+  STORAGE_PROVIDER_TOKEN,
+  type StorageProviderContract,
+} from '../../infra/storage/storage-provider.type';
+import { ERROR_CODES } from '../../shared/constants/error-codes.constants';
+import {
+  MAX_OPERATION_PHOTOS,
+  MAX_OPERATION_PHOTO_SIZE_BYTES,
+  OPERATION_AUDIT_ACTIONS,
+  OPERATION_DOCUMENT_PREFIX,
+  OPERATION_PHOTO_MIME_TYPES,
+  OPERATION_RESOURCE,
+  formatDocumentNumber,
+} from '../../shared/constants/operations.constants';
+import { ApplicationException } from '../../shared/exceptions/application.exception';
+import type { AuthenticatedUser } from '../../shared/types/authenticated-user.type';
+import { PrismaService } from '../database/prisma.service';
+import type {
+  CreateOperationDto,
+  ListOperationsQueryDto,
+  OperationChecklistItemDto,
+  OperationPhotoInputDto,
+  UpdateOperationDto,
+} from './dto/operation.dto';
+
+export interface OperationAuditContext {
+  requestId: string;
+  ip: string | null;
+  userAgent: string | null;
+}
+
+const OPERATION_INCLUDE = {
+  customer: { select: { id: true, name: true, tradeName: true } },
+  address: true,
+  equipment: { select: { id: true, name: true, tag: true, type: true } },
+  operator: { select: { id: true, name: true } },
+  photos: {
+    orderBy: { createdAt: 'asc' as const },
+    select: { id: true, caption: true, mimeType: true, fileSize: true, createdAt: true },
+  },
+  documents: { orderBy: { createdAt: 'asc' as const } },
+} satisfies Prisma.OperationInclude;
+
+const OPERATION_LIST_INCLUDE = {
+  customer: { select: { id: true, name: true } },
+  equipment: { select: { id: true, name: true } },
+  operator: { select: { id: true, name: true } },
+  documents: { orderBy: { createdAt: 'asc' as const } },
+  _count: { select: { photos: true, documents: true } },
+} satisfies Prisma.OperationInclude;
+
+type DecodedPhoto = { buffer: Buffer; mimeType: string; ext: string; caption: string | null };
+
+@Injectable()
+export class OperationsService {
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(STORAGE_PROVIDER_TOKEN) private readonly storage: StorageProviderContract,
+  ) {}
+
+  async list(query: ListOperationsQueryDto): Promise<unknown> {
+    const where: Prisma.OperationWhereInput = {
+      ...(query.customerId ? { customerId: query.customerId } : {}),
+      ...(query.equipmentId ? { equipmentId: query.equipmentId } : {}),
+      ...(query.operatorId ? { operatorId: query.operatorId } : {}),
+      ...(query.type ? { type: query.type } : {}),
+      ...(query.status ? { status: query.status } : {}),
+      ...(query.search
+        ? {
+            OR: [
+              { customer: { name: { contains: query.search, mode: 'insensitive' } } },
+              { equipment: { name: { contains: query.search, mode: 'insensitive' } } },
+              { operator: { name: { contains: query.search, mode: 'insensitive' } } },
+            ],
+          }
+        : {}),
+    };
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.operation.findMany({
+        where,
+        skip: (query.page - 1) * query.limit,
+        take: query.limit,
+        orderBy: { createdAt: 'desc' },
+        include: OPERATION_LIST_INCLUDE,
+      }),
+      this.prisma.operation.count({ where }),
+    ]);
+    return {
+      items,
+      pagination: {
+        page: query.page,
+        limit: query.limit,
+        total,
+        totalPages: Math.ceil(total / query.limit),
+      },
+    };
+  }
+
+  async stats(): Promise<Record<string, unknown>> {
+    const [total, draft, inProgress, completed, canceled] = await this.prisma.$transaction([
+      this.prisma.operation.count(),
+      this.prisma.operation.count({ where: { status: 'DRAFT' } }),
+      this.prisma.operation.count({ where: { status: 'IN_PROGRESS' } }),
+      this.prisma.operation.count({ where: { status: 'COMPLETED' } }),
+      this.prisma.operation.count({ where: { status: 'CANCELED' } }),
+    ]);
+    return { total, byStatus: { DRAFT: draft, IN_PROGRESS: inProgress, COMPLETED: completed, CANCELED: canceled } };
+  }
+
+  async get(id: string): Promise<unknown> {
+    return this.operationOrThrow(id);
+  }
+
+  async create(
+    dto: CreateOperationDto,
+    actor: AuthenticatedUser,
+    context: OperationAuditContext,
+  ): Promise<unknown> {
+    await this.validateRelations(dto.customerId, dto.addressId, dto.equipmentId);
+    const photos = (dto.photos ?? []).map((p) => this.decodePhoto(p));
+    if (photos.length > MAX_OPERATION_PHOTOS) {
+      throw new ApplicationException(
+        ERROR_CODES.OPERATION_PHOTO_INVALID,
+        `A maximum of ${MAX_OPERATION_PHOTOS} photos is allowed`,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    // Operation + auto Work Order draft are created atomically. The OS number is
+    // derived from the operation sequential number.
+    const operationId = await this.prisma.$transaction(async (tx) => {
+      const operation = await tx.operation.create({
+        data: {
+          customerId: dto.customerId,
+          addressId: dto.addressId ?? null,
+          equipmentId: dto.equipmentId ?? null,
+          operatorId: actor.id,
+          type: dto.type,
+          status: dto.status ?? 'DRAFT',
+          scheduledFor: dto.scheduledFor ? new Date(dto.scheduledFor) : null,
+          startedAt: dto.startedAt ? new Date(dto.startedAt) : null,
+          completedAt: dto.completedAt ? new Date(dto.completedAt) : null,
+          checklist: this.normalizeChecklist(dto.checklist),
+          observations: dto.observations ?? null,
+          signatureData: dto.signatureData ?? null,
+          signedAt: dto.signedAt ? new Date(dto.signedAt) : null,
+        },
+      });
+      await tx.operationDocument.create({
+        data: {
+          operationId: operation.id,
+          type: DocumentTemplateType.WORK_ORDER,
+          number: formatDocumentNumber(OPERATION_DOCUMENT_PREFIX.WORK_ORDER, operation.number),
+          status: 'DRAFT',
+        },
+      });
+      await tx.auditLog.create({
+        data: this.audit(OPERATION_AUDIT_ACTIONS.OPERATION_CREATED, OPERATION_RESOURCE, actor, context, {
+          operationId: operation.id,
+          number: operation.number,
+          customerId: operation.customerId,
+        }),
+      });
+      return operation.id;
+    });
+
+    // Photos are persisted via the storage provider (non-transactional) after the
+    // operation exists. A failed photo never blocks the operation.
+    for (const photo of photos) {
+      const storageKey = `operations/${operationId}/photos/${randomUUID()}.${photo.ext}`;
+      try {
+        await this.storage.save({ storageKey, content: photo.buffer });
+        await this.prisma.operationPhoto.create({
+          data: {
+            operationId,
+            storageKey,
+            caption: photo.caption,
+            mimeType: photo.mimeType,
+            fileSize: photo.buffer.length,
+          },
+        });
+      } catch {
+        await this.storage.delete(storageKey).catch(() => undefined);
+      }
+    }
+
+    return this.operationOrThrow(operationId);
+  }
+
+  async update(
+    id: string,
+    dto: UpdateOperationDto,
+    actor: AuthenticatedUser,
+    context: OperationAuditContext,
+  ): Promise<unknown> {
+    await this.operationOrThrow(id);
+    return this.prisma.$transaction(async (tx) => {
+      await tx.operation.update({
+        where: { id },
+        data: {
+          ...(dto.status ? { status: dto.status } : {}),
+          ...(dto.startedAt ? { startedAt: new Date(dto.startedAt) } : {}),
+          ...(dto.completedAt ? { completedAt: new Date(dto.completedAt) } : {}),
+          ...(dto.checklist ? { checklist: this.normalizeChecklist(dto.checklist) } : {}),
+          ...(dto.observations !== undefined ? { observations: dto.observations } : {}),
+        },
+      });
+      await tx.auditLog.create({
+        data: this.audit(OPERATION_AUDIT_ACTIONS.OPERATION_UPDATED, OPERATION_RESOURCE, actor, context, {
+          operationId: id,
+          changedFields: Object.keys(dto),
+        }),
+      });
+      return tx.operation.findUniqueOrThrow({ where: { id }, include: OPERATION_INCLUDE });
+    });
+  }
+
+  async getPhoto(photoId: string): Promise<unknown> {
+    const photo = await this.prisma.operationPhoto.findUnique({ where: { id: photoId } });
+    if (!photo)
+      throw new ApplicationException(
+        ERROR_CODES.OPERATION_PHOTO_NOT_FOUND,
+        'Operation photo was not found',
+        HttpStatus.NOT_FOUND,
+      );
+    const stored = await this.storage.get(photo.storageKey);
+    return {
+      id: photo.id,
+      caption: photo.caption,
+      mimeType: photo.mimeType,
+      fileSize: photo.fileSize,
+      createdAt: photo.createdAt,
+      contentBase64: stored.content.toString('base64'),
+    };
+  }
+
+  private normalizeChecklist(items?: OperationChecklistItemDto[]): Prisma.InputJsonValue {
+    return (items ?? []).map((item) => ({
+      label: item.label,
+      done: item.done,
+      note: item.note ?? null,
+    }));
+  }
+
+  private decodePhoto(input: OperationPhotoInputDto): DecodedPhoto {
+    const match = /^data:(image\/png|image\/jpeg);base64,(.+)$/.exec(input.dataUrl.trim());
+    if (!match)
+      throw new ApplicationException(
+        ERROR_CODES.OPERATION_PHOTO_INVALID,
+        'Photo must be a PNG or JPEG data URL',
+        HttpStatus.BAD_REQUEST,
+      );
+    const mimeType = match[1];
+    if (!OPERATION_PHOTO_MIME_TYPES.includes(mimeType as never))
+      throw new ApplicationException(
+        ERROR_CODES.OPERATION_PHOTO_INVALID,
+        'Photo MIME type is not allowed',
+        HttpStatus.BAD_REQUEST,
+      );
+    const buffer = Buffer.from(match[2], 'base64');
+    if (buffer.length === 0 || buffer.length > MAX_OPERATION_PHOTO_SIZE_BYTES)
+      throw new ApplicationException(
+        ERROR_CODES.OPERATION_PHOTO_INVALID,
+        'Photo is empty or exceeds the 5 MiB limit',
+        HttpStatus.BAD_REQUEST,
+      );
+    return { buffer, mimeType, ext: mimeType === 'image/png' ? 'png' : 'jpg', caption: input.caption ?? null };
+  }
+
+  private async validateRelations(
+    customerId: string,
+    addressId?: string,
+    equipmentId?: string,
+  ): Promise<void> {
+    const customer = await this.prisma.customer.findUnique({
+      where: { id: customerId },
+      select: { id: true },
+    });
+    if (!customer)
+      throw new ApplicationException(
+        ERROR_CODES.CUSTOMER_NOT_FOUND,
+        'Customer was not found',
+        HttpStatus.NOT_FOUND,
+      );
+    if (addressId) {
+      const address = await this.prisma.customerAddress.findFirst({
+        where: { id: addressId, customerId },
+        select: { id: true },
+      });
+      if (!address)
+        throw new ApplicationException(
+          ERROR_CODES.VALIDATION_ERROR,
+          'Address does not belong to the selected customer',
+          HttpStatus.BAD_REQUEST,
+        );
+    }
+    if (equipmentId) {
+      const equipment = await this.prisma.equipment.findFirst({
+        where: { id: equipmentId, customerId },
+        select: { id: true },
+      });
+      if (!equipment)
+        throw new ApplicationException(
+          ERROR_CODES.VALIDATION_ERROR,
+          'Equipment does not belong to the selected customer',
+          HttpStatus.BAD_REQUEST,
+        );
+    }
+  }
+
+  private async operationOrThrow(
+    id: string,
+  ): Promise<Prisma.OperationGetPayload<{ include: typeof OPERATION_INCLUDE }>> {
+    const operation = await this.prisma.operation.findUnique({
+      where: { id },
+      include: OPERATION_INCLUDE,
+    });
+    if (!operation)
+      throw new ApplicationException(
+        ERROR_CODES.OPERATION_NOT_FOUND,
+        'Operation was not found',
+        HttpStatus.NOT_FOUND,
+      );
+    return operation;
+  }
+
+  private audit(
+    action: string,
+    resource: string,
+    actor: AuthenticatedUser,
+    context: OperationAuditContext,
+    metadata: Record<string, unknown>,
+  ): Prisma.AuditLogUncheckedCreateInput {
+    return {
+      action,
+      resource,
+      actor: actor.id,
+      metadata: {
+        requestId: context.requestId,
+        ip: context.ip,
+        userAgent: context.userAgent,
+        ...metadata,
+      },
+    };
+  }
+}

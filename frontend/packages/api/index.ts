@@ -28,8 +28,10 @@ export * as financialApi from "./financial";
 export * as demoApi from "./demo";
 
 export * as operationsApi from "./operations";
+export * as operationApi from "./operation";
 
 export { isDemoDisabled, DemoUnavailableError } from "./demo";
 export type { DashboardData } from "./dashboard";
 export type { FinancialData, ScheduleData } from "./financial";
 export type { OrdersData, ProductsData, DocumentsData, ServicesData } from "./operations";
+export type { OperationPhotoContent } from "./operation";

@@ -5,7 +5,7 @@ Dois apps no mesmo runtime Next, separados por pathname (`app/app-providers.tsx`
 ## Platform (gestão · desktop-first)
 
 `/login`, `/trocar-senha` (escopo platform) + shell autenticado em `app/(platform)/…`:
-`/`, `/agenda`, `/servicos`, `/ordens`, `/clientes` (+`/[id]`), `/equipamentos` (+`/[id]`), `/produtos`, `/financial`, `/usuarios`, `/profile`, `/settings`, `/reports` (+`/visita`), `/documentos` (**novo** — visibilidade demo de documentos), `/demo-ready` (**novo** — modo apresentação). Sprint 4: Ordens e Produtos passam a consumir o Demo Dataset (`demo.orders.v1`/`demo.products.v1`).
+`/`, `/agenda`, `/operacoes` (**Backlog #004** — domínio operacional real, lista `/operations` + drawer), `/servicos`, `/ordens`, `/clientes` (+`/[id]`), `/equipamentos` (+`/[id]`), `/produtos`, `/financial`, `/usuarios`, `/profile`, `/settings`, `/reports` (+`/visita`), `/documentos` (central — mescla documentos reais de Operations + demo), `/demo-ready` (modo apresentação). Sprint 4: Ordens e Produtos passam a consumir o Demo Dataset (`demo.orders.v1`/`demo.products.v1`).
 
 ## Operator (campo · mobile-first)
 

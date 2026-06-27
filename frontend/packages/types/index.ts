@@ -421,6 +421,80 @@ export type CreateEquipmentPayload = {
   observations?: string | null;
 };
 
+/* ============ Operations (central operational domain) ============ */
+
+export type OperationType = "PREVENTIVA" | "CORRETIVA" | "INSTALACAO" | "PROJETO";
+export type OperationStatus = "DRAFT" | "IN_PROGRESS" | "COMPLETED" | "CANCELED";
+export type OperationDocumentStatus = "DRAFT" | "READY" | "VALIDATED" | "SENT";
+
+export type OperationChecklistItem = { label: string; done: boolean; note?: string | null };
+
+export type OperationDocument = {
+  id: string;
+  type: DocumentTemplateType;
+  number: string;
+  status: OperationDocumentStatus;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type OperationPhoto = {
+  id: string;
+  caption: string | null;
+  mimeType: string;
+  fileSize: number;
+  createdAt: string;
+};
+
+export type OperationSummary = {
+  id: string;
+  number: number;
+  type: OperationType;
+  status: OperationStatus;
+  customer: { id: string; name: string } | null;
+  equipment: { id: string; name: string } | null;
+  operator: { id: string; name: string } | null;
+  scheduledFor: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  documents: OperationDocument[];
+  _count?: { photos: number; documents: number };
+};
+
+export type OperationDetail = Omit<OperationSummary, "equipment"> & {
+  address: CustomerAddress | null;
+  equipment: { id: string; name: string; tag: string | null; type: EquipmentType } | null;
+  checklist: OperationChecklistItem[];
+  observations: string | null;
+  signatureData: string | null;
+  signedAt: string | null;
+  photos: OperationPhoto[];
+  documents: OperationDocument[];
+};
+
+export type OperationStats = {
+  total: number;
+  byStatus: Record<OperationStatus, number>;
+};
+
+export type CreateOperationPayload = {
+  customerId: string;
+  addressId?: string | null;
+  equipmentId?: string | null;
+  type: OperationType;
+  status?: OperationStatus;
+  scheduledFor?: string | null;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  checklist?: OperationChecklistItem[];
+  observations?: string | null;
+  signatureData?: string | null;
+  signedAt?: string | null;
+  photos?: { dataUrl: string; caption?: string | null }[];
+};
+
 /* ============ Demo bridge (dashboard / schedule / finance) ============ */
 
 export type DemoScheduleState = "OVERDUE" | "IN_PROGRESS" | "SCHEDULED" | "DONE";

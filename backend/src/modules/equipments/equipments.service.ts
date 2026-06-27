@@ -114,8 +114,20 @@ export class EquipmentsService {
         HttpStatus.BAD_REQUEST,
       );
     }
+    // The QR encodes `qrCode` (`equipment:<qrToken>`). `qrCode` is a VarChar and
+    // accepts any string, but `qrToken` is a UUID column: passing a non-UUID
+    // (e.g. the full `equipment:<uuid>` value) makes Prisma fail while casting.
+    // So only match `qrToken` when we have a bare UUID candidate.
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const tokenCandidate = value.startsWith('equipment:')
+      ? value.slice('equipment:'.length)
+      : value;
+    const or: Prisma.EquipmentWhereInput[] = [{ qrCode: value }];
+    if (UUID_RE.test(tokenCandidate)) {
+      or.push({ qrToken: tokenCandidate });
+    }
     const equipment = await this.prisma.equipment.findFirst({
-      where: { OR: [{ qrCode: value }, { qrToken: value }] },
+      where: { OR: or },
       include: EQUIPMENT_INCLUDE,
     });
     if (!equipment) {

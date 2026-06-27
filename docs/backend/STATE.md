@@ -382,3 +382,10 @@ Verificações específicas:
 ## Backlog #003 — Relatórios, Documentos e Templates
 
 - `DocumentTemplate.isActive` (migration `20260627120000_template_is_active`) — ativar/desativar modelos; DTO/serviço/contratos atualizados. Sem novos Demo Datasets (usa `demo.documents.v1`).
+
+## Backlog #004 — Operações (OS + Formulários Base)
+
+- Novo domínio **Operation** (real, Prisma): `Operation`, `OperationPhoto`, `OperationDocument` + enums `OperationType`/`OperationStatus`/`OperationDocumentStatus`. Migration `20260627150000_operation_domain_foundation`.
+- Módulo `operations` (controller/service/dto): `GET /operations` (filtros), `/stats`, `/:id`, `/photos/:id` (base64), `POST /operations` (cria + **OS rascunho** automática `WORK_ORDER/DRAFT`, número `OS-000001` derivado do sequencial), `PATCH /:id`. Operador = usuário autenticado; fotos via storage provider (data URL, PNG/JPEG, 16 × 5 MiB); assinatura como texto.
+- Toda OS nasce de uma Operation; `OperationDocument` reusa `DocumentTemplateType` (fundação única para OS/PMOC/Laudo/Relatório/Visita/Orçamento/Recibo). Histórico de equipamento/cliente derivado de `/operations` (sem duplicação). PDF é escopo futuro.
+- Validado com `prisma generate` + `tsc --noEmit` (sem banco neste ambiente; migration roda no deploy).

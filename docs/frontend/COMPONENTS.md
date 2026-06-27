@@ -87,3 +87,19 @@ Biblioteca de QR: `@zxing/browser` + `@zxing/library` (`BrowserQRCodeReader`, so
 | `TemplateFormDrawer` | `@platform/components/template-form-drawer` | criar/editar modelo |
 
 Páginas: `/reports` = Gestão de Modelos; `/documentos` = Central Documental (filtros cumulativos + preview + download).
+
+## Backlog #004 — Operações
+
+| Item | Local | Uso |
+|---|---|---|
+| `OperationView` | `@erp/ui/operations/operation-view` | renderiza uma Operation pelas seções (Renderers) |
+| `buildOperationSections` | `@erp/ui/operations/operation-sections` | modelo de seções (fundação reutilizável dos documentos) |
+| `OPERATION_*` / `operationsToTimeline` | `@erp/ui/operations/operation-shared` | labels/tones + mapeamento para Timeline |
+| `OperationDetailDrawer` | `@platform/components/operation-detail-drawer` | drawer: Timeline + Checklist + Fotos + Observações + Assinatura + Documentos |
+| `operationApi` | `@erp/api/operation` | domínio real `/operations` (≠ `operationsApi` demo) |
+
+Arquitetura: **OperationForm → Sections → Renderers** — um único modelo de seções
+reutilizado por OS/PMOC/Laudo/Relatório/Visita/Orçamento/Recibo (sem forms
+duplicados). Páginas: `/operacoes` (Platform). Operator: o Wizard cria uma
+Operation real e a OS rascunho. Histórico (Timeline) em Equipamento/Cliente vem de
+`/operations`.
