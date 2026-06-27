@@ -52,3 +52,9 @@ Domínios reais (Agenda, Serviços, Ordem de Serviço, Documentos) substituindo 
 - Botão "Escanear QR Code" no fluxo Novo Atendimento → Buscar Equipamento: lê o QR → `GET /equipments/lookup/:qrCode` → card do equipamento (nome, cliente, endereço, patrimônio, série, status, foto) → confirma → **pré-seleciona no wizard e avança** (sem nova busca).
 - `/operator/qr` passou a usar o scanner real + `lookupByQr` (sem simulação).
 - API: `equipmentsApi.lookupByQr(qrCode)`; backend `GET /equipments/lookup/:qrCode`.
+
+## Backlog #003 — Relatórios, Documentos e Templates
+
+- **Relatórios** (`/reports`) virou **Gestão de Modelos**: 7 modelos profissionais (OS, Relatório Técnico, Visita Técnica, PMOC, Laudo, Orçamento, Recibo) com identidade compartilhada (`@erp/ui/documents/document-paper` + `model-blueprints`). Ações por modelo: pré-visualizar, editar, ativar/desativar (`isActive`), definir padrão, importar (upload), versão (updatedAt) — consumindo `/organization/templates`.
+- **Documentos** (`/documentos`) virou **Central Documental**: lista documentos emitidos (`demo.documents.v1`) com filtros **cumulativos** (cliente, equipamento, operador, tipo, status, período), preview profissional (`DocumentPaper`) e download estruturado (JSON) + export CSV.
+- Backend: `DocumentTemplate.isActive` (migration + DTO + serviço). Sem novos Demo Datasets.

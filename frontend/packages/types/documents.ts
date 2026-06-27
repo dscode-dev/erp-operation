@@ -19,8 +19,8 @@ export const DOCUMENT_KIND_LABEL: Record<DocumentKind, string> = {
   QUOTE: "Orçamento",
   WORK_ORDER: "Ordem de Serviço",
   RECEIPT: "Recibo",
-  REPORT: "Relatório",
-  TECHNICAL_REPORT: "Laudo Técnico",
+  REPORT: "Laudo Técnico",
+  TECHNICAL_REPORT: "Relatório de Visita Técnica",
   PMOC: "PMOC",
 };
 

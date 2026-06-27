@@ -33,6 +33,10 @@ export class CreateDocumentTemplateDto {
   @IsOptional()
   @IsBoolean()
   isDefault?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }
 
 export class UpdateDocumentTemplateDto {
@@ -67,4 +71,8 @@ export class UpdateDocumentTemplateDto {
   @IsOptional()
   @IsBoolean()
   isDefault?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }

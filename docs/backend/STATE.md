@@ -378,3 +378,7 @@ Verificações específicas:
 
 - Novo endpoint `GET /equipments/lookup/:qrCode` (service `lookupByQrCode`) — aceita `qrCode`/`qrToken`, retorna o equipamento completo, 404 quando inexistente, 400 para QR vazio. Formato do QR inalterado.
 - Documentado em API_CONTRACTS / FRONTEND_INTEGRATION / OPUS_INTEGRATION.
+
+## Backlog #003 — Relatórios, Documentos e Templates
+
+- `DocumentTemplate.isActive` (migration `20260627120000_template_is_active`) — ativar/desativar modelos; DTO/serviço/contratos atualizados. Sem novos Demo Datasets (usa `demo.documents.v1`).

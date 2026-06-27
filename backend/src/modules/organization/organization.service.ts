@@ -71,6 +71,7 @@ const TEMPLATE_SELECT = {
   observations: true,
   isDefault: true,
   isSystem: true,
+  isActive: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.DocumentTemplateSelect;
@@ -210,6 +211,7 @@ export class OrganizationService {
           footerContent: dto.footerContent,
           observations: dto.observations,
           isDefault: dto.isDefault ?? false,
+          isActive: dto.isActive ?? true,
           isSystem: false,
         },
         select: TEMPLATE_SELECT,

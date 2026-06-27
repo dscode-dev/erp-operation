@@ -106,6 +106,7 @@ export type DocumentTemplate = {
   observations: string;
   isDefault: boolean;
   isSystem: boolean;
+  isActive: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -730,3 +731,10 @@ wizard (mostrando nome, cliente, endereço, patrimônio, série, status e foto)
 e o fluxo avança sem nova busca. A página `/operator/qr` usa o mesmo scanner +
 lookup. Tratamentos: permissão negada, câmera indisponível, QR inválido (400),
 equipamento inexistente (404). O formato do QR não muda.
+
+## Relatórios (modelos) × Documentos (central)
+
+Responsabilidades separadas:
+
+- **Relatórios** (`/reports`): gestão de **modelos** de documento. Consome `GET /organization/templates`; OWNER cria/edita/exclui (`POST/PATCH/DELETE /organization/templates/:id`), define padrão (`isDefault`), ativa/desativa (`isActive`) e importa modelo do cliente (`POST /organization/assets`). Modelos profissionais (OS, Relatório Técnico, Visita Técnica, PMOC, Laudo, Orçamento, Recibo) compartilham identidade/cabeçalho/rodapé/tipografia e são pré-visualizados no `DocumentPaper` (preparado para a renderização dinâmica do backend).
+- **Documentos** (`/documentos`): **central** de documentos emitidos. Lista o snapshot `demo.documents.v1` com filtros cumulativos (cliente, equipamento, operador, tipo, status, período), preview estruturado (`DocumentPaper`) e download da estrutura. A geração de PDF permanece no backend.

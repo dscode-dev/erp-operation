@@ -362,3 +362,9 @@ identificador do QR (aceita `qrCode` ou `qrToken`) e retorna o mesmo payload de
 `GET /equipments/:id`. O frontend lê o QR pela câmera (PWA, `@zxing/browser`) e
 seleciona o equipamento automaticamente no wizard de atendimento. Erros:
 `VALIDATION_ERROR` (400) e `EQUIPMENT_NOT_FOUND` (404).
+
+## Templates: ativar/desativar
+
+`DocumentTemplate` ganhou `isActive` (default `true`). `POST/PATCH /organization/templates`
+aceitam `isActive`; o frontend usa para ativar/desativar modelos na tela de Relatórios (Modelos).
+Migration: `20260627120000_template_is_active`.

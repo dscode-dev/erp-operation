@@ -191,6 +191,7 @@ export type DocumentTemplate = {
   observations: string;
   isDefault: boolean;
   isSystem: boolean;
+  isActive: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -242,6 +243,7 @@ export type CreateDocumentTemplatePayload = {
   footerContent: string;
   observations: string;
   isDefault?: boolean;
+  isActive?: boolean;
 };
 
 export type UpdateDocumentTemplatePayload = Partial<CreateDocumentTemplatePayload>;

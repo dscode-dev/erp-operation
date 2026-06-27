@@ -77,3 +77,13 @@ Telas: `/reports` (central documental), `/servicos` (histórico timeline), `/ope
 | `equipmentsApi.lookupByQr` | `@erp/api` | resolve equipamento por `GET /equipments/lookup/:qrCode` |
 
 Biblioteca de QR: `@zxing/browser` + `@zxing/library` (`BrowserQRCodeReader`, somente QR).
+
+## Backlog #003 — Modelos & Documentos
+
+| Item | Local | Uso |
+|---|---|---|
+| `DocumentPaper` | `@erp/ui/documents/document-paper` | renderização profissional A4 (identidade compartilhada) |
+| `MODEL_BLUEPRINTS` / `buildDocument` | `@erp/ui/documents/model-blueprints` | 7 modelos + montagem do documento |
+| `TemplateFormDrawer` | `@platform/components/template-form-drawer` | criar/editar modelo |
+
+Páginas: `/reports` = Gestão de Modelos; `/documentos` = Central Documental (filtros cumulativos + preview + download).

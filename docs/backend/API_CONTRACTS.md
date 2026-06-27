@@ -314,6 +314,7 @@ Response 200:
       "observations": "",
       "isDefault": true,
       "isSystem": true,
+      "isActive": true,
       "createdAt": "2026-06-23T17:45:00.000Z",
       "updatedAt": "2026-06-23T17:45:00.000Z"
     }
@@ -334,11 +335,13 @@ Request:
   "headerContent": "<p>Conteúdo livre controlado pelo frontend</p>",
   "footerContent": "",
   "observations": "",
-  "isDefault": false
+  "isDefault": false,
+  "isActive": true
 }
 ```
 
-Response 201: objeto `DocumentTemplate` criado.
+Response 201: objeto `DocumentTemplate` criado. `isActive` é opcional (default `true`)
+e habilita o controle de ativar/desativar modelos.
 
 ### PATCH `/api/v1/organization/templates/:id`
 
@@ -350,11 +353,12 @@ Request: todos os campos são opcionais.
 {
   "name": "Orçamento padrão atualizado",
   "observations": "Validade de 7 dias",
-  "isDefault": true
+  "isDefault": true,
+  "isActive": false
 }
 ```
 
-Response 200: objeto `DocumentTemplate` atualizado.
+Response 200: objeto `DocumentTemplate` atualizado. `isActive` controla ativar/desativar o modelo.
 
 ### DELETE `/api/v1/organization/templates/:id`
 
