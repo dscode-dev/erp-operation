@@ -1,7 +1,7 @@
 "use client";
 
-import { Suspense, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Plus, Search, Wrench } from "lucide-react";
 import { PageHeader } from "@platform/components/page-header";
 import { DataTable, type Column } from "@platform/components/data-table";
@@ -15,7 +15,7 @@ import { ErrorState } from "@erp/ui/states";
 import { Gate } from "@erp/ui/auth/gate";
 import { EquipmentDetailDrawer } from "@platform/components/equipment-detail-drawer";
 import { EquipmentFormDrawer } from "@platform/components/equipment-form-drawer";
-import { equipmentsApi, useQuery, type EquipmentSummary, type EquipmentStatus, type EquipmentType } from "@erp/api";
+import { customersApi, equipmentsApi, useQuery, type EquipmentSummary, type EquipmentStatus, type EquipmentType } from "@erp/api";
 import { useDebounce } from "@erp/utils";
 import { cn } from "@erp/utils";
 import {
@@ -26,16 +26,23 @@ import {
 } from "@platform/equipment-display";
 
 function EquipamentosInner() {
+  const router = useRouter();
   const params = useSearchParams();
-  const customerId = params.get("customerId") ?? undefined;
+  const customerIdFromUrl = params.get("customerId") ?? "";
 
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<EquipmentStatus | "">("");
   const [type] = useState<EquipmentType | "">("");
+  const [customerId, setCustomerId] = useState(customerIdFromUrl);
   const [page, setPage] = useState(1);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const debounced = useDebounce(search, 300);
+
+  useEffect(() => {
+    setCustomerId(customerIdFromUrl);
+    setPage(1);
+  }, [customerIdFromUrl]);
 
   const list = useQuery(
     (signal) =>
@@ -45,12 +52,13 @@ function EquipamentosInner() {
         search: debounced || undefined,
         status: status || undefined,
         type: type || undefined,
-        customerId,
+        customerId: customerId || undefined,
         signal,
       }),
     [page, debounced, status, type, customerId],
   );
   const stats = useQuery((signal) => equipmentsApi.getEquipmentStats({ signal }), []);
+  const customers = useQuery((signal) => customersApi.listCustomers({ page: 1, limit: 100, signal }), []);
 
   const columns = useMemo<Column<EquipmentSummary>[]>(
     () => [
@@ -73,6 +81,16 @@ function EquipamentosInner() {
   );
 
   const s = stats.data;
+
+  function changeCustomer(nextCustomerId: string) {
+    setCustomerId(nextCustomerId);
+    setPage(1);
+    const query = new URLSearchParams(params.toString());
+    if (nextCustomerId) query.set("customerId", nextCustomerId);
+    else query.delete("customerId");
+    const qs = query.toString();
+    router.replace(qs ? `/equipamentos?${qs}` : "/equipamentos", { scroll: false });
+  }
 
   return (
     <div className="space-y-6 max-w-[1400px]">
@@ -129,6 +147,20 @@ function EquipamentosInner() {
             className="flex-1 bg-transparent outline-none text-sm placeholder:text-[var(--color-muted-foreground)]"
           />
         </div>
+        <select
+          value={customerId}
+          onChange={(e) => changeCustomer(e.target.value)}
+          className="h-9 w-full sm:w-[260px] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm outline-none focus:border-[var(--color-primary)]"
+          aria-label="Filtrar por cliente"
+          disabled={customers.loading && !customers.data}
+        >
+          <option value="">Todos os clientes</option>
+          {(customers.data?.items ?? []).map((customer) => (
+            <option key={customer.id} value={customer.id}>
+              {customer.tradeName || customer.name}
+            </option>
+          ))}
+        </select>
         <div className="flex items-center gap-1 overflow-x-auto">
           <FilterChip active={status === ""} onClick={() => { setStatus(""); setPage(1); }}>Todos</FilterChip>
           {EQUIPMENT_STATUSES.map((st) => (
@@ -162,7 +194,7 @@ function EquipamentosInner() {
         open={formOpen}
         onClose={() => setFormOpen(false)}
         onSaved={() => { list.refetch(); stats.refetch(); }}
-        presetCustomerId={customerId}
+        presetCustomerId={customerId || undefined}
       />
     </div>
   );

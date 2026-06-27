@@ -5,8 +5,8 @@
  * fluxo (OS, Relatório, PMOC, Recibo, Orçamento). O operador NUNCA edita
  * documentos finalizados; a geração é do backend. Consome o Demo Dataset.
  */
-import { useState } from "react";
-import { FileText } from "lucide-react";
+import { Suspense, useMemo, useState } from "react";
+import { Building2, FileText } from "lucide-react";
 import { Drawer } from "@erp/ui/drawer";
 import { StatusChip, type ChipTone } from "@erp/ui/status-chip";
 import { SkeletonList } from "@erp/ui/skeletons";
@@ -17,6 +17,8 @@ import { operationsApi, useQuery, type DemoDocument, type DemoDocumentStatus, ty
 import type { GeneratedDocument, DocumentStatus } from "@erp/types";
 import { DOCUMENT_KIND_LABEL } from "@erp/types";
 import { formatDate } from "@erp/utils";
+import { CustomerPicker } from "@operator/components/customer-picker";
+import { useSelectedCustomer } from "@operator/lib/selected-customer";
 
 const STATUS: Record<DemoDocumentStatus, { tone: ChipTone; label: string }> = {
   DRAFT: { tone: "neutral", label: "Rascunho" },
@@ -25,28 +27,40 @@ const STATUS: Record<DemoDocumentStatus, { tone: ChipTone; label: string }> = {
   SENT: { tone: "primary", label: "Enviado" },
 };
 
-export default function OperatorDocuments() {
+function OperatorDocumentsInner() {
+  const [customer, setCustomer] = useSelectedCustomer();
   const [detail, setDetail] = useState<DemoDocument | null>(null);
   const docs = useQuery<DocumentsData>((s) => operationsApi.getDocuments({ signal: s }), []);
+
+  const items = useMemo(
+    () => (customer ? (docs.data?.items ?? []).filter((d) => d.customer === customer.name) : []),
+    [docs.data, customer],
+  );
 
   return (
     <div className="px-4 pt-4 pb-24 space-y-4">
       <header>
         <h1 className="text-[22px] font-semibold tracking-tight">Documentos</h1>
-        <p className="text-caption">Seus documentos recentes (somente leitura).</p>
+        <p className="text-caption">Documentos por cliente (somente leitura).</p>
       </header>
 
-      {docs.loading && !docs.data ? (
+      <div className="sticky top-12 z-10 -mx-4 px-4 py-2 bg-[var(--color-background)]/95 backdrop-blur">
+        <CustomerPicker selected={customer} onSelect={setCustomer} />
+      </div>
+
+      {!customer ? (
+        <EmptyState icon={Building2} title="Selecione um cliente" description="Escolha um cliente para ver os documentos." />
+      ) : docs.loading && !docs.data ? (
         <SkeletonList rows={6} />
       ) : docs.error && !docs.data ? (
         <ErrorState error={docs.error} onRetry={docs.refetch} />
       ) : docs.data?.disabled ? (
         <ComingSoonState title="Sem documentos" description="Ative o Demo Dataset para visualizar documentos." />
-      ) : (docs.data?.items.length ?? 0) === 0 ? (
-        <EmptyState icon={FileText} title="Nenhum documento" />
+      ) : items.length === 0 ? (
+        <EmptyState icon={FileText} title="Nenhum documento" description="Este cliente não possui documentos." />
       ) : (
         <ul className="space-y-2">
-          {(docs.data?.items ?? []).map((d) => (
+          {items.map((d) => (
             <li key={d.id}>
               <button type="button" onClick={() => setDetail(d)} className="w-full text-left flex items-center gap-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-3.5 active:scale-[0.99] transition-transform">
                 <span className="h-10 w-10 rounded-[var(--radius-md)] bg-[var(--color-muted)] grid place-items-center text-[var(--color-muted-foreground)] shrink-0"><FileText className="h-5 w-5" /></span>
@@ -82,4 +96,12 @@ export default function OperatorDocuments() {
 function toGeneratedDoc(d: DemoDocument): GeneratedDocument {
   const status: DocumentStatus = d.status === "DRAFT" ? "draft" : "ready";
   return { id: d.id, kind: d.kind, title: `${d.number} · ${DOCUMENT_KIND_LABEL[d.kind]}`, status };
+}
+
+export default function OperatorDocumentsPage() {
+  return (
+    <Suspense fallback={null}>
+      <OperatorDocumentsInner />
+    </Suspense>
+  );
 }

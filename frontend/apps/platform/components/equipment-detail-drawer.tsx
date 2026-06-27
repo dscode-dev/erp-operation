@@ -67,18 +67,21 @@ export function EquipmentDetailDrawer({
           />
 
           {tab === "Visão geral" && (
-            <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
-              <Row label="Cliente" value={e.customer?.name} />
-              <Row label="Local" value={e.address?.name ?? e.address?.city} />
-              <Row label="Tag" value={e.tag} />
-              <Row label="Fabricante" value={e.manufacturer} />
-              <Row label="Modelo" value={e.model} />
-              <Row label="Nº de série" value={e.serialNumber} />
-              <Row label="Capacidade" value={e.capacity} />
-              <Row label="Tensão" value={e.voltage} />
-              <Row label="Instalação" value={formatDate(e.installationDate)} />
-              <Row label="Garantia até" value={formatDate(e.warrantyExpiration)} />
-              {e.observations && <Row label="Observações" value={e.observations} />}
+            <div className="space-y-3">
+              <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
+                <Row label="Cliente" value={e.customer?.name} />
+                <Row label="Local" value={e.address?.name ?? e.address?.city} />
+                <Row label="Tag" value={e.tag} />
+                <Row label="Fabricante" value={e.manufacturer} />
+                <Row label="Modelo" value={e.model} />
+                <Row label="Nº de série" value={e.serialNumber} />
+                <Row label="Capacidade" value={e.capacity} />
+                <Row label="Tensão" value={e.voltage} />
+                <Row label="Instalação" value={formatDate(e.installationDate)} />
+                <Row label="Garantia até" value={formatDate(e.warrantyExpiration)} />
+                {e.observations && <Row label="Observações" value={e.observations} />}
+              </div>
+              <QrFoundation qrCode={e.qrCode} qrToken={e.qrToken} />
             </div>
           )}
 
