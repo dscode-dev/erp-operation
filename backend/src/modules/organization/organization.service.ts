@@ -1,5 +1,5 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import { BrandAssetType, Prisma, type DocumentTemplateType } from '@prisma/client';
+import { BrandAssetType, Prisma, SignatureMode, type DocumentTemplateType } from '@prisma/client';
 import { extname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../database/prisma.service';
@@ -72,6 +72,9 @@ const TEMPLATE_SELECT = {
   isDefault: true,
   isSystem: true,
   isActive: true,
+  requiresSignature: true,
+  signatureMode: true,
+  signatureId: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.DocumentTemplateSelect;
@@ -202,6 +205,11 @@ export class OrganizationService {
           data: { isDefault: false },
         });
       }
+      const signatureConfig = await this.resolveSignatureConfig({
+        requiresSignature: dto.requiresSignature,
+        signatureMode: dto.signatureMode,
+        signatureId: dto.signatureId,
+      });
       const created = await transaction.documentTemplate.create({
         data: {
           organizationId: organization.id,
@@ -212,6 +220,7 @@ export class OrganizationService {
           observations: dto.observations,
           isDefault: dto.isDefault ?? false,
           isActive: dto.isActive ?? true,
+          ...signatureConfig,
           isSystem: false,
         },
         select: TEMPLATE_SELECT,
@@ -245,9 +254,17 @@ export class OrganizationService {
           data: { isDefault: false },
         });
       }
+      const signatureConfig = await this.resolveSignatureConfig({
+        requiresSignature: dto.requiresSignature ?? existing.requiresSignature,
+        signatureMode: dto.signatureMode ?? existing.signatureMode,
+        signatureId: dto.signatureId !== undefined ? dto.signatureId : existing.signatureId,
+      });
       const updated = await transaction.documentTemplate.update({
         where: { id },
-        data: dto,
+        data: {
+          ...dto,
+          ...signatureConfig,
+        },
         select: TEMPLATE_SELECT,
       });
       await transaction.auditLog.create({
@@ -406,6 +423,70 @@ export class OrganizationService {
       );
     }
     return template;
+  }
+
+  private async resolveSignatureConfig(input: {
+    requiresSignature?: boolean;
+    signatureMode?: SignatureMode;
+    signatureId?: string | null;
+  }): Promise<{
+    requiresSignature: boolean;
+    signatureMode: SignatureMode;
+    signatureId: string | null;
+  }> {
+    const mode = input.signatureMode ?? SignatureMode.NONE;
+    const requiresSignature = input.requiresSignature ?? mode !== SignatureMode.NONE;
+    const signatureId = input.signatureId ?? null;
+
+    if (mode === SignatureMode.NONE) {
+      if (requiresSignature || signatureId) {
+        throw new ApplicationException(
+          ERROR_CODES.VALIDATION_ERROR,
+          'Signature mode NONE cannot require or reference a signature',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      return { requiresSignature: false, signatureMode: mode, signatureId: null };
+    }
+
+    if (!requiresSignature) {
+      throw new ApplicationException(
+        ERROR_CODES.VALIDATION_ERROR,
+        'Signature configuration requires requiresSignature=true',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    if (mode === SignatureMode.FIXED || mode === SignatureMode.HYBRID) {
+      if (!signatureId) {
+        throw new ApplicationException(
+          ERROR_CODES.VALIDATION_ERROR,
+          'FIXED and HYBRID signature modes require signatureId',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      const signature = await this.prisma.signature.findUnique({
+        where: { id: signatureId },
+        select: { id: true, active: true },
+      });
+      if (!signature) {
+        throw new ApplicationException(
+          ERROR_CODES.SIGNATURE_NOT_FOUND,
+          'Signature was not found',
+          HttpStatus.NOT_FOUND,
+        );
+      }
+      if (!signature.active) {
+        throw new ApplicationException(
+          ERROR_CODES.SIGNATURE_INACTIVE,
+          'Inactive signatures cannot be assigned to templates',
+          HttpStatus.CONFLICT,
+        );
+      }
+      return { requiresSignature: true, signatureMode: mode, signatureId };
+    }
+
+    return { requiresSignature: true, signatureMode: mode, signatureId: null };
   }
 
   private async getAssetOrThrow(organizationId: string, id: string): Promise<AssetResponse> {

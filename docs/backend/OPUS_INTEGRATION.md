@@ -347,7 +347,7 @@ Categories: PHOTO, MANUAL, WARRANTY, DOCUMENT. Upload multipart; read base64; OW
 ### QR foundation
 
 Display or generate a visual QR from `qrCode`. Store no QR image. `qrToken` and `qrCode` are stable
-identifiers, not access credentials. A scan-resolution endpoint is future scope.
+identifiers, not access credentials. Use `GET /equipments/lookup/:qrCode` to resolve scans.
 
 ### Demo
 
@@ -381,5 +381,145 @@ Endpoints: `GET /operations` (lista/filtros `customerId,equipmentId,operatorId,t
 (base64), `POST /operations` (cria + OS rascunho; operador = usuário autenticado),
 `PATCH /operations/:id`. Fotos como data URL (PNG/JPEG, máx. 16 × 5 MiB);
 assinatura como data URL (texto). O histórico de equipamento/cliente é derivado de
-`/operations` por `equipmentId`/`customerId`. PDF é escopo futuro. Migration:
+`/operations` por `equipmentId`/`customerId`. Migration:
 `20260627150000_operation_domain_foundation`.
+
+## Document Engine (Sprint 6)
+
+O backend agora possui preview estruturado e render/download PDF oficial. Remover previews mocks
+para documentos oficiais conforme as telas forem conectadas.
+
+Endpoints:
+
+```http
+GET  /documents/operations/:operationId/:type/preview
+POST /documents/operations/:operationId/:type/render
+GET  /documents/:documentId/preview
+POST /documents/:documentId/render
+GET  /documents/:documentId/download
+```
+
+Tipos:
+
+- `WORK_ORDER`
+- `REPORT`
+- `TECHNICAL_REPORT`
+- `PMOC`
+- `QUOTE` (somente OWNER)
+- `RECEIPT` (somente OWNER)
+
+Fluxo UX sugerido:
+
+1. Na lista de documentos, usar `GET /operations` e os `documents[]` reais.
+2. Ao abrir o preview, chamar `GET /documents/:documentId/preview`.
+3. Se o usuário clicar "Gerar PDF", chamar `POST /documents/:documentId/render`.
+4. Se `downloadReady=true`, chamar `GET /documents/:documentId/download`.
+5. Converter `contentBase64` para `Blob` com `mimeType=application/pdf`.
+
+Estados:
+
+- `DRAFT`: mostrar "Gerar PDF";
+- `READY`: mostrar "Baixar PDF" e permitir "Gerar novamente";
+- `DOCUMENT_DOWNLOAD_NOT_READY`: ainda não renderizado;
+- `DOCUMENT_FORBIDDEN_TYPE`: esconder Orçamento/Recibo para MANAGER/OPERATOR/VIEWER;
+- `DOCUMENT_SIZE_LIMIT_EXCEEDED`: o documento ficou grande demais;
+- `DOCUMENT_RENDER_FAILED`: mostrar retry e incluir `X-Request-Id` no suporte.
+
+Blueprint:
+
+O preview retorna `sections[]` com componentes reutilizáveis (`metadata`, `paragraph`, `table`,
+`list`, `image`, `qrCode`, `checklist`, `signaturePlaceholder`, `observation`). O frontend pode
+renderizar esses componentes em tela, mas o PDF oficial sempre vem do backend.
+
+Observações de UX:
+
+- fotos ainda aparecem como componentes/metadados seguros no PDF; embed binário inline não é parte
+  da Sprint 6;
+- assinatura é placeholder arquitetural (`none`, `fixed`, `collected`, `hybrid`), sem CRUD;
+- QR Code do equipamento aparece como componente lógico e não autentica acesso.
+
+Próximos endpoints previstos:
+
+- versionamento de documentos;
+- uso efetivo da configuração de assinatura no Builder;
+- envio por e-mail/WhatsApp;
+- editor visual de templates.
+
+## Document Configuration & Signatures (Sprint 7)
+
+A Sprint 7 é backend-only e prepara o domínio de assinatura/configuração. Não altera o render PDF
+oficial ainda. O frontend pode remover mocks de configuração de assinatura e consumir estes dados
+reais.
+
+Enums:
+
+```ts
+type SignatureMode = 'NONE' | 'FIXED' | 'COLLECTED' | 'HYBRID';
+type DocumentTemplateType =
+  | 'QUOTE'
+  | 'WORK_ORDER'
+  | 'RECEIPT'
+  | 'REPORT'
+  | 'TECHNICAL_REPORT'
+  | 'PMOC';
+```
+
+Campos novos em `DocumentTemplate`:
+
+```ts
+{
+  requiresSignature: boolean;
+  signatureMode: SignatureMode;
+  signatureId: string | null;
+}
+```
+
+Estados de assinatura por template:
+
+- `NONE`: sem assinatura;
+- `FIXED`: seleciona assinatura cadastrada;
+- `COLLECTED`: assinatura será coletada em fluxo futuro;
+- `HYBRID`: aceita assinatura cadastrada e futura coleta.
+
+Endpoints disponíveis:
+
+```http
+GET /documents/configuration
+GET /documents/configuration/types/:type
+GET /documents/configuration/templates/:templateId
+
+GET    /signatures?page=1&limit=20&search=&active=true
+GET    /signatures/:id
+POST   /signatures
+PATCH  /signatures/:id
+DELETE /signatures/:id
+POST   /signatures/:id/upload
+GET    /signatures/:id/download
+```
+
+Paginação de assinaturas:
+
+```ts
+{
+  items: Signature[];
+  pagination: { page: number; limit: number; total: number; totalPages: number };
+}
+```
+
+UX sugerida:
+
+- Em Configurações → Documentos, carregar `GET /documents/configuration`.
+- Para escolher assinatura fixa/híbrida, listar `GET /signatures?active=true`.
+- Mostrar upload apenas para OWNER.
+- Para preview de imagem, chamar `GET /signatures/:id/download` e montar `Blob` a partir de
+  `contentBase64`.
+- Ocultar toda a área para OPERATOR.
+
+Mocks que podem ser removidos:
+
+- lista local de assinaturas;
+- estados locais de assinatura por template;
+- imagem de assinatura fixa mockada.
+
+Observação importante: o Builder ainda não usa a assinatura cadastrada no PDF. Esta sprint apenas
+persiste e expõe a configuração; a utilização no documento será etapa posterior.

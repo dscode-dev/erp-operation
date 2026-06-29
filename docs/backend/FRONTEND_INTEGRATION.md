@@ -68,6 +68,8 @@ export type DocumentTemplateType =
   | 'TECHNICAL_REPORT'
   | 'PMOC';
 
+export type SignatureMode = 'NONE' | 'FIXED' | 'COLLECTED' | 'HYBRID';
+
 export type Organization = {
   id: string;
   legalName: string;
@@ -107,6 +109,22 @@ export type DocumentTemplate = {
   isDefault: boolean;
   isSystem: boolean;
   isActive: boolean;
+  requiresSignature: boolean;
+  signatureMode: SignatureMode;
+  signatureId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type Signature = {
+  id: string;
+  name: string;
+  title: string;
+  imageStorageKey: string | null;
+  mimeType: string | null;
+  originalFileName: string | null;
+  fileSize: number | null;
+  active: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -204,6 +222,10 @@ type CreateDocumentTemplatePayload = {
   footerContent: string;
   observations: string;
   isDefault?: boolean;
+  isActive?: boolean;
+  requiresSignature?: boolean;
+  signatureMode?: SignatureMode;
+  signatureId?: string | null;
 };
 ```
 
@@ -221,9 +243,62 @@ DELETE /organization/templates/:id
 
 Se `isDefault=true`, o backend remove o default anterior do mesmo `type`.
 
+Assinatura por template:
+
+- `signatureMode='NONE'`: sem assinatura; envie `requiresSignature=false` e `signatureId=null`;
+- `FIXED`: usa uma assinatura cadastrada; exige `signatureId`;
+- `COLLECTED`: indica assinatura coletada no futuro; não usa `signatureId`;
+- `HYBRID`: aceita assinatura cadastrada e futura coleta; exige `signatureId`.
+
 Conteúdo de `headerContent`, `footerContent` e `observations` é texto livre controlado pelo
 frontend. Se o frontend permitir HTML, sanitize no cliente antes de renderizar. O backend apenas
 valida tamanho e tipo.
+
+## Document configuration and signatures
+
+Sprint 7 adiciona configuração documental. Não há mudança no fluxo de render/download ainda; o
+builder continuará usando o placeholder de assinatura até sprint posterior.
+
+Endpoints para tela de configuração:
+
+```http
+GET /documents/configuration
+GET /documents/configuration/types/:type
+GET /documents/configuration/templates/:templateId
+```
+
+Use esses endpoints para exibir organização, settings, template default, templates ativos e a
+assinatura associada. `OPERATOR` recebe 403.
+
+CRUD de assinaturas:
+
+```http
+GET    /signatures?page=1&limit=20&search=&active=true
+GET    /signatures/:id
+POST   /signatures
+PATCH  /signatures/:id
+DELETE /signatures/:id
+POST   /signatures/:id/upload
+GET    /signatures/:id/download
+```
+
+Permissões de UX:
+
+- `OWNER`: mostrar criação/edição/upload/exclusão;
+- `MANAGER` e `VIEWER`: mostrar leitura/download;
+- `OPERATOR`: ocultar tela/ações.
+
+Upload de assinatura:
+
+```ts
+const form = new FormData();
+form.append('file', file); // png, jpg ou jpeg; máximo 2 MiB
+await api.post(`/signatures/${id}/upload`, form);
+```
+
+Download retorna `contentBase64`; crie um `Blob` com `mimeType` para preview. Erros importantes:
+`SIGNATURE_IMAGE_REQUIRED`, `UPLOAD_INVALID_MIME_TYPE`, `UPLOAD_INVALID_EXTENSION`,
+`UPLOAD_FILE_TOO_LARGE`.
 
 ## Assets and branding uploads
 
@@ -737,7 +812,7 @@ equipamento inexistente (404). O formato do QR não muda.
 Responsabilidades separadas:
 
 - **Relatórios** (`/reports`): gestão de **modelos** de documento. Consome `GET /organization/templates`; OWNER cria/edita/exclui (`POST/PATCH/DELETE /organization/templates/:id`), define padrão (`isDefault`), ativa/desativa (`isActive`) e importa modelo do cliente (`POST /organization/assets`). Modelos profissionais (OS, Relatório Técnico, Visita Técnica, PMOC, Laudo, Orçamento, Recibo) compartilham identidade/cabeçalho/rodapé/tipografia e são pré-visualizados no `DocumentPaper` (preparado para a renderização dinâmica do backend).
-- **Documentos** (`/documentos`): **central** de documentos emitidos. Mescla os documentos reais gerados por Operations (`GET /operations` → `documents[]`, incluindo a OS rascunho) com o snapshot `demo.documents.v1`, com filtros cumulativos (cliente, equipamento, operador, tipo, status, período), preview estruturado (`DocumentPaper`) e download da estrutura. A geração de PDF permanece no backend.
+- **Documentos** (`/documentos`): **central** de documentos emitidos. Mescla os documentos reais gerados por Operations (`GET /operations` → `documents[]`, incluindo a OS rascunho) com o snapshot `demo.documents.v1`, com filtros cumulativos (cliente, equipamento, operador, tipo, status, período). A Sprint 6 adiciona preview oficial via Blueprint e render/download PDF pelo backend.
 
 ## Operations (atendimentos)
 
@@ -752,3 +827,75 @@ Assinatura + Documentos relacionados (preview via `DocumentPaper`). O histórico
 cada equipamento/cliente é derivado de `GET /operations?equipmentId=` /
 `?customerId=` (sem duplicação de dados). API no frontend: `operationApi`
 (`@erp/api`) — distinto do `operationsApi` (snapshots de demo).
+
+## Document Engine (produção)
+
+A Sprint 6 expõe o motor oficial de documentos. O frontend não deve montar PDF no cliente para
+documentos oficiais; use o backend.
+
+Fluxo recomendado na central de documentos:
+
+1. Listar operações com `GET /operations` e usar `documents[]` para descobrir `documentId`, `type`,
+   `number` e `status`;
+2. Preview: `GET /documents/:documentId/preview`;
+3. Render PDF: `POST /documents/:documentId/render`;
+4. Download: `GET /documents/:documentId/download` e criar `Blob` a partir de `contentBase64`.
+
+Fluxo sem `documentId` ainda conhecido:
+
+```http
+GET  /documents/operations/:operationId/:type/preview
+POST /documents/operations/:operationId/:type/render
+```
+
+Tipos:
+
+```ts
+type DocumentTemplateType =
+  | 'QUOTE'
+  | 'WORK_ORDER'
+  | 'RECEIPT'
+  | 'REPORT'
+  | 'TECHNICAL_REPORT'
+  | 'PMOC';
+```
+
+Preview retorna `DocumentBlueprint`:
+
+- `header`;
+- `footer`;
+- `metadata`;
+- `sections[]`;
+- componentes: `metadata`, `paragraph`, `table`, `list`, `image`, `qrCode`, `checklist`,
+  `signaturePlaceholder`, `observation`.
+
+Use esse Blueprint para preview visual no frontend, mas trate o PDF oficial como produto do backend.
+
+Download:
+
+```ts
+type DocumentDownload = {
+  id: string;
+  operationId: string;
+  type: DocumentTemplateType;
+  number: string;
+  status: 'DRAFT' | 'READY' | 'VALIDATED' | 'SENT';
+  mimeType: 'application/pdf';
+  fileSize: number;
+  renderedAt: string;
+  renderMetadata: { engine: string; pageCount: number; blueprintVersion?: string };
+  downloadReady: boolean;
+  contentBase64: string;
+};
+```
+
+Erros de UX:
+
+- `DOCUMENT_DOWNLOAD_NOT_READY` (409): mostrar botão "Gerar PDF" antes do download;
+- `DOCUMENT_FORBIDDEN_TYPE` (403): ocultar orçamento/recibo para não-OWNER;
+- `DOCUMENT_SIZE_LIMIT_EXCEEDED` (400): orientar reduzir fotos/checklist/tabelas;
+- `DOCUMENT_RENDER_FAILED` (500): exibir retry e registrar `X-Request-Id`.
+
+Limitação consciente da Sprint 6: fotos aparecem como componentes/metadados seguros no PDF; embed
+inline de imagem binária fica para sprint específica. Assinatura está preparada como placeholder,
+sem domínio funcional.

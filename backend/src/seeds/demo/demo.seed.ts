@@ -35,6 +35,8 @@ interface DemoManifest {
   createdAttachmentKeys: string[];
   createdEquipmentIds: string[];
   createdEquipmentAttachmentKeys: string[];
+  createdSignatureIds: string[];
+  createdSignatureImageKeys: string[];
   organizationMode: DemoSeedResult['organization'];
   generatedAt: string;
 }
@@ -111,6 +113,7 @@ export async function seedDemoData(
 
   const demoCustomers = await ensureDemoCustomers(prisma);
   const demoEquipments = await ensureDemoEquipments(prisma);
+  const demoSignatures = await ensureDemoSignatures(prisma);
 
   const snapshots = buildDemoSnapshots(now);
   for (const [key, value] of Object.entries(snapshots)) {
@@ -144,6 +147,15 @@ export async function seedDemoData(
       ...new Set([
         ...(previousManifest?.createdEquipmentAttachmentKeys ?? []),
         ...demoEquipments.attachmentKeys,
+      ]),
+    ],
+    createdSignatureIds: [
+      ...new Set([...(previousManifest?.createdSignatureIds ?? []), ...demoSignatures.createdIds]),
+    ],
+    createdSignatureImageKeys: [
+      ...new Set([
+        ...(previousManifest?.createdSignatureImageKeys ?? []),
+        ...demoSignatures.imageKeys,
       ]),
     ],
     organizationMode: organization,
@@ -197,6 +209,21 @@ export async function resetDemoData(
       where: {
         id: { in: manifest.createdEquipmentIds },
         observations: { startsWith: DEMO_MARKER },
+      },
+    });
+  }
+  if (manifest?.createdSignatureImageKeys.length) {
+    await Promise.all(
+      manifest.createdSignatureImageKeys.map((key) =>
+        rm(resolve(process.env.STORAGE_PATH ?? './storage', key), { force: true }),
+      ),
+    );
+  }
+  if (manifest?.createdSignatureIds.length) {
+    await prisma.signature.deleteMany({
+      where: {
+        id: { in: manifest.createdSignatureIds },
+        name: { startsWith: 'Demo ' },
       },
     });
   }
@@ -376,6 +403,12 @@ async function readManifest(prisma: PrismaClient): Promise<DemoManifest | null> 
       ? value.createdEquipmentAttachmentKeys.filter(
           (item): item is string => typeof item === 'string',
         )
+      : [],
+    createdSignatureIds: Array.isArray(value.createdSignatureIds)
+      ? value.createdSignatureIds.filter((item): item is string => typeof item === 'string')
+      : [],
+    createdSignatureImageKeys: Array.isArray(value.createdSignatureImageKeys)
+      ? value.createdSignatureImageKeys.filter((item): item is string => typeof item === 'string')
       : [],
     organizationMode:
       value.organizationMode === 'created' || value.organizationMode === 'converted-bootstrap'
@@ -627,6 +660,60 @@ async function ensureDemoEquipments(
     attachmentKeys.push(storageKey);
   }
   return { createdIds, attachmentKeys };
+}
+
+async function ensureDemoSignatures(
+  prisma: PrismaClient,
+): Promise<{ createdIds: string[]; imageKeys: string[] }> {
+  const definitions = [
+    ['Demo Responsável Técnico', 'Responsável Técnico', 'demo-responsavel-tecnico.png'],
+    ['Demo Supervisor Operacional', 'Supervisor Operacional', 'demo-supervisor-operacional.png'],
+  ] as const;
+  const createdIds: string[] = [];
+  const imageKeys: string[] = [];
+  const file = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGOSHzRgAAAAABJRU5ErkJggg==',
+    'base64',
+  );
+
+  for (const [name, title, fileName] of definitions) {
+    const existing = await prisma.signature.findFirst({
+      where: { name },
+      select: { id: true },
+    });
+    if (existing) continue;
+
+    const storageKey = `documents/signatures/demo/${fileName}`;
+    const path = resolve(process.env.STORAGE_PATH ?? './storage', storageKey);
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, file, { flag: 'wx' }).catch((error: unknown) => {
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        error.code === 'EEXIST'
+      ) {
+        return;
+      }
+      throw error;
+    });
+    const signature = await prisma.signature.create({
+      data: {
+        name,
+        title,
+        imageStorageKey: storageKey,
+        mimeType: 'image/png',
+        originalFileName: fileName,
+        fileSize: file.length,
+        active: true,
+      },
+      select: { id: true },
+    });
+    createdIds.push(signature.id);
+    imageKeys.push(storageKey);
+  }
+
+  return { createdIds, imageKeys };
 }
 
 function permissionsFor(role: Role): Prisma.UserPermissionUncheckedCreateWithoutUserInput {

@@ -17,6 +17,8 @@ import { InternalDemoModule } from './modules/internal-demo/internal-demo.module
 import { CustomersModule } from './modules/customers/customers.module';
 import { EquipmentsModule } from './modules/equipments/equipments.module';
 import { OperationsModule } from './modules/operations/operations.module';
+import { DocumentEngineModule } from './modules/document-engine/document-engine.module';
+import { SignaturesModule } from './modules/signatures/signatures.module';
 import { GlobalExceptionFilter } from './shared/filters/global-exception.filter';
 import { RequestLoggingInterceptor } from './shared/interceptors/request-logging.interceptor';
 import { ResponseEnvelopeInterceptor } from './shared/interceptors/response-envelope.interceptor';
@@ -43,6 +45,8 @@ import { ResponseEnvelopeInterceptor } from './shared/interceptors/response-enve
     CustomersModule,
     EquipmentsModule,
     OperationsModule,
+    DocumentEngineModule,
+    SignaturesModule,
     HealthModule,
   ],
   providers: [

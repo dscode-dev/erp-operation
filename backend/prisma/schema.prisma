@@ -81,6 +81,13 @@ enum OperationDocumentStatus {
   SENT
 }
 
+enum SignatureMode {
+  NONE
+  FIXED
+  COLLECTED
+  HYBRID
+}
+
 model SystemSetting {
   id        String   @id @default(uuid()) @db.Uuid
   key       String   @unique @db.VarChar(150)
@@ -206,14 +213,36 @@ model DocumentTemplate {
   isDefault      Boolean              @default(false) @map("is_default")
   isSystem       Boolean              @default(false) @map("is_system")
   isActive       Boolean              @default(true) @map("is_active")
+  requiresSignature Boolean           @default(false) @map("requires_signature")
+  signatureMode     SignatureMode     @default(NONE) @map("signature_mode")
+  signatureId       String?           @map("signature_id") @db.Uuid
   createdAt      DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt      DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
   organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  signature      Signature?           @relation(fields: [signatureId], references: [id], onDelete: SetNull)
 
   @@index([organizationId, type])
   @@index([organizationId, isDefault])
   @@index([organizationId, isActive])
+  @@index([signatureId])
   @@map("document_templates")
+}
+
+model Signature {
+  id              String             @id @default(uuid()) @db.Uuid
+  name            String             @db.VarChar(120)
+  title           String             @db.VarChar(120)
+  imageStorageKey String?            @unique @map("image_storage_key") @db.VarChar(255)
+  mimeType        String?            @map("mime_type") @db.VarChar(100)
+  originalFileName String?           @map("original_file_name") @db.VarChar(255)
+  fileSize        Int?               @map("file_size")
+  active          Boolean            @default(true)
+  createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+  templates       DocumentTemplate[]
+
+  @@index([active, name])
+  @@map("signatures")
 }
 
 model UserPreferences {
@@ -460,16 +489,22 @@ model OperationPhoto {
 /// type via DocumentTemplateType; the Work Order is generated automatically as a
 /// DRAFT when an Operation is created. PDF generation is future scope.
 model OperationDocument {
-  id          String                  @id @default(uuid()) @db.Uuid
-  operationId String                  @map("operation_id") @db.Uuid
-  type        DocumentTemplateType
-  number      String                  @db.VarChar(40)
-  status      OperationDocumentStatus @default(DRAFT)
-  createdAt   DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt   DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
-  operation   Operation               @relation(fields: [operationId], references: [id], onDelete: Cascade)
+  id             String                  @id @default(uuid()) @db.Uuid
+  operationId    String                  @map("operation_id") @db.Uuid
+  type           DocumentTemplateType
+  number         String                  @db.VarChar(40)
+  status         OperationDocumentStatus @default(DRAFT)
+  storageKey     String?                 @unique @map("storage_key") @db.VarChar(255)
+  mimeType       String?                 @map("mime_type") @db.VarChar(100)
+  fileSize       Int?                    @map("file_size")
+  renderedAt     DateTime?               @map("rendered_at") @db.Timestamptz(3)
+  renderMetadata Json?                   @map("render_metadata")
+  createdAt      DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
+  operation      Operation               @relation(fields: [operationId], references: [id], onDelete: Cascade)
 
   @@unique([operationId, type])
   @@index([type, status])
+  @@index([renderedAt])
   @@map("operation_documents")
 }

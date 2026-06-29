@@ -104,6 +104,100 @@ AuditLog nunca recebe arquivo/base64 ou valor completo de observações.
 Eventos: `EQUIPMENT_CREATED`, `EQUIPMENT_UPDATED`, `EQUIPMENT_DISABLED`, `EQUIPMENT_ENABLED`,
 `EQUIPMENT_DELETED`, attachment upload/delete e metric create/delete.
 
+## Document Engine security
+
+Sprint 6 adiciona o motor oficial de documentos de produção. O fluxo normativo é:
+
+```text
+Operation → DocumentBuilder → DocumentBlueprint → DocumentRenderer → PDF Engine
+```
+
+Separação de responsabilidades:
+
+- `DocumentBuilder` concentra regras de negócio e acesso a banco;
+- `DocumentBlueprint` é um modelo serializável e independente de PDF;
+- `DocumentRenderer` transforma Blueprint em páginas e não acessa banco;
+- `PdfEngine` gera PDF diretamente e não conhece Prisma/storage;
+- a camada de assinaturas fica apenas preparada por interfaces e placeholders.
+
+RBAC:
+
+| Ação/documento                        | OWNER | MANAGER | OPERATOR | VIEWER |
+| ------------------------------------- | ----- | ------- | -------- | ------ |
+| Preview tipos não financeiros         | Sim   | Sim     | Sim      | Sim    |
+| Render tipos não financeiros          | Sim   | Sim     | Sim      | Não    |
+| Download tipos não financeiros        | Sim   | Sim     | Sim      | Sim    |
+| Preview/render/download QUOTE/RECEIPT | Sim   | Não     | Não      | Não    |
+
+`QUOTE` e `RECEIPT` são tratados como documentos financeiros e bloqueados por
+`DOCUMENT_FORBIDDEN_TYPE` para não-OWNER.
+
+Proteções de AppSec:
+
+- textos são sanitizados antes do Blueprint e antes da escrita no PDF;
+- o PDF é gerado diretamente, sem HTML, browser headless ou impressão;
+- storage key é sempre gerada pelo backend com UUID em
+  `documents/operations/<operationId>/`, sem nomes fornecidos pelo usuário;
+- limites de documento: 80 seções, 600 componentes, 400 linhas, 80 páginas e 10 MiB por PDF;
+- renderer impede quebra de tabela por linha individual: tabelas são divididas em blocos com
+  cabeçalho repetido;
+- componentes críticos podem ser mantidos juntos por `keepTogether`;
+- imagens de operação são representadas no Blueprint/PDF por metadados seguros; o binário continua
+  protegido no storage até a sprint específica de renderização inline de imagens;
+- QR Code é componente lógico no Blueprint; não concede autenticação;
+- conteúdo base64 do PDF só é retornado no endpoint de download e não entra no AuditLog;
+- eventos auditados: `DOCUMENT_PREVIEWED`, `DOCUMENT_RENDERED`, `DOCUMENT_DOWNLOADED`.
+
+## Document Configuration & Signature security
+
+Sprint 7 adiciona configuração documental persistida e domínio de assinaturas. A regra principal é:
+nenhuma camada de documento deve acessar storage diretamente. Assets documentais passam por
+`DocumentAssetResolver`, que centraliza gravação, leitura, exclusão e existência de PDFs,
+assinaturas e futuros assets de documento.
+
+RBAC:
+
+| Recurso                                | OWNER | MANAGER | OPERATOR | VIEWER |
+| -------------------------------------- | ----- | ------- | -------- | ------ |
+| Configuração de documentos             | Sim   | Leitura | Não      | Leitura |
+| CRUD de assinaturas                    | Sim   | Não     | Não      | Não    |
+| Listar/detalhar/download de assinatura | Sim   | Sim     | Não      | Sim    |
+| Configurar assinatura em template      | Sim   | Não     | Não      | Não    |
+
+Proteções aplicadas:
+
+- upload de assinatura aceita apenas PNG/JPG/JPEG;
+- limite de 2 MiB por imagem;
+- validação de MIME, extensão e assinatura binária;
+- nome original é sanitizado e nunca usado como storage key;
+- storage key de upload é gerada com UUID pelo backend;
+- proteção contra path traversal pela abstração de storage e ausência de paths vindos do cliente;
+- soft delete em `Signature` (`active=false`);
+- templates `FIXED` e `HYBRID` só aceitam assinatura ativa;
+- `NONE` rejeita `signatureId`;
+- `COLLECTED` não usa assinatura fixa;
+- AuditLog registra criação, atualização, soft delete, upload e download sem armazenar base64.
+
+Eventos auditados:
+
+- `SIGNATURE_CREATED`;
+- `SIGNATURE_UPDATED`;
+- `SIGNATURE_DELETED`;
+- `SIGNATURE_IMAGE_UPLOADED`;
+- `SIGNATURE_IMAGE_DOWNLOADED`;
+- `TEMPLATE_CREATED`;
+- `TEMPLATE_UPDATED`;
+- `TEMPLATE_DELETED`.
+
+Fora do escopo de segurança desta sprint: assinatura digital ICP, certificados, DocuSign, workflow,
+aprovação, envio por e-mail/WhatsApp e validação jurídica de assinatura eletrônica.
+
+Assinaturas:
+
+- nenhum CRUD, tabela ou regra funcional de assinatura foi criado;
+- foram criados contratos para `none`, `fixed`, `collected` e `hybrid`;
+- decisões futuras de assinatura deverão passar pelo `DocumentBuilder`, nunca pelo Renderer/PDF.
+
 Proteções administrativas:
 
 - OWNER não pode desativar ou excluir a própria conta;

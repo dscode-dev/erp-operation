@@ -315,6 +315,9 @@ Response 200:
       "isDefault": true,
       "isSystem": true,
       "isActive": true,
+      "requiresSignature": false,
+      "signatureMode": "NONE",
+      "signatureId": null,
       "createdAt": "2026-06-23T17:45:00.000Z",
       "updatedAt": "2026-06-23T17:45:00.000Z"
     }
@@ -336,12 +339,22 @@ Request:
   "footerContent": "",
   "observations": "",
   "isDefault": false,
-  "isActive": true
+  "isActive": true,
+  "requiresSignature": true,
+  "signatureMode": "FIXED",
+  "signatureId": "7198f91a-418f-4c3d-b8db-4ff7f8a9c0b1"
 }
 ```
 
 Response 201: objeto `DocumentTemplate` criado. `isActive` é opcional (default `true`)
 e habilita o controle de ativar/desativar modelos.
+
+Configuração de assinatura:
+
+- `signatureMode`: `NONE`, `FIXED`, `COLLECTED` ou `HYBRID`;
+- `NONE`: `requiresSignature=false` e `signatureId=null`;
+- `FIXED` e `HYBRID`: exigem `requiresSignature=true` e `signatureId` de uma assinatura ativa;
+- `COLLECTED`: exige `requiresSignature=true` e não usa `signatureId`.
 
 ### PATCH `/api/v1/organization/templates/:id`
 
@@ -354,7 +367,10 @@ Request: todos os campos são opcionais.
   "name": "Orçamento padrão atualizado",
   "observations": "Validade de 7 dias",
   "isDefault": true,
-  "isActive": false
+  "isActive": false,
+  "signatureMode": "COLLECTED",
+  "requiresSignature": true,
+  "signatureId": null
 }
 ```
 
@@ -383,10 +399,217 @@ Errors para templates:
 | 404  | `NOT_FOUND`                 | Template inexistente na organização      |
 | 403  | `FORBIDDEN`                 | Papel sem permissão                      |
 | 409  | `SYSTEM_TEMPLATE_PROTECTED` | Tentativa de excluir template do sistema |
+| 409  | `SIGNATURE_INACTIVE`        | Template apontando para assinatura inativa |
+| 404  | `SIGNATURE_NOT_FOUND`       | `signatureId` inexistente                |
 
 Quando `isDefault=true`, templates anteriores do mesmo `type` são marcados como não-default.
 Templates criados pela API recebem `isSystem=false`. Templates com `isSystem=true` podem ser
 editados, mas não excluídos.
+
+## Document configuration
+
+Sprint 7 cria a camada de consulta centralizada para configuração documental. O frontend pode usar
+estes endpoints para montar telas de configuração e inspecionar o comportamento efetivo de cada
+tipo de documento.
+
+Permissões: `OWNER`, `MANAGER` e `VIEWER`. `OPERATOR` não acessa.
+
+### GET `/api/v1/documents/configuration`
+
+Response 200:
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "type": "WORK_ORDER",
+      "organization": {
+        "id": "8498a905-49f1-4e77-99a4-e84e5151f5ed",
+        "legalName": "ERP Operation",
+        "tradeName": "ERP Operation",
+        "cnpj": "00.000.000/0001-00",
+        "email": "contato@example.com",
+        "phone": "+55 81 99999-9999",
+        "city": "Recife",
+        "state": "PE",
+        "primaryColor": "#111827",
+        "secondaryColor": "#2563EB"
+      },
+      "settings": {
+        "id": "22ae5a08-04db-4ad0-b49e-311230fb5991",
+        "language": "pt-BR",
+        "timezone": "America/Recife",
+        "currency": "BRL",
+        "documentPrefix": "ERP"
+      },
+      "defaultTemplate": {
+        "id": "f38b0b79-5c79-4f74-8d66-e6f3f77ad9aa",
+        "type": "WORK_ORDER",
+        "name": "Ordem de serviço padrão",
+        "isDefault": true,
+        "isSystem": true,
+        "isActive": true,
+        "requiresSignature": false,
+        "signatureMode": "NONE",
+        "signatureId": null,
+        "signature": null
+      },
+      "templates": []
+    }
+  ]
+}
+```
+
+### GET `/api/v1/documents/configuration/types/:type`
+
+`:type` deve ser `QUOTE`, `WORK_ORDER`, `RECEIPT`, `REPORT`, `TECHNICAL_REPORT` ou `PMOC`.
+
+Response 200: mesmo objeto de configuração para um único tipo.
+
+### GET `/api/v1/documents/configuration/templates/:templateId`
+
+`:templateId` deve ser UUID v4.
+
+Response 200: configuração completa do tipo ao qual o template pertence.
+
+Erros: common protected errors, `VALIDATION_ERROR`, `NOT_FOUND`, `ORGANIZATION_NOT_FOUND`.
+
+## Signatures
+
+Domínio de assinaturas cadastra assinaturas fixas reutilizáveis por templates. Imagens ficam no
+StorageProvider; o banco armazena apenas metadados e `imageStorageKey`.
+
+Permissões:
+
+- `OWNER`: criar, editar, upload, soft delete, listar e baixar;
+- `MANAGER`: listar, detalhar e baixar;
+- `VIEWER`: listar, detalhar e baixar;
+- `OPERATOR`: sem acesso.
+
+### GET `/api/v1/signatures`
+
+Query:
+
+- `page` default `1`;
+- `limit` default `20`, máximo `100`;
+- `search` opcional;
+- `active` opcional.
+
+Response 200:
+
+```json
+{
+  "success": true,
+  "data": {
+    "items": [
+      {
+        "id": "7198f91a-418f-4c3d-b8db-4ff7f8a9c0b1",
+        "name": "Responsável Técnico",
+        "title": "Eng. Mecânico CREA 000000",
+        "imageStorageKey": "documents/signatures/8f2c.../signature.png",
+        "mimeType": "image/png",
+        "originalFileName": "assinatura.png",
+        "fileSize": 18432,
+        "active": true,
+        "createdAt": "2026-06-29T15:00:00.000Z",
+        "updatedAt": "2026-06-29T15:02:00.000Z"
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "limit": 20,
+      "total": 1,
+      "totalPages": 1
+    }
+  }
+}
+```
+
+### GET `/api/v1/signatures/:id`
+
+Response 200: objeto `Signature`.
+
+### POST `/api/v1/signatures`
+
+Role: `OWNER`.
+
+```json
+{
+  "name": "Responsável Técnico",
+  "title": "Eng. Mecânico CREA 000000",
+  "active": true
+}
+```
+
+Response 201: objeto `Signature`.
+
+### PATCH `/api/v1/signatures/:id`
+
+Role: `OWNER`. Campos opcionais: `name`, `title`, `active`.
+
+### DELETE `/api/v1/signatures/:id`
+
+Role: `OWNER`. Soft delete (`active=false`).
+
+Response 200:
+
+```json
+{
+  "success": true,
+  "data": {
+    "deleted": true
+  }
+}
+```
+
+### POST `/api/v1/signatures/:id/upload`
+
+Role: `OWNER`. `multipart/form-data` com campo `file`.
+
+Regras:
+
+- formatos permitidos: PNG, JPG, JPEG;
+- tamanho máximo: 2 MiB;
+- valida MIME, extensão e assinatura binária;
+- nome original é sanitizado;
+- storage key é gerada pelo backend.
+
+Response 201: objeto `Signature` atualizado.
+
+### GET `/api/v1/signatures/:id/download`
+
+Roles: `OWNER`, `MANAGER`, `VIEWER`.
+
+Response 200:
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "7198f91a-418f-4c3d-b8db-4ff7f8a9c0b1",
+    "name": "Responsável Técnico",
+    "title": "Eng. Mecânico CREA 000000",
+    "mimeType": "image/png",
+    "fileSize": 18432,
+    "active": true,
+    "contentBase64": "iVBORw0KGgoAAA..."
+  }
+}
+```
+
+Erros:
+
+| HTTP | Code                       | Condition                              |
+| ---- | -------------------------- | -------------------------------------- |
+| 400  | `VALIDATION_ERROR`         | Body, query ou UUID inválido           |
+| 400  | `SIGNATURE_IMAGE_REQUIRED` | Upload ausente                         |
+| 400  | `UPLOAD_FILE_TOO_LARGE`    | Arquivo vazio ou acima de 2 MiB        |
+| 400  | `UPLOAD_INVALID_MIME_TYPE` | MIME/binário incompatível              |
+| 400  | `UPLOAD_INVALID_EXTENSION` | Extensão não permitida                 |
+| 403  | `FORBIDDEN`                | Papel sem permissão                    |
+| 404  | `SIGNATURE_NOT_FOUND`      | Assinatura inexistente                 |
+| 409  | `SIGNATURE_IMAGE_REQUIRED` | Download solicitado antes do upload    |
 
 ## Brand assets
 
@@ -1201,9 +1424,9 @@ Item (alinhado ao snapshot demo, campos enriquecidos opcionais):
 type ScheduleItem = {
   id: string;
   title: string;
-  customer: string;        // futuramente customerId + nome
-  operator: string;        // futuramente operatorId + nome
-  startsAt: string;        // ISO 8601
+  customer: string; // futuramente customerId + nome
+  operator: string; // futuramente operatorId + nome
+  startsAt: string; // ISO 8601
   endsAt?: string;
   state: 'OVERDUE' | 'IN_PROGRESS' | 'SCHEDULED' | 'DONE';
   equipment?: string;
@@ -1232,10 +1455,10 @@ customer, address, parent, children, attachments e métricas).
 
 Errors:
 
-| HTTP | Code                  | Condition                          |
-| ---- | --------------------- | ---------------------------------- |
-| 400  | `VALIDATION_ERROR`    | QR vazio/ausente                   |
-| 404  | `EQUIPMENT_NOT_FOUND` | Nenhum equipamento para o QR       |
+| HTTP | Code                  | Condition                    |
+| ---- | --------------------- | ---------------------------- |
+| 400  | `VALIDATION_ERROR`    | QR vazio/ausente             |
+| 404  | `EQUIPMENT_NOT_FOUND` | Nenhum equipamento para o QR |
 
 > O formato do QR exibido na Platform não muda; o QR codifica o `qrCode`.
 
@@ -1247,31 +1470,31 @@ Operation. Ao criar uma Operation, o backend gera automaticamente um
 `OperationDocument` do tipo `WORK_ORDER` em `DRAFT`, com número derivado do número
 sequencial da operação (`OS-000001`).
 
-| Método | Rota                          | Roles                          | Descrição |
-| ------ | ----------------------------- | ------------------------------ | --------- |
-| GET    | `/operations`                 | OWNER/MANAGER/OPERATOR/VIEWER  | Lista paginada. Filtros: `page,limit,search,customerId,equipmentId,operatorId,type,status` |
-| GET    | `/operations/stats`           | OWNER/MANAGER/OPERATOR/VIEWER  | `{ total, byStatus }` |
-| GET    | `/operations/:id`             | OWNER/MANAGER/OPERATOR/VIEWER  | Detalhe (customer, address, equipment, operator, checklist, photos, documents, signature) |
-| GET    | `/operations/photos/:photoId` | OWNER/MANAGER/OPERATOR/VIEWER  | Foto em base64 (`{ mimeType, contentBase64, ... }`) |
-| POST   | `/operations`                 | OWNER/MANAGER/OPERATOR         | Cria a Operation (operador = usuário autenticado) + OS rascunho |
-| PATCH  | `/operations/:id`             | OWNER/MANAGER/OPERATOR         | Atualiza status/datas/checklist/observações |
+| Método | Rota                          | Roles                         | Descrição                                                                                  |
+| ------ | ----------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------ |
+| GET    | `/operations`                 | OWNER/MANAGER/OPERATOR/VIEWER | Lista paginada. Filtros: `page,limit,search,customerId,equipmentId,operatorId,type,status` |
+| GET    | `/operations/stats`           | OWNER/MANAGER/OPERATOR/VIEWER | `{ total, byStatus }`                                                                      |
+| GET    | `/operations/:id`             | OWNER/MANAGER/OPERATOR/VIEWER | Detalhe (customer, address, equipment, operator, checklist, photos, documents, signature)  |
+| GET    | `/operations/photos/:photoId` | OWNER/MANAGER/OPERATOR/VIEWER | Foto em base64 (`{ mimeType, contentBase64, ... }`)                                        |
+| POST   | `/operations`                 | OWNER/MANAGER/OPERATOR        | Cria a Operation (operador = usuário autenticado) + OS rascunho                            |
+| PATCH  | `/operations/:id`             | OWNER/MANAGER/OPERATOR        | Atualiza status/datas/checklist/observações                                                |
 
 `POST /operations` (body):
 
 ```jsonc
 {
-  "customerId": "<uuid>",          // obrigatório
-  "addressId": "<uuid>",           // opcional (deve pertencer ao cliente)
-  "equipmentId": "<uuid>",         // opcional (deve pertencer ao cliente)
-  "type": "PREVENTIVA",            // PREVENTIVA|CORRETIVA|INSTALACAO|PROJETO
-  "status": "COMPLETED",           // opcional, default DRAFT
+  "customerId": "<uuid>", // obrigatório
+  "addressId": "<uuid>", // opcional (deve pertencer ao cliente)
+  "equipmentId": "<uuid>", // opcional (deve pertencer ao cliente)
+  "type": "PREVENTIVA", // PREVENTIVA|CORRETIVA|INSTALACAO|PROJETO
+  "status": "COMPLETED", // opcional, default DRAFT
   "startedAt": "<iso>",
   "completedAt": "<iso>",
   "checklist": [{ "label": "…", "done": true, "note": null }],
   "observations": "…",
-  "signatureData": "data:image/png;base64,…",   // texto (data URL)
+  "signatureData": "data:image/png;base64,…", // texto (data URL)
   "signedAt": "<iso>",
-  "photos": [{ "dataUrl": "data:image/jpeg;base64,…", "caption": "…" }]
+  "photos": [{ "dataUrl": "data:image/jpeg;base64,…", "caption": "…" }],
 }
 ```
 
@@ -1283,5 +1506,247 @@ fora do cliente), `OPERATION_PHOTO_INVALID` (400), `OPERATION_NOT_FOUND` (404),
 `OPERATION_PHOTO_NOT_FOUND` (404).
 
 Migration: `20260627150000_operation_domain_foundation` (tabelas `operations`,
-`operation_photos`, `operation_documents` + enums). Geração de PDF é escopo
-futuro.
+`operation_photos`, `operation_documents` + enums).
+
+## Document Engine
+
+Sprint 6 cria o motor oficial de documentos de produção:
+
+```text
+Operation → DocumentBuilder → DocumentBlueprint → DocumentRenderer → PDF Engine
+```
+
+O Builder resolve dados operacionais e gera um Blueprint independente de PDF. O Renderer pagina o
+Blueprint. O PDF Engine gera PDF diretamente, sem HTML/print.
+
+Tipos válidos em `:type`:
+
+```ts
+type DocumentTemplateType =
+  | 'QUOTE'
+  | 'WORK_ORDER'
+  | 'RECEIPT'
+  | 'REPORT'
+  | 'TECHNICAL_REPORT'
+  | 'PMOC';
+```
+
+Permissões:
+
+- `OWNER`: todos os tipos e ações;
+- `MANAGER`: preview/render/download de tipos não financeiros;
+- `OPERATOR`: preview/render/download de tipos não financeiros;
+- `VIEWER`: preview/download de tipos não financeiros;
+- `QUOTE` e `RECEIPT`: somente `OWNER`.
+
+### Blueprint response
+
+Preview retorna o documento estruturado, sem PDF:
+
+```ts
+type DocumentBlueprint = {
+  version: '1.0';
+  metadata: {
+    operationId: string;
+    documentId: string | null;
+    documentType: DocumentTemplateType;
+    documentNumber: string;
+    generatedAt: string;
+    locale: 'pt-BR';
+    timezone: string;
+    currency: string;
+    organization: {
+      legalName: string;
+      tradeName: string;
+      cnpj: string;
+      email: string;
+      phone: string;
+      city: string;
+      state: string;
+      primaryColor: string;
+      secondaryColor: string;
+    };
+  };
+  header: {
+    title: string;
+    subtitle?: string;
+    organizationName: string;
+    documentNumber: string;
+  };
+  footer: { content: string; generatedAt: string };
+  sections: Array<{
+    id: string;
+    title: string;
+    critical?: boolean;
+    components: Array<
+      | { id: string; kind: 'metadata'; items: Array<{ label: string; value: string }> }
+      | { id: string; kind: 'paragraph'; text: string; emphasis?: 'normal' | 'strong' }
+      | {
+          id: string;
+          kind: 'table';
+          columns: Array<{ key: string; label: string; width?: number }>;
+          rows: Array<Record<string, string>>;
+        }
+      | { id: string; kind: 'list'; items: string[] }
+      | {
+          id: string;
+          kind: 'image';
+          sourceId: string;
+          caption: string | null;
+          mimeType: string;
+          fileSize: number;
+        }
+      | { id: string; kind: 'qrCode'; label: string; value: string }
+      | {
+          id: string;
+          kind: 'checklist';
+          items: Array<{ label: string; done: boolean; note: string | null }>;
+        }
+      | {
+          id: string;
+          kind: 'signaturePlaceholder';
+          label: string;
+          strategy: 'none' | 'fixed' | 'collected' | 'hybrid';
+          signedAt: string | null;
+        }
+      | { id: string; kind: 'observation'; text: string }
+    >;
+  }>;
+};
+```
+
+### GET `/api/v1/documents/operations/:operationId/:type/preview`
+
+Roles: `OWNER`, `MANAGER`, `OPERATOR`, `VIEWER` respeitando restrição financeira.
+
+Response 200:
+
+```json
+{
+  "success": true,
+  "data": {
+    "version": "1.0",
+    "metadata": {
+      "operationId": "7db71471-0cf4-4414-8d06-83eb9c1917c9",
+      "documentId": "f4ea14f7-859b-452d-b669-e12338d23b39",
+      "documentType": "WORK_ORDER",
+      "documentNumber": "OS-000001",
+      "generatedAt": "2026-06-29T10:00:00.000Z",
+      "locale": "pt-BR",
+      "timezone": "America/Recife",
+      "currency": "BRL",
+      "organization": {
+        "legalName": "Climatize Nordeste LTDA",
+        "tradeName": "Climatize Nordeste",
+        "cnpj": "00.000.000/0001-00",
+        "email": "contato@example.com",
+        "phone": "+55 81 99999-9999",
+        "city": "Recife",
+        "state": "PE",
+        "primaryColor": "#111827",
+        "secondaryColor": "#2563EB"
+      }
+    },
+    "header": {
+      "title": "Ordem de Serviço",
+      "subtitle": "Operação 000001",
+      "organizationName": "Climatize Nordeste",
+      "documentNumber": "OS-000001"
+    },
+    "footer": {
+      "content": "Gerado por Climatize Nordeste · contato@example.com",
+      "generatedAt": "2026-06-29T10:00:00.000Z"
+    },
+    "sections": []
+  }
+}
+```
+
+### POST `/api/v1/documents/operations/:operationId/:type/render`
+
+Roles: `OWNER`, `MANAGER`, `OPERATOR` respeitando restrição financeira.
+
+Cria o `OperationDocument` caso ainda não exista, renderiza o Blueprint, gera PDF direto, grava no
+storage e atualiza metadados.
+
+Response 200:
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "f4ea14f7-859b-452d-b669-e12338d23b39",
+    "operationId": "7db71471-0cf4-4414-8d06-83eb9c1917c9",
+    "type": "WORK_ORDER",
+    "number": "OS-000001",
+    "status": "READY",
+    "mimeType": "application/pdf",
+    "fileSize": 48213,
+    "renderedAt": "2026-06-29T10:00:02.000Z",
+    "renderMetadata": {
+      "engine": "direct-pdf-v1",
+      "blueprintVersion": "1.0",
+      "pageCount": 3,
+      "generatedAt": "2026-06-29T10:00:00.000Z"
+    },
+    "createdAt": "2026-06-29T09:58:00.000Z",
+    "updatedAt": "2026-06-29T10:00:02.000Z",
+    "downloadReady": true
+  }
+}
+```
+
+### GET `/api/v1/documents/:documentId/preview`
+
+Roles: `OWNER`, `MANAGER`, `OPERATOR`, `VIEWER` respeitando restrição financeira.
+
+Gera o Blueprint a partir do `OperationDocument` existente.
+
+### POST `/api/v1/documents/:documentId/render`
+
+Roles: `OWNER`, `MANAGER`, `OPERATOR` respeitando restrição financeira.
+
+Renderiza novamente o documento existente. Se já houver PDF anterior, o arquivo antigo é removido
+do storage após a nova versão ser salva.
+
+### GET `/api/v1/documents/:documentId/download`
+
+Roles: `OWNER`, `MANAGER`, `OPERATOR`, `VIEWER` respeitando restrição financeira.
+
+Response 200:
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "f4ea14f7-859b-452d-b669-e12338d23b39",
+    "operationId": "7db71471-0cf4-4414-8d06-83eb9c1917c9",
+    "type": "WORK_ORDER",
+    "number": "OS-000001",
+    "status": "READY",
+    "mimeType": "application/pdf",
+    "fileSize": 48213,
+    "renderedAt": "2026-06-29T10:00:02.000Z",
+    "renderMetadata": { "engine": "direct-pdf-v1", "pageCount": 3 },
+    "createdAt": "2026-06-29T09:58:00.000Z",
+    "updatedAt": "2026-06-29T10:00:02.000Z",
+    "downloadReady": true,
+    "contentBase64": "JVBERi0xLjcK..."
+  }
+}
+```
+
+Errors:
+
+| HTTP | Code                           | Condition                             |
+| ---- | ------------------------------ | ------------------------------------- |
+| 400  | `VALIDATION_ERROR`             | UUID/type inválido                    |
+| 400  | `DOCUMENT_SIZE_LIMIT_EXCEEDED` | Blueprint/PDF excede limites          |
+| 403  | `DOCUMENT_FORBIDDEN_TYPE`      | Não-OWNER acessando `QUOTE`/`RECEIPT` |
+| 404  | `OPERATION_NOT_FOUND`          | Operation ausente                     |
+| 404  | `DOCUMENT_NOT_FOUND`           | OperationDocument ausente             |
+| 404  | `ORGANIZATION_NOT_FOUND`       | Seed organizacional/config ausente    |
+| 409  | `DOCUMENT_DOWNLOAD_NOT_READY`  | Download solicitado antes do render   |
+| 500  | `DOCUMENT_RENDER_FAILED`       | Falha inesperada no render            |
+
+Migration: `20260629110000_document_engine_foundation`.

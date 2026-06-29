@@ -2,17 +2,42 @@
 
 ## Current milestone
 
-**Sprint 5 — Equipment Domain Foundation**  
-Status: concluída em 24 de junho de 2026.
+**Sprint 7 — Document Configuration & Signature Domain (Produção)**
+Status: concluída em 29 de junho de 2026.
 
-As Sprints 0, 1, 2 e 3 foram preservadas. Nenhuma entidade, migration ou regra operacional foi
-adicionada.
+As Sprints 0, 1, 2, 3, 3.5, 4, 5 e 6 foram preservadas. Nenhum módulo operacional novo foi
+adicionado nesta sprint.
 
 Sprint 4 introduz o primeiro domínio operacional de produção: Customer. Organization continua
 representando a empresa dona da instalação; Customer representa o cliente atendido por ela.
 
-Sprint 5 introduz Equipment como domínio real ligado obrigatoriamente a Customer e opcionalmente a
+Sprint 5 introduziu Equipment como domínio real ligado obrigatoriamente a Customer e opcionalmente a
 CustomerAddress e equipamento pai.
+
+Sprint 6 introduziu o motor oficial de documentos de produção, exclusivamente backend:
+
+```text
+Operation
+↓
+DocumentBuilder
+↓
+DocumentBlueprint
+↓
+DocumentRenderer
+↓
+PDF Engine
+```
+
+O Builder concentra regras de negócio e resolve operação, cliente, equipamento, operador,
+observações, fotos, checklist, documentos relacionados e assinatura preparada. O Blueprint é
+independente de PDF. O Renderer transforma o Blueprint em páginas com cabeçalho/rodapé repetidos,
+numeração, paginação e proteção contra quebras incorretas. O PDF Engine gera PDF diretamente, sem
+HTML/print.
+
+Sprint 7 adiciona a configuração documental persistida e o domínio Signature. Templates agora
+suportam `requiresSignature`, `signatureMode` (`NONE`, `FIXED`, `COLLECTED`, `HYBRID`) e
+`signatureId`. O Builder passa a receber organização/settings via `DocumentConfigurationService`;
+ele ainda não aplica assinatura fixa/coletada no PDF, conforme fora de escopo da sprint.
 
 ## Architecture
 
@@ -33,11 +58,13 @@ src/modules/
 ├── auth/
 ├── config/
 ├── customers/
+├── document-engine/
 ├── database/
 ├── equipments/
 ├── health/
 ├── internal-demo/
 ├── organization/
+├── signatures/
 └── users/
 ```
 
@@ -51,6 +78,10 @@ Migrations:
 4. `20260624110000_user_team_foundation`
 5. `20260624160000_customer_domain_foundation`
 6. `20260624190000_equipment_domain_foundation`
+7. `20260627120000_template_is_active`
+8. `20260627150000_operation_domain_foundation`
+9. `20260629110000_document_engine_foundation`
+10. `20260629150000_document_configuration_signature_domain`
 
 Sprint 3.5 não criou migrations e não alterou `schema.prisma`.
 
@@ -127,6 +158,150 @@ Cada equipamento demo possui endereço real, métrica e manual PDF. `demo.equipm
 
 Validação: 6 migrations do zero, 5 equipamentos demo, hierarquia, filtros combinados, QR,
 integridade customer/address/parent, métricas, anexos, soft delete, RBAC e nove eventos auditados.
+
+### Document Engine
+
+Módulo: `src/modules/document-engine`.
+
+Camadas:
+
+- `builder/DocumentBuilderService`: recebe uma Operation e monta um `DocumentBlueprint`;
+- `blueprint/document-blueprint.types`: modelo oficial independente de PDF com Header, Footer,
+  Section, Paragraph, Table, List, Image, QR Code, Checklist, SignaturePlaceholder, Observation e
+  Metadata;
+- `renderer/DocumentRendererService`: paginação lógica, cabeçalho/rodapé repetidos, numeração e
+  quebra de tabela por blocos;
+- `pdf/PdfEngineService`: geração direta de PDF 1.7 usando primitives de PDF, fontes Helvetica,
+  múltiplas páginas, linhas, caixas, textos, tabelas e metadados;
+- `signatures/*`: contratos e resolver padrão para futura assinatura fixa/coletada/híbrida/sem
+  assinatura. Não há CRUD, tabela ou domínio funcional de assinatura nesta sprint.
+
+`OperationDocument` recebeu:
+
+- `storageKey`;
+- `mimeType`;
+- `fileSize`;
+- `renderedAt`;
+- `renderMetadata`.
+
+Storage:
+
+- PDFs são gravados em `documents/operations/<operationId>/<type>-<uuid>.pdf`;
+- nomes externos nunca são usados no path;
+- download retorna base64 via contrato JSON atual.
+
+Endpoints criados:
+
+| Method | Path                                                      | Access                           |
+| ------ | --------------------------------------------------------- | -------------------------------- |
+| GET    | `/api/v1/documents/operations/:operationId/:type/preview` | OWNER, MANAGER, OPERATOR, VIEWER |
+| POST   | `/api/v1/documents/operations/:operationId/:type/render`  | OWNER, MANAGER, OPERATOR         |
+| GET    | `/api/v1/documents/:documentId/preview`                   | OWNER, MANAGER, OPERATOR, VIEWER |
+| POST   | `/api/v1/documents/:documentId/render`                    | OWNER, MANAGER, OPERATOR         |
+| GET    | `/api/v1/documents/:documentId/download`                  | OWNER, MANAGER, OPERATOR, VIEWER |
+
+Documentos financeiros (`QUOTE`, `RECEIPT`) são bloqueados para não-OWNER por segurança.
+
+Audit events:
+
+- `DOCUMENT_PREVIEWED`;
+- `DOCUMENT_RENDERED`;
+- `DOCUMENT_DOWNLOADED`.
+
+Limites de AppSec:
+
+- 80 seções;
+- 600 componentes;
+- 400 linhas de tabela/checklist;
+- 80 páginas renderizadas;
+- PDF máximo de 10 MiB;
+- sanitização de texto antes do Blueprint e do PDF;
+- storage key gerada por UUID para evitar path traversal;
+- renderer/PDF engine não acessam banco de dados.
+
+### Document Configuration & Signature Domain
+
+Sprint 7 criou a fundação de configuração documental e assinatura.
+
+Entidades/alterações:
+
+- `Signature`:
+  - `id`;
+  - `name`;
+  - `title`;
+  - `imageStorageKey`;
+  - `mimeType`;
+  - `originalFileName`;
+  - `fileSize`;
+  - `active`;
+  - `createdAt`;
+  - `updatedAt`.
+- `DocumentTemplate`:
+  - `requiresSignature Boolean @default(false)`;
+  - `signatureMode SignatureMode @default(NONE)`;
+  - `signatureId String?`.
+- enum `SignatureMode`: `NONE`, `FIXED`, `COLLECTED`, `HYBRID`.
+
+Arquitetura criada:
+
+- `DocumentAssetResolver`: única porta para assets de documentos no StorageProvider. Centraliza PDF,
+  assinaturas e futuros logos/marca d'água/fotos/QR codes;
+- `DocumentConfigurationService`: fornece organização, settings, templates ativos, default template
+  e assinatura para o Builder sem expor consultas diretas a tabelas;
+- `LayoutEngine`: prepara cálculo de área imprimível, largura útil, altura útil e quebra lógica de
+  página;
+- `DocumentMeasureService`: mede texto, tabela, imagem, lista e checklist para uso do LayoutEngine;
+- `SignaturesModule`: CRUD, upload/download e auditoria de assinaturas.
+
+Endpoints criados:
+
+| Method | Path                                               | Access                 |
+| ------ | -------------------------------------------------- | ---------------------- |
+| GET    | `/api/v1/documents/configuration`                  | OWNER, MANAGER, VIEWER |
+| GET    | `/api/v1/documents/configuration/types/:type`      | OWNER, MANAGER, VIEWER |
+| GET    | `/api/v1/documents/configuration/templates/:id`    | OWNER, MANAGER, VIEWER |
+| GET    | `/api/v1/signatures`                               | OWNER, MANAGER, VIEWER |
+| GET    | `/api/v1/signatures/:id`                           | OWNER, MANAGER, VIEWER |
+| POST   | `/api/v1/signatures`                               | OWNER                  |
+| PATCH  | `/api/v1/signatures/:id`                           | OWNER                  |
+| DELETE | `/api/v1/signatures/:id`                           | OWNER                  |
+| POST   | `/api/v1/signatures/:id/upload`                    | OWNER                  |
+| GET    | `/api/v1/signatures/:id/download`                  | OWNER, MANAGER, VIEWER |
+
+AppSec:
+
+- OPERATOR sem acesso ao domínio de configuração/assinatura;
+- OWNER é o único papel com escrita;
+- upload de assinatura limitado a 2 MiB;
+- PNG/JPG/JPEG com validação de extensão, MIME e assinatura binária;
+- nome original sanitizado e nunca usado para storage key;
+- storage key gerada com UUID;
+- soft delete de assinatura (`active=false`);
+- templates `FIXED`/`HYBRID` exigem assinatura ativa;
+- AuditLog registra criação/edição/soft delete/upload/download de assinatura.
+
+Audit events:
+
+- `SIGNATURE_CREATED`;
+- `SIGNATURE_UPDATED`;
+- `SIGNATURE_DELETED`;
+- `SIGNATURE_IMAGE_UPLOADED`;
+- `SIGNATURE_IMAGE_DOWNLOADED`.
+
+Seeds:
+
+- Demo seed cria assinaturas de exemplo somente quando `ENABLE_DEMO_DATA=true`;
+- reset demo remove assinaturas e imagens demo pelo manifesto;
+- nenhuma nova migration ou dependência foi criada para demo dataset.
+
+Validação executada:
+
+- `npm run lint`;
+- `npm test`;
+- `npm run build`;
+- `DATABASE_URL=... npx prisma validate`;
+- todas as migrations foram aplicadas em PostgreSQL 17 limpo, incluindo
+  `20260629150000_document_configuration_signature_domain`.
 
 ### Stage 0
 
@@ -387,5 +562,5 @@ Verificações específicas:
 
 - Novo domínio **Operation** (real, Prisma): `Operation`, `OperationPhoto`, `OperationDocument` + enums `OperationType`/`OperationStatus`/`OperationDocumentStatus`. Migration `20260627150000_operation_domain_foundation`.
 - Módulo `operations` (controller/service/dto): `GET /operations` (filtros), `/stats`, `/:id`, `/photos/:id` (base64), `POST /operations` (cria + **OS rascunho** automática `WORK_ORDER/DRAFT`, número `OS-000001` derivado do sequencial), `PATCH /:id`. Operador = usuário autenticado; fotos via storage provider (data URL, PNG/JPEG, 16 × 5 MiB); assinatura como texto.
-- Toda OS nasce de uma Operation; `OperationDocument` reusa `DocumentTemplateType` (fundação única para OS/PMOC/Laudo/Relatório/Visita/Orçamento/Recibo). Histórico de equipamento/cliente derivado de `/operations` (sem duplicação). PDF é escopo futuro.
+- Toda OS nasce de uma Operation; `OperationDocument` reusa `DocumentTemplateType` (fundação única para OS/PMOC/Laudo/Relatório/Visita/Orçamento/Recibo). Histórico de equipamento/cliente derivado de `/operations` (sem duplicação). PDF oficial é gerado pelo Document Engine da Sprint 6.
 - Validado com `prisma generate` + `tsc --noEmit` (sem banco neste ambiente; migration roda no deploy).
