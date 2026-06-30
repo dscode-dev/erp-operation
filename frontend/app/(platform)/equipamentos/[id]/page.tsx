@@ -1,6 +1,6 @@
 "use client";
 
-import { use } from "react";
+import { use, useState } from "react";
 import Link from "next/link";
 import { Activity } from "lucide-react";
 import { Breadcrumbs } from "@platform/components/breadcrumbs";
@@ -10,8 +10,10 @@ import { QrFoundation } from "@platform/components/qr-foundation";
 import { StatusPill } from "@erp/ui/status-pill";
 import { SkeletonCard } from "@erp/ui/skeletons";
 import { AsyncBoundary } from "@erp/ui/states";
-import { Timeline, type TimelineEvent } from "@erp/ui/timeline";
-import { equipmentsApi, operationsApi, useQuery, type EquipmentDetail, type ServicesData } from "@erp/api";
+import { DrawerTabs } from "@erp/ui/drawer-tabs";
+import { AssetTimeline } from "@erp/ui/assets/asset-timeline";
+import { OperationDetailDrawer } from "@platform/components/operation-detail-drawer";
+import { equipmentsApi, assetLifecycleApi, useQuery, type EquipmentDetail, type AssetLifecycleStats } from "@erp/api";
 import { formatDate, formatDateTime } from "@erp/utils";
 import {
   EQUIPMENT_STATUS_LABEL,
@@ -19,18 +21,15 @@ import {
   EQUIPMENT_TYPE_LABEL,
 } from "@platform/equipment-display";
 
-function equipmentTimeline(data: ServicesData | null, equipmentName: string): TimelineEvent[] {
-  if (!data) return [];
-  return data.items
-    .filter((s) => s.equipment === equipmentName)
-    .flatMap((s) => s.history.map((h, i) => ({ id: `${s.id}-${i}`, at: h.at, kind: h.kind, label: h.label, meta: s.operator })))
-    .sort((a, b) => b.at.localeCompare(a.at));
-}
+const TABS = ["Resumo", "Informações", "Timeline", "Documentos", "Métricas", "Anexos"] as const;
+type Tab = (typeof TABS)[number];
 
 export default function EquipamentoDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const [tab, setTab] = useState<Tab>("Resumo");
+  const [operationId, setOperationId] = useState<string | null>(null);
   const detail = useQuery<EquipmentDetail>((signal) => equipmentsApi.getEquipment(id, { signal }), [id]);
-  const services = useQuery<ServicesData>((signal) => operationsApi.getServices({ signal }), []);
+  const lifecycleStats = useQuery<AssetLifecycleStats>((signal) => assetLifecycleApi.getEquipmentLifecycleStats(id, { signal }), [id]);
 
   return (
     <div className="space-y-6 max-w-[1400px]">
@@ -54,7 +53,24 @@ export default function EquipamentoDetailPage({ params }: { params: Promise<{ id
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
               <div className="lg:col-span-2 space-y-4">
-                <InfoCard title="Ficha técnica">
+                <DrawerTabs tabs={TABS} active={tab} onChange={setTab} counts={{ Timeline: lifecycleStats.data?.total, Métricas: e.metrics.length, Anexos: e.attachments.length }} />
+
+                {tab === "Resumo" && (
+                  <>
+                    <div className="grid gap-3 sm:grid-cols-4">
+                      <InfoCard title="Preventivas"><p className="text-2xl font-semibold">{lifecycleStats.data?.preventiveCount ?? "—"}</p></InfoCard>
+                      <InfoCard title="Corretivas"><p className="text-2xl font-semibold">{lifecycleStats.data?.correctiveCount ?? "—"}</p></InfoCard>
+                      <InfoCard title="Documentos"><p className="text-2xl font-semibold">{lifecycleStats.data?.documentCount ?? "—"}</p></InfoCard>
+                      <InfoCard title="Inspeções"><p className="text-2xl font-semibold">{lifecycleStats.data?.inspectionCount ?? "—"}</p></InfoCard>
+                    </div>
+                    <InfoCard title="Últimos eventos">
+                      <AssetTimeline equipmentId={e.id} limit={5} compact onOpenOperation={setOperationId} />
+                    </InfoCard>
+                  </>
+                )}
+
+                {tab === "Informações" && (
+                  <InfoCard title="Ficha técnica">
                   <InfoRow label="Tag" value={e.tag ?? "—"} />
                   <InfoRow label="Fabricante" value={e.manufacturer ?? "—"} />
                   <InfoRow label="Modelo" value={e.model ?? "—"} />
@@ -65,9 +81,23 @@ export default function EquipamentoDetailPage({ params }: { params: Promise<{ id
                   <InfoRow label="Garantia até" value={formatDate(e.warrantyExpiration)} />
                   <InfoRow label="Local" value={e.address?.name ?? e.address?.city ?? "—"} />
                   {e.observations && <InfoRow label="Observações" value={e.observations} />}
-                </InfoCard>
+                  </InfoCard>
+                )}
 
-                <InfoCard title={`Métricas recentes (${e.metrics.length})`}>
+                {tab === "Timeline" && (
+                  <InfoCard title="Timeline oficial">
+                    <AssetTimeline equipmentId={e.id} onOpenOperation={setOperationId} />
+                  </InfoCard>
+                )}
+
+                {tab === "Documentos" && (
+                  <InfoCard title="Documentos do ciclo de vida">
+                    <AssetTimeline equipmentId={e.id} type="DOCUMENT" compact onOpenOperation={setOperationId} />
+                  </InfoCard>
+                )}
+
+                {tab === "Métricas" && (
+                  <InfoCard title={`Métricas recentes (${e.metrics.length})`}>
                   {e.metrics.length === 0 ? (
                     <p className="text-sm text-[var(--color-muted-foreground)]">Nenhuma métrica registrada.</p>
                   ) : (
@@ -82,25 +112,41 @@ export default function EquipamentoDetailPage({ params }: { params: Promise<{ id
                       ))}
                     </ul>
                   )}
-                </InfoCard>
+                  </InfoCard>
+                )}
+
+                {tab === "Anexos" && (
+                  <InfoCard title={`Anexos (${e.attachments.length})`}>
+                    {e.attachments.length === 0 ? (
+                      <p className="text-sm text-[var(--color-muted-foreground)]">Nenhum anexo.</p>
+                    ) : (
+                      <ul className="space-y-2 text-sm">
+                        {e.attachments.map((at) => (
+                          <li key={at.id} className="flex items-center justify-between gap-2">
+                            <span className="truncate">{at.originalFileName}</span>
+                            <span className="text-caption">{at.category}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </InfoCard>
+                )}
+              </div>
+
+              <div className="space-y-4">
+                <QrFoundation qrCode={e.qrCode} qrToken={e.qrToken} />
 
                 <InfoCard title="Hierarquia">
                   <div className="space-y-3">
                     <div>
                       <div className="text-caption uppercase tracking-wider mb-1">Equipamento pai</div>
                       {e.parent ? (
-                        <Link href={`/equipamentos/${e.parent.id}`} className="text-sm font-medium hover:text-[var(--color-primary)]">
-                          {e.parent.name}{e.parent.tag ? ` · ${e.parent.tag}` : ""}
-                        </Link>
-                      ) : (
-                        <span className="text-sm text-[var(--color-muted-foreground)]">Sem equipamento pai.</span>
-                      )}
+                        <Link href={`/equipamentos/${e.parent.id}`} className="text-sm font-medium hover:text-[var(--color-primary)]">{e.parent.name}{e.parent.tag ? ` · ${e.parent.tag}` : ""}</Link>
+                      ) : <span className="text-sm text-[var(--color-muted-foreground)]">Sem equipamento pai.</span>}
                     </div>
                     <div>
                       <div className="text-caption uppercase tracking-wider mb-2">Filhos ({e.children.length})</div>
-                      {e.children.length === 0 ? (
-                        <span className="text-sm text-[var(--color-muted-foreground)]">Nenhum equipamento filho.</span>
-                      ) : (
+                      {e.children.length === 0 ? <span className="text-sm text-[var(--color-muted-foreground)]">Nenhum equipamento filho.</span> : (
                         <ul className="space-y-1.5">
                           {e.children.map((child) => (
                             <li key={child.id}>
@@ -115,31 +161,9 @@ export default function EquipamentoDetailPage({ params }: { params: Promise<{ id
                     </div>
                   </div>
                 </InfoCard>
-
-                <InfoCard title="Histórico">
-                  <Timeline events={equipmentTimeline(services.data, e.name)} />
-                </InfoCard>
-              </div>
-
-              <div className="space-y-4">
-                <QrFoundation qrCode={e.qrCode} qrToken={e.qrToken} />
-
-                <InfoCard title={`Anexos (${e.attachments.length})`}>
-                  {e.attachments.length === 0 ? (
-                    <p className="text-sm text-[var(--color-muted-foreground)]">Nenhum anexo.</p>
-                  ) : (
-                    <ul className="space-y-2 text-sm">
-                      {e.attachments.map((at) => (
-                        <li key={at.id} className="flex items-center justify-between gap-2">
-                          <span className="truncate">{at.originalFileName}</span>
-                          <span className="text-caption">{at.category}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </InfoCard>
               </div>
             </div>
+            <OperationDetailDrawer operationId={operationId} open={operationId !== null} onClose={() => setOperationId(null)} />
           </>
         )}
       </AsyncBoundary>

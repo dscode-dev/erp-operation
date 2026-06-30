@@ -8,6 +8,15 @@ export function formatNumber(value: number): string {
   return value.toLocaleString("pt-BR");
 }
 
+export function formatBytes(value: number | null | undefined): string {
+  const bytes = value ?? 0;
+  if (bytes <= 0) return "—";
+  const units = ["B", "KB", "MB", "GB"];
+  const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const amount = bytes / 1024 ** exponent;
+  return `${amount.toLocaleString("pt-BR", { maximumFractionDigits: exponent === 0 ? 0 : 1 })} ${units[exponent]}`;
+}
+
 /** ISO date/datetime → "dd/mm/aaaa". Returns "—" for null/invalid. */
 export function formatDate(iso: string | null | undefined): string {
   if (!iso) return "—";

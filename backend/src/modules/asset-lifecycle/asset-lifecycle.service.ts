@@ -1,0 +1,351 @@
+import { HttpStatus, Inject, Injectable } from '@nestjs/common';
+import { AssetLifecycleEventType, Prisma } from '@prisma/client';
+import { randomUUID } from 'node:crypto';
+import { extname } from 'node:path';
+import {
+  STORAGE_PROVIDER_TOKEN,
+  type StorageProviderContract,
+} from '../../infra/storage/storage-provider.type';
+import {
+  ASSET_LIFECYCLE_ATTACHMENT_EXTENSIONS,
+  ASSET_LIFECYCLE_ATTACHMENT_MIME_TYPES,
+  ASSET_LIFECYCLE_ATTACHMENT_RESOURCE,
+  ASSET_LIFECYCLE_AUDIT_ACTIONS,
+  ASSET_LIFECYCLE_STORAGE_PREFIX,
+  MAX_ASSET_LIFECYCLE_ATTACHMENT_SIZE_BYTES,
+} from '../../shared/constants/asset-lifecycle.constants';
+import { ERROR_CODES } from '../../shared/constants/error-codes.constants';
+import { ApplicationException } from '../../shared/exceptions/application.exception';
+import type { AuthenticatedUser } from '../../shared/types/authenticated-user.type';
+import { PrismaService } from '../database/prisma.service';
+import {
+  ASSET_LIFECYCLE_EVENT_INCLUDE,
+  type AssetLifecycleAuditContext,
+  type AssetLifecycleEventPayload,
+} from './asset-lifecycle.types';
+import type {
+  CreateAssetLifecycleEventDto,
+  ListAssetLifecycleQueryDto,
+} from './dto/asset-lifecycle.dto';
+import { LifecyclePublisher } from './lifecycle-publisher.service';
+import { TimelineAssembler } from './timeline-assembler.service';
+import type { UploadedAssetLifecycleFile } from './types/uploaded-asset-lifecycle-file.type';
+
+const INTERVENTION_EVENT_TYPES: AssetLifecycleEventType[] = [
+  AssetLifecycleEventType.PREVENTIVE,
+  AssetLifecycleEventType.CORRECTIVE,
+  AssetLifecycleEventType.MAINTENANCE,
+  AssetLifecycleEventType.PART_REPLACEMENT,
+  AssetLifecycleEventType.INSPECTION,
+];
+
+const MAINTENANCE_EVENT_TYPES: AssetLifecycleEventType[] = [
+  AssetLifecycleEventType.PREVENTIVE,
+  AssetLifecycleEventType.CORRECTIVE,
+  AssetLifecycleEventType.MAINTENANCE,
+];
+
+@Injectable()
+export class AssetLifecycleService {
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(STORAGE_PROVIDER_TOKEN) private readonly storage: StorageProviderContract,
+    private readonly publisher: LifecyclePublisher,
+    private readonly timeline: TimelineAssembler,
+  ) {}
+
+  async list(query: ListAssetLifecycleQueryDto): Promise<unknown> {
+    const where = this.where(query);
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.assetLifecycleEvent.findMany({
+        where,
+        include: ASSET_LIFECYCLE_EVENT_INCLUDE,
+        orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
+        skip: (query.page - 1) * query.limit,
+        take: query.limit,
+      }),
+      this.prisma.assetLifecycleEvent.count({ where }),
+    ]);
+    return {
+      items: items.map((event) => this.withTimeline(event)),
+      timelineGroups: this.timeline.assembleGroups(items),
+      pagination: {
+        page: query.page,
+        limit: query.limit,
+        total,
+        totalPages: Math.ceil(total / query.limit),
+      },
+    };
+  }
+
+  async get(id: string): Promise<unknown> {
+    const event = await this.eventOrThrow(id);
+    return this.withTimeline(event);
+  }
+
+  listForEquipment(equipmentId: string, query: ListAssetLifecycleQueryDto): Promise<unknown> {
+    return this.list({ ...query, equipmentId });
+  }
+
+  async create(
+    dto: CreateAssetLifecycleEventDto,
+    actor: AuthenticatedUser,
+    context: AssetLifecycleAuditContext,
+  ): Promise<unknown> {
+    const event = await this.publisher.publishManual(dto, actor.id, context);
+    return this.withTimeline(event);
+  }
+
+  async listAttachments(eventId: string): Promise<unknown> {
+    await this.eventOrThrow(eventId);
+    return this.prisma.assetLifecycleAttachment.findMany({
+      where: { eventId, deletedAt: null },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async uploadAttachment(
+    eventId: string,
+    category: string,
+    file: UploadedAssetLifecycleFile | undefined,
+    actor: AuthenticatedUser,
+    context: AssetLifecycleAuditContext,
+  ): Promise<unknown> {
+    await this.eventOrThrow(eventId);
+    this.validateAttachment(file);
+    const validFile = file as UploadedAssetLifecycleFile;
+    const extension = this.extensionFor(validFile);
+    const storageKey = `${ASSET_LIFECYCLE_STORAGE_PREFIX}/${eventId}/attachments/${randomUUID()}.${extension}`;
+    try {
+      await this.storage.save({ storageKey, content: validFile.buffer });
+      return await this.prisma.$transaction(async (tx) => {
+        const attachment = await tx.assetLifecycleAttachment.create({
+          data: {
+            eventId,
+            storageKey,
+            originalFileName: this.sanitizeOriginalName(validFile.originalname),
+            mimeType: validFile.mimetype,
+            fileSize: validFile.size,
+            category: this.clean(category).slice(0, 80),
+          },
+        });
+        await tx.auditLog.create({
+          data: this.auditInput(
+            ASSET_LIFECYCLE_AUDIT_ACTIONS.ATTACHMENT_UPLOADED,
+            ASSET_LIFECYCLE_ATTACHMENT_RESOURCE,
+            actor.id,
+            context,
+            {
+              eventId,
+              attachmentId: attachment.id,
+              fileSize: attachment.fileSize,
+              mimeType: attachment.mimeType,
+            },
+          ),
+        });
+        return attachment;
+      });
+    } catch (error) {
+      await this.storage.delete(storageKey).catch(() => undefined);
+      throw error;
+    }
+  }
+
+  async deleteAttachment(
+    eventId: string,
+    attachmentId: string,
+    actor: AuthenticatedUser,
+    context: AssetLifecycleAuditContext,
+  ): Promise<{ deleted: true }> {
+    await this.eventOrThrow(eventId);
+    const existing = await this.prisma.assetLifecycleAttachment.findFirst({
+      where: { id: attachmentId, eventId, deletedAt: null },
+    });
+    if (!existing) {
+      throw new ApplicationException(
+        ERROR_CODES.ASSET_LIFECYCLE_ATTACHMENT_NOT_FOUND,
+        'Asset lifecycle attachment was not found',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    await this.prisma.$transaction([
+      this.prisma.assetLifecycleAttachment.update({
+        where: { id: attachmentId },
+        data: { deletedAt: new Date() },
+      }),
+      this.prisma.auditLog.create({
+        data: this.auditInput(
+          ASSET_LIFECYCLE_AUDIT_ACTIONS.ATTACHMENT_DELETED,
+          ASSET_LIFECYCLE_ATTACHMENT_RESOURCE,
+          actor.id,
+          context,
+          { eventId, attachmentId },
+        ),
+      }),
+    ]);
+    await this.storage.delete(existing.storageKey).catch(() => undefined);
+    return { deleted: true };
+  }
+
+  async stats(equipmentId: string): Promise<unknown> {
+    const events = await this.prisma.assetLifecycleEvent.findMany({
+      where: { equipmentId },
+      select: { type: true, occurredAt: true },
+      orderBy: { occurredAt: 'asc' },
+    });
+    const byType = Object.fromEntries(
+      Object.values(AssetLifecycleEventType).map((type) => [
+        type,
+        events.filter((event) => event.type === type).length,
+      ]),
+    );
+    const interventions = events.filter((event) => INTERVENTION_EVENT_TYPES.includes(event.type));
+    const gaps = interventions
+      .slice(1)
+      .map((event, index) => event.occurredAt.getTime() - interventions[index].occurredAt.getTime());
+    const averageDays =
+      gaps.length > 0 ? gaps.reduce((sum, gap) => sum + gap, 0) / gaps.length / 86_400_000 : null;
+    return {
+      equipmentId,
+      total: events.length,
+      byType,
+      preventiveCount: byType.PREVENTIVE,
+      correctiveCount: byType.CORRECTIVE,
+      documentCount: byType.DOCUMENT,
+      inspectionCount: byType.INSPECTION,
+      firstInstallation:
+        events.find((event) => event.type === AssetLifecycleEventType.INSTALLATION)?.occurredAt ??
+        null,
+      lastMaintenance:
+        [...events]
+          .reverse()
+          .find((event) => MAINTENANCE_EVENT_TYPES.includes(event.type))?.occurredAt ?? null,
+      meanDaysBetweenInterventions: averageDays,
+    };
+  }
+
+  private where(query: ListAssetLifecycleQueryDto): Prisma.AssetLifecycleEventWhereInput {
+    return {
+      ...(query.equipmentId ? { equipmentId: query.equipmentId } : {}),
+      ...(query.customerId ? { equipment: { customerId: query.customerId } } : {}),
+      ...(query.operationId ? { operationId: query.operationId } : {}),
+      ...(query.type ? { type: query.type } : {}),
+      ...(query.performedBy ? { performedBy: query.performedBy } : {}),
+      ...(query.from || query.to
+        ? {
+            occurredAt: {
+              ...(query.from ? { gte: new Date(query.from) } : {}),
+              ...(query.to ? { lte: new Date(query.to) } : {}),
+            },
+          }
+        : {}),
+    };
+  }
+
+  private async eventOrThrow(id: string): Promise<AssetLifecycleEventPayload> {
+    const event = await this.prisma.assetLifecycleEvent.findUnique({
+      where: { id },
+      include: ASSET_LIFECYCLE_EVENT_INCLUDE,
+    });
+    if (!event) {
+      throw new ApplicationException(
+        ERROR_CODES.ASSET_LIFECYCLE_EVENT_NOT_FOUND,
+        'Asset lifecycle event was not found',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    return event;
+  }
+
+  private validateAttachment(file: UploadedAssetLifecycleFile | undefined): void {
+    if (!file) {
+      throw new ApplicationException(
+        ERROR_CODES.UPLOAD_FILE_REQUIRED,
+        'Asset lifecycle attachment file is required',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    if (file.size <= 0 || file.size > MAX_ASSET_LIFECYCLE_ATTACHMENT_SIZE_BYTES) {
+      throw new ApplicationException(
+        ERROR_CODES.UPLOAD_FILE_TOO_LARGE,
+        'Asset lifecycle attachment is empty or exceeds the 5 MiB limit',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    if (!ASSET_LIFECYCLE_ATTACHMENT_MIME_TYPES.includes(file.mimetype as never)) {
+      throw new ApplicationException(
+        ERROR_CODES.UPLOAD_INVALID_MIME_TYPE,
+        'Asset lifecycle attachment MIME type is not allowed',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const extension = this.extensionFor(file);
+    if (!ASSET_LIFECYCLE_ATTACHMENT_EXTENSIONS.includes(extension as never)) {
+      throw new ApplicationException(
+        ERROR_CODES.UPLOAD_INVALID_EXTENSION,
+        'Asset lifecycle attachment extension is not allowed',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    if (!this.hasValidBinarySignature(file.buffer, file.mimetype)) {
+      throw new ApplicationException(
+        ERROR_CODES.UPLOAD_INVALID_MIME_TYPE,
+        'Asset lifecycle attachment binary signature is invalid',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
+  private extensionFor(file: UploadedAssetLifecycleFile): string {
+    return extname(file.originalname).toLowerCase().replace('.', '');
+  }
+
+  private hasValidBinarySignature(buffer: Buffer, mimeType: string): boolean {
+    if (mimeType === 'application/pdf') return buffer.subarray(0, 5).toString('latin1') === '%PDF-';
+    if (mimeType === 'image/png')
+      return buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    return buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
+  }
+
+  private clean(value: string): string {
+    return value
+      .split('')
+      .filter((char) => {
+        const code = char.charCodeAt(0);
+        return code === 9 || code === 10 || code === 13 || (code >= 32 && code !== 127);
+      })
+      .join('')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  private sanitizeOriginalName(name: string): string {
+    return (name.replace(/[^\w.\- ]+/g, '_').replace(/\s+/g, ' ').trim() || 'attachment').slice(0, 255);
+  }
+
+  private withTimeline(event: AssetLifecycleEventPayload): AssetLifecycleEventPayload & {
+    timeline: Record<string, unknown>;
+  } {
+    return { ...event, timeline: this.timeline.assemble(event) };
+  }
+
+  private auditInput(
+    action: string,
+    resource: string,
+    actor: string,
+    context: AssetLifecycleAuditContext,
+    metadata: Record<string, unknown>,
+  ): Prisma.AuditLogUncheckedCreateInput {
+    return {
+      action,
+      resource,
+      actor,
+      metadata: {
+        requestId: context.requestId,
+        ip: context.ip,
+        userAgent: context.userAgent,
+        ...metadata,
+      },
+    };
+  }
+}

@@ -8,8 +8,8 @@
  * ativar/desativar, definir padrão, importar modelo do cliente e ver versão.
  * Modelos profissionais renderizados via DocumentPaper (prontos para o backend).
  */
-import { useMemo, useRef, useState } from "react";
-import { FileText, Eye, Pencil, Star, Power, Upload, Plus, Trash2, Loader2, CheckCircle2 } from "lucide-react";
+import { useRef, useState } from "react";
+import { FileText, Eye, Pencil, Star, Power, Upload, Plus, Trash2, Loader2, CheckCircle2, MoreVertical } from "lucide-react";
 import { PageHeader } from "@platform/components/page-header";
 import { SectionCard } from "@erp/ui/section-card";
 import { StatusChip } from "@erp/ui/status-chip";
@@ -18,25 +18,19 @@ import { ErrorState } from "@erp/ui/states";
 import { Drawer } from "@erp/ui/drawer";
 import { Gate } from "@erp/ui/auth/gate";
 import { ConfirmDialog } from "@erp/ui/confirm-dialog";
-import { DocumentPaper } from "@erp/ui/documents/document-paper";
-import { MODEL_BLUEPRINTS, buildDocument, type ModelKey } from "@erp/ui/documents/model-blueprints";
+import { MODEL_BLUEPRINTS, type ModelKey } from "@erp/ui/documents/model-blueprints";
 import { TemplateFormDrawer } from "@platform/components/template-form-drawer";
 import { useAuth } from "@erp/ui/auth/auth-provider";
 import { organizationApi, useQuery, type DocumentTemplate } from "@erp/api";
 import { formatDate } from "@erp/utils";
 
 export default function ReportsPage() {
-  const { session, hasRole } = useAuth();
+  const { hasRole } = useAuth();
   const canEdit = hasRole("OWNER");
   const templates = useQuery((s) => organizationApi.listTemplates({ signal: s }), []);
 
   const [previewKey, setPreviewKey] = useState<ModelKey | null>(null);
   const [manageKey, setManageKey] = useState<ModelKey | null>(null);
-
-  const org = {
-    name: session?.organization.tradeName || session?.organization.legalName || "Climatize",
-    segment: session?.organization.segment ?? undefined,
-  };
 
   function templatesOfType(type: DocumentTemplate["type"]): DocumentTemplate[] {
     return (templates.data ?? []).filter((t) => t.type === type);
@@ -75,15 +69,16 @@ export default function ReportsPage() {
                   </div>
                   <div className="mt-3 flex flex-wrap items-center gap-1.5">
                     {def ? <StatusChip tone={def.isActive ? "success" : "neutral"} dot>{def.isActive ? "Ativo" : "Inativo"}</StatusChip> : <StatusChip tone="neutral">Modelo do sistema</StatusChip>}
+                    {def && <StatusChip tone={def.requiresSignature ? "info" : "neutral"}>{signatureModeLabel(def.signatureMode)}</StatusChip>}
                     {list.length > 0 && <StatusChip tone="info">{list.length} modelo{list.length > 1 ? "s" : ""}{activeCount !== list.length ? ` · ${activeCount} ativos` : ""}</StatusChip>}
                   </div>
                   <div className="mt-4 flex items-center gap-2">
                     <button type="button" onClick={() => setPreviewKey(bp.key)} className="inline-flex items-center gap-1.5 rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 h-9 text-sm hover:bg-[var(--color-muted)]">
-                      <Eye className="h-4 w-4" /> Pré-visualizar
+                      <Eye className="h-4 w-4" /> Ver configuração
                     </button>
                     {canEdit && (
                       <button type="button" onClick={() => setManageKey(bp.key)} className="inline-flex items-center gap-1.5 rounded-[var(--radius-md)] bg-[var(--color-primary)] text-[var(--color-primary-foreground)] px-3 h-9 text-sm font-medium">
-                        <Pencil className="h-4 w-4" /> Gerenciar
+                        <MoreVertical className="h-4 w-4" /> Ações
                       </button>
                     )}
                   </div>
@@ -95,11 +90,37 @@ export default function ReportsPage() {
       </div>
 
       {/* Preview */}
-      <Drawer open={previewKey !== null} onClose={() => setPreviewKey(null)} eyebrow="Modelo" title={previewKey ? MODEL_BLUEPRINTS.find((b) => b.key === previewKey)!.label : ""} width="max-w-3xl">
+      <Drawer open={previewKey !== null} onClose={() => setPreviewKey(null)} eyebrow="Modelo" title={previewKey ? MODEL_BLUEPRINTS.find((b) => b.key === previewKey)!.label : ""} width="max-w-xl">
         {previewKey && (() => {
           const bp = MODEL_BLUEPRINTS.find((b) => b.key === previewKey)!;
-          const data = buildDocument(bp, { number: "MODELO-EXEMPLO", date: new Date().toISOString(), customer: "Cliente Exemplo", equipment: "Equipamento Exemplo", operator: "Operador", value: 2400, statusLabel: "Modelo" }, { name: org.name });
-          return <div className="bg-[var(--color-muted)]/40 -m-5 p-4 sm:p-6"><DocumentPaper data={data} /></div>;
+          const list = templatesOfType(bp.templateType);
+          const def = list.find((t) => t.isDefault) ?? list[0];
+          return (
+            <div className="space-y-4">
+              <p className="text-sm text-[var(--color-muted-foreground)]">{bp.description}</p>
+              {def ? (
+                <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] p-4">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <StatusChip tone={def.isActive ? "success" : "neutral"} dot>{def.isActive ? "Ativo" : "Inativo"}</StatusChip>
+                    {def.isDefault && <StatusChip tone="primary">Padrão</StatusChip>}
+                    {def.isSystem && <StatusChip tone="neutral">Sistema</StatusChip>}
+                    <StatusChip tone={def.requiresSignature ? "info" : "neutral"}>{signatureModeLabel(def.signatureMode)}</StatusChip>
+                  </div>
+                  <dl className="mt-4 space-y-2 text-sm">
+                    <Row label="Nome" value={def.name} />
+                    <Row label="Cabeçalho" value={def.headerContent || "—"} />
+                    <Row label="Rodapé" value={def.footerContent || "—"} />
+                    <Row label="Observações" value={def.observations || "—"} />
+                    <Row label="Assinatura obrigatória" value={def.requiresSignature ? "Sim" : "Não"} />
+                    <Row label="Assinatura fixa" value={def.signatureId ?? "—"} />
+                    <Row label="Atualizado em" value={formatDate(def.updatedAt)} />
+                  </dl>
+                </div>
+              ) : (
+                <p className="text-sm text-[var(--color-muted-foreground)]">Nenhum template cadastrado para este tipo.</p>
+              )}
+            </div>
+          );
         })()}
       </Drawer>
 
@@ -235,4 +256,23 @@ function Action({ icon: Icon, label, onClick, busy, danger }: { icon: typeof Pen
       {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Icon className="h-3.5 w-3.5" />} {label}
     </button>
   );
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-start justify-between gap-4">
+      <dt className="text-caption">{label}</dt>
+      <dd className="text-right">{value}</dd>
+    </div>
+  );
+}
+
+function signatureModeLabel(mode: DocumentTemplate["signatureMode"]): string {
+  const labels: Record<DocumentTemplate["signatureMode"], string> = {
+    NONE: "Sem assinatura",
+    FIXED: "Assinatura fixa",
+    COLLECTED: "Coletada",
+    HYBRID: "Híbrida",
+  };
+  return labels[mode];
 }

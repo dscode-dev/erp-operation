@@ -1,8 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import {
-  DOCUMENT_STORAGE_PREFIX,
-} from '../../../shared/constants/document-engine.constants';
+import { DOCUMENT_STORAGE_PREFIX } from '../../../shared/constants/document-engine.constants';
 import { SIGNATURE_STORAGE_PREFIX } from '../../../shared/constants/signatures.constants';
 import {
   STORAGE_PROVIDER_TOKEN,
@@ -19,6 +17,13 @@ export interface SaveDocumentPdfInput {
 export interface SaveSignatureImageInput {
   content: Buffer;
   extension: 'png' | 'jpg' | 'jpeg';
+}
+
+export interface ResolvedAsset {
+  storageKey: string;
+  mimeType: string;
+  fileSize: number;
+  contentBase64: string;
 }
 
 @Injectable()
@@ -44,6 +49,39 @@ export class DocumentAssetResolver {
 
   getSignatureImage(storageKey: string): Promise<StoredFile> {
     return this.storage.get(storageKey);
+  }
+
+  async resolveSignature(
+    storageKey: string,
+    metadata: { mimeType: string; fileSize: number },
+  ): Promise<ResolvedAsset> {
+    const stored = await this.storage.get(storageKey);
+    return {
+      storageKey,
+      mimeType: metadata.mimeType,
+      fileSize: metadata.fileSize,
+      contentBase64: stored.content.toString('base64'),
+    };
+  }
+
+  async resolveLogo(storageKey: string, metadata: { mimeType: string; fileSize: number }): Promise<ResolvedAsset> {
+    const stored = await this.storage.get(storageKey);
+    return { storageKey, mimeType: metadata.mimeType, fileSize: metadata.fileSize, contentBase64: stored.content.toString('base64') };
+  }
+
+  async resolveWatermark(storageKey: string, metadata: { mimeType: string; fileSize: number }): Promise<ResolvedAsset> {
+    const stored = await this.storage.get(storageKey);
+    return { storageKey, mimeType: metadata.mimeType, fileSize: metadata.fileSize, contentBase64: stored.content.toString('base64') };
+  }
+
+  async resolveQrCode(storageKey: string, metadata: { mimeType: string; fileSize: number }): Promise<ResolvedAsset> {
+    const stored = await this.storage.get(storageKey);
+    return { storageKey, mimeType: metadata.mimeType, fileSize: metadata.fileSize, contentBase64: stored.content.toString('base64') };
+  }
+
+  async resolveDocumentImage(storageKey: string, metadata: { mimeType: string; fileSize: number }): Promise<ResolvedAsset> {
+    const stored = await this.storage.get(storageKey);
+    return { storageKey, mimeType: metadata.mimeType, fileSize: metadata.fileSize, contentBase64: stored.content.toString('base64') };
   }
 
   delete(storageKey: string): Promise<void> {

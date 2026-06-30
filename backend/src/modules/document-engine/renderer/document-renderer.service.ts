@@ -15,6 +15,7 @@ import type {
   ObservationComponent,
   ParagraphComponent,
   QrCodeComponent,
+  SignatureComponent,
   SignaturePlaceholderComponent,
   TableComponent,
 } from '../blueprint/document-blueprint.types';
@@ -103,6 +104,8 @@ export class DocumentRendererService {
         return [this.imageBlock(component)];
       case 'qrCode':
         return [this.qrBlock(component)];
+      case 'signature':
+        return [this.signatureComponentBlock(component)];
       case 'signaturePlaceholder':
         return [this.signatureBlock(component)];
     }
@@ -364,6 +367,77 @@ export class DocumentRendererService {
           size: 8,
         },
       ],
+    };
+  }
+
+  private signatureComponentBlock(component: SignatureComponent): LayoutBlock {
+    const itemHeight = 96;
+    const height = 18 + Math.max(1, component.signatures.length) * itemHeight;
+    return {
+      component,
+      height,
+      draw: (x, y, width): RenderedElement[] => {
+        const elements: RenderedElement[] = [];
+        elements.push({
+          type: 'text',
+          x,
+          y: y - 4,
+          text: `Modo de assinatura: ${component.mode}`,
+          size: 8,
+        });
+        component.signatures.forEach((signature, index) => {
+          const top = y - 18 - index * itemHeight;
+          const centerX = x + width / 2;
+          if (signature.image) {
+            elements.push({
+              type: 'image',
+              x: centerX - 95,
+              y: top - 42,
+              width: 190,
+              height: 44,
+              mimeType: signature.image.mimeType,
+              contentBase64: signature.image.contentBase64,
+            });
+          } else {
+            elements.push({
+              type: 'text',
+              x: centerX - 80,
+              y: top - 28,
+              text: 'Assinatura coletada manualmente',
+              size: 8,
+            });
+          }
+          elements.push({
+            type: 'line',
+            x1: x + 70,
+            y1: top - 54,
+            x2: x + width - 70,
+            y2: top - 54,
+          });
+          elements.push({
+            type: 'text',
+            x: x + 70,
+            y: top - 68,
+            text: signature.name ?? signature.label,
+            size: 9,
+            bold: true,
+          });
+          elements.push({
+            type: 'text',
+            x: x + 70,
+            y: top - 81,
+            text: [
+              signature.title,
+              signature.caption,
+              signature.signedAt ? `Data: ${signature.signedAt}` : null,
+            ]
+              .filter(Boolean)
+              .join(' · '),
+            size: 8,
+          });
+        });
+        return elements;
+      },
     };
   }
 

@@ -2,8 +2,8 @@
 
 ## Current milestone
 
-**Sprint 7 — Document Configuration & Signature Domain (Produção)**
-Status: concluída em 29 de junho de 2026.
+**Sprint 11 — PMOC Compliance Domain (Produção)**
+Status: concluída em 30 de junho de 2026.
 
 As Sprints 0, 1, 2, 3, 3.5, 4, 5 e 6 foram preservadas. Nenhum módulo operacional novo foi
 adicionado nesta sprint.
@@ -39,6 +39,48 @@ suportam `requiresSignature`, `signatureMode` (`NONE`, `FIXED`, `COLLECTED`, `HY
 `signatureId`. O Builder passa a receber organização/settings via `DocumentConfigurationService`;
 ele ainda não aplica assinatura fixa/coletada no PDF, conforme fora de escopo da sprint.
 
+Sprint 8 integra definitivamente assinaturas ao fluxo oficial:
+
+```text
+Operation
+↓
+DocumentContext
+↓
+DocumentConfigurationService
+↓
+DocumentBuilder
+↓
+DocumentBlueprint
+↓
+LayoutEngine
+↓
+DocumentRenderer
+↓
+PDF Engine
+```
+
+`DocumentContextService` passa a ser o ponto responsável por buscar Operation, organização,
+template, configuração de assinatura e assets. O Builder não realiza consultas adicionais e apenas
+transforma o contexto em Blueprint.
+
+Sprint 9 cria o domínio oficial `AssetLifecycle`. A timeline do equipamento agora nasce de eventos
+imutáveis, e não de múltiplas consultas espalhadas. Operations concluídas e documentos renderizados
+registram eventos automaticamente no ciclo de vida do ativo.
+
+Sprint 9.5 consolida a arquitetura do Asset Lifecycle antes de Maintenance Planning e PMOC:
+`LifecyclePublisher` passa a ser o único ponto de publicação de eventos e `TimelineAssembler` passa
+a entregar payloads prontos para renderização, com ícone, cor, título, subtítulo, categoria,
+referências e anexos seguros.
+
+Sprint 10 cria o domínio oficial **Maintenance Planning**, separando planejamento de execução. O
+planejamento calcula recorrências e agenda futuras execuções; a execução operacional continua sendo
+representada por `Operation`. Quando uma execução de manutenção é concluída, o histórico oficial do
+ativo recebe evento `MAINTENANCE` publicado exclusivamente pelo `LifecyclePublisher`.
+
+Sprint 11 cria o domínio oficial **PMOC Compliance** como especialização de Maintenance Planning.
+PMOC não possui agenda, calendário, execução, timeline ou documento paralelos: usa
+`MaintenancePlan`, `MaintenanceExecution`, `Operation`, `AssetLifecycle` e `Document Engine`.
+
 ## Architecture
 
 - NestJS 11, TypeScript estrito, PostgreSQL e Prisma.
@@ -56,6 +98,7 @@ Módulos:
 ```text
 src/modules/
 ├── auth/
+├── asset-lifecycle/
 ├── config/
 ├── customers/
 ├── document-engine/
@@ -63,7 +106,9 @@ src/modules/
 ├── equipments/
 ├── health/
 ├── internal-demo/
+├── maintenance-planning/
 ├── organization/
+├── pmoc-compliance/
 ├── signatures/
 └── users/
 ```
@@ -82,6 +127,10 @@ Migrations:
 8. `20260627150000_operation_domain_foundation`
 9. `20260629110000_document_engine_foundation`
 10. `20260629150000_document_configuration_signature_domain`
+11. `20260630110000_asset_lifecycle_foundation`
+12. `20260630130000_asset_lifecycle_refinement`
+13. `20260630150000_maintenance_planning_domain`
+14. `20260630170000_pmoc_compliance_domain`
 
 Sprint 3.5 não criou migrations e não alterou `schema.prisma`.
 
@@ -255,18 +304,18 @@ Arquitetura criada:
 
 Endpoints criados:
 
-| Method | Path                                               | Access                 |
-| ------ | -------------------------------------------------- | ---------------------- |
-| GET    | `/api/v1/documents/configuration`                  | OWNER, MANAGER, VIEWER |
-| GET    | `/api/v1/documents/configuration/types/:type`      | OWNER, MANAGER, VIEWER |
-| GET    | `/api/v1/documents/configuration/templates/:id`    | OWNER, MANAGER, VIEWER |
-| GET    | `/api/v1/signatures`                               | OWNER, MANAGER, VIEWER |
-| GET    | `/api/v1/signatures/:id`                           | OWNER, MANAGER, VIEWER |
-| POST   | `/api/v1/signatures`                               | OWNER                  |
-| PATCH  | `/api/v1/signatures/:id`                           | OWNER                  |
-| DELETE | `/api/v1/signatures/:id`                           | OWNER                  |
-| POST   | `/api/v1/signatures/:id/upload`                    | OWNER                  |
-| GET    | `/api/v1/signatures/:id/download`                  | OWNER, MANAGER, VIEWER |
+| Method | Path                                            | Access                 |
+| ------ | ----------------------------------------------- | ---------------------- |
+| GET    | `/api/v1/documents/configuration`               | OWNER, MANAGER, VIEWER |
+| GET    | `/api/v1/documents/configuration/types/:type`   | OWNER, MANAGER, VIEWER |
+| GET    | `/api/v1/documents/configuration/templates/:id` | OWNER, MANAGER, VIEWER |
+| GET    | `/api/v1/signatures`                            | OWNER, MANAGER, VIEWER |
+| GET    | `/api/v1/signatures/:id`                        | OWNER, MANAGER, VIEWER |
+| POST   | `/api/v1/signatures`                            | OWNER                  |
+| PATCH  | `/api/v1/signatures/:id`                        | OWNER                  |
+| DELETE | `/api/v1/signatures/:id`                        | OWNER                  |
+| POST   | `/api/v1/signatures/:id/upload`                 | OWNER                  |
+| GET    | `/api/v1/signatures/:id/download`               | OWNER, MANAGER, VIEWER |
 
 AppSec:
 
@@ -302,6 +351,55 @@ Validação executada:
 - `DATABASE_URL=... npx prisma validate`;
 - todas as migrations foram aplicadas em PostgreSQL 17 limpo, incluindo
   `20260629150000_document_configuration_signature_domain`.
+
+### Document Signature Integration
+
+Sprint 8 não criou migrations nem alterou endpoints. A integração é arquitetural e funcional dentro
+do Document Engine.
+
+Novos/alterados:
+
+- `DocumentContextService`: entrega ao Builder um único objeto contendo Operation, cliente,
+  equipamento, operador, organização, settings, template, configuração de assinatura e assets
+  resolvidos;
+- `DocumentBlueprint` recebeu componente `signature`;
+- `DocumentRendererService` renderiza assinatura fixa, linha manual, nome, cargo, data e legenda;
+- `PdfEngineService` recebeu suporte a imagem de assinatura:
+  - JPEG via `/DCTDecode`;
+  - PNG 8-bit gray/RGB/gray+alpha/RGBA com filtros PNG básicos e `/FlateDecode`;
+- `DocumentAssetResolver` resolve assinatura, logo, marca d'água, QR Code e imagens documentais;
+- seed demo de assinatura passou a usar PNG válido para renderização direta no PDF.
+
+Modos:
+
+- `NONE`: não adiciona seção de assinatura;
+- `FIXED`: carrega assinatura ativa configurada no template, resolve imagem via
+  `DocumentAssetResolver` e insere no Blueprint/PDF;
+- `COLLECTED`: reserva área manual, sem inserir assinatura fixa;
+- `HYBRID`: insere assinatura fixa e reserva também área manual.
+
+Paginação:
+
+- componente `signature` sempre usa `keepTogether=true`;
+- Renderer move o bloco inteiro para a próxima página se não houver espaço;
+- tabelas continuam quebradas por blocos com cabeçalho repetido;
+- checklists continuam renderizados como blocos não quebrados por item.
+
+AppSec:
+
+- assinatura inexistente/inativa/imagem ausente interrompe render com erro controlado;
+- nenhuma camada acessa storage diretamente fora do `DocumentAssetResolver`;
+- imagem de assinatura não entra no AuditLog;
+- PDF mantém limite de 10 MiB;
+- textos são sanitizados antes do Blueprint/PDF;
+- PNG/JPEG inválido é rejeitado pelo PDF engine.
+
+Validação executada:
+
+- `npm run lint`;
+- `npm test`;
+- `npm run build`;
+- `DATABASE_URL=... npx prisma validate`.
 
 ### Stage 0
 
@@ -564,3 +662,350 @@ Verificações específicas:
 - Módulo `operations` (controller/service/dto): `GET /operations` (filtros), `/stats`, `/:id`, `/photos/:id` (base64), `POST /operations` (cria + **OS rascunho** automática `WORK_ORDER/DRAFT`, número `OS-000001` derivado do sequencial), `PATCH /:id`. Operador = usuário autenticado; fotos via storage provider (data URL, PNG/JPEG, 16 × 5 MiB); assinatura como texto.
 - Toda OS nasce de uma Operation; `OperationDocument` reusa `DocumentTemplateType` (fundação única para OS/PMOC/Laudo/Relatório/Visita/Orçamento/Recibo). Histórico de equipamento/cliente derivado de `/operations` (sem duplicação). PDF oficial é gerado pelo Document Engine da Sprint 6.
 - Validado com `prisma generate` + `tsc --noEmit` (sem banco neste ambiente; migration roda no deploy).
+
+## Sprint 9 — Asset Lifecycle Foundation
+
+Domínio criado:
+
+- `src/modules/asset-lifecycle`;
+- `AssetLifecycleService` como único ponto de criação e leitura de eventos históricos;
+- `AssetLifecycleController` expondo timeline, eventos, anexos e estatísticas;
+- `AssetLifecycleModule` exportado para integrações internas.
+
+Entidades:
+
+- `AssetLifecycleEvent`;
+- `AssetLifecycleAttachment`.
+
+Enum oficial:
+
+- `INSTALLATION`;
+- `INSPECTION`;
+- `PREVENTIVE`;
+- `CORRECTIVE`;
+- `MAINTENANCE`;
+- `PART_REPLACEMENT`;
+- `WARRANTY`;
+- `DOCUMENT`;
+- `NOTE`;
+- `CUSTOM`.
+
+Decisões arquiteturais:
+
+- eventos históricos são imutáveis: não há endpoint de edição ou exclusão de evento;
+- correções devem ser representadas por novo evento;
+- anexos possuem soft delete em `deletedAt`;
+- PDFs e imagens não são duplicados no evento: documentos gerados são referenciados por `documentId`;
+- Operations concluídas geram evento automaticamente via `recordOperationCompletedTx`;
+- Document Engine registra evento `DOCUMENT` automaticamente após renderização via `recordDocumentRenderedTx`;
+- integrações automáticas são idempotentes por `operationId`/`documentId`.
+
+Timeline:
+
+- construída exclusivamente a partir de `AssetLifecycleEvent`;
+- suporta paginação;
+- suporta filtros por equipamento, operação, tipo, operador e período;
+- ordenação padrão por `occurredAt desc`.
+
+Endpoints adicionados:
+
+| Method | Path                                                    | Access                           |
+| ------ | ------------------------------------------------------- | -------------------------------- |
+| GET    | `/api/v1/asset-lifecycle`                               | OWNER, MANAGER, OPERATOR, VIEWER |
+| GET    | `/api/v1/asset-lifecycle/:id`                           | OWNER, MANAGER, OPERATOR, VIEWER |
+| POST   | `/api/v1/asset-lifecycle`                               | OWNER, MANAGER, OPERATOR         |
+| GET    | `/api/v1/equipments/:id/lifecycle`                      | OWNER, MANAGER, OPERATOR, VIEWER |
+| GET    | `/api/v1/equipments/:id/lifecycle/stats`                | OWNER, MANAGER, OPERATOR, VIEWER |
+| GET    | `/api/v1/asset-lifecycle/:id/attachments`               | OWNER, MANAGER, OPERATOR, VIEWER |
+| POST   | `/api/v1/asset-lifecycle/:id/attachments`               | OWNER, MANAGER, OPERATOR         |
+| DELETE | `/api/v1/asset-lifecycle/:id/attachments/:attachmentId` | OWNER, MANAGER                   |
+
+Auditoria:
+
+- `ASSET_LIFECYCLE_EVENT_CREATED`;
+- `ASSET_LIFECYCLE_EVENT_AUTO_CREATED`;
+- `ASSET_LIFECYCLE_ATTACHMENT_UPLOADED`;
+- `ASSET_LIFECYCLE_ATTACHMENT_DELETED`.
+
+Seed demo:
+
+- `src/seeds/demo/demo.seed.ts` agora cria histórico coerente para equipamentos demo existentes;
+- eventos são idempotentes e marcados com `DEMO_MARKER`;
+- nenhum novo Demo Dataset foi criado.
+
+Verificação executada:
+
+- `npx prisma generate`;
+- `DATABASE_URL=postgresql://user:pass@localhost:5432/db npx prisma validate`;
+- todas as migrations aplicadas em PostgreSQL Docker limpo, incluindo `20260630110000_asset_lifecycle_foundation`;
+- `npm run build`;
+- `npm run lint`;
+- `npm test` com 7 suítes e 21 testes aprovados.
+
+## Sprint 11 — PMOC Compliance Domain
+
+Domínio criado:
+
+- `src/modules/pmoc-compliance`;
+- `PmocComplianceService` como façade de PMOC, ambientes, compliance status, estatísticas e
+  preparação documental;
+- `ComplianceEvaluator` e tipos base para futura Compliance Engine;
+- `PmocComplianceController` expondo API PMOC;
+- `PmocComplianceModule` importado no `AppModule`.
+
+Entidades:
+
+- `PmocPlan`;
+- `PmocEnvironment`;
+- `PmocPlanEquipment`;
+- `PmocEnvironmentEquipment`.
+
+Enum oficial:
+
+- `PmocComplianceStatus`: `COMPLIANT`, `WARNING`, `OVERDUE`, `NON_COMPLIANT`, `IN_PROGRESS`.
+
+Asset Lifecycle expandido:
+
+- `PMOC_CREATED`;
+- `PMOC_UPDATED`;
+- `PMOC_COMPLETED`;
+- `PMOC_EXPIRED`.
+
+Decisões arquiteturais:
+
+- cada PMOC possui exatamente um `MaintenancePlan`;
+- PMOC não armazena recorrência própria;
+- PMOC não cria execução própria;
+- ambientes relacionam equipamentos reais, sem duplicar `Equipment`;
+- execuções continuam em `MaintenanceExecution`;
+- intervenções continuam em `Operation`;
+- timeline continua em `AssetLifecycle`;
+- documentos PMOC são preparados para `DocumentTemplateType.PMOC` via Document Engine.
+
+Compliance status:
+
+- `NON_COMPLIANT`: PMOC ou MaintenancePlan inativo;
+- `OVERDUE`: validade vencida ou execução planejada vencida;
+- `IN_PROGRESS`: vigência futura;
+- `WARNING`: execução prevista nos próximos sete dias;
+- `COMPLIANT`: ativo, vigente e sem pendências próximas/vencidas.
+
+Endpoints adicionados:
+
+| Method | Path                            | Access                           |
+| ------ | ------------------------------- | -------------------------------- |
+| GET    | `/api/v1/pmoc/stats`            | OWNER, MANAGER, OPERATOR, VIEWER |
+| GET    | `/api/v1/pmoc`                  | OWNER, MANAGER, OPERATOR, VIEWER |
+| GET    | `/api/v1/pmoc/:id`              | OWNER, MANAGER, OPERATOR, VIEWER |
+| POST   | `/api/v1/pmoc`                  | OWNER, MANAGER                   |
+| PATCH  | `/api/v1/pmoc/:id`              | OWNER, MANAGER                   |
+| DELETE | `/api/v1/pmoc/:id`              | OWNER, MANAGER                   |
+| GET    | `/api/v1/pmoc/:id/environments` | OWNER, MANAGER, OPERATOR, VIEWER |
+| POST   | `/api/v1/pmoc/:id/environments` | OWNER, MANAGER                   |
+| PATCH  | `/api/v1/pmoc/environments/:id` | OWNER, MANAGER                   |
+| DELETE | `/api/v1/pmoc/environments/:id` | OWNER, MANAGER                   |
+| GET    | `/api/v1/pmoc/:id/compliance`   | OWNER, MANAGER, OPERATOR, VIEWER |
+| GET    | `/api/v1/equipments/:id/pmoc`   | OWNER, MANAGER, OPERATOR, VIEWER |
+
+Auditoria:
+
+- `PMOC_CREATED`;
+- `PMOC_UPDATED`;
+- `PMOC_DELETED`;
+- `PMOC_ENVIRONMENT_CREATED`;
+- `PMOC_ENVIRONMENT_UPDATED`;
+- `PMOC_ENVIRONMENT_DELETED`.
+
+Integrações:
+
+- PMOC cria `MaintenancePlan` preventivo e primeira `MaintenanceExecution`;
+- conclusão de execução PMOC publica `MAINTENANCE` e `PMOC_COMPLETED` via `LifecyclePublisher`;
+- criação/atualização/vencimento publica eventos PMOC via `LifecyclePublisher`;
+- compliance retorna configuração documental `PMOC` via `DocumentConfigurationService`.
+
+Seed demo:
+
+- `src/seeds/demo/demo.seed.ts` cria PMOCs coerentes para Chiller Hospital Santa Clara e VRF
+  Shopping Recife;
+- dados são idempotentes, opcionais e removíveis pelo manifesto demo;
+- nenhum novo Demo Dataset foi criado.
+
+Verificação executada até este registro:
+
+- `npx prisma generate`;
+- `DATABASE_URL=postgresql://user:pass@localhost:5432/db npx prisma validate`;
+- todas as migrations aplicadas em PostgreSQL Docker limpo, incluindo
+  `20260630170000_pmoc_compliance_domain`;
+- `npm run build`;
+- `npm run lint`;
+- `npm test` com 7 suítes e 21 testes aprovados.
+
+## Sprint 9.5 — Asset Lifecycle Refinement & Consolidation
+
+Arquitetura consolidada:
+
+- `LifecyclePublisher`: serviço oficial para publicação de eventos do ciclo de vida;
+- `TimelineAssembler`: serviço oficial para montar timeline pronta para consumo;
+- `AssetLifecycleService`: permanece como façade de API, listagem, anexos, estatísticas e
+  enriquecimento de payload;
+- Operations e Document Engine não dependem mais do `AssetLifecycleService` para emitir eventos.
+
+Garantia arquitetural:
+
+- criação direta de `AssetLifecycleEvent` no backend ficou concentrada em
+  `LifecyclePublisher`;
+- integrações atuais migradas:
+  - `OperationsService` usa `publishOperationCompletedTx`;
+  - `DocumentEngineService` usa `publishDocumentRenderedTx`;
+  - seed demo usa `publishManual` para enriquecer dados existentes.
+
+Timeline enriquecida:
+
+- cada evento retorna também `timeline`;
+- listagens retornam `timelineGroups`;
+- `timeline` inclui:
+  - `icon`;
+  - `color`;
+  - `title`;
+  - `subtitle`;
+  - `category`;
+  - `description`;
+  - `date`;
+  - `groupKey`;
+  - `sortKey`;
+  - `user`;
+  - `type`;
+  - `operationId`;
+  - `documentId`;
+  - `equipmentId`;
+  - `references`;
+  - `attachments`;
+  - `badges`.
+
+Contratos preservados:
+
+- os campos originais de `AssetLifecycleEvent` continuam no payload;
+- os novos campos são aditivos;
+- nenhum endpoint novo foi criado.
+
+Melhorias de API:
+
+- `GET /asset-lifecycle` passa a aceitar filtro `customerId`;
+- ordenação passou a usar `occurredAt desc` e `id desc` para consistência;
+- eventos `DOCUMENT` incluem metadata com `documentId`, `documentType`, `documentNumber`,
+  `renderStatus` e `renderedAt`;
+- eventos de Operation incluem metadata com `operationId`, `operationNumber`, `operationType` e
+  `operationStatus`.
+
+Performance:
+
+- migration `20260630130000_asset_lifecycle_refinement` adiciona índices:
+  - `asset_lifecycle_eq_type_at_idx`;
+  - `asset_lifecycle_eq_performer_at_idx`;
+  - `asset_lifecycle_at_id_idx`;
+  - `asset_lifecycle_doc_type_idx`;
+- migration foundation usa índice curto explícito `asset_lifecycle_eq_at_idx`;
+- esses índices cobrem timeline por equipamento, filtros por tipo, operador, período e documentos.
+
+Verificação executada:
+
+- `DATABASE_URL=postgresql://user:pass@localhost:5432/db npx prisma validate`;
+- todas as migrations aplicadas em PostgreSQL Docker limpo;
+- `npm run build`;
+- `npm run lint`;
+- `npm test` com 7 suítes e 21 testes aprovados.
+
+## Sprint 10 — Maintenance Planning Domain
+
+Domínio criado:
+
+- `src/modules/maintenance-planning`;
+- `MaintenancePlanningService` como façade transacional de planos, execuções, estatísticas e
+  sincronização com Operations;
+- `RecurringEngine` independente para cálculo de próximas ocorrências;
+- `MaintenancePlanningController` expondo a API de planejamento e consultas por equipamento;
+- `MaintenancePlanningModule` importado no `AppModule` e no `OperationsModule`.
+
+Entidades:
+
+- `MaintenancePlan`;
+- `MaintenanceExecution`.
+
+Enums:
+
+- `MaintenancePlanType`: `PREVENTIVE`, `INSPECTION`, `WARRANTY`, `CUSTOM`;
+- `MaintenancePriority`: `LOW`, `MEDIUM`, `HIGH`, `CRITICAL`;
+- `MaintenanceExecutionStatus`: `PLANNED`, `LINKED`, `COMPLETED`, `CANCELED`.
+
+Recorrência:
+
+- `DAILY`;
+- `WEEKLY`;
+- `MONTHLY`;
+- `YEARLY`;
+- `INTERVAL_DAYS`;
+- `INTERVAL_MONTHS`.
+
+Decisões arquiteturais:
+
+- planejamento e execução permanecem separados;
+- `MaintenancePlan` calcula agenda futura e guarda `firstExecution`, `nextExecution` e
+  `lastExecution`;
+- `MaintenanceExecution` representa a ocorrência planejada e pode ser vinculada a uma `Operation`;
+- o `RecurringEngine` recebe apenas regras de recorrência e datas, sem conhecer PMOC, garantia, SLA
+  ou qualquer domínio específico;
+- não há cron nem geração automática de Operations nesta sprint;
+- conclusão de execução publica evento `MAINTENANCE` via `LifecyclePublisher`;
+- nenhum módulo cria evento histórico diretamente;
+- vincular uma Operation concluída a uma execução atualiza `status`, `executedAt`, `lastExecution` e
+  `nextExecution`;
+- `OperationsService` sincroniza execuções vinculadas quando uma Operation é concluída.
+
+Endpoints adicionados:
+
+| Method | Path                                          | Access                           |
+| ------ | --------------------------------------------- | -------------------------------- |
+| GET    | `/api/v1/maintenance-plans/stats`             | OWNER, MANAGER, OPERATOR, VIEWER |
+| GET    | `/api/v1/maintenance-plans`                   | OWNER, MANAGER, OPERATOR, VIEWER |
+| GET    | `/api/v1/maintenance-plans/:id`               | OWNER, MANAGER, OPERATOR, VIEWER |
+| POST   | `/api/v1/maintenance-plans`                   | OWNER, MANAGER                   |
+| PATCH  | `/api/v1/maintenance-plans/:id`               | OWNER, MANAGER                   |
+| DELETE | `/api/v1/maintenance-plans/:id`               | OWNER, MANAGER                   |
+| GET    | `/api/v1/maintenance-plans/:id/executions`    | OWNER, MANAGER, OPERATOR, VIEWER |
+| POST   | `/api/v1/maintenance-plans/:id/executions`    | OWNER, MANAGER, OPERATOR         |
+| PATCH  | `/api/v1/maintenance-executions/:id`          | OWNER, MANAGER, OPERATOR         |
+| GET    | `/api/v1/equipments/:id/maintenance`          | OWNER, MANAGER, OPERATOR, VIEWER |
+| GET    | `/api/v1/equipments/:id/maintenance/upcoming` | OWNER, MANAGER, OPERATOR, VIEWER |
+
+Auditoria:
+
+- `MAINTENANCE_PLAN_CREATED`;
+- `MAINTENANCE_PLAN_UPDATED`;
+- `MAINTENANCE_PLAN_DELETED`;
+- `MAINTENANCE_EXECUTION_CREATED`;
+- `MAINTENANCE_EXECUTION_UPDATED`;
+- `MAINTENANCE_EXECUTION_COMPLETED`.
+
+Integração com Asset Lifecycle:
+
+- execuções concluídas geram evento `MAINTENANCE`;
+- o evento referencia `maintenancePlanId`, `maintenanceExecutionId`, `operationId` quando houver,
+  nome do plano e notas;
+- publicação passa por `LifecyclePublisher.publishMaintenanceCompletedTx`.
+
+Seed demo:
+
+- `src/seeds/demo/demo.seed.ts` foi enriquecido com planos coerentes para equipamentos existentes;
+- os planos são opcionais, idempotentes e marcados com `DEMO_MARKER`;
+- nenhum novo Demo Dataset foi criado;
+- o sistema continua funcionando sem `ENABLE_DEMO_DATA`.
+
+Verificação executada até este registro:
+
+- `npx prisma generate`;
+- `DATABASE_URL=postgresql://user:pass@localhost:5432/db npx prisma validate`;
+- todas as migrations aplicadas em PostgreSQL Docker limpo, incluindo
+  `20260630150000_maintenance_planning_domain`;
+- `npm run build`.
+- `npm run lint`;
+- `npm test` com 7 suítes e 21 testes aprovados.

@@ -5,10 +5,8 @@ import Link from "next/link";
 import { ArrowLeft, Camera, X, Info } from "lucide-react";
 import { PageHeader } from "@platform/components/page-header";
 import { SectionCard } from "@erp/ui/section-card";
-import { DocumentViewer } from "@erp/ui/documents/document-viewer";
 import { SignaturePad } from "@erp/ui/documents/signature-pad";
 import { customersApi, equipmentsApi, usersApi, useQuery } from "@erp/api";
-import type { GeneratedDocument } from "@erp/types";
 
 /**
  * Relatório de Visita Técnica — fluxo VISUAL (Sprint 2).
@@ -45,13 +43,6 @@ export default function VisitaTecnicaPage() {
   function removePhoto(i: number) {
     setPhotos((prev) => prev.filter((_, idx) => idx !== i));
   }
-
-  const doc: GeneratedDocument = {
-    id: "visita-draft",
-    kind: "TECHNICAL_REPORT",
-    title: customer ? `Visita Técnica — ${customer.name}` : "Relatório de Visita Técnica",
-    status: "draft",
-  };
 
   return (
     <div className="space-y-6 max-w-[1200px]">
@@ -102,20 +93,28 @@ export default function VisitaTecnicaPage() {
           </SectionCard>
         </div>
 
-        {/* Preview / Review */}
         <div className="space-y-4">
-          <DocumentViewer
-            document={doc}
-            reviewFields={[
-              { label: "Cliente", value: customer?.name ?? "—" },
-              { label: "Equipamento", value: equipment?.name ?? "—" },
-              { label: "Operador", value: operator?.name ?? "—" },
-              { label: "Fotos", value: String(photos.length) },
-              { label: "Assinatura", value: signed ? "Coletada" : "Pendente" },
-            ]}
-          />
+          <SectionCard title="Resumo">
+            <dl className="space-y-2 text-sm">
+              <ReviewRow label="Cliente" value={customer?.name ?? "—"} />
+              <ReviewRow label="Equipamento" value={equipment?.name ?? "—"} />
+              <ReviewRow label="Operador" value={operator?.name ?? "—"} />
+              <ReviewRow label="Fotos" value={String(photos.length)} />
+              <ReviewRow label="Assinatura" value={signed ? "Coletada" : "Pendente"} />
+            </dl>
+            <p className="mt-3 text-caption">Preview e PDF oficiais são feitos apenas pelo Document Engine após criação de Operation.</p>
+          </SectionCard>
         </div>
       </div>
+    </div>
+  );
+}
+
+function ReviewRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <dt className="text-caption">{label}</dt>
+      <dd className="text-right">{value}</dd>
     </div>
   );
 }

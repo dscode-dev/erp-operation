@@ -11,10 +11,10 @@ import { Drawer } from "@erp/ui/drawer";
 import { DrawerTabs } from "@erp/ui/drawer-tabs";
 import { StatusPill } from "@erp/ui/status-pill";
 import { ErrorState } from "@erp/ui/states";
-import { Timeline } from "@erp/ui/timeline";
-import { operationsToTimeline } from "@erp/ui/operations/operation-shared";
+import { AssetTimeline } from "@erp/ui/assets/asset-timeline";
 import { QrFoundation } from "@platform/components/qr-foundation";
-import { equipmentsApi, operationApi, useQuery, type EquipmentDetail } from "@erp/api";
+import { OperationDetailDrawer } from "@platform/components/operation-detail-drawer";
+import { equipmentsApi, useQuery, type EquipmentDetail } from "@erp/api";
 import { formatDate, formatDateTime } from "@erp/utils";
 import {
   EQUIPMENT_STATUS_LABEL,
@@ -35,12 +35,9 @@ export function EquipmentDetailDrawer({
   onClose: () => void;
 }) {
   const [tab, setTab] = useState<Tab>("Visão geral");
+  const [operationId, setOperationId] = useState<string | null>(null);
   const detail = useQuery<EquipmentDetail | null>(
     (signal) => (equipmentId ? equipmentsApi.getEquipment(equipmentId, { signal }) : Promise.resolve(null)),
-    [equipmentId, open],
-  );
-  const history = useQuery(
-    (signal) => (equipmentId ? operationApi.listOperations({ equipmentId, limit: 50, signal }) : Promise.resolve(null)),
     [equipmentId, open],
   );
   const e = detail.data;
@@ -69,7 +66,7 @@ export function EquipmentDetailDrawer({
             tabs={TABS}
             active={tab}
             onChange={setTab}
-            counts={{ Histórico: history.data?.items.length ?? 0, Hierarquia: e.children.length, Métricas: e.metrics.length, Anexos: e.attachments.length }}
+            counts={{ Hierarquia: e.children.length, Métricas: e.metrics.length, Anexos: e.attachments.length }}
           />
 
           {tab === "Visão geral" && (
@@ -93,13 +90,7 @@ export function EquipmentDetailDrawer({
 
           {tab === "Histórico" && (
             <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
-              {history.loading && !history.data ? (
-                <p className="text-sm text-[var(--color-muted-foreground)] py-4 text-center">Carregando histórico…</p>
-              ) : (history.data?.items.length ?? 0) === 0 ? (
-                <p className="text-sm text-[var(--color-muted-foreground)] py-4 text-center">Nenhuma operação registrada para este equipamento.</p>
-              ) : (
-                <Timeline events={operationsToTimeline(history.data?.items ?? [])} />
-              )}
+              <AssetTimeline equipmentId={e.id} compact onOpenOperation={setOperationId} />
             </div>
           )}
 
@@ -178,6 +169,7 @@ export function EquipmentDetailDrawer({
           )}
         </div>
       ) : null}
+      <OperationDetailDrawer operationId={operationId} open={operationId !== null} onClose={() => setOperationId(null)} />
     </Drawer>
   );
 }

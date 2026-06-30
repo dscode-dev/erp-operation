@@ -1,9 +1,11 @@
 import { Module } from '@nestjs/common';
 import { StorageModule } from '../../infra/storage/storage.module';
+import { AssetLifecycleModule } from '../asset-lifecycle/asset-lifecycle.module';
 import { DocumentAssetResolver } from './assets/document-asset-resolver.service';
 import { DocumentBuilderService } from './builder/document-builder.service';
 import { DocumentConfigurationController } from './configuration/document-configuration.controller';
 import { DocumentConfigurationService } from './configuration/document-configuration.service';
+import { DocumentContextService } from './context/document-context.service';
 import { LayoutEngine } from './layout/layout-engine.service';
 import { DocumentMeasureService } from './measurement/document-measure.service';
 import { DefaultSignaturePolicyResolver } from './signatures/default-signature-policy.resolver';
@@ -13,7 +15,7 @@ import { PdfEngineService } from './pdf/pdf-engine.service';
 import { DocumentRendererService } from './renderer/document-renderer.service';
 
 @Module({
-  imports: [StorageModule],
+  imports: [StorageModule, AssetLifecycleModule],
   controllers: [DocumentEngineController, DocumentConfigurationController],
   providers: [
     DocumentEngineService,
@@ -25,12 +27,14 @@ import { DocumentRendererService } from './renderer/document-renderer.service';
     LayoutEngine,
     DocumentMeasureService,
     DocumentConfigurationService,
+    DocumentContextService,
   ],
   exports: [
     DocumentAssetResolver,
     LayoutEngine,
     DocumentMeasureService,
     DocumentConfigurationService,
+    DocumentContextService,
   ],
 })
 export class DocumentEngineModule {}

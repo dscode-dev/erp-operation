@@ -1,9 +1,19 @@
-import { DocumentTemplateType, Prisma, PrismaClient, Role } from '@prisma/client';
+import {
+  AssetLifecycleEventType,
+  DocumentTemplateType,
+  MaintenancePlanType,
+  MaintenancePriority,
+  Prisma,
+  PrismaClient,
+  Role,
+} from '@prisma/client';
 import * as argon2 from 'argon2';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { ARGON2_OPTIONS } from '../../infra/security/argon2.constants';
+import { LifecyclePublisher } from '../../modules/asset-lifecycle/lifecycle-publisher.service';
+import { PrismaService } from '../../modules/database/prisma.service';
 import {
   DEMO_MANIFEST_KEY,
   DEMO_MARKER,
@@ -35,6 +45,8 @@ interface DemoManifest {
   createdAttachmentKeys: string[];
   createdEquipmentIds: string[];
   createdEquipmentAttachmentKeys: string[];
+  createdMaintenancePlanIds: string[];
+  createdPmocPlanIds: string[];
   createdSignatureIds: string[];
   createdSignatureImageKeys: string[];
   organizationMode: DemoSeedResult['organization'];
@@ -113,6 +125,9 @@ export async function seedDemoData(
 
   const demoCustomers = await ensureDemoCustomers(prisma);
   const demoEquipments = await ensureDemoEquipments(prisma);
+  await ensureDemoLifecycle(prisma);
+  const demoMaintenancePlans = await ensureDemoMaintenancePlans(prisma, now);
+  const demoPmocPlans = await ensureDemoPmocPlans(prisma);
   const demoSignatures = await ensureDemoSignatures(prisma);
 
   const snapshots = buildDemoSnapshots(now);
@@ -148,6 +163,15 @@ export async function seedDemoData(
         ...(previousManifest?.createdEquipmentAttachmentKeys ?? []),
         ...demoEquipments.attachmentKeys,
       ]),
+    ],
+    createdMaintenancePlanIds: [
+      ...new Set([
+        ...(previousManifest?.createdMaintenancePlanIds ?? []),
+        ...demoMaintenancePlans.createdIds,
+      ]),
+    ],
+    createdPmocPlanIds: [
+      ...new Set([...(previousManifest?.createdPmocPlanIds ?? []), ...demoPmocPlans.createdIds]),
     ],
     createdSignatureIds: [
       ...new Set([...(previousManifest?.createdSignatureIds ?? []), ...demoSignatures.createdIds]),
@@ -203,6 +227,22 @@ export async function resetDemoData(
         rm(resolve(process.env.STORAGE_PATH ?? './storage', key), { force: true }),
       ),
     );
+  }
+  if (manifest?.createdPmocPlanIds.length) {
+    await prisma.pmocPlan.deleteMany({
+      where: {
+        id: { in: manifest.createdPmocPlanIds },
+        observations: { startsWith: DEMO_MARKER },
+      },
+    });
+  }
+  if (manifest?.createdMaintenancePlanIds.length) {
+    await prisma.maintenancePlan.deleteMany({
+      where: {
+        id: { in: manifest.createdMaintenancePlanIds },
+        description: { startsWith: DEMO_MARKER },
+      },
+    });
   }
   if (manifest?.createdEquipmentIds.length) {
     await prisma.equipment.deleteMany({
@@ -403,6 +443,12 @@ async function readManifest(prisma: PrismaClient): Promise<DemoManifest | null> 
       ? value.createdEquipmentAttachmentKeys.filter(
           (item): item is string => typeof item === 'string',
         )
+      : [],
+    createdMaintenancePlanIds: Array.isArray(value.createdMaintenancePlanIds)
+      ? value.createdMaintenancePlanIds.filter((item): item is string => typeof item === 'string')
+      : [],
+    createdPmocPlanIds: Array.isArray(value.createdPmocPlanIds)
+      ? value.createdPmocPlanIds.filter((item): item is string => typeof item === 'string')
       : [],
     createdSignatureIds: Array.isArray(value.createdSignatureIds)
       ? value.createdSignatureIds.filter((item): item is string => typeof item === 'string')
@@ -662,6 +708,282 @@ async function ensureDemoEquipments(
   return { createdIds, attachmentKeys };
 }
 
+async function ensureDemoLifecycle(prisma: PrismaClient): Promise<void> {
+  const publisher = new LifecyclePublisher(prisma as unknown as PrismaService);
+  const equipments = await prisma.equipment.findMany({
+    where: {
+      tag: { in: ['CBV-SPL-001', 'SR-VRF-001', 'HSC-CHI-001', 'CAS-INV-001', 'SR-EVA-114'] },
+      observations: { startsWith: DEMO_MARKER },
+    },
+    select: { id: true, tag: true, installationDate: true },
+  });
+  if (equipments.length === 0) return;
+
+  const operator = await prisma.user.findFirst({
+    where: { username: { in: ['joao', 'maria', 'ricardo'] } },
+    orderBy: { username: 'asc' },
+    select: { id: true },
+  });
+
+  for (const equipment of equipments) {
+    await ensureDemoLifecycleEvent(prisma, {
+      publisher,
+      equipmentId: equipment.id,
+      type: AssetLifecycleEventType.INSTALLATION,
+      occurredAt: equipment.installationDate ?? new Date('2024-03-15T11:00:00.000Z'),
+      performedBy: operator?.id ?? null,
+      description: `${DEMO_MARKER} Instalação inicial registrada para demonstração.`,
+      metadata: { demo: true, source: 'demo.seed', tag: equipment.tag },
+    });
+
+    await ensureDemoLifecycleEvent(prisma, {
+      publisher,
+      equipmentId: equipment.id,
+      type: AssetLifecycleEventType.INSPECTION,
+      occurredAt: new Date('2026-06-20T13:00:00.000Z'),
+      performedBy: operator?.id ?? null,
+      description: `${DEMO_MARKER} Inspeção visual e conferência operacional.`,
+      metadata: { demo: true, source: 'demo.seed', tag: equipment.tag },
+    });
+
+    await ensureDemoLifecycleEvent(prisma, {
+      publisher,
+      equipmentId: equipment.id,
+      type:
+        equipment.tag === 'HSC-CHI-001'
+          ? AssetLifecycleEventType.CORRECTIVE
+          : AssetLifecycleEventType.PREVENTIVE,
+      occurredAt:
+        equipment.tag === 'HSC-CHI-001'
+          ? new Date('2026-06-24T16:30:00.000Z')
+          : new Date('2026-06-25T12:30:00.000Z'),
+      performedBy: operator?.id ?? null,
+      description:
+        equipment.tag === 'HSC-CHI-001'
+          ? `${DEMO_MARKER} Correção de oscilação elétrica e validação de partida.`
+          : `${DEMO_MARKER} Manutenção preventiva com limpeza e medição de desempenho.`,
+      metadata: { demo: true, source: 'demo.seed', tag: equipment.tag },
+    });
+  }
+}
+
+async function ensureDemoLifecycleEvent(
+  prisma: PrismaClient,
+  input: {
+    publisher: LifecyclePublisher;
+    equipmentId: string;
+    type: AssetLifecycleEventType;
+    occurredAt: Date;
+    performedBy: string | null;
+    description: string;
+    metadata: Prisma.InputJsonValue;
+  },
+): Promise<void> {
+  const existing = await prisma.assetLifecycleEvent.findFirst({
+    where: {
+      equipmentId: input.equipmentId,
+      type: input.type,
+      description: input.description,
+    },
+    select: { id: true },
+  });
+  if (existing) return;
+
+  await input.publisher.publishManual(
+    {
+      equipmentId: input.equipmentId,
+      type: input.type,
+      occurredAt: input.occurredAt.toISOString(),
+      performedBy: input.performedBy ?? undefined,
+      description: input.description,
+      metadata: input.metadata as Record<string, unknown>,
+    },
+    input.performedBy ?? 'system',
+    { requestId: 'demo-seed', ip: null, userAgent: 'demo.seed' },
+  );
+}
+
+async function ensureDemoMaintenancePlans(
+  prisma: PrismaClient,
+  now: Date,
+): Promise<{ createdIds: string[] }> {
+  const definitions = [
+    {
+      tag: 'CBV-SPL-001',
+      name: 'Preventiva mensal - Sala de aula climatizada',
+      type: MaintenancePlanType.PREVENTIVE,
+      priority: MaintenancePriority.MEDIUM,
+      recurrenceRule: { frequency: 'MONTHLY', interval: 1 },
+      daysFromNow: 7,
+    },
+    {
+      tag: 'SR-VRF-001',
+      name: 'Inspeção quinzenal - VRF lojas',
+      type: MaintenancePlanType.INSPECTION,
+      priority: MaintenancePriority.HIGH,
+      recurrenceRule: { frequency: 'INTERVAL_DAYS', interval: 15 },
+      daysFromNow: 4,
+    },
+    {
+      tag: 'HSC-CHI-001',
+      name: 'Preventiva crítica - Chiller hospitalar',
+      type: MaintenancePlanType.PREVENTIVE,
+      priority: MaintenancePriority.CRITICAL,
+      recurrenceRule: { frequency: 'MONTHLY', interval: 1 },
+      daysFromNow: 2,
+    },
+    {
+      tag: 'CAS-INV-001',
+      name: 'Inspeção trimestral - inversor solar',
+      type: MaintenancePlanType.INSPECTION,
+      priority: MaintenancePriority.MEDIUM,
+      recurrenceRule: { frequency: 'INTERVAL_MONTHS', interval: 3 },
+      daysFromNow: 18,
+    },
+  ] as const;
+
+  const createdIds: string[] = [];
+  const owner = await prisma.user.findFirst({
+    where: { username: 'ninja' },
+    select: { id: true },
+  });
+
+  for (const definition of definitions) {
+    const equipment = await prisma.equipment.findFirst({
+      where: {
+        tag: definition.tag,
+        observations: { startsWith: DEMO_MARKER },
+      },
+      select: { id: true },
+    });
+    if (!equipment) continue;
+
+    const existing = await prisma.maintenancePlan.findFirst({
+      where: {
+        equipmentId: equipment.id,
+        name: definition.name,
+      },
+      select: { id: true },
+    });
+    if (existing) continue;
+
+    const firstExecution = addDays(now, definition.daysFromNow);
+    const plan = await prisma.maintenancePlan.create({
+      data: {
+        equipmentId: equipment.id,
+        name: definition.name,
+        description: `${DEMO_MARKER} Plano de manutenção criado para desenvolvimento e demonstração.`,
+        type: definition.type,
+        active: true,
+        priority: definition.priority,
+        recurrenceRule: definition.recurrenceRule,
+        firstExecution,
+        nextExecution: firstExecution,
+        createdBy: owner?.id,
+        executions: {
+          create: [
+            {
+              scheduledAt: firstExecution,
+              status: 'PLANNED',
+              notes: `${DEMO_MARKER} Primeira execução planejada.`,
+            },
+          ],
+        },
+      },
+      select: { id: true },
+    });
+    createdIds.push(plan.id);
+  }
+
+  return { createdIds };
+}
+
+async function ensureDemoPmocPlans(prisma: PrismaClient): Promise<{ createdIds: string[] }> {
+  const organization = await prisma.organization.findFirst({
+    orderBy: { createdAt: 'asc' },
+    select: { id: true },
+  });
+  if (!organization) return { createdIds: [] };
+
+  const definitions = [
+    {
+      tag: 'HSC-CHI-001',
+      responsibleTechnician: 'Ricardo Almeida',
+      artNumber: 'ART-PE-2026-00091',
+      contractNumber: 'HSC-PMOC-2026',
+      environments: [
+        ['Central de água gelada', '85 m²', 4],
+        ['UTI climatizada', '120 m²', 28],
+      ],
+    },
+    {
+      tag: 'SR-VRF-001',
+      responsibleTechnician: 'Ricardo Almeida',
+      artNumber: 'ART-PE-2026-00112',
+      contractNumber: 'SR-PMOC-2026',
+      environments: [
+        ['Área técnica VRF', '64 m²', 3],
+        ['Corredor lojas 100', '210 m²', 160],
+      ],
+    },
+  ] as const;
+
+  const createdIds: string[] = [];
+  for (const definition of definitions) {
+    const equipment = await prisma.equipment.findFirst({
+      where: { tag: definition.tag, observations: { startsWith: DEMO_MARKER } },
+      select: { id: true, customerId: true, name: true },
+    });
+    if (!equipment) continue;
+
+    const existing = await prisma.pmocPlan.findFirst({
+      where: { equipmentId: equipment.id },
+      select: { id: true },
+    });
+    if (existing) continue;
+
+    const maintenancePlan = await prisma.maintenancePlan.findFirst({
+      where: {
+        equipmentId: equipment.id,
+        description: { startsWith: DEMO_MARKER },
+      },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    });
+    if (!maintenancePlan) continue;
+
+    const pmoc = await prisma.pmocPlan.create({
+      data: {
+        organizationId: organization.id,
+        customerId: equipment.customerId,
+        equipmentId: equipment.id,
+        maintenancePlanId: maintenancePlan.id,
+        responsibleTechnician: definition.responsibleTechnician,
+        artNumber: definition.artNumber,
+        contractNumber: definition.contractNumber,
+        startDate: new Date('2026-01-01T00:00:00.000Z'),
+        endDate: new Date('2026-12-31T00:00:00.000Z'),
+        active: true,
+        observations: `${DEMO_MARKER} PMOC created for development and demonstration.`,
+        equipments: { create: [{ equipmentId: equipment.id }] },
+        environments: {
+          create: definition.environments.map(([name, area, occupancy]) => ({
+            name,
+            area,
+            occupancy,
+            observations: `${DEMO_MARKER} PMOC environment.`,
+            equipments: { create: [{ equipmentId: equipment.id }] },
+          })),
+        },
+      },
+      select: { id: true },
+    });
+    createdIds.push(pmoc.id);
+  }
+
+  return { createdIds };
+}
+
 async function ensureDemoSignatures(
   prisma: PrismaClient,
 ): Promise<{ createdIds: string[]; imageKeys: string[] }> {
@@ -672,7 +994,7 @@ async function ensureDemoSignatures(
   const createdIds: string[] = [];
   const imageKeys: string[] = [];
   const file = Buffer.from(
-    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGOSHzRgAAAAABJRU5ErkJggg==',
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=',
     'base64',
   );
 
@@ -714,6 +1036,12 @@ async function ensureDemoSignatures(
   }
 
   return { createdIds, imageKeys };
+}
+
+function addDays(date: Date, days: number): Date {
+  const next = new Date(date);
+  next.setUTCDate(next.getUTCDate() + days);
+  return next;
 }
 
 function permissionsFor(role: Role): Prisma.UserPermissionUncheckedCreateWithoutUserInput {

@@ -1,5 +1,5 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { DocumentTemplateType, Prisma } from '@prisma/client';
+import { DocumentTemplateType, Prisma, SignatureMode } from '@prisma/client';
 import {
   DOCUMENT_MAX_COMPONENTS,
   DOCUMENT_MAX_SECTIONS,
@@ -11,79 +11,28 @@ import {
   OPERATION_DOCUMENT_PREFIX,
 } from '../../../shared/constants/operations.constants';
 import { ApplicationException } from '../../../shared/exceptions/application.exception';
-import { PrismaService } from '../../database/prisma.service';
 import type {
   DocumentBlueprint,
   DocumentBlueprintComponent,
   DocumentSection,
 } from '../blueprint/document-blueprint.types';
-import { DocumentConfigurationService } from '../configuration/document-configuration.service';
-import { DefaultSignaturePolicyResolver } from '../signatures/default-signature-policy.resolver';
-
-const OPERATION_DOCUMENT_BUILDER_INCLUDE = {
-  customer: {
-    include: {
-      addresses: {
-        orderBy: [{ isPrimary: 'desc' as const }, { createdAt: 'asc' as const }],
-        take: 5,
-      },
-      contacts: {
-        orderBy: [{ isPrimary: 'desc' as const }, { createdAt: 'asc' as const }],
-        take: 5,
-      },
-    },
-  },
-  address: true,
-  equipment: {
-    include: {
-      customer: { select: { id: true, name: true } },
-      address: true,
-      parent: { select: { id: true, name: true, tag: true } },
-      children: {
-        select: { id: true, name: true, tag: true, status: true },
-        orderBy: { name: 'asc' as const },
-      },
-      metrics: { orderBy: { recordedAt: 'desc' as const }, take: 12 },
-      attachments: { orderBy: { createdAt: 'desc' as const }, take: 12 },
-    },
-  },
-  operator: { select: { id: true, name: true, email: true, username: true, jobTitle: true } },
-  photos: { orderBy: { createdAt: 'asc' as const } },
-  documents: { orderBy: { createdAt: 'asc' as const } },
-} satisfies Prisma.OperationInclude;
-
-type OperationForDocument = Prisma.OperationGetPayload<{
-  include: typeof OPERATION_DOCUMENT_BUILDER_INCLUDE;
-}>;
+import {
+  DocumentContextService,
+  type DocumentContext,
+} from '../context/document-context.service';
 
 type ChecklistItem = { label: string; done: boolean; note: string | null };
 
 @Injectable()
 export class DocumentBuilderService {
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly signaturePolicy: DefaultSignaturePolicyResolver,
-    private readonly configuration: DocumentConfigurationService,
-  ) {}
+  constructor(private readonly context: DocumentContextService) {}
 
   async buildFromOperation(
     operationId: string,
     type: DocumentTemplateType,
   ): Promise<DocumentBlueprint> {
-    const [operation, configuration] = await Promise.all([
-      this.prisma.operation.findUnique({
-        where: { id: operationId },
-        include: OPERATION_DOCUMENT_BUILDER_INCLUDE,
-      }),
-      this.configuration.getConfigurationForType(type),
-    ]);
-    if (!operation) {
-      throw new ApplicationException(
-        ERROR_CODES.OPERATION_NOT_FOUND,
-        'Operation was not found',
-        HttpStatus.NOT_FOUND,
-      );
-    }
+    const context = await this.context.create(operationId, type);
+    const { operation, configuration } = context;
     const { organization, settings } = configuration;
 
     const document = operation.documents.find((item) => item.type === type) ?? {
@@ -92,7 +41,7 @@ export class DocumentBuilderService {
     };
 
     const generatedAt = new Date().toISOString();
-    const sections = this.sections(operation, type);
+    const sections = this.sections(context);
     this.assertBlueprintLimits(sections);
 
     return {
@@ -132,13 +81,9 @@ export class DocumentBuilderService {
     };
   }
 
-  private sections(operation: OperationForDocument, type: DocumentTemplateType): DocumentSection[] {
+  private sections(context: DocumentContext): DocumentSection[] {
+    const { operation } = context;
     const checklist = this.checklist(operation.checklist);
-    const signature = this.signaturePolicy.resolve({
-      operationId: operation.id,
-      documentType: type,
-      hasCollectedSignature: Boolean(operation.signatureData),
-    });
     const address = operation.address ?? operation.customer.addresses[0] ?? null;
     const primaryContact = operation.customer.contacts[0] ?? null;
 
@@ -280,23 +225,60 @@ export class DocumentBuilderService {
       ],
     });
 
-    sections.push({
-      id: 'signature',
-      title: 'Assinatura',
-      critical: true,
-      components: [
-        {
-          id: 'signature-placeholder',
-          kind: 'signaturePlaceholder',
-          label: signature.label,
-          strategy: signature.strategy,
-          signedAt: operation.signedAt?.toISOString() ?? signature.signedAt,
-          keepTogether: true,
-        },
-      ],
-    });
+    const signature = this.signatureComponent(context);
+    if (signature) {
+      sections.push({
+        id: 'signature',
+        title: 'Assinatura',
+        critical: true,
+        components: [signature],
+      });
+    }
 
     return sections;
+  }
+
+  private signatureComponent(context: DocumentContext): DocumentBlueprintComponent | null {
+    const { signature } = context;
+    if (!signature.requiresSignature || signature.signatureMode === SignatureMode.NONE) return null;
+
+    const signatures: Extract<DocumentBlueprintComponent, { kind: 'signature' }>['signatures'] = [];
+    if (signature.fixedSignature) {
+      signatures.push({
+        id: signature.fixedSignature.id,
+        role: 'fixed',
+        label: 'Assinatura fixa',
+        name: this.clean(signature.fixedSignature.name),
+        title: this.clean(signature.fixedSignature.title),
+        signedAt: null,
+        caption: 'Assinatura cadastrada',
+        image: {
+          mimeType: signature.fixedSignature.image.mimeType,
+          fileSize: signature.fixedSignature.image.fileSize,
+          contentBase64: signature.fixedSignature.image.contentBase64,
+        },
+      });
+    }
+    if (signature.collectedSignature) {
+      signatures.push({
+        id: 'collected-signature',
+        role: 'collected',
+        label: signature.collectedSignature.label,
+        name: null,
+        title: null,
+        signedAt: signature.collectedSignature.signedAt,
+        caption: 'Assinatura coletada em campo',
+        image: null,
+      });
+    }
+
+    return {
+      id: 'document-signature',
+      kind: 'signature',
+      mode: signature.signatureMode,
+      signatures,
+      keepTogether: true,
+    };
   }
 
   private metadata(id: string, entries: Array<[string, string]>): DocumentBlueprintComponent {

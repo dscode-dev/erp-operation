@@ -6,11 +6,10 @@
  * domains ship, swap the implementation here — pages stay unchanged.
  */
 import { getDemoDataset, isDemoDisabled } from "./demo";
-import type { DemoDocument, DemoOrder, DemoProduct, DemoService } from "@erp/types";
+import type { DemoOrder, DemoProduct, DemoService } from "@erp/types";
 
 export type OrdersData = { items: DemoOrder[]; disabled: boolean };
 export type ProductsData = { items: DemoProduct[]; disabled: boolean };
-export type DocumentsData = { items: DemoDocument[]; disabled: boolean };
 export type ServicesData = { items: DemoService[]; disabled: boolean };
 
 export async function getOrders(opts?: { signal?: AbortSignal }): Promise<OrdersData> {
@@ -26,15 +25,6 @@ export async function getProducts(opts?: { signal?: AbortSignal }): Promise<Prod
   try {
     const dataset = await getDemoDataset(opts);
     return { items: dataset["demo.products.v1"]?.items ?? [], disabled: false };
-  } catch (err) {
-    return { items: [], disabled: isDemoDisabled(err) };
-  }
-}
-
-export async function getDocuments(opts?: { signal?: AbortSignal }): Promise<DocumentsData> {
-  try {
-    const dataset = await getDemoDataset(opts);
-    return { items: dataset["demo.documents.v1"]?.items ?? [], disabled: false };
   } catch (err) {
     return { items: [], disabled: isDemoDisabled(err) };
   }

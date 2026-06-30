@@ -393,14 +393,14 @@ Response 200:
 
 Errors para templates:
 
-| HTTP | Code                        | Condition                                |
-| ---- | --------------------------- | ---------------------------------------- |
-| 400  | `VALIDATION_ERROR`          | Body ou UUID inválido                    |
-| 404  | `NOT_FOUND`                 | Template inexistente na organização      |
-| 403  | `FORBIDDEN`                 | Papel sem permissão                      |
-| 409  | `SYSTEM_TEMPLATE_PROTECTED` | Tentativa de excluir template do sistema |
+| HTTP | Code                        | Condition                                  |
+| ---- | --------------------------- | ------------------------------------------ |
+| 400  | `VALIDATION_ERROR`          | Body ou UUID inválido                      |
+| 404  | `NOT_FOUND`                 | Template inexistente na organização        |
+| 403  | `FORBIDDEN`                 | Papel sem permissão                        |
+| 409  | `SYSTEM_TEMPLATE_PROTECTED` | Tentativa de excluir template do sistema   |
 | 409  | `SIGNATURE_INACTIVE`        | Template apontando para assinatura inativa |
-| 404  | `SIGNATURE_NOT_FOUND`       | `signatureId` inexistente                |
+| 404  | `SIGNATURE_NOT_FOUND`       | `signatureId` inexistente                  |
 
 Quando `isDefault=true`, templates anteriores do mesmo `type` são marcados como não-default.
 Templates criados pela API recebem `isSystem=false`. Templates com `isSystem=true` podem ser
@@ -600,16 +600,16 @@ Response 200:
 
 Erros:
 
-| HTTP | Code                       | Condition                              |
-| ---- | -------------------------- | -------------------------------------- |
-| 400  | `VALIDATION_ERROR`         | Body, query ou UUID inválido           |
-| 400  | `SIGNATURE_IMAGE_REQUIRED` | Upload ausente                         |
-| 400  | `UPLOAD_FILE_TOO_LARGE`    | Arquivo vazio ou acima de 2 MiB        |
-| 400  | `UPLOAD_INVALID_MIME_TYPE` | MIME/binário incompatível              |
-| 400  | `UPLOAD_INVALID_EXTENSION` | Extensão não permitida                 |
-| 403  | `FORBIDDEN`                | Papel sem permissão                    |
-| 404  | `SIGNATURE_NOT_FOUND`      | Assinatura inexistente                 |
-| 409  | `SIGNATURE_IMAGE_REQUIRED` | Download solicitado antes do upload    |
+| HTTP | Code                       | Condition                           |
+| ---- | -------------------------- | ----------------------------------- |
+| 400  | `VALIDATION_ERROR`         | Body, query ou UUID inválido        |
+| 400  | `SIGNATURE_IMAGE_REQUIRED` | Upload ausente                      |
+| 400  | `UPLOAD_FILE_TOO_LARGE`    | Arquivo vazio ou acima de 2 MiB     |
+| 400  | `UPLOAD_INVALID_MIME_TYPE` | MIME/binário incompatível           |
+| 400  | `UPLOAD_INVALID_EXTENSION` | Extensão não permitida              |
+| 403  | `FORBIDDEN`                | Papel sem permissão                 |
+| 404  | `SIGNATURE_NOT_FOUND`      | Assinatura inexistente              |
+| 409  | `SIGNATURE_IMAGE_REQUIRED` | Download solicitado antes do upload |
 
 ## Brand assets
 
@@ -1609,11 +1609,41 @@ type DocumentBlueprint = {
           strategy: 'none' | 'fixed' | 'collected' | 'hybrid';
           signedAt: string | null;
         }
+      | {
+          id: string;
+          kind: 'signature';
+          mode: 'NONE' | 'FIXED' | 'COLLECTED' | 'HYBRID';
+          keepTogether?: boolean;
+          signatures: Array<{
+            id: string;
+            role: 'fixed' | 'collected';
+            label: string;
+            name: string | null;
+            title: string | null;
+            signedAt: string | null;
+            caption: string | null;
+            image?: {
+              mimeType: 'image/png' | 'image/jpeg';
+              fileSize: number;
+              contentBase64: string;
+            } | null;
+          }>;
+        }
       | { id: string; kind: 'observation'; text: string }
     >;
   }>;
 };
 ```
+
+Sprint 8 adicionou o componente `signature`. `signaturePlaceholder` permanece documentado por
+compatibilidade, mas o fluxo oficial usa `signature` quando o template exige assinatura.
+
+Comportamento por `signatureMode`:
+
+- `NONE`: nenhuma seção de assinatura é adicionada;
+- `FIXED`: inclui assinatura cadastrada e imagem resolvida do storage;
+- `COLLECTED`: inclui área manual sem imagem fixa;
+- `HYBRID`: inclui assinatura fixa e área manual.
 
 ### GET `/api/v1/documents/operations/:operationId/:type/preview`
 
@@ -1738,15 +1768,894 @@ Response 200:
 
 Errors:
 
-| HTTP | Code                           | Condition                             |
-| ---- | ------------------------------ | ------------------------------------- |
-| 400  | `VALIDATION_ERROR`             | UUID/type inválido                    |
-| 400  | `DOCUMENT_SIZE_LIMIT_EXCEEDED` | Blueprint/PDF excede limites          |
-| 403  | `DOCUMENT_FORBIDDEN_TYPE`      | Não-OWNER acessando `QUOTE`/`RECEIPT` |
-| 404  | `OPERATION_NOT_FOUND`          | Operation ausente                     |
-| 404  | `DOCUMENT_NOT_FOUND`           | OperationDocument ausente             |
-| 404  | `ORGANIZATION_NOT_FOUND`       | Seed organizacional/config ausente    |
-| 409  | `DOCUMENT_DOWNLOAD_NOT_READY`  | Download solicitado antes do render   |
-| 500  | `DOCUMENT_RENDER_FAILED`       | Falha inesperada no render            |
+| HTTP | Code                           | Condition                              |
+| ---- | ------------------------------ | -------------------------------------- |
+| 400  | `VALIDATION_ERROR`             | UUID/type inválido                     |
+| 400  | `DOCUMENT_SIZE_LIMIT_EXCEEDED` | Blueprint/PDF excede limites           |
+| 403  | `DOCUMENT_FORBIDDEN_TYPE`      | Não-OWNER acessando `QUOTE`/`RECEIPT`  |
+| 404  | `OPERATION_NOT_FOUND`          | Operation ausente                      |
+| 404  | `DOCUMENT_NOT_FOUND`           | OperationDocument ausente              |
+| 404  | `ORGANIZATION_NOT_FOUND`       | Seed organizacional/config ausente     |
+| 404  | `SIGNATURE_NOT_FOUND`          | Template exige assinatura fixa ausente |
+| 409  | `SIGNATURE_INACTIVE`           | Assinatura configurada inativa         |
+| 409  | `SIGNATURE_IMAGE_REQUIRED`     | Assinatura fixa sem imagem enviada     |
+| 409  | `DOCUMENT_DOWNLOAD_NOT_READY`  | Download solicitado antes do render    |
+| 500  | `DOCUMENT_RENDER_FAILED`       | Falha inesperada no render             |
 
-Migration: `20260629110000_document_engine_foundation`.
+Migrations relacionadas: `20260629110000_document_engine_foundation` e
+`20260629150000_document_configuration_signature_domain`. Sprint 8 não cria migration.
+
+## Asset Lifecycle (Sprint 9)
+
+Eventos do ciclo de vida de equipamento são imutáveis. Não existe `PATCH` ou `DELETE` de evento.
+Quando um histórico precisa ser corrigido, criar um novo evento do tipo adequado.
+
+Tipos:
+
+```ts
+type AssetLifecycleEventType =
+  | 'INSTALLATION'
+  | 'INSPECTION'
+  | 'PREVENTIVE'
+  | 'CORRECTIVE'
+  | 'MAINTENANCE'
+  | 'PART_REPLACEMENT'
+  | 'WARRANTY'
+  | 'DOCUMENT'
+  | 'NOTE'
+  | 'CUSTOM';
+```
+
+Payload base:
+
+```ts
+type AssetLifecycleEvent = {
+  id: string;
+  equipmentId: string;
+  operationId: string | null;
+  documentId: string | null;
+  type: AssetLifecycleEventType;
+  occurredAt: string;
+  performedBy: string | null;
+  description: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  equipment?: { id: string; name: string; tag: string; type: string; status: string };
+  operation?: { id: string; number: number; type: string; status: string } | null;
+  document?: { id: string; number: string; type: string; status: string } | null;
+  performer?: { id: string; name: string; email: string; username: string } | null;
+  attachments?: AssetLifecycleAttachment[];
+  timeline?: AssetLifecycleTimelineItem;
+};
+
+type AssetLifecycleTimelineItem = {
+  id: string;
+  icon: string;
+  color: string;
+  title: string;
+  subtitle: string;
+  category: string;
+  description: string;
+  date: string;
+  groupKey: string;
+  sortKey: string;
+  user: { id: string; name: string; username: string } | null;
+  type: AssetLifecycleEventType;
+  operationId: string | null;
+  documentId: string | null;
+  equipmentId: string;
+  references: {
+    equipment: { id: string; name: string; tag: string; type: string; status: string } | null;
+    customer: { id: string; name: string; tradeName: string | null } | null;
+    operation: { id: string; number: number; type: string; status: string } | null;
+    document: {
+      id: string;
+      number: string;
+      type: string;
+      status: string;
+      renderedAt: string | null;
+      fileSize: number | null;
+    } | null;
+  };
+  attachments: Array<{
+    id: string;
+    category: string;
+    mimeType: string;
+    fileSize: number;
+    originalFileName: string;
+    createdAt: string;
+  }>;
+  badges: string[];
+};
+
+type AssetLifecycleAttachment = {
+  id: string;
+  eventId: string;
+  storageKey: string;
+  originalFileName: string;
+  mimeType: 'application/pdf' | 'image/png' | 'image/jpeg';
+  fileSize: number;
+  category: string;
+  deletedAt: string | null;
+  createdAt: string;
+};
+```
+
+### GET `/api/v1/asset-lifecycle`
+
+Roles: `OWNER`, `MANAGER`, `OPERATOR`, `VIEWER`.
+
+Query:
+
+```http
+?page=1&limit=20&customerId=<uuid>&equipmentId=<uuid>&operationId=<uuid>&type=PREVENTIVE&performedBy=<uuid>&from=2026-06-01T00:00:00.000Z&to=2026-06-30T23:59:59.999Z
+```
+
+Response 200:
+
+```json
+{
+  "success": true,
+  "data": {
+    "items": [
+      {
+        "id": "fdbff227-5bd2-4be8-bb14-8bdfc0fda945",
+        "equipmentId": "7e4333fa-7f52-4d61-a9d3-caa3697d3301",
+        "operationId": "0d095617-4c7b-45a1-95c1-c8d1a950d587",
+        "documentId": null,
+        "type": "PREVENTIVE",
+        "occurredAt": "2026-06-30T12:00:00.000Z",
+        "performedBy": "9ca64187-aecf-4717-8805-16c942133e3d",
+        "description": "Preventiva concluída",
+        "metadata": { "operationNumber": 12 },
+        "createdAt": "2026-06-30T12:00:02.000Z",
+        "equipment": {
+          "id": "7e4333fa-7f52-4d61-a9d3-caa3697d3301",
+          "name": "Split 24.000 BTU",
+          "tag": "CBV-SPL-001",
+          "type": "SPLIT",
+          "status": "ACTIVE"
+        },
+        "operation": {
+          "id": "0d095617-4c7b-45a1-95c1-c8d1a950d587",
+          "number": 12,
+          "type": "PREVENTIVA",
+          "status": "COMPLETED"
+        },
+        "document": null,
+        "performer": {
+          "id": "9ca64187-aecf-4717-8805-16c942133e3d",
+          "name": "João Técnico",
+          "email": "joao@climatize.example",
+          "username": "joao"
+        },
+        "attachments": [],
+        "timeline": {
+          "id": "fdbff227-5bd2-4be8-bb14-8bdfc0fda945",
+          "icon": "shield-check",
+          "color": "#16A34A",
+          "title": "Atendimento #12 · PREVENTIVA",
+          "subtitle": "Intervenção planejada/preventiva",
+          "category": "maintenance",
+          "description": "Preventiva concluída",
+          "date": "2026-06-30T12:00:00.000Z",
+          "groupKey": "2026-06-30",
+          "sortKey": "2026-06-30T12:00:00.000Z_fdbff227-5bd2-4be8-bb14-8bdfc0fda945",
+          "user": {
+            "id": "9ca64187-aecf-4717-8805-16c942133e3d",
+            "name": "João Técnico",
+            "username": "joao"
+          },
+          "type": "PREVENTIVE",
+          "operationId": "0d095617-4c7b-45a1-95c1-c8d1a950d587",
+          "documentId": null,
+          "equipmentId": "7e4333fa-7f52-4d61-a9d3-caa3697d3301",
+          "references": {
+            "equipment": {
+              "id": "7e4333fa-7f52-4d61-a9d3-caa3697d3301",
+              "name": "Split 24.000 BTU",
+              "tag": "CBV-SPL-001",
+              "type": "SPLIT",
+              "status": "ACTIVE"
+            },
+            "customer": {
+              "id": "b98be991-9aa5-4721-aeb2-6486e9615cbb",
+              "name": "Colégio Boa Viagem",
+              "tradeName": "Colégio Boa Viagem"
+            },
+            "operation": {
+              "id": "0d095617-4c7b-45a1-95c1-c8d1a950d587",
+              "number": 12,
+              "type": "PREVENTIVA",
+              "status": "COMPLETED"
+            },
+            "document": null
+          },
+          "attachments": [],
+          "badges": ["maintenance", "preventive"]
+        }
+      }
+    ],
+    "timelineGroups": [
+      {
+        "date": "2026-06-30",
+        "count": 1,
+        "items": []
+      }
+    ],
+    "pagination": { "page": 1, "limit": 20, "total": 1, "totalPages": 1 }
+  }
+}
+```
+
+### GET `/api/v1/asset-lifecycle/:id`
+
+Roles: `OWNER`, `MANAGER`, `OPERATOR`, `VIEWER`.
+
+Retorna um `AssetLifecycleEvent` completo com o campo aditivo `timeline`.
+
+### POST `/api/v1/asset-lifecycle`
+
+Roles: `OWNER`, `MANAGER`, `OPERATOR`.
+
+Request:
+
+```json
+{
+  "equipmentId": "7e4333fa-7f52-4d61-a9d3-caa3697d3301",
+  "operationId": "0d095617-4c7b-45a1-95c1-c8d1a950d587",
+  "documentId": null,
+  "type": "NOTE",
+  "occurredAt": "2026-06-30T12:00:00.000Z",
+  "performedBy": "9ca64187-aecf-4717-8805-16c942133e3d",
+  "description": "Observação técnica registrada no ativo.",
+  "metadata": { "source": "field-note" }
+}
+```
+
+Campos opcionais: `operationId`, `documentId`, `occurredAt`, `performedBy`, `metadata`.
+
+Response 201: `AssetLifecycleEvent`.
+
+### GET `/api/v1/equipments/:id/lifecycle`
+
+Roles: `OWNER`, `MANAGER`, `OPERATOR`, `VIEWER`.
+
+Mesmo contrato de `GET /asset-lifecycle`, com `equipmentId` fixado pelo path. O filtro
+`customerId` é ignorado para esta rota quando conflitar com o path.
+
+### GET `/api/v1/equipments/:id/lifecycle/stats`
+
+Roles: `OWNER`, `MANAGER`, `OPERATOR`, `VIEWER`.
+
+Response 200:
+
+```json
+{
+  "success": true,
+  "data": {
+    "equipmentId": "7e4333fa-7f52-4d61-a9d3-caa3697d3301",
+    "total": 8,
+    "byType": {
+      "INSTALLATION": 1,
+      "INSPECTION": 2,
+      "PREVENTIVE": 3,
+      "CORRECTIVE": 1,
+      "MAINTENANCE": 0,
+      "PART_REPLACEMENT": 0,
+      "WARRANTY": 0,
+      "DOCUMENT": 1,
+      "NOTE": 0,
+      "CUSTOM": 0
+    },
+    "preventiveCount": 3,
+    "correctiveCount": 1,
+    "documentCount": 1,
+    "inspectionCount": 2,
+    "firstInstallation": "2024-03-15T00:00:00.000Z",
+    "lastMaintenance": "2026-06-30T12:00:00.000Z",
+    "meanDaysBetweenInterventions": 46.5
+  }
+}
+```
+
+### GET `/api/v1/asset-lifecycle/:id/attachments`
+
+Roles: `OWNER`, `MANAGER`, `OPERATOR`, `VIEWER`.
+
+Retorna apenas anexos ativos (`deletedAt=null`).
+
+### POST `/api/v1/asset-lifecycle/:id/attachments`
+
+Roles: `OWNER`, `MANAGER`, `OPERATOR`.
+
+Content-Type: `multipart/form-data`.
+
+Campos:
+
+- `file`: obrigatório;
+- `category`: string, default `DOCUMENT`.
+
+Arquivos aceitos:
+
+- MIME: `application/pdf`, `image/png`, `image/jpeg`;
+- extensões: `pdf`, `png`, `jpg`, `jpeg`;
+- tamanho máximo: 5 MiB.
+
+Response 201: `AssetLifecycleAttachment`.
+
+### DELETE `/api/v1/asset-lifecycle/:id/attachments/:attachmentId`
+
+Roles: `OWNER`, `MANAGER`.
+
+Soft delete do anexo e remoção best-effort do arquivo físico no storage.
+
+Response 200:
+
+```json
+{
+  "success": true,
+  "data": { "deleted": true }
+}
+```
+
+Erros:
+
+| HTTP | Code                                   | Condition                                |
+| ---- | -------------------------------------- | ---------------------------------------- |
+| 400  | `VALIDATION_ERROR`                     | Payload, UUID, query ou relação inválida |
+| 400  | `UPLOAD_FILE_REQUIRED`                 | Upload sem arquivo                       |
+| 400  | `UPLOAD_FILE_TOO_LARGE`                | Arquivo vazio ou maior que 5 MiB         |
+| 400  | `UPLOAD_INVALID_MIME_TYPE`             | MIME ou assinatura binária inválida      |
+| 400  | `UPLOAD_INVALID_EXTENSION`             | Extensão não permitida                   |
+| 401  | `AUTH_TOKEN_INVALID`                   | Token ausente/inválido                   |
+| 403  | `AUTH_FORBIDDEN`                       | Papel sem permissão                      |
+| 404  | `ASSET_LIFECYCLE_EVENT_NOT_FOUND`      | Evento ausente                           |
+| 404  | `ASSET_LIFECYCLE_ATTACHMENT_NOT_FOUND` | Anexo ausente ou já removido             |
+| 404  | `EQUIPMENT_NOT_FOUND`                  | Equipamento ausente                      |
+| 404  | `OPERATION_NOT_FOUND`                  | Operation informada ausente              |
+| 404  | `DOCUMENT_NOT_FOUND`                   | Documento informado ausente              |
+
+Integrações automáticas:
+
+- ao concluir uma `Operation`, o backend cria evento `INSTALLATION`, `PREVENTIVE`, `CORRECTIVE` ou
+  `CUSTOM`, conforme `OperationType`;
+- ao renderizar um documento oficial, o backend cria evento `DOCUMENT`;
+- ambos são idempotentes e não duplicam histórico se a rota for chamada novamente.
+
+Metadata garantida:
+
+- eventos de Operation: `operationId`, `operationNumber`, `operationType`, `operationStatus`;
+- eventos `DOCUMENT`: `documentId`, `documentType`, `documentNumber`, `renderStatus`, `renderedAt`.
+
+Consolidação Sprint 9.5:
+
+- a publicação passa exclusivamente pelo `LifecyclePublisher`;
+- a timeline pronta para consumo é gerada pelo `TimelineAssembler`;
+- payloads antigos permanecem compatíveis e os campos `timeline`/`timelineGroups` são aditivos.
+
+Migrations: `20260630110000_asset_lifecycle_foundation` e
+`20260630130000_asset_lifecycle_refinement`.
+
+## Maintenance Planning
+
+Sprint 10 adiciona planejamento de manutenção. Planejamento não executa atendimento sozinho; a
+execução operacional continua sendo `Operation`.
+
+Roles:
+
+- leitura: `OWNER`, `MANAGER`, `OPERATOR`, `VIEWER`;
+- criar/editar/desativar planos: `OWNER`, `MANAGER`;
+- criar/atualizar execuções planejadas: `OWNER`, `MANAGER`, `OPERATOR`.
+
+Enums:
+
+```ts
+type MaintenancePlanType = 'PREVENTIVE' | 'INSPECTION' | 'WARRANTY' | 'CUSTOM';
+type MaintenancePriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+type MaintenanceExecutionStatus = 'PLANNED' | 'LINKED' | 'COMPLETED' | 'CANCELED';
+type RecurrenceFrequency =
+  | 'DAILY'
+  | 'WEEKLY'
+  | 'MONTHLY'
+  | 'YEARLY'
+  | 'INTERVAL_DAYS'
+  | 'INTERVAL_MONTHS';
+```
+
+`recurrenceRule`:
+
+```json
+{
+  "frequency": "MONTHLY",
+  "interval": 1
+}
+```
+
+`interval` é opcional, inteiro de 1 a 3650. Quando ausente, assume 1.
+
+### GET `/api/v1/maintenance-plans/stats`
+
+Response 200:
+
+```json
+{
+  "success": true,
+  "data": {
+    "activePlans": 12,
+    "overduePlans": 2,
+    "upcomingExecutions": 8,
+    "completedExecutions": 31,
+    "pendingExecutions": 10,
+    "meanDaysBetweenExecutions": 28.4
+  }
+}
+```
+
+### GET `/api/v1/maintenance-plans`
+
+Query:
+
+- `page`: default `1`, máximo indireto por `limit`;
+- `limit`: default `20`, máximo `100`;
+- `equipmentId`: UUID opcional;
+- `type`: `MaintenancePlanType`;
+- `priority`: `MaintenancePriority`;
+- `active`: boolean.
+
+Response 200:
+
+```json
+{
+  "success": true,
+  "data": {
+    "items": [
+      {
+        "id": "9d5ff2e4-7f77-4f05-b07f-075a21a9c0f8",
+        "equipmentId": "7e4333fa-7f52-4d61-a9d3-caa3697d3301",
+        "name": "Preventiva mensal",
+        "description": "Limpeza, inspeção e medição.",
+        "type": "PREVENTIVE",
+        "active": true,
+        "priority": "MEDIUM",
+        "recurrenceRule": { "frequency": "MONTHLY", "interval": 1 },
+        "firstExecution": "2026-07-10T12:00:00.000Z",
+        "nextExecution": "2026-07-10T12:00:00.000Z",
+        "lastExecution": null,
+        "createdBy": "4f9a4e4a-c3fd-4e2e-b97f-b2b5d4ce5d5c",
+        "createdAt": "2026-06-30T15:00:00.000Z",
+        "updatedAt": "2026-06-30T15:00:00.000Z",
+        "equipment": {
+          "id": "7e4333fa-7f52-4d61-a9d3-caa3697d3301",
+          "name": "Split Samsung 24.000 BTU",
+          "tag": "CBV-SPL-001",
+          "type": "SPLIT",
+          "status": "ACTIVE",
+          "customer": { "id": "20ebef96-bc68-4d3e-9272-7c9383df2232", "name": "Colégio Boa Viagem" }
+        },
+        "creator": {
+          "id": "4f9a4e4a-c3fd-4e2e-b97f-b2b5d4ce5d5c",
+          "name": "Darlan Simplicio",
+          "username": "ninja"
+        },
+        "_count": { "executions": 1 }
+      }
+    ],
+    "pagination": { "page": 1, "limit": 20, "total": 1, "totalPages": 1 }
+  }
+}
+```
+
+### GET `/api/v1/maintenance-plans/:id`
+
+Response 200: um `MaintenancePlan` com o mesmo shape da listagem.
+
+### POST `/api/v1/maintenance-plans`
+
+Request:
+
+```json
+{
+  "equipmentId": "7e4333fa-7f52-4d61-a9d3-caa3697d3301",
+  "name": "Preventiva mensal",
+  "description": "Limpeza, inspeção e medição.",
+  "type": "PREVENTIVE",
+  "priority": "MEDIUM",
+  "recurrenceRule": { "frequency": "MONTHLY", "interval": 1 },
+  "firstExecution": "2026-07-10T12:00:00.000Z",
+  "active": true
+}
+```
+
+Response 201: `MaintenancePlan` criado. A criação do plano também cria uma
+`MaintenanceExecution` inicial em `PLANNED` com `scheduledAt = firstExecution`; `nextExecution`
+continua apontando para essa próxima execução pendente.
+
+### PATCH `/api/v1/maintenance-plans/:id`
+
+Request parcial:
+
+```json
+{
+  "name": "Preventiva mensal atualizada",
+  "priority": "HIGH",
+  "recurrenceRule": { "frequency": "INTERVAL_DAYS", "interval": 45 },
+  "firstExecution": "2026-07-15T12:00:00.000Z",
+  "active": true
+}
+```
+
+Response 200: `MaintenancePlan` atualizado.
+
+### DELETE `/api/v1/maintenance-plans/:id`
+
+Desativa o plano (`active=false`). Não remove fisicamente.
+
+Response 200:
+
+```json
+{
+  "success": true,
+  "data": { "deleted": true }
+}
+```
+
+### GET `/api/v1/maintenance-plans/:id/executions`
+
+Query:
+
+- `page`;
+- `limit`;
+- `status`;
+- `from`;
+- `to`.
+
+Response 200:
+
+```json
+{
+  "success": true,
+  "data": {
+    "items": [
+      {
+        "id": "46bd4114-7fb1-4fb8-8061-9dc99383e311",
+        "maintenancePlanId": "9d5ff2e4-7f77-4f05-b07f-075a21a9c0f8",
+        "operationId": null,
+        "scheduledAt": "2026-07-10T12:00:00.000Z",
+        "executedAt": null,
+        "status": "PLANNED",
+        "notes": "Primeira execução planejada.",
+        "createdAt": "2026-06-30T15:00:00.000Z",
+        "plan": {},
+        "operation": null
+      }
+    ],
+    "pagination": { "page": 1, "limit": 20, "total": 1, "totalPages": 1 }
+  }
+}
+```
+
+`plan` usa o mesmo include de `MaintenancePlan`; `operation`, quando presente, contém `id`,
+`number`, `type`, `status` e `completedAt`.
+
+### POST `/api/v1/maintenance-plans/:id/executions`
+
+Request:
+
+```json
+{
+  "scheduledAt": "2026-08-10T12:00:00.000Z",
+  "notes": "Execução planejada manualmente."
+}
+```
+
+`scheduledAt` é opcional. Quando ausente, usa `plan.nextExecution`.
+
+Response 201: `MaintenanceExecution` criada. O plano recalcula `nextExecution` com o
+`RecurringEngine`.
+
+### PATCH `/api/v1/maintenance-executions/:id`
+
+Request:
+
+```json
+{
+  "operationId": "c67bb70d-8d5f-4994-af9a-c206c6ae02ea",
+  "status": "COMPLETED",
+  "executedAt": "2026-07-10T18:00:00.000Z",
+  "notes": "Executada conforme checklist operacional."
+}
+```
+
+Regras:
+
+- `operationId`, quando informado, deve pertencer ao mesmo equipamento do plano;
+- se a Operation vinculada já estiver `COMPLETED`, a execução é concluída;
+- ao concluir, o plano atualiza `lastExecution` e `nextExecution`;
+- ao concluir, o Asset Lifecycle recebe evento `MAINTENANCE` via `LifecyclePublisher`.
+
+Response 200: `MaintenanceExecution` atualizada.
+
+### GET `/api/v1/equipments/:id/maintenance`
+
+Mesmo contrato de `GET /maintenance-plans`, com `equipmentId` fixado pelo path.
+
+### GET `/api/v1/equipments/:id/maintenance/upcoming`
+
+Mesmo contrato de `GET /maintenance-plans/:id/executions`, filtrado pelo equipamento e, por padrão,
+por `status=PLANNED`.
+
+Erros:
+
+| HTTP | Code                              | Condition                                  |
+| ---- | --------------------------------- | ------------------------------------------ |
+| 400  | `VALIDATION_ERROR`                | Payload/query inválido                     |
+| 400  | `MAINTENANCE_RECURRENCE_INVALID`  | Regra de recorrência inválida              |
+| 400  | `MAINTENANCE_OPERATION_MISMATCH`  | Operation vinculada pertence a outro ativo |
+| 401  | `AUTH_TOKEN_INVALID`              | Token ausente/inválido                     |
+| 403  | `AUTH_FORBIDDEN`                  | Papel sem permissão                        |
+| 404  | `EQUIPMENT_NOT_FOUND`             | Equipamento ausente                        |
+| 404  | `OPERATION_NOT_FOUND`             | Operation vinculada ausente                |
+| 404  | `MAINTENANCE_PLAN_NOT_FOUND`      | Plano ausente                              |
+| 404  | `MAINTENANCE_EXECUTION_NOT_FOUND` | Execução ausente                           |
+
+Auditoria:
+
+- `MAINTENANCE_PLAN_CREATED`;
+- `MAINTENANCE_PLAN_UPDATED`;
+- `MAINTENANCE_PLAN_DELETED`;
+- `MAINTENANCE_EXECUTION_CREATED`;
+- `MAINTENANCE_EXECUTION_UPDATED`;
+- `MAINTENANCE_EXECUTION_COMPLETED`.
+
+Migration: `20260630150000_maintenance_planning_domain`.
+
+## PMOC Compliance
+
+Sprint 11 adiciona PMOC como especialização de Maintenance Planning. PMOC não possui recorrência ou
+execução própria: usa `MaintenancePlan`, `MaintenanceExecution`, `Operation`, `AssetLifecycle` e
+Document Engine.
+
+Roles:
+
+- leitura: `OWNER`, `MANAGER`, `OPERATOR`, `VIEWER`;
+- criação/edição/desativação de PMOC e ambientes: `OWNER`, `MANAGER`.
+
+Enums:
+
+```ts
+type PmocComplianceStatus = 'COMPLIANT' | 'WARNING' | 'OVERDUE' | 'NON_COMPLIANT' | 'IN_PROGRESS';
+```
+
+### GET `/api/v1/pmoc/stats`
+
+Response 200:
+
+```json
+{
+  "success": true,
+  "data": {
+    "activePmocs": 8,
+    "expiredPmocs": 1,
+    "compliantPmocs": 5,
+    "pendingPmocs": 2,
+    "environments": 22,
+    "monitoredEquipments": 14,
+    "upcomingExecutions": 6
+  }
+}
+```
+
+### GET `/api/v1/pmoc`
+
+Query:
+
+- `page`;
+- `limit`;
+- `customerId`;
+- `equipmentId`;
+- `active`.
+
+Response 200:
+
+```json
+{
+  "success": true,
+  "data": {
+    "items": [
+      {
+        "id": "2b487f6d-4af8-404e-a482-fbc0e52f5207",
+        "organizationId": "d8996dbb-a64f-4e51-9a72-951f10c0f36d",
+        "customerId": "20ebef96-bc68-4d3e-9272-7c9383df2232",
+        "equipmentId": "7e4333fa-7f52-4d61-a9d3-caa3697d3301",
+        "maintenancePlanId": "9d5ff2e4-7f77-4f05-b07f-075a21a9c0f8",
+        "responsibleTechnician": "Ricardo Almeida",
+        "artNumber": "ART-PE-2026-00091",
+        "contractNumber": "HSC-PMOC-2026",
+        "startDate": "2026-01-01T00:00:00.000Z",
+        "endDate": "2026-12-31T00:00:00.000Z",
+        "active": true,
+        "observations": "PMOC anual",
+        "organization": {
+          "id": "d8996dbb-a64f-4e51-9a72-951f10c0f36d",
+          "legalName": "Climatize Refrigeração LTDA",
+          "tradeName": "Climatize"
+        },
+        "customer": {
+          "id": "20ebef96-bc68-4d3e-9272-7c9383df2232",
+          "name": "Hospital Santa Clara",
+          "tradeName": "Hospital Santa Clara"
+        },
+        "equipment": {
+          "id": "7e4333fa-7f52-4d61-a9d3-caa3697d3301",
+          "name": "Chiller Trane 120 TR",
+          "tag": "HSC-CHI-001",
+          "type": "CHILLER",
+          "status": "ACTIVE"
+        },
+        "maintenancePlan": {
+          "id": "9d5ff2e4-7f77-4f05-b07f-075a21a9c0f8",
+          "type": "PREVENTIVE",
+          "recurrenceRule": { "frequency": "MONTHLY", "interval": 1 },
+          "nextExecution": "2026-07-10T12:00:00.000Z",
+          "executions": []
+        },
+        "equipments": [],
+        "environments": [],
+        "compliance": {
+          "status": "COMPLIANT",
+          "reasons": [],
+          "evaluatedAt": "2026-06-30T18:00:00.000Z"
+        }
+      }
+    ],
+    "pagination": { "page": 1, "limit": 20, "total": 1, "totalPages": 1 }
+  }
+}
+```
+
+### GET `/api/v1/pmoc/:id`
+
+Response 200: `PmocPlan` completo com `compliance`, ambientes, equipamentos monitorados,
+`MaintenancePlan` e próximas execuções.
+
+### POST `/api/v1/pmoc`
+
+Request:
+
+```json
+{
+  "customerId": "20ebef96-bc68-4d3e-9272-7c9383df2232",
+  "equipmentId": "7e4333fa-7f52-4d61-a9d3-caa3697d3301",
+  "equipmentIds": ["7e4333fa-7f52-4d61-a9d3-caa3697d3301"],
+  "responsibleTechnician": "Ricardo Almeida",
+  "artNumber": "ART-PE-2026-00091",
+  "contractNumber": "HSC-PMOC-2026",
+  "startDate": "2026-01-01T00:00:00.000Z",
+  "endDate": "2026-12-31T00:00:00.000Z",
+  "observations": "PMOC anual",
+  "priority": "HIGH",
+  "recurrenceRule": { "frequency": "MONTHLY", "interval": 1 },
+  "active": true
+}
+```
+
+Response 201: PMOC criado. O backend também cria exatamente um `MaintenancePlan` preventivo e a
+primeira `MaintenanceExecution` planejada.
+
+### PATCH `/api/v1/pmoc/:id`
+
+Request parcial:
+
+```json
+{
+  "responsibleTechnician": "Mariana Costa",
+  "equipmentIds": ["7e4333fa-7f52-4d61-a9d3-caa3697d3301"],
+  "endDate": "2026-12-31T00:00:00.000Z",
+  "recurrenceRule": { "frequency": "INTERVAL_MONTHS", "interval": 1 },
+  "active": true
+}
+```
+
+Response 200: PMOC atualizado.
+
+### DELETE `/api/v1/pmoc/:id`
+
+Desativa PMOC e seu `MaintenancePlan`.
+
+Response 200:
+
+```json
+{
+  "success": true,
+  "data": { "deleted": true }
+}
+```
+
+### GET `/api/v1/pmoc/:id/environments`
+
+Response 200: lista de ambientes do PMOC com equipamentos relacionados.
+
+### POST `/api/v1/pmoc/:id/environments`
+
+Request:
+
+```json
+{
+  "name": "Central de água gelada",
+  "area": "85 m²",
+  "occupancy": 4,
+  "equipmentIds": ["7e4333fa-7f52-4d61-a9d3-caa3697d3301"],
+  "observations": "Ambiente técnico"
+}
+```
+
+Response 201: ambiente criado.
+
+### PATCH `/api/v1/pmoc/environments/:id`
+
+Request parcial com os mesmos campos de criação.
+
+Response 200: ambiente atualizado.
+
+### DELETE `/api/v1/pmoc/environments/:id`
+
+Remove o ambiente e seus vínculos.
+
+Response 200:
+
+```json
+{
+  "success": true,
+  "data": { "deleted": true }
+}
+```
+
+### GET `/api/v1/pmoc/:id/compliance`
+
+Response 200:
+
+```json
+{
+  "success": true,
+  "data": {
+    "pmocPlanId": "2b487f6d-4af8-404e-a482-fbc0e52f5207",
+    "status": "WARNING",
+    "reasons": ["There are upcoming PMOC executions within seven days"],
+    "evaluatedAt": "2026-06-30T18:00:00.000Z",
+    "document": {
+      "type": "PMOC",
+      "engine": "DocumentEngine",
+      "defaultTemplate": {},
+      "ready": true
+    }
+  }
+}
+```
+
+### GET `/api/v1/equipments/:id/pmoc`
+
+Mesmo contrato de `GET /pmoc`, filtrado por equipamento principal ou equipamento monitorado.
+
+Erros:
+
+| HTTP | Code                         | Condition                                |
+| ---- | ---------------------------- | ---------------------------------------- |
+| 400  | `VALIDATION_ERROR`           | Payload/query inválido                   |
+| 400  | `PMOC_INVALID_RELATIONSHIP`  | Equipamento não pertence ao cliente/PMOC |
+| 401  | `AUTH_TOKEN_INVALID`         | Token ausente/inválido                   |
+| 403  | `AUTH_FORBIDDEN`             | Papel sem permissão                      |
+| 404  | `CUSTOMER_NOT_FOUND`         | Cliente ausente                          |
+| 404  | `EQUIPMENT_NOT_FOUND`        | Equipamento ausente                      |
+| 404  | `ORGANIZATION_NOT_FOUND`     | Organização ausente                      |
+| 404  | `PMOC_PLAN_NOT_FOUND`        | PMOC ausente                             |
+| 404  | `PMOC_ENVIRONMENT_NOT_FOUND` | Ambiente ausente                         |
+
+Eventos automáticos:
+
+- `PMOC_CREATED`;
+- `PMOC_UPDATED`;
+- `PMOC_EXPIRED`;
+- `PMOC_COMPLETED` quando uma execução PMOC é concluída via Maintenance Execution.
+
+Migration: `20260630170000_pmoc_compliance_domain`.

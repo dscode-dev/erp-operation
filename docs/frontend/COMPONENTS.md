@@ -1,4 +1,50 @@
-# COMPONENTS — Sprint 3
+# COMPONENTS — Frontend
+
+## Sprint 7 — Asset Lifecycle Integration
+
+| Item | Local | Uso |
+|---|---|---|
+| `AssetTimeline` | `packages/ui/assets/asset-timeline.tsx` | Timeline oficial do ativo, renderizada a partir do `TimelineAssembler` do backend |
+| `assetLifecycleApi` | `packages/api/asset-lifecycle.ts` | Listagem, detalhe e estatísticas de Asset Lifecycle |
+| `AssetLifecycle*` types | `packages/types/index.ts` | Contratos de evento, timeline, stats e filtros |
+| `OperationDetailDrawer` integrado | `apps/platform/components/operation-detail-drawer.tsx` | Timeline da operação via Asset Lifecycle |
+| `DocumentViewer` integrado | `packages/ui/documents/document-viewer.tsx` | Aberto diretamente por eventos `DOCUMENT` |
+
+Removidos na Sprint 7:
+
+- `packages/ui/timeline.tsx`;
+- helper `operationsToTimeline`;
+- timeline local derivada de `/operations`;
+- timeline demo em detalhes de cliente/equipamento.
+
+Regra visual: o frontend usa `event.timeline.icon`, `color`, `title`, `subtitle`, `category`,
+`badges` e `references` enviados pelo backend. Não há mapeamento local de enum para montar timeline.
+
+## Sprint 6 — Document Center & Configuration
+
+| Item | Local | Uso |
+|---|---|---|
+| `DocumentViewer` | `packages/ui/documents/document-viewer.tsx` | Viewer único do Document Engine: preview oficial, páginas, miniaturas, zoom, render e download |
+| `documentsApi` | `packages/api/documents.ts` | Preview/render/download/configuração de documentos |
+| `signaturesApi` | `packages/api/signatures.ts` | CRUD/upload/download de assinaturas |
+| `TemplateFormDrawer` atualizado | `apps/platform/components/template-form-drawer.tsx` | Configura assinatura obrigatória, modo e assinatura fixa |
+| Central Documental real | `app/(platform)/documentos/page.tsx` | Lista `OperationDocument` via `/operations`; abre `DocumentViewer` |
+| Operator Documentos real | `app/operator/(shell)/documents/page.tsx` | Lista documentos por cliente selecionado via `/operations` |
+| Configurações → Documentos/Assinaturas | `app/(platform)/settings/page.tsx` | Consome `/documents/configuration` e `/signatures` |
+
+Removidos na Sprint 6:
+
+- `packages/ui/documents/document-preview.tsx`;
+- `packages/ui/documents/document-download.tsx`;
+- fluxo `GeneratedDocument`;
+- preview local com `DocumentPaper` para documento emitido;
+- `operationsApi.getDocuments` e consumo de `demo.documents.v1` nas telas de documentos.
+
+O frontend não monta PDF, não gera documento e não baixa JSON estrutural. O fluxo oficial é:
+
+```text
+Preview backend → Render backend → Download backend
+```
 
 Pacotes compartilhados (`@erp/*`) + apps (`@platform/*`, `@operator/*`). Ver `ARCHITECTURE.md`.
 
@@ -51,7 +97,7 @@ Telas demo: `/documentos` (DocumentViewer + RBAC), `/demo-ready` (apresentação
 |---|---|---|
 | `BrandLogo` | `@erp/ui/brand` | logo do cliente (login/sidebar/operator) |
 | `Timeline` / `TimelineEvent` | `@erp/ui/timeline` | histórico (Serviço/Cliente/Equipamento) |
-| `operationsApi.getDocuments`/`getServices` | `@erp/api/operations` | snapshots `demo.documents.v1`/`demo.services.v1` |
+| `operationsApi.getServices` | `@erp/api/operations` | snapshot `demo.services.v1` |
 
 Telas: `/reports` (central documental), `/servicos` (histórico timeline), `/operator/{equipamentos,documents,sync}`, `/demo-ready` (roteiro guiado). Docker: `frontend/Dockerfile` + serviço `frontend` no compose.
 
@@ -82,7 +128,7 @@ Biblioteca de QR: `@zxing/browser` + `@zxing/library` (`BrowserQRCodeReader`, so
 
 | Item | Local | Uso |
 |---|---|---|
-| `DocumentPaper` | `@erp/ui/documents/document-paper` | renderização profissional A4 (identidade compartilhada) |
+| `DocumentPaper` | `@erp/ui/documents/document-paper` | base visual legada/modelos; documentos emitidos usam `DocumentViewer` |
 | `MODEL_BLUEPRINTS` / `buildDocument` | `@erp/ui/documents/model-blueprints` | 7 modelos + montagem do documento |
 | `TemplateFormDrawer` | `@platform/components/template-form-drawer` | criar/editar modelo |
 
@@ -94,12 +140,12 @@ Páginas: `/reports` = Gestão de Modelos; `/documentos` = Central Documental (f
 |---|---|---|
 | `OperationView` | `@erp/ui/operations/operation-view` | renderiza uma Operation pelas seções (Renderers) |
 | `buildOperationSections` | `@erp/ui/operations/operation-sections` | modelo de seções (fundação reutilizável dos documentos) |
-| `OPERATION_*` / `operationsToTimeline` | `@erp/ui/operations/operation-shared` | labels/tones + mapeamento para Timeline |
-| `OperationDetailDrawer` | `@platform/components/operation-detail-drawer` | drawer: Timeline + Checklist + Fotos + Observações + Assinatura + Documentos |
+| `OPERATION_*` | `@erp/ui/operations/operation-shared` | labels/tones de operações |
+| `OperationDetailDrawer` | `@platform/components/operation-detail-drawer` | drawer: AssetTimeline + Checklist + Fotos + Observações + Assinatura + Documentos |
 | `operationApi` | `@erp/api/operation` | domínio real `/operations` (≠ `operationsApi` demo) |
 
 Arquitetura: **OperationForm → Sections → Renderers** — um único modelo de seções
 reutilizado por OS/PMOC/Laudo/Relatório/Visita/Orçamento/Recibo (sem forms
 duplicados). Páginas: `/operacoes` (Platform). Operator: o Wizard cria uma
-Operation real e a OS rascunho. Histórico (Timeline) em Equipamento/Cliente vem de
-`/operations`.
+Operation real e a OS rascunho. Histórico oficial em Equipamento/Cliente vem de
+`/asset-lifecycle`.

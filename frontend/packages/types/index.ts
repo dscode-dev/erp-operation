@@ -27,6 +27,13 @@ export type Pagination = {
 };
 
 export type Paginated<T> = { items: T[]; pagination: Pagination };
+export type PaginatedTimeline<T> = Paginated<T> & {
+  timelineGroups?: Array<{
+    date: string;
+    count: number;
+    items: AssetLifecycleTimelineItem[];
+  }>;
+};
 
 /* ============ Auth / Roles ============ */
 
@@ -153,6 +160,8 @@ export type DocumentTemplateType =
   | "TECHNICAL_REPORT"
   | "PMOC";
 
+export type SignatureMode = "NONE" | "FIXED" | "COLLECTED" | "HYBRID";
+
 export type Organization = {
   id: string;
   legalName: string;
@@ -192,8 +201,39 @@ export type DocumentTemplate = {
   isDefault: boolean;
   isSystem: boolean;
   isActive: boolean;
+  requiresSignature: boolean;
+  signatureMode: SignatureMode;
+  signatureId: string | null;
   createdAt: string;
   updatedAt: string;
+};
+
+export type Signature = {
+  id: string;
+  name: string;
+  title: string;
+  imageStorageKey: string | null;
+  mimeType: string | null;
+  originalFileName: string | null;
+  fileSize: number | null;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SignatureImage = Signature & {
+  contentBase64: string;
+};
+
+export type DocumentConfiguration = {
+  type: DocumentTemplateType;
+  organization: Pick<
+    Organization,
+    "id" | "legalName" | "tradeName" | "cnpj" | "email" | "phone" | "city" | "state" | "primaryColor" | "secondaryColor"
+  >;
+  settings: Pick<OrganizationSettings, "id" | "language" | "timezone" | "currency" | "documentPrefix">;
+  defaultTemplate: (DocumentTemplate & { signature?: Signature | null }) | null;
+  templates: Array<DocumentTemplate & { signature?: Signature | null }>;
 };
 
 export type AssetWithContent = {
@@ -244,6 +284,9 @@ export type CreateDocumentTemplatePayload = {
   observations: string;
   isDefault?: boolean;
   isActive?: boolean;
+  requiresSignature?: boolean;
+  signatureMode?: SignatureMode;
+  signatureId?: string | null;
 };
 
 export type UpdateDocumentTemplatePayload = Partial<CreateDocumentTemplatePayload>;
@@ -403,6 +446,111 @@ export type EquipmentStats = {
   byType: Record<EquipmentType, number>;
 };
 
+/* ============ Asset Lifecycle ============ */
+
+export type AssetLifecycleEventType =
+  | "INSTALLATION"
+  | "INSPECTION"
+  | "PREVENTIVE"
+  | "CORRECTIVE"
+  | "MAINTENANCE"
+  | "PART_REPLACEMENT"
+  | "WARRANTY"
+  | "DOCUMENT"
+  | "NOTE"
+  | "CUSTOM";
+
+export type AssetLifecycleAttachment = {
+  id: string;
+  eventId?: string;
+  storageKey?: string;
+  originalFileName: string;
+  mimeType: string;
+  fileSize: number;
+  category: string;
+  deletedAt?: string | null;
+  createdAt: string;
+};
+
+export type AssetLifecycleTimelineItem = {
+  id: string;
+  icon: string;
+  color: string;
+  title: string;
+  subtitle: string;
+  category: string;
+  description: string;
+  date: string;
+  groupKey: string;
+  sortKey: string;
+  user: { id: string; name: string; username: string } | null;
+  type: AssetLifecycleEventType;
+  operationId: string | null;
+  documentId: string | null;
+  equipmentId: string;
+  references: {
+    equipment: { id: string; name: string; tag: string | null; type: string; status: string } | null;
+    customer: { id: string; name: string; tradeName: string | null } | null;
+    operation: { id: string; number: number; type: string; status: string } | null;
+    document: {
+      id: string;
+      number: string;
+      type: DocumentTemplateType;
+      status: OperationDocumentStatus;
+      renderedAt: string | null;
+      fileSize: number | null;
+    } | null;
+  };
+  attachments: Array<{
+    id: string;
+    category: string;
+    mimeType: string;
+    fileSize: number;
+    originalFileName: string;
+    createdAt: string;
+  }>;
+  badges: string[];
+};
+
+export type AssetLifecycleEvent = {
+  id: string;
+  equipmentId: string;
+  operationId: string | null;
+  documentId: string | null;
+  type: AssetLifecycleEventType;
+  occurredAt: string;
+  performedBy: string | null;
+  description: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  equipment?: { id: string; name: string; tag: string | null; type: string; status: string } | null;
+  operation?: { id: string; number: number; type: string; status: string } | null;
+  document?: {
+    id: string;
+    number: string;
+    type: DocumentTemplateType;
+    status: OperationDocumentStatus;
+    renderedAt?: string | null;
+    fileSize?: number | null;
+  } | null;
+  performer?: { id: string; name: string; email?: string; username: string } | null;
+  attachments?: AssetLifecycleAttachment[];
+  timeline: AssetLifecycleTimelineItem;
+};
+
+export type AssetLifecycleStats = {
+  equipmentId: string;
+  total: number;
+  byType: Record<AssetLifecycleEventType, number>;
+  preventiveCount: number;
+  correctiveCount: number;
+  documentCount: number;
+  inspectionCount: number;
+  firstInstallation: string | null;
+  lastMaintenance: string | null;
+  meanDaysBetweenInterventions: number | null;
+};
+
 export type CreateEquipmentPayload = {
   customerId: string;
   type: EquipmentType;
@@ -431,9 +579,15 @@ export type OperationChecklistItem = { label: string; done: boolean; note?: stri
 
 export type OperationDocument = {
   id: string;
+  operationId?: string;
   type: DocumentTemplateType;
   number: string;
   status: OperationDocumentStatus;
+  storageKey?: string | null;
+  mimeType?: string | null;
+  fileSize?: number | null;
+  renderedAt?: string | null;
+  renderMetadata?: Record<string, unknown> | null;
   createdAt: string;
   updatedAt: string;
 };

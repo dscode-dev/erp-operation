@@ -12,9 +12,9 @@ import { DrawerTabs } from "@erp/ui/drawer-tabs";
 import { StatusPill } from "@erp/ui/status-pill";
 import { ErrorState } from "@erp/ui/states";
 import { Gate } from "@erp/ui/auth/gate";
-import { Timeline } from "@erp/ui/timeline";
-import { operationsToTimeline } from "@erp/ui/operations/operation-shared";
-import { customersApi, operationApi, useQuery, type CustomerDetail } from "@erp/api";
+import { AssetTimeline } from "@erp/ui/assets/asset-timeline";
+import { OperationDetailDrawer } from "@platform/components/operation-detail-drawer";
+import { customersApi, useQuery, type CustomerDetail } from "@erp/api";
 import { formatDate, maskCep } from "@erp/utils";
 
 const TABS = ["Visão geral", "Histórico", "Endereços", "Contatos", "Anexos"] as const;
@@ -32,12 +32,9 @@ export function CustomerDetailDrawer({
   onEdit?: (customer: CustomerDetail) => void;
 }) {
   const [tab, setTab] = useState<Tab>("Visão geral");
+  const [operationId, setOperationId] = useState<string | null>(null);
   const detail = useQuery<CustomerDetail | null>(
     (signal) => (customerId ? customersApi.getCustomer(customerId, { signal }) : Promise.resolve(null)),
-    [customerId, open],
-  );
-  const history = useQuery(
-    (signal) => (customerId ? operationApi.listOperations({ customerId, limit: 50, signal }) : Promise.resolve(null)),
     [customerId, open],
   );
   const c = detail.data;
@@ -75,19 +72,13 @@ export function CustomerDetailDrawer({
             tabs={TABS}
             active={tab}
             onChange={setTab}
-            counts={{ Histórico: history.data?.items.length ?? 0, Endereços: c.addresses.length, Contatos: c.contacts.length, Anexos: c.attachments.length }}
+            counts={{ Endereços: c.addresses.length, Contatos: c.contacts.length, Anexos: c.attachments.length }}
           />
 
           {tab === "Visão geral" && <OverviewTab c={c} />}
           {tab === "Histórico" && (
             <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
-              {history.loading && !history.data ? (
-                <Empty label="Carregando histórico…" />
-              ) : (history.data?.items.length ?? 0) === 0 ? (
-                <Empty label="Nenhuma operação registrada para este cliente." />
-              ) : (
-                <Timeline events={operationsToTimeline(history.data?.items ?? [])} />
-              )}
+              <AssetTimeline customerId={c.id} compact onOpenOperation={setOperationId} />
             </div>
           )}
           {tab === "Endereços" && <AddressesTab c={c} />}
@@ -95,6 +86,7 @@ export function CustomerDetailDrawer({
           {tab === "Anexos" && <AttachmentsTab c={c} />}
         </div>
       ) : null}
+      <OperationDetailDrawer operationId={operationId} open={operationId !== null} onClose={() => setOperationId(null)} />
     </Drawer>
   );
 }

@@ -9,10 +9,8 @@
  */
 import { Drawer } from "@erp/ui/drawer";
 import { StatusChip } from "@erp/ui/status-chip";
-import { DocumentViewer } from "@erp/ui/documents/document-viewer";
 import { User, Clock, Building2 } from "lucide-react";
 import type { DemoScheduleState } from "@erp/api";
-import type { GeneratedDocument } from "@erp/types";
 
 export type ServiceItem = {
   id: string;
@@ -41,12 +39,6 @@ export function ServiceDetailDrawer({
 }) {
   if (!service) return null;
   const s = STATE[service.state];
-  const doc: GeneratedDocument = {
-    id: `os-${service.id}`,
-    kind: "WORK_ORDER",
-    title: `OS — ${service.title}`,
-    status: "draft",
-  };
 
   return (
     <Drawer open={open} onClose={onClose} eyebrow="Atendimento" title={service.title} width="max-w-2xl">
@@ -63,14 +55,9 @@ export function ServiceDetailDrawer({
 
         <div>
           <h3 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)] mb-2">Documento</h3>
-          <DocumentViewer
-            document={doc}
-            reviewFields={[
-              { label: "Cliente", value: service.customer },
-              { label: "Operador", value: service.operator },
-              { label: "Status", value: s.label },
-            ]}
-          />
+          <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-muted)]/30 p-4 text-sm text-[var(--color-muted-foreground)]">
+            Documentos oficiais são exibidos pela Central Documental a partir das Operations reais.
+          </div>
         </div>
       </div>
     </Drawer>

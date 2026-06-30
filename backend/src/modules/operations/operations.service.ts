@@ -17,7 +17,9 @@ import {
 } from '../../shared/constants/operations.constants';
 import { ApplicationException } from '../../shared/exceptions/application.exception';
 import type { AuthenticatedUser } from '../../shared/types/authenticated-user.type';
+import { LifecyclePublisher } from '../asset-lifecycle/lifecycle-publisher.service';
 import { PrismaService } from '../database/prisma.service';
+import { MaintenancePlanningService } from '../maintenance-planning/maintenance-planning.service';
 import type {
   CreateOperationDto,
   ListOperationsQueryDto,
@@ -59,6 +61,8 @@ export class OperationsService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(STORAGE_PROVIDER_TOKEN) private readonly storage: StorageProviderContract,
+    private readonly lifecycle: LifecyclePublisher,
+    private readonly maintenance: MaintenancePlanningService,
   ) {}
 
   async list(query: ListOperationsQueryDto): Promise<unknown> {
@@ -107,7 +111,10 @@ export class OperationsService {
       this.prisma.operation.count({ where: { status: 'COMPLETED' } }),
       this.prisma.operation.count({ where: { status: 'CANCELED' } }),
     ]);
-    return { total, byStatus: { DRAFT: draft, IN_PROGRESS: inProgress, COMPLETED: completed, CANCELED: canceled } };
+    return {
+      total,
+      byStatus: { DRAFT: draft, IN_PROGRESS: inProgress, COMPLETED: completed, CANCELED: canceled },
+    };
   }
 
   async get(id: string): Promise<unknown> {
@@ -158,12 +165,20 @@ export class OperationsService {
         },
       });
       await tx.auditLog.create({
-        data: this.audit(OPERATION_AUDIT_ACTIONS.OPERATION_CREATED, OPERATION_RESOURCE, actor, context, {
-          operationId: operation.id,
-          number: operation.number,
-          customerId: operation.customerId,
-        }),
+        data: this.audit(
+          OPERATION_AUDIT_ACTIONS.OPERATION_CREATED,
+          OPERATION_RESOURCE,
+          actor,
+          context,
+          {
+            operationId: operation.id,
+            number: operation.number,
+            customerId: operation.customerId,
+          },
+        ),
       });
+      await this.lifecycle.publishOperationCompletedTx(tx, operation.id, actor.id, context);
+      await this.maintenance.syncOperationCompletedTx(tx, operation.id, actor.id, context);
       return operation.id;
     });
 
@@ -209,11 +224,19 @@ export class OperationsService {
         },
       });
       await tx.auditLog.create({
-        data: this.audit(OPERATION_AUDIT_ACTIONS.OPERATION_UPDATED, OPERATION_RESOURCE, actor, context, {
-          operationId: id,
-          changedFields: Object.keys(dto),
-        }),
+        data: this.audit(
+          OPERATION_AUDIT_ACTIONS.OPERATION_UPDATED,
+          OPERATION_RESOURCE,
+          actor,
+          context,
+          {
+            operationId: id,
+            changedFields: Object.keys(dto),
+          },
+        ),
       });
+      await this.lifecycle.publishOperationCompletedTx(tx, id, actor.id, context);
+      await this.maintenance.syncOperationCompletedTx(tx, id, actor.id, context);
       return tx.operation.findUniqueOrThrow({ where: { id }, include: OPERATION_INCLUDE });
     });
   }
@@ -267,7 +290,12 @@ export class OperationsService {
         'Photo is empty or exceeds the 5 MiB limit',
         HttpStatus.BAD_REQUEST,
       );
-    return { buffer, mimeType, ext: mimeType === 'image/png' ? 'png' : 'jpg', caption: input.caption ?? null };
+    return {
+      buffer,
+      mimeType,
+      ext: mimeType === 'image/png' ? 'png' : 'jpg',
+      caption: input.caption ?? null,
+    };
   }
 
   private async validateRelations(

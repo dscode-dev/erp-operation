@@ -1,6 +1,69 @@
-# STATE — Sprint 5 (RC1 · Product Polish & Commercial Demo)
+# STATE — Frontend Sprint 7 (Asset Lifecycle Integration)
 
-Status: Concluída ✅ — Release Candidate 1. Next.js 15 · App Router · RSC. `tsc` limpo (frontend e backend; exceto `routes/` legado). Sem mocks locais — backend + Demo Dataset.
+Status: Concluída ✅ — 30 de junho de 2026. Next.js 15 · App Router · TypeScript. Timelines oficiais agora consomem exclusivamente o Asset Lifecycle do backend.
+
+## Sprint 7 — Asset Lifecycle Integration
+
+- `@erp/api/asset-lifecycle` integrado aos endpoints oficiais:
+  - `GET /equipments/:id/lifecycle`;
+  - `GET /equipments/:id/lifecycle/stats`;
+  - `GET /asset-lifecycle`;
+  - `GET /asset-lifecycle/:id`.
+- Tipos `AssetLifecycle*` adicionados em `@erp/types`.
+- `AssetTimeline` criado em `@erp/ui/assets/asset-timeline.tsx`.
+- Timelines locais removidas:
+  - `@erp/ui/timeline` removido;
+  - `operationsToTimeline` removido;
+  - histórico local/demo em Cliente, Equipamento, Operator e OperationDetailDrawer substituído.
+- Página `/equipamentos/[id]` ganhou abas:
+  - Resumo;
+  - Informações;
+  - Timeline;
+  - Documentos;
+  - Métricas;
+  - Anexos.
+- `/clientes/[id]` passou a mostrar timeline consolidada via `GET /asset-lifecycle?customerId=...`.
+- Drawers de Cliente e Equipamento usam `AssetTimeline`.
+- Operator `/operator/equipamentos/[id]` usa o mesmo `AssetTimeline`.
+- Eventos `DOCUMENT` abrem o `DocumentViewer` existente.
+- Eventos com `operationId` abrem o `OperationDetailDrawer` existente.
+- Dashboard passou a consumir `GET /asset-lifecycle` para widgets reais de ciclo de vida.
+
+Validação:
+
+- `npm run build` passou.
+- `npm run lint` passou com warnings pré-existentes de imagem/useMemo fora do escopo.
+
+## Sprint 6 — Document Center & Configuration Integration
+
+- `@erp/api/documents` integrado aos endpoints oficiais:
+  - `GET /documents/operations/:operationId/:type/preview`;
+  - `POST /documents/operations/:operationId/:type/render`;
+  - `GET /documents/:documentId/preview`;
+  - `POST /documents/:documentId/render`;
+  - `GET /documents/:documentId/download`;
+  - `GET /documents/configuration`.
+- `@erp/api/signatures` integrado ao domínio de assinaturas:
+  - listagem, criação, edição, soft delete, upload e download.
+- `/documentos` virou a Central Documental real: lista documentos vindos de `/operations`, sem `demo.documents.v1`, com filtros cumulativos por cliente, equipamento, operador, tipo, status e data.
+- `DocumentViewer` foi substituído por um componente único do Document Engine: preview oficial, páginas, miniaturas, zoom, navegação, atualizar preview, renderizar e baixar PDF real.
+- `OperationDetailDrawer` e Operator `/operator/documents` reutilizam o mesmo `DocumentViewer`.
+- `/settings` ganhou:
+  - seção **Documentos**, consumindo `/documents/configuration`;
+  - seção **Assinaturas**, consumindo `/signatures`.
+- `/reports` permanece como Gestão de Modelos, mas removeu preview com dados de exemplo e passou a exibir configuração real dos templates.
+- `TemplateFormDrawer` passou a administrar `requiresSignature`, `signatureMode` e `signatureId`.
+- Fluxos removidos: `DocumentPreview`, `DocumentDownload`, `GeneratedDocument`, download JSON/local, preview `DocumentPaper` para documentos emitidos e `operationsApi.getDocuments`.
+
+Validação:
+
+- `npm run lint` passou com warnings existentes de imagem/useMemo fora do escopo.
+- `npm run build` passou.
+
+Pendências conscientes:
+
+- O backend ainda não aplica assinatura fixa/coletada no PDF; o frontend apenas persiste e exibe a configuração.
+- Editor visual, workflow, aprovação, versionamento, ICP/DocuSign e assinatura eletrônica continuam fora do escopo.
 
 ## STAGE 0 — Branding
 
@@ -8,7 +71,7 @@ Identidade do cliente (Climatize) aplicada: `logo.PNG`/`favicon.PNG` copiados pa
 
 ## STAGE 1 — Relatórios → Central documental (`/reports`)
 
-A Platform administra (não cria) documentos dos operadores. Lista RVT, Laudos, PMOC, Orçamentos, Recibos e OS (snapshot `demo.documents.v1`) com operador/cliente/equipamento/data/status, **preview** (DocumentViewer), revisar/editar (OWNER) e **download**. Filtros por tipo + busca + export.
+A Platform administrava documentos por snapshot `demo.documents.v1` nesta etapa histórica; a Sprint 6 substituiu esse fluxo por `/operations` + Document Engine oficial.
 
 ## STAGE 2 — Serviços (`/servicos`) → Histórico operacional
 
@@ -56,14 +119,14 @@ Domínios reais (Agenda, Serviços, Ordem de Serviço, Documentos) substituindo 
 ## Backlog #003 — Relatórios, Documentos e Templates
 
 - **Relatórios** (`/reports`) virou **Gestão de Modelos**: 7 modelos profissionais (OS, Relatório Técnico, Visita Técnica, PMOC, Laudo, Orçamento, Recibo) com identidade compartilhada (`@erp/ui/documents/document-paper` + `model-blueprints`). Ações por modelo: pré-visualizar, editar, ativar/desativar (`isActive`), definir padrão, importar (upload), versão (updatedAt) — consumindo `/organization/templates`.
-- **Documentos** (`/documentos`) virou **Central Documental**: lista documentos emitidos (`demo.documents.v1`) com filtros **cumulativos** (cliente, equipamento, operador, tipo, status, período), preview profissional (`DocumentPaper`) e download estruturado (JSON) + export CSV.
+- **Documentos** (`/documentos`) virou **Central Documental** histórica com snapshot; substituída na Sprint 6 por documentos reais de Operations, preview oficial e download PDF via backend.
 - Backend: `DocumentTemplate.isActive` (migration + DTO + serviço). Sem novos Demo Datasets.
 
 ## Backlog #004 — Operações (OS + Formulários Base)
 
 - Domínio **Operation** real consumido via `operationApi` (`@erp/api/operation`) — distinto do `operationsApi` (snapshots demo). Tipos em `@erp/types` (`Operation*`, `CreateOperationPayload`).
 - **Operator**: o Wizard de atendimento passou a **criar uma Operation real** (`POST /operations`) ao finalizar — fotos convertidas para data URL, assinatura e checklist enviados; a OS rascunho é gerada no backend. Tela de sucesso: "Atendimento registrado com sucesso · OS #000001 criada". (substitui o outbox local).
-- **Platform**: nova página `/operacoes` (lista real, filtros por status, paginação) + `OperationDetailDrawer` com Timeline + Checklist + Fotos + Observações + Assinatura + Documentos relacionados (preview via `DocumentPaper`).
+- **Platform**: nova página `/operacoes` (lista real, filtros por status, paginação) + `OperationDetailDrawer` com Timeline + Checklist + Fotos + Observações + Assinatura + Documentos relacionados. Preview foi migrado na Sprint 6 para `DocumentViewer`.
 - **Fundação reutilizável** `@erp/ui/operations`: `operation-sections` (modelo de seções), `operation-view` (renderers), `operation-shared` (labels/tones + `operationsToTimeline`). Todos os documentos reutilizam essa base (OperationForm → Sections → Renderers).
 - **Histórico (Timeline)** automático em: drawer de Equipamento (aba Histórico), drawer de Cliente (aba Histórico) e detalhe de Equipamento no operator — derivado de `/operations` (sem duplicação).
 - **Documentos** (`/documentos`): agora mescla os documentos reais das Operations (incluindo a **OS em rascunho**) com o snapshot demo, mantendo filtros/preview.

@@ -1,4 +1,5 @@
 import type { DocumentTemplateType } from '@prisma/client';
+import type { SignatureMode } from '@prisma/client';
 
 export type DocumentComponentKind =
   | 'metadata'
@@ -8,6 +9,7 @@ export type DocumentComponentKind =
   | 'image'
   | 'qrCode'
   | 'checklist'
+  | 'signature'
   | 'signaturePlaceholder'
   | 'observation';
 
@@ -99,6 +101,25 @@ export interface SignaturePlaceholderComponent extends BlueprintBaseComponent {
   signedAt: string | null;
 }
 
+export interface SignatureComponent extends BlueprintBaseComponent {
+  kind: 'signature';
+  mode: SignatureMode;
+  signatures: Array<{
+    id: string;
+    role: 'fixed' | 'collected';
+    label: string;
+    name: string | null;
+    title: string | null;
+    signedAt: string | null;
+    caption: string | null;
+    image?: {
+      mimeType: string;
+      fileSize: number;
+      contentBase64: string;
+    } | null;
+  }>;
+}
+
 export interface ObservationComponent extends BlueprintBaseComponent {
   kind: 'observation';
   text: string;
@@ -112,6 +133,7 @@ export type DocumentBlueprintComponent =
   | ImageComponent
   | QrCodeComponent
   | ChecklistComponent
+  | SignatureComponent
   | SignaturePlaceholderComponent
   | ObservationComponent;
 

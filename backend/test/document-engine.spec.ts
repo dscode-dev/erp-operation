@@ -5,6 +5,9 @@ import type { DocumentBlueprint } from '../src/modules/document-engine/blueprint
 import { LayoutEngine } from '../src/modules/document-engine/layout/layout-engine.service';
 import { DocumentMeasureService } from '../src/modules/document-engine/measurement/document-measure.service';
 
+const ONE_PIXEL_PNG =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=';
+
 function blueprint(rowCount: number): DocumentBlueprint {
   return {
     version: '1.0',
@@ -106,5 +109,58 @@ describe('DocumentEngine foundation', () => {
     expect(layout.contentWidth()).toBeGreaterThan(400);
     expect(layout.availableHeight()).toBeGreaterThan(600);
     expect(wrapped.length).toBeGreaterThan(1);
+  });
+
+  it('keeps signature blocks together and embeds fixed signature images in the PDF', () => {
+    const doc = blueprint(55);
+    doc.sections.push({
+      id: 'signature',
+      title: 'Assinatura',
+      critical: true,
+      components: [
+        {
+          id: 'document-signature',
+          kind: 'signature',
+          mode: 'HYBRID',
+          keepTogether: true,
+          signatures: [
+            {
+              id: 'fixed',
+              role: 'fixed',
+              label: 'Assinatura fixa',
+              name: 'Responsável Técnico',
+              title: 'Eng. Mecânico',
+              signedAt: null,
+              caption: 'Assinatura cadastrada',
+              image: {
+                mimeType: 'image/png',
+                fileSize: Buffer.from(ONE_PIXEL_PNG, 'base64').length,
+                contentBase64: ONE_PIXEL_PNG,
+              },
+            },
+            {
+              id: 'collected',
+              role: 'collected',
+              label: 'Assinatura do cliente',
+              name: null,
+              title: null,
+              signedAt: null,
+              caption: 'Assinatura coletada em campo',
+              image: null,
+            },
+          ],
+        },
+      ],
+    });
+
+    const rendered = renderer().render(doc);
+    const signaturePages = rendered.pages.filter((page) =>
+      page.elements.some((element) => element.type === 'image'),
+    );
+    const result = new PdfEngineService().create(rendered);
+
+    expect(signaturePages).toHaveLength(1);
+    expect(result.buffer.toString('latin1')).toContain('/Subtype /Image');
+    expect(result.buffer.toString('latin1')).toContain('/XObject');
   });
 });

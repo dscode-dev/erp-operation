@@ -29,9 +29,14 @@ export * as demoApi from "./demo";
 
 export * as operationsApi from "./operations";
 export * as operationApi from "./operation";
+export * as documentsApi from "./documents";
+export * as signaturesApi from "./signatures";
+export * as assetLifecycleApi from "./asset-lifecycle";
 
 export { isDemoDisabled, DemoUnavailableError } from "./demo";
 export type { DashboardData } from "./dashboard";
 export type { FinancialData, ScheduleData } from "./financial";
-export type { OrdersData, ProductsData, DocumentsData, ServicesData } from "./operations";
+export type { OrdersData, ProductsData, ServicesData } from "./operations";
 export type { OperationPhotoContent } from "./operation";
+export type { ListSignaturesParams, SignaturePayload } from "./signatures";
+export type { ListAssetLifecycleParams } from "./asset-lifecycle";

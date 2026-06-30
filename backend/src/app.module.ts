@@ -19,6 +19,9 @@ import { EquipmentsModule } from './modules/equipments/equipments.module';
 import { OperationsModule } from './modules/operations/operations.module';
 import { DocumentEngineModule } from './modules/document-engine/document-engine.module';
 import { SignaturesModule } from './modules/signatures/signatures.module';
+import { AssetLifecycleModule } from './modules/asset-lifecycle/asset-lifecycle.module';
+import { MaintenancePlanningModule } from './modules/maintenance-planning/maintenance-planning.module';
+import { PmocComplianceModule } from './modules/pmoc-compliance/pmoc-compliance.module';
 import { GlobalExceptionFilter } from './shared/filters/global-exception.filter';
 import { RequestLoggingInterceptor } from './shared/interceptors/request-logging.interceptor';
 import { ResponseEnvelopeInterceptor } from './shared/interceptors/response-envelope.interceptor';
@@ -47,6 +50,9 @@ import { ResponseEnvelopeInterceptor } from './shared/interceptors/response-enve
     OperationsModule,
     DocumentEngineModule,
     SignaturesModule,
+    AssetLifecycleModule,
+    MaintenancePlanningModule,
+    PmocComplianceModule,
     HealthModule,
   ],
   providers: [

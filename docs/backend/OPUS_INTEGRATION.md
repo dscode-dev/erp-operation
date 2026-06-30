@@ -521,5 +521,414 @@ Mocks que podem ser removidos:
 - estados locais de assinatura por template;
 - imagem de assinatura fixa mockada.
 
-Observação importante: o Builder ainda não usa a assinatura cadastrada no PDF. Esta sprint apenas
-persiste e expõe a configuração; a utilização no documento será etapa posterior.
+## Document Signature Integration (Sprint 8)
+
+O Builder agora usa a configuração de assinatura no PDF oficial. O frontend deve continuar usando os
+mesmos endpoints de preview/render/download; contratos de rota não mudaram.
+
+Novo componente possível no Blueprint:
+
+```ts
+type SignatureComponent = {
+  id: string;
+  kind: 'signature';
+  mode: 'NONE' | 'FIXED' | 'COLLECTED' | 'HYBRID';
+  keepTogether?: boolean;
+  signatures: Array<{
+    role: 'fixed' | 'collected';
+    label: string;
+    name: string | null;
+    title: string | null;
+    signedAt: string | null;
+    caption: string | null;
+    image?: { mimeType: string; fileSize: number; contentBase64: string } | null;
+  }>;
+};
+```
+
+UX:
+
+- se `kind='signature'`, renderize bloco não quebrável;
+- `fixed` pode exibir a imagem no preview;
+- `collected` deve exibir linha manual;
+- o PDF baixado já vem com assinatura fixa quando configurada;
+- erros possíveis ao renderizar: `SIGNATURE_NOT_FOUND`, `SIGNATURE_INACTIVE`,
+  `SIGNATURE_IMAGE_REQUIRED`, `DOCUMENT_RENDER_FAILED`.
+
+Mocks que podem ser removidos:
+
+- placeholder local de assinatura fixa no PDF;
+- regra local de qual assinatura aparece por tipo;
+- geração local de área de assinatura.
+
+## Asset Lifecycle / Timeline oficial do ativo (Sprint 9)
+
+Use estes endpoints para a linha do tempo de equipamentos. Não derive histórico combinando
+`/operations`, documentos e anexos no frontend.
+
+Endpoints disponíveis:
+
+```http
+GET  /asset-lifecycle
+GET  /asset-lifecycle/:id
+POST /asset-lifecycle
+GET  /equipments/:id/lifecycle
+GET  /equipments/:id/lifecycle/stats
+GET  /asset-lifecycle/:id/attachments
+POST /asset-lifecycle/:id/attachments
+DELETE /asset-lifecycle/:id/attachments/:attachmentId
+```
+
+Paginação:
+
+```ts
+{
+  items: AssetLifecycleEvent[];
+  pagination: { page: number; limit: number; total: number; totalPages: number };
+}
+```
+
+Filtros:
+
+- `page`;
+- `limit`;
+- `customerId` (`GET /asset-lifecycle`);
+- `equipmentId`;
+- `operationId`;
+- `type`;
+- `performedBy`;
+- `from`;
+- `to`.
+
+Para tela de equipamento, prefira:
+
+```http
+GET /equipments/:id/lifecycle?page=1&limit=20&type=&performedBy=&from=&to=
+```
+
+Campos importantes:
+
+- `timeline`: card pronto para UI, preferir este objeto na renderização;
+- `type`: badge/ícone do evento;
+- `occurredAt`: data operacional do evento;
+- `createdAt`: data em que o registro foi gravado;
+- `performedBy`/`performer`: técnico/usuário relacionado;
+- `operation`: link para atendimento;
+- `document`: link para documento;
+- `attachments`: anexos ativos do evento;
+- `metadata`: dados auxiliares, não usar como fonte única de regra visual.
+
+Sprint 9.5:
+
+O backend agora entrega o objeto `timeline` em cada evento e `timelineGroups` nas listagens. O Opus
+não precisa mais mapear enum para ícone/cor/título.
+
+Use:
+
+```ts
+event.timeline.icon;
+event.timeline.color;
+event.timeline.title;
+event.timeline.subtitle;
+event.timeline.category;
+event.timeline.references;
+event.timeline.attachments;
+```
+
+Para infinite scroll:
+
+- continue paginando com `page`/`limit`;
+- use `timeline.sortKey` como chave estável visual;
+- use `timeline.groupKey` ou `timelineGroups[].date` para separar por dia;
+- ao mudar filtros, reinicie a paginação.
+
+Para tela de cliente:
+
+```http
+GET /asset-lifecycle?customerId=<customerId>&page=1&limit=20
+```
+
+Para tela de equipamento:
+
+```http
+GET /equipments/:id/lifecycle?page=1&limit=20
+```
+
+Tipos e sugestão visual:
+
+- `INSTALLATION`: instalação / início do ativo;
+- `INSPECTION`: inspeção;
+- `PREVENTIVE`: preventiva;
+- `CORRECTIVE`: corretiva;
+- `MAINTENANCE`: manutenção geral;
+- `PART_REPLACEMENT`: peça trocada;
+- `WARRANTY`: garantia;
+- `DOCUMENT`: documento gerado;
+- `NOTE`: observação;
+- `CUSTOM`: evento especial.
+
+Estatísticas:
+
+```http
+GET /equipments/:id/lifecycle/stats
+```
+
+Retorna:
+
+- `preventiveCount`;
+- `correctiveCount`;
+- `documentCount`;
+- `inspectionCount`;
+- `firstInstallation`;
+- `lastMaintenance`;
+- `meanDaysBetweenInterventions`;
+- `byType` com todos os tipos oficiais.
+
+Upload de anexos:
+
+```ts
+const form = new FormData();
+form.append('file', file);
+form.append('category', 'PHOTO');
+await api.post(`/asset-lifecycle/${eventId}/attachments`, form);
+```
+
+Aceito:
+
+- PDF;
+- PNG;
+- JPG/JPEG;
+- 5 MiB.
+
+RBAC para UX:
+
+- OWNER/MANAGER/OPERATOR/VIEWER: podem ver;
+- OWNER/MANAGER/OPERATOR: podem criar evento e anexar arquivo;
+- OWNER/MANAGER: podem remover anexo;
+- nenhum papel edita ou exclui evento.
+
+Integrações automáticas:
+
+- concluir Operation cria evento no ativo;
+- renderizar documento cria evento `DOCUMENT`;
+- depois dessas ações, invalide a query de lifecycle do equipamento.
+
+Metadata confiável para navegação:
+
+- eventos de Operation carregam `operationId`, `operationNumber`, `operationType`,
+  `operationStatus`;
+- eventos `DOCUMENT` carregam `documentId`, `documentType`, `documentNumber`, `renderStatus`,
+  `renderedAt`;
+- para UI, prefira `timeline.references.operation` e `timeline.references.document`, pois já vêm
+  normalizados.
+
+Mocks que podem ser removidos:
+
+- timeline local de equipamento;
+- contadores locais de preventiva/corretiva/documentos;
+- histórico derivado manualmente de `/operations`;
+- anexos temporários de evento.
+- mapeamento local de enum para cor/ícone/título.
+
+Próximos endpoints previstos:
+
+- alertas de garantia/SLA;
+- manutenção recorrente;
+- PMOC;
+- agenda automática;
+- indicadores agregados globais.
+
+## Maintenance Planning — Sprint 10
+
+O Opus já pode integrar a fundação de planejamento de manutenção. Não gere Operations no frontend
+automaticamente; esta sprint apenas agenda futuras execuções e permite vincular uma Operation real.
+
+Endpoints disponíveis:
+
+```http
+GET    /maintenance-plans/stats
+GET    /maintenance-plans?page=1&limit=20&equipmentId=&type=&priority=&active=
+GET    /maintenance-plans/:id
+POST   /maintenance-plans
+PATCH  /maintenance-plans/:id
+DELETE /maintenance-plans/:id
+
+GET   /maintenance-plans/:id/executions?page=1&limit=20&status=&from=&to=
+POST  /maintenance-plans/:id/executions
+PATCH /maintenance-executions/:id
+
+GET /equipments/:id/maintenance?page=1&limit=20
+GET /equipments/:id/maintenance/upcoming?page=1&limit=20&status=&from=&to=
+```
+
+Payload para criar plano:
+
+```ts
+type CreateMaintenancePlanRequest = {
+  equipmentId: string;
+  name: string;
+  description?: string;
+  type: 'PREVENTIVE' | 'INSPECTION' | 'WARRANTY' | 'CUSTOM';
+  priority?: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  recurrenceRule: {
+    frequency: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY' | 'INTERVAL_DAYS' | 'INTERVAL_MONTHS';
+    interval?: number;
+  };
+  firstExecution: string;
+  active?: boolean;
+};
+```
+
+Payload de execução:
+
+```ts
+type MaintenanceExecution = {
+  id: string;
+  maintenancePlanId: string;
+  operationId: string | null;
+  scheduledAt: string;
+  executedAt: string | null;
+  status: 'PLANNED' | 'LINKED' | 'COMPLETED' | 'CANCELED';
+  notes: string | null;
+  createdAt: string;
+  plan: MaintenancePlan;
+  operation: {
+    id: string;
+    number: number;
+    type: string;
+    status: string;
+    completedAt: string | null;
+  } | null;
+};
+```
+
+Estados importantes:
+
+- `PLANNED`: execução planejada sem operação concluída;
+- `LINKED`: execução vinculada a uma Operation ainda não concluída;
+- `COMPLETED`: execução realizada; backend atualiza plano e Asset Lifecycle;
+- `CANCELED`: execução cancelada para fins operacionais.
+
+Paginação:
+
+Todas as listagens retornam:
+
+```ts
+{
+  items: T[];
+  pagination: { page: number; limit: number; total: number; totalPages: number };
+}
+```
+
+UX recomendada:
+
+- Em equipamento, carregar `GET /equipments/:id/maintenance` para planos e
+  `GET /equipments/:id/maintenance/upcoming` para próximas execuções.
+- Em dashboard, usar `GET /maintenance-plans/stats`.
+- Exibir `nextExecution`, `lastExecution`, `priority` e `_count.executions` nos cards.
+- Após concluir uma execução, invalidar timeline do equipamento; o backend cria evento
+  `MAINTENANCE`.
+- Não montar recorrência local além de validação visual; o cálculo oficial é do `RecurringEngine`.
+
+Mocks que podem ser removidos:
+
+- cards locais de manutenção futura;
+- próximas preventivas simuladas;
+- estatísticas manuais de planos ativos/vencidos;
+- recorrência calculada no frontend como fonte de verdade.
+
+Próximos endpoints previstos:
+
+- PMOC sobre Maintenance Planning;
+- geração assistida de Operations a partir de execuções planejadas;
+- alertas;
+- agenda automática;
+- garantias inteligentes.
+
+## PMOC Compliance — Sprint 11
+
+O backend já expõe PMOC como domínio de conformidade sobre Maintenance Planning. Não criar mocks,
+agenda paralela, execução paralela, timeline paralela ou PDF local.
+
+Endpoints:
+
+```http
+GET    /pmoc/stats
+GET    /pmoc?page=1&limit=20&customerId=&equipmentId=&active=
+GET    /pmoc/:id
+POST   /pmoc
+PATCH  /pmoc/:id
+DELETE /pmoc/:id
+
+GET    /pmoc/:id/environments
+POST   /pmoc/:id/environments
+PATCH  /pmoc/environments/:id
+DELETE /pmoc/environments/:id
+
+GET /pmoc/:id/compliance
+GET /equipments/:id/pmoc
+```
+
+Payload de criação:
+
+```ts
+type CreatePmocRequest = {
+  customerId: string;
+  equipmentId: string;
+  equipmentIds?: string[];
+  responsibleTechnician: string;
+  artNumber?: string;
+  contractNumber?: string;
+  startDate: string;
+  endDate: string;
+  observations?: string;
+  priority?: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  recurrenceRule: {
+    frequency: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY' | 'INTERVAL_DAYS' | 'INTERVAL_MONTHS';
+    interval?: number;
+  };
+  active?: boolean;
+};
+```
+
+Status:
+
+- `COMPLIANT`: ativo, vigente e sem pendências próximas/vencidas;
+- `WARNING`: execução PMOC próxima;
+- `OVERDUE`: validade vencida ou execução vencida;
+- `NON_COMPLIANT`: PMOC ou plano inativo;
+- `IN_PROGRESS`: vigência ainda não iniciou.
+
+Campos importantes:
+
+- `maintenancePlan`: plano oficial de recorrência;
+- `maintenancePlan.executions`: próximas execuções planejadas;
+- `equipments`: equipamentos reais monitorados pelo PMOC;
+- `environments`: ambientes e equipamentos associados;
+- `compliance`: status calculado pelo backend;
+- `document`: em `/pmoc/:id/compliance`, indica preparação para Document Engine.
+
+UX:
+
+- Página de cliente: carregar `GET /pmoc?customerId=<id>`.
+- Página de equipamento: carregar `GET /equipments/:id/pmoc`.
+- Dashboard: carregar `GET /pmoc/stats`.
+- Detalhe PMOC: carregar `GET /pmoc/:id` e `GET /pmoc/:id/compliance`.
+- Timeline: continuar usando Asset Lifecycle; eventos PMOC chegam como `PMOC_CREATED`,
+  `PMOC_UPDATED`, `PMOC_COMPLETED`, `PMOC_EXPIRED`.
+
+Mocks que podem ser removidos:
+
+- status PMOC calculado localmente;
+- próximas execuções PMOC simuladas;
+- ambientes mockados;
+- PDFs PMOC montados no frontend;
+- timeline PMOC local.
+
+Próximos endpoints previstos:
+
+- Compliance Engine genérico;
+- geração assistida de Operation a partir de PMOC;
+- alertas de vencimento;
+- workflow de aprovação;
+- assinatura digital avançada.

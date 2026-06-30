@@ -867,7 +867,35 @@ Preview retorna `DocumentBlueprint`:
 - `metadata`;
 - `sections[]`;
 - componentes: `metadata`, `paragraph`, `table`, `list`, `image`, `qrCode`, `checklist`,
-  `signaturePlaceholder`, `observation`.
+  `signature`, `signaturePlaceholder`, `observation`.
+
+Sprint 8: quando o template exige assinatura, o backend envia componente `signature` no Blueprint.
+O frontend não deve decidir regra de assinatura; apenas renderizar o componente recebido.
+
+```ts
+type SignatureBlueprintComponent = {
+  id: string;
+  kind: 'signature';
+  mode: 'NONE' | 'FIXED' | 'COLLECTED' | 'HYBRID';
+  keepTogether?: boolean;
+  signatures: Array<{
+    role: 'fixed' | 'collected';
+    label: string;
+    name: string | null;
+    title: string | null;
+    signedAt: string | null;
+    caption: string | null;
+    image?: { mimeType: string; fileSize: number; contentBase64: string } | null;
+  }>;
+};
+```
+
+PDF oficial já contém a assinatura conforme configuração do template:
+
+- `NONE`: sem assinatura;
+- `FIXED`: assinatura cadastrada;
+- `COLLECTED`: área manual;
+- `HYBRID`: assinatura cadastrada + área manual.
 
 Use esse Blueprint para preview visual no frontend, mas trate o PDF oficial como produto do backend.
 
@@ -896,6 +924,354 @@ Erros de UX:
 - `DOCUMENT_SIZE_LIMIT_EXCEEDED` (400): orientar reduzir fotos/checklist/tabelas;
 - `DOCUMENT_RENDER_FAILED` (500): exibir retry e registrar `X-Request-Id`.
 
-Limitação consciente da Sprint 6: fotos aparecem como componentes/metadados seguros no PDF; embed
-inline de imagem binária fica para sprint específica. Assinatura está preparada como placeholder,
-sem domínio funcional.
+Limitação consciente atual: fotos de operação ainda aparecem como componentes/metadados seguros no
+PDF; assinatura fixa já é embutida no PDF pela Sprint 8.
+
+## Asset Lifecycle / Timeline de Equipamento (Sprint 9)
+
+O histórico oficial do equipamento agora vem de `AssetLifecycleEvent`. Não monte timeline juntando
+Operations, documentos e anexos no frontend; use a API de ciclo de vida.
+
+Endpoints principais:
+
+```http
+GET  /asset-lifecycle?page=1&limit=20&equipmentId=&operationId=&type=&performedBy=&from=&to=
+GET  /asset-lifecycle/:id
+POST /asset-lifecycle
+
+GET  /equipments/:id/lifecycle?page=1&limit=20&type=&performedBy=&from=&to=
+GET  /equipments/:id/lifecycle/stats
+
+GET    /asset-lifecycle/:id/attachments
+POST   /asset-lifecycle/:id/attachments
+DELETE /asset-lifecycle/:id/attachments/:attachmentId
+```
+
+Sprint 9.5 adiciona também `customerId` em `GET /asset-lifecycle` para telas agregadas por cliente:
+
+```http
+GET /asset-lifecycle?customerId=<uuid>&page=1&limit=20
+```
+
+Roles:
+
+- OWNER/MANAGER/OPERATOR/VIEWER: leitura da timeline;
+- OWNER/MANAGER/OPERATOR: criação de evento e upload de anexo;
+- OWNER/MANAGER: remoção de anexo;
+- eventos não são editáveis nem removíveis.
+
+Eventos oficiais:
+
+```ts
+type AssetLifecycleEventType =
+  | 'INSTALLATION'
+  | 'INSPECTION'
+  | 'PREVENTIVE'
+  | 'CORRECTIVE'
+  | 'MAINTENANCE'
+  | 'PART_REPLACEMENT'
+  | 'WARRANTY'
+  | 'DOCUMENT'
+  | 'NOTE'
+  | 'CUSTOM';
+```
+
+UX recomendada para a página/drawer de equipamento:
+
+1. Abrir detalhes do equipamento com `GET /equipments/:id`.
+2. Carregar timeline oficial com `GET /equipments/:id/lifecycle?page=1&limit=20`.
+3. Carregar cards de indicadores com `GET /equipments/:id/lifecycle/stats`.
+4. Para filtros, enviar cumulativamente `type`, `performedBy`, `from` e `to`.
+5. Para anexos de um evento, usar `GET /asset-lifecycle/:eventId/attachments`.
+
+O backend cria automaticamente:
+
+- evento de manutenção/instalação quando uma Operation é concluída;
+- evento `DOCUMENT` quando um PDF oficial é renderizado.
+
+Portanto, após concluir atendimento ou gerar documento, basta invalidar/refazer a query da timeline
+do equipamento.
+
+Payload pronto para UI:
+
+Cada item preserva os campos originais e inclui `timeline`. Use `timeline` para renderizar cards,
+badges, cor, ícone, navegação e agrupamento. Não interprete enum no frontend.
+
+```ts
+type AssetLifecycleTimelineItem = {
+  id: string;
+  icon: string;
+  color: string;
+  title: string;
+  subtitle: string;
+  category: string;
+  description: string;
+  date: string;
+  groupKey: string;
+  sortKey: string;
+  user: { id: string; name: string; username: string } | null;
+  type: AssetLifecycleEventType;
+  operationId: string | null;
+  documentId: string | null;
+  equipmentId: string;
+  references: {
+    equipment: { id: string; name: string; tag: string; type: string; status: string } | null;
+    customer: { id: string; name: string; tradeName: string | null } | null;
+    operation: { id: string; number: number; type: string; status: string } | null;
+    document: {
+      id: string;
+      number: string;
+      type: string;
+      status: string;
+      renderedAt: string | null;
+      fileSize: number | null;
+    } | null;
+  };
+  attachments: Array<{
+    id: string;
+    category: string;
+    mimeType: string;
+    fileSize: number;
+    originalFileName: string;
+    createdAt: string;
+  }>;
+  badges: string[];
+};
+```
+
+Listagens incluem `timelineGroups`, preparado para infinite scroll/agrupamento por dia. O frontend
+pode usar `items` para lista plana ou `timelineGroups` para seções por data.
+
+Navegação direta:
+
+- se `timeline.operationId` existir, abrir drawer/página da operação;
+- se `timeline.documentId` existir, abrir preview/download do documento;
+- usar `timeline.references.customer` para link de cliente;
+- usar `timeline.references.equipment` para link do ativo.
+
+Payload de criação manual:
+
+```ts
+type CreateLifecycleEventRequest = {
+  equipmentId: string;
+  operationId?: string;
+  documentId?: string;
+  type: AssetLifecycleEventType;
+  occurredAt?: string;
+  performedBy?: string;
+  description: string;
+  metadata?: Record<string, unknown>;
+};
+```
+
+Anexos:
+
+- `multipart/form-data`;
+- campo `file`;
+- campo opcional `category`;
+- PDF/PNG/JPG/JPEG;
+- máximo 5 MiB;
+- o cliente deve validar para UX, mas o backend é autoridade.
+
+Estados vazios:
+
+- sem eventos: mostrar "Nenhum evento registrado para este equipamento";
+- sem estatísticas: os contadores retornam zero e datas retornam `null`;
+- sem anexos: mostrar lista vazia.
+
+Erros de UX:
+
+- `ASSET_LIFECYCLE_EVENT_NOT_FOUND`: evento removido/inexistente; atualizar timeline;
+- `ASSET_LIFECYCLE_ATTACHMENT_NOT_FOUND`: anexo já removido; atualizar lista;
+- `UPLOAD_INVALID_MIME_TYPE` / `UPLOAD_INVALID_EXTENSION`: rejeitar arquivo e orientar formatos;
+- `UPLOAD_FILE_TOO_LARGE`: orientar limite de 5 MiB;
+- `VALIDATION_ERROR`: revisar filtros/payload.
+
+## Maintenance Planning (Sprint 10)
+
+O backend agora expõe planejamento de manutenção. Importante: planejamento não é execução. Execuções
+reais continuam sendo `Operation`; uma execução planejada pode ser vinculada a uma Operation.
+
+Endpoints:
+
+```http
+GET    /maintenance-plans/stats
+GET    /maintenance-plans?page=1&limit=20&equipmentId=&type=&priority=&active=
+GET    /maintenance-plans/:id
+POST   /maintenance-plans
+PATCH  /maintenance-plans/:id
+DELETE /maintenance-plans/:id
+
+GET   /maintenance-plans/:id/executions?page=1&limit=20&status=&from=&to=
+POST  /maintenance-plans/:id/executions
+PATCH /maintenance-executions/:id
+
+GET /equipments/:id/maintenance?page=1&limit=20
+GET /equipments/:id/maintenance/upcoming?page=1&limit=20&status=&from=&to=
+```
+
+Roles para UI:
+
+- OWNER/MANAGER: podem criar, editar e desativar planos;
+- OWNER/MANAGER/OPERATOR: podem criar/atualizar execuções planejadas;
+- OWNER/MANAGER/OPERATOR/VIEWER: podem visualizar planos, execuções e estatísticas.
+
+Tipos:
+
+```ts
+type MaintenancePlanType = 'PREVENTIVE' | 'INSPECTION' | 'WARRANTY' | 'CUSTOM';
+type MaintenancePriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+type MaintenanceExecutionStatus = 'PLANNED' | 'LINKED' | 'COMPLETED' | 'CANCELED';
+type RecurrenceFrequency =
+  | 'DAILY'
+  | 'WEEKLY'
+  | 'MONTHLY'
+  | 'YEARLY'
+  | 'INTERVAL_DAYS'
+  | 'INTERVAL_MONTHS';
+```
+
+Criação de plano:
+
+```ts
+await api.post('/maintenance-plans', {
+  equipmentId,
+  name: 'Preventiva mensal',
+  description: 'Limpeza, inspeção e medição.',
+  type: 'PREVENTIVE',
+  priority: 'MEDIUM',
+  recurrenceRule: { frequency: 'MONTHLY', interval: 1 },
+  firstExecution: '2026-07-10T12:00:00.000Z',
+  active: true,
+});
+```
+
+Criação de execução:
+
+```ts
+await api.post(`/maintenance-plans/${planId}/executions`, {
+  scheduledAt: '2026-08-10T12:00:00.000Z',
+  notes: 'Execução planejada manualmente.',
+});
+```
+
+Vincular/concluir execução:
+
+```ts
+await api.patch(`/maintenance-executions/${executionId}`, {
+  operationId,
+  status: 'COMPLETED',
+  executedAt: new Date().toISOString(),
+  notes: 'Executada conforme checklist operacional.',
+});
+```
+
+Após concluir uma execução, invalide/refaça:
+
+- plano (`GET /maintenance-plans/:id`);
+- lista de execuções;
+- timeline do equipamento (`GET /equipments/:id/lifecycle`);
+- estatísticas de manutenção (`GET /maintenance-plans/stats`).
+
+Estados de UX:
+
+- sem planos: mostrar CTA conforme papel (`OWNER/MANAGER`);
+- plano vencido: compare `nextExecution` com relógio do cliente apenas para destaque visual; o
+  backend é autoridade;
+- `VIEWER`: ocultar ações de escrita, mas ainda tratar 403;
+- `OPERATOR`: pode atualizar execução, mas não criar/editar plano.
+
+Erros principais:
+
+- `MAINTENANCE_RECURRENCE_INVALID`: revisar frequência/intervalo;
+- `MAINTENANCE_OPERATION_MISMATCH`: Operation não pertence ao equipamento do plano;
+- `MAINTENANCE_PLAN_NOT_FOUND`: plano inexistente/desativado para a ação;
+- `MAINTENANCE_EXECUTION_NOT_FOUND`: execução inexistente;
+- `VALIDATION_ERROR`: datas ISO, UUIDs ou enums inválidos.
+
+## PMOC Compliance (Sprint 11)
+
+PMOC é uma especialização de Maintenance Planning. O frontend não deve criar calendário, execução ou
+timeline paralelos.
+
+Endpoints:
+
+```http
+GET    /pmoc/stats
+GET    /pmoc?page=1&limit=20&customerId=&equipmentId=&active=
+GET    /pmoc/:id
+POST   /pmoc
+PATCH  /pmoc/:id
+DELETE /pmoc/:id
+
+GET    /pmoc/:id/environments
+POST   /pmoc/:id/environments
+PATCH  /pmoc/environments/:id
+DELETE /pmoc/environments/:id
+
+GET /pmoc/:id/compliance
+GET /equipments/:id/pmoc?page=1&limit=20
+```
+
+Roles para UI:
+
+- OWNER/MANAGER: criam, editam e desativam PMOC/ambientes;
+- OWNER/MANAGER/OPERATOR/VIEWER: visualizam PMOCs, ambientes, compliance e stats.
+
+Status:
+
+```ts
+type PmocComplianceStatus = 'COMPLIANT' | 'WARNING' | 'OVERDUE' | 'NON_COMPLIANT' | 'IN_PROGRESS';
+```
+
+Criação:
+
+```ts
+await api.post('/pmoc', {
+  customerId,
+  equipmentId,
+  equipmentIds: [equipmentId],
+  responsibleTechnician: 'Ricardo Almeida',
+  artNumber: 'ART-PE-2026-00091',
+  contractNumber: 'HSC-PMOC-2026',
+  startDate: '2026-01-01T00:00:00.000Z',
+  endDate: '2026-12-31T00:00:00.000Z',
+  priority: 'HIGH',
+  recurrenceRule: { frequency: 'MONTHLY', interval: 1 },
+});
+```
+
+O backend cria o `MaintenancePlan` e a primeira `MaintenanceExecution`. Para mostrar agenda, use os
+campos de `maintenancePlan.executions` ou os endpoints de Maintenance Planning.
+
+Ambiente:
+
+```ts
+await api.post(`/pmoc/${pmocId}/environments`, {
+  name: 'Central de água gelada',
+  area: '85 m²',
+  occupancy: 4,
+  equipmentIds: [equipmentId],
+});
+```
+
+Documentos:
+
+`GET /pmoc/:id/compliance` retorna `document.type = 'PMOC'`, `engine = 'DocumentEngine'` e o
+template padrão. A renderização/preview/download do documento continua usando os endpoints oficiais
+do Document Engine. Não montar PDF PMOC no frontend.
+
+Após concluir uma execução PMOC:
+
+- invalidar `GET /pmoc/:id`;
+- invalidar `GET /pmoc/:id/compliance`;
+- invalidar `GET /equipments/:id/lifecycle`;
+- invalidar Maintenance Planning relacionado.
+
+Erros principais:
+
+- `PMOC_INVALID_RELATIONSHIP`: equipamento não pertence ao cliente ou ambiente referencia ativo fora
+  do PMOC;
+- `PMOC_PLAN_NOT_FOUND`: PMOC inexistente;
+- `PMOC_ENVIRONMENT_NOT_FOUND`: ambiente inexistente;
+- `VALIDATION_ERROR`: datas, enum, paginação ou payload inválido.

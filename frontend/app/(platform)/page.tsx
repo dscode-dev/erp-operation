@@ -2,7 +2,7 @@
 
 // Dashboard operacional — Sprint 2 (widgets integrados ao backend).
 import Link from "next/link";
-import { CalendarClock, Wallet } from "lucide-react";
+import { CalendarClock, FileText, ShieldCheck, TriangleAlert, Wallet, Wrench } from "lucide-react";
 import { DashboardSection } from "@platform/components/dashboard-section";
 import { MetricCard } from "@erp/ui/metric-card";
 import { GreetingHeader } from "@platform/components/greeting-header";
@@ -14,10 +14,10 @@ import { ComingSoonState, ErrorState } from "@erp/ui/states";
 import { useAuth } from "@erp/ui/auth/auth-provider";
 import { Gate } from "@erp/ui/auth/gate";
 import {
-  dashboardApi, usersApi, customersApi, financialApi, useQuery,
-  type DashboardData, type DemoScheduleState, type FinancialData,
+  dashboardApi, usersApi, customersApi, financialApi, assetLifecycleApi, useQuery,
+  type AssetLifecycleEvent, type DashboardData, type DemoScheduleState, type FinancialData,
 } from "@erp/api";
-import { firstName, formatNumber, formatCurrencyBRL } from "@erp/utils";
+import { firstName, formatNumber, formatCurrencyBRL, formatDateTime } from "@erp/utils";
 
 const SCHEDULE_STATUS: Record<DemoScheduleState, Status> = {
   OVERDUE: "danger",
@@ -38,6 +38,7 @@ export default function PlatformHome() {
     [canSeeTeam],
   );
   const customers = useQuery((signal) => customersApi.listCustomers({ limit: 100, signal }), []);
+  const lifecycle = useQuery((signal) => assetLifecycleApi.listLifecycle({ limit: 12, signal }), []);
 
   const counters = dash.data?.demo?.["demo.dashboard.v1"].counters;
   const schedule = dash.data?.demo?.["demo.schedule.v1"].items ?? [];
@@ -69,6 +70,8 @@ export default function PlatformHome() {
           </div>
         )}
       </DashboardSection>
+
+      <AssetLifecycleWidgets loading={lifecycle.loading} error={lifecycle.error} events={lifecycle.data?.items ?? []} onRetry={lifecycle.refetch} />
 
       {/* Indicadores financeiros (gated) */}
       <Gate roles={["OWNER", "MANAGER"]} permission="canFinancial">
@@ -115,6 +118,71 @@ export default function PlatformHome() {
         )}
       </div>
     </div>
+  );
+}
+
+function AssetLifecycleWidgets({
+  loading,
+  error,
+  events,
+  onRetry,
+}: {
+  loading: boolean;
+  error: unknown;
+  events: AssetLifecycleEvent[];
+  onRetry: () => void;
+}) {
+  const preventive = events.filter((event) => event.type === "PREVENTIVE").length;
+  const corrective = events.filter((event) => event.type === "CORRECTIVE").length;
+  const documents = events.filter((event) => event.type === "DOCUMENT").length;
+  const equipmentOccurrences = new Map<string, { name: string; count: number }>();
+  for (const event of events) {
+    const equipment = event.timeline.references.equipment;
+    if (!equipment) continue;
+    const current = equipmentOccurrences.get(equipment.id) ?? { name: equipment.name, count: 0 };
+    equipmentOccurrences.set(equipment.id, { ...current, count: current.count + 1 });
+  }
+  const topEquipment = [...equipmentOccurrences.values()].sort((a, b) => b.count - a.count)[0];
+
+  return (
+    <DashboardSection title="Ciclo de vida dos ativos">
+      {loading && events.length === 0 ? (
+        <div className="grid gap-3 lg:grid-cols-4">{Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)}</div>
+      ) : error && events.length === 0 ? (
+        <ErrorState error={error} onRetry={onRetry} title="Asset Lifecycle indisponível" />
+      ) : (
+        <div className="grid gap-4 lg:grid-cols-[repeat(4,minmax(0,1fr))]">
+          <MetricCard label="Preventivas recentes" value={formatNumber(preventive)} delta="últimos eventos" trend="flat" icon="ShieldCheck" />
+          <MetricCard label="Corretivas recentes" value={formatNumber(corrective)} delta="últimos eventos" trend={corrective ? "up" : "flat"} icon="TriangleAlert" />
+          <MetricCard label="Documentos recentes" value={formatNumber(documents)} delta="renderizados" trend="flat" icon="FileText" />
+          <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 shadow-[var(--shadow-card)]">
+            <div className="flex items-center gap-2 text-caption"><Wrench className="h-4 w-4" /> Maior ocorrência</div>
+            <div className="mt-2 text-lg font-semibold truncate">{topEquipment?.name ?? "—"}</div>
+            <p className="text-caption">{topEquipment ? `${topEquipment.count} eventos recentes` : "Sem eventos"}</p>
+          </div>
+          <div className="lg:col-span-4 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] shadow-[var(--shadow-card)] overflow-hidden">
+            {events.length === 0 ? (
+              <EmptyState icon={ShieldCheck} title="Sem eventos" description="Nenhum evento de ciclo de vida retornado pela API." />
+            ) : (
+              <ul className="divide-y divide-[var(--color-border)]">
+                {events.slice(0, 5).map((event) => (
+                  <li key={event.id} className="flex items-center gap-3 p-3">
+                    <span className="grid h-9 w-9 place-items-center rounded-full" style={{ backgroundColor: `${event.timeline.color}18`, color: event.timeline.color }}>
+                      {event.type === "DOCUMENT" ? <FileText className="h-4 w-4" /> : event.type === "CORRECTIVE" ? <TriangleAlert className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium truncate">{event.timeline.title}</div>
+                      <div className="text-caption truncate">{event.timeline.references.customer?.name ?? "—"} · {event.timeline.references.equipment?.name ?? "—"}</div>
+                    </div>
+                    <span className="text-caption hidden sm:inline">{formatDateTime(event.timeline.date)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+    </DashboardSection>
   );
 }
 

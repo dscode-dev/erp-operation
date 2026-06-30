@@ -12,9 +12,7 @@ import { SkeletonList } from "@erp/ui/skeletons";
 import { ComingSoonState, ErrorState } from "@erp/ui/states";
 import { EmptyState } from "@erp/ui/empty-state";
 import { Drawer } from "@erp/ui/drawer";
-import { DocumentViewer } from "@erp/ui/documents/document-viewer";
 import { operationsApi, useQuery, type DemoOrder, type DemoOrderStatus, type OrdersData } from "@erp/api";
-import type { GeneratedDocument } from "@erp/types";
 import { formatCurrencyBRL, formatDateTime } from "@erp/utils";
 
 const STATUS_PILL: Record<DemoOrderStatus, Status> = {
@@ -110,7 +108,6 @@ export default function OrdensPage() {
 }
 
 function OrderDetail({ order }: { order: DemoOrder }) {
-  const doc: GeneratedDocument = { id: `os-${order.id}`, kind: "WORK_ORDER", title: `OS ${order.number}`, status: "draft" };
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -125,14 +122,9 @@ function OrderDetail({ order }: { order: DemoOrder }) {
       </div>
       <div>
         <h3 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)] mb-2">Documento</h3>
-        <DocumentViewer
-          document={doc}
-          reviewFields={[
-            { label: "Cliente", value: order.customer },
-            { label: "Tipo", value: TYPE_LABEL[order.type] },
-            { label: "Valor", value: formatCurrencyBRL(order.value) },
-          ]}
-        />
+        <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-muted)]/30 p-4 text-sm text-[var(--color-muted-foreground)]">
+          OS legadas do Demo Dataset não possuem preview local. Documentos oficiais ficam em /documentos após criação de Operation real.
+        </div>
       </div>
     </div>
   );

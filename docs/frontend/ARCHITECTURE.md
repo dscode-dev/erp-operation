@@ -1,4 +1,60 @@
-# ARCHITECTURE — Frontend (Sprint 3.0)
+# ARCHITECTURE — Frontend
+
+## Sprint 7 — Asset Lifecycle Integration
+
+O frontend não monta mais histórico operacional local para Cliente, Equipamento ou Operação. A
+arquitetura normativa é:
+
+```text
+AssetLifecycleEvent
+↓
+assetLifecycleApi
+↓
+AssetTimeline
+↓
+Event Drawer
+├─ DocumentViewer quando documentId existir
+└─ OperationDetailDrawer quando operationId existir
+```
+
+Decisões:
+
+- `packages/api/asset-lifecycle.ts` é a única porta frontend para o Asset Lifecycle.
+- `packages/ui/assets/asset-timeline.tsx` é o componente único de timeline.
+- O componente consome o payload `timeline` produzido pelo `TimelineAssembler` do backend.
+- O frontend não interpreta enum para ícone/cor/título/badge.
+- Listagens suportam paginação, carregar mais, filtros rápidos, busca local segura, loading,
+  skeleton, retry e estado vazio.
+- Metadata nunca é renderizada como HTML.
+- RBAC é respeitado pelo backend; o frontend apenas trata 401/403.
+- O componente local antigo `@erp/ui/timeline` foi removido.
+
+## Sprint 6 — Document Engine Integration
+
+O frontend não possui mais pipeline local de documento oficial. A arquitetura normativa é:
+
+```text
+OperationDocument
+↓
+documentsApi.preview*
+↓
+DocumentViewer
+↓
+documentsApi.render*
+↓
+documentsApi.download*
+```
+
+Decisões:
+
+- `packages/api/documents.ts` é a única porta para Document Engine.
+- `packages/api/signatures.ts` é a única porta para assinaturas.
+- `packages/ui/documents/document-viewer.tsx` é o viewer único para Platform e Operator.
+- O viewer renderiza o `DocumentBlueprint` recebido do backend para preview de tela, mas nunca monta PDF.
+- Renderização PDF e download sempre chamam backend.
+- `/documentos` não usa mais Demo Dataset.
+- Configuração documental e assinaturas vivem em `/settings` e respeitam RBAC do backend.
+- Templates em `/reports` editam apenas dados persistidos em `/organization/templates`; não há editor visual nem mock de layout.
 
 A partir da Sprint 3.0 o frontend é composto por **dois produtos independentes** que
 compartilham apenas o backend, o Design System e os pacotes comuns:
@@ -62,9 +118,9 @@ Regra de dependência: `app → apps/* → packages/*`. `packages/*` nunca impor
 | Visualizar, gerenciar, aprovar, editar, baixar documentos, acompanhar indicadores | Executar serviço, capturar dados, fotografar, coletar assinatura, enviar |
 | Desktop-first | Mobile-first, uma mão, poucos toques |
 
-**Documentos:** toda a responsabilidade documental (preview detalhado, gestão,
-download) é da Platform. O Operator apenas envia dados, assina e acompanha o
-status do envio.
+**Documentos:** preview estruturado, renderização e download são responsabilidade do backend.
+Platform administra a Central Documental e configurações; Operator apenas consulta documentos reais
+do cliente selecionado e abre o mesmo viewer quando autorizado.
 
 ## Autenticação (isolada)
 
@@ -139,7 +195,7 @@ Platform exibe o QR (matriz visual determinística + código real) com copiar/ba
 ## RC1 (Sprint 5)
 
 - **Branding**: `@erp/ui/brand` (BrandLogo) + `public/brand/*` + `app/icon.png`/`apple-icon.png`. Tema azul/branco definitivo; cores dinâmicas do OWNER preservadas.
-- **Central documental** (`/reports`) e **Serviços/histórico** (`/servicos`) consomem `demo.documents.v1`/`demo.services.v1` via `@erp/api/operations`.
+- **Central documental** antiga (`/reports`) e **Serviços/histórico** (`/servicos`) consumiam `demo.documents.v1`/`demo.services.v1` via `@erp/api/operations`; a Sprint 6 substituiu documentos oficiais pelo Document Engine.
 - **Timeline** (`@erp/ui/timeline`) reutilizada em Serviço/Cliente/Equipamento.
 - **Docker**: `frontend/Dockerfile` (Next `output: standalone`) + serviço `frontend` no compose (serve Platform e Operator; subdomínios via proxy em produção). Vars: `FRONTEND_PORT`, `NEXT_PUBLIC_API_BASE_URL`, `NEXT_PUBLIC_ENABLE_DEMO`.
 - **Demo guiado** (`/demo-ready`): roteiro comercial de ponta a ponta.

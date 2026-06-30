@@ -16,6 +16,7 @@ import { ApplicationException } from '../../shared/exceptions/application.except
 import type { AuthenticatedUser } from '../../shared/types/authenticated-user.type';
 import type { RequestWithId } from '../../shared/types/request-with-id.type';
 import { AppLoggerService } from '../../infra/logger/app-logger.service';
+import { LifecyclePublisher } from '../asset-lifecycle/lifecycle-publisher.service';
 import { PrismaService } from '../database/prisma.service';
 import { DocumentAssetResolver } from './assets/document-asset-resolver.service';
 import { DocumentBuilderService } from './builder/document-builder.service';
@@ -37,6 +38,7 @@ export class DocumentEngineService {
     private readonly pdf: PdfEngineService,
     private readonly logger: AppLoggerService,
     private readonly assets: DocumentAssetResolver,
+    private readonly lifecycle: LifecyclePublisher,
   ) {}
 
   async previewOperation(
@@ -153,6 +155,7 @@ export class DocumentEngineService {
             },
           ),
         });
+        await this.lifecycle.publishDocumentRenderedTx(tx, saved.id, actor.id, context);
         return saved;
       });
 

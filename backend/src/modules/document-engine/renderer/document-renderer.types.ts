@@ -28,7 +28,17 @@ export interface RenderedLine {
   y2: number;
 }
 
-export type RenderedElement = RenderedTextLine | RenderedRect | RenderedLine;
+export interface RenderedImage {
+  type: 'image';
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  mimeType: string;
+  contentBase64: string;
+}
+
+export type RenderedElement = RenderedTextLine | RenderedRect | RenderedLine | RenderedImage;
 
 export interface RenderedPage {
   pageNumber: number;

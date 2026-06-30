@@ -157,12 +157,12 @@ assinaturas e futuros assets de documento.
 
 RBAC:
 
-| Recurso                                | OWNER | MANAGER | OPERATOR | VIEWER |
-| -------------------------------------- | ----- | ------- | -------- | ------ |
+| Recurso                                | OWNER | MANAGER | OPERATOR | VIEWER  |
+| -------------------------------------- | ----- | ------- | -------- | ------- |
 | Configuração de documentos             | Sim   | Leitura | Não      | Leitura |
-| CRUD de assinaturas                    | Sim   | Não     | Não      | Não    |
-| Listar/detalhar/download de assinatura | Sim   | Sim     | Não      | Sim    |
-| Configurar assinatura em template      | Sim   | Não     | Não      | Não    |
+| CRUD de assinaturas                    | Sim   | Não     | Não      | Não     |
+| Listar/detalhar/download de assinatura | Sim   | Sim     | Não      | Sim     |
+| Configurar assinatura em template      | Sim   | Não     | Não      | Não     |
 
 Proteções aplicadas:
 
@@ -191,6 +191,37 @@ Eventos auditados:
 
 Fora do escopo de segurança desta sprint: assinatura digital ICP, certificados, DocuSign, workflow,
 aprovação, envio por e-mail/WhatsApp e validação jurídica de assinatura eletrônica.
+
+## Document Signature Rendering security
+
+Sprint 8 integra assinatura ao render oficial sem alterar endpoints.
+
+Garantias:
+
+- `DocumentContextService` é responsável por buscar Operation/configuração/assets; o Builder não
+  consulta banco;
+- `DocumentAssetResolver` é a única origem de assets documentais;
+- templates `FIXED` e `HYBRID` exigem assinatura ativa e imagem existente;
+- `COLLECTED` nunca injeta assinatura fixa;
+- `NONE` não cria seção de assinatura;
+- imagens de assinatura são carregadas do storage e não são registradas em AuditLog;
+- PDF engine valida formato de imagem antes de embutir:
+  - JPEG com dimensões válidas;
+  - PNG 8-bit gray/RGB/alpha com filtros suportados;
+- assinatura usa `keepTogether`, evitando quebra entre páginas;
+- limite de PDF de 10 MiB continua aplicado;
+- falhas de asset ou imagem inválida retornam erro controlado.
+
+Erros relevantes:
+
+- `SIGNATURE_NOT_FOUND`;
+- `SIGNATURE_INACTIVE`;
+- `SIGNATURE_IMAGE_REQUIRED`;
+- `DOCUMENT_RENDER_FAILED`;
+- `DOCUMENT_SIZE_LIMIT_EXCEEDED`.
+
+Fora do escopo: ICP Brasil, certificados digitais, carimbo de tempo, DocuSign/Adobe Sign,
+aprovação, workflow e múltiplos aprovadores.
 
 Assinaturas:
 
@@ -570,3 +601,191 @@ Em 24 de junho de 2026, a Sprint 3.5 não adicionou dependências.
 - storage S3/remoto;
 - cookies HttpOnly/BFF;
 - limpeza agendada de sessões expiradas.
+
+## Asset Lifecycle security (Sprint 9)
+
+Eventos de ciclo de vida de equipamento são registros históricos imutáveis.
+
+Controles aplicados:
+
+- publicação de eventos centralizada no `LifecyclePublisher`;
+- outros módulos não criam `AssetLifecycleEvent` diretamente;
+- não existe endpoint de edição de evento;
+- não existe endpoint de remoção de evento;
+- correções históricas devem criar novo evento;
+- anexos usam soft delete (`deletedAt`) e podem ter arquivo físico removido best-effort;
+- integrações automáticas com Operations e Document Engine são idempotentes.
+
+RBAC:
+
+- `OWNER`, `MANAGER`, `OPERATOR`, `VIEWER`: leitura;
+- `OWNER`, `MANAGER`, `OPERATOR`: criação de eventos e upload de anexos;
+- `OWNER`, `MANAGER`: remoção de anexos;
+- eventos financeiros continuam protegidos indiretamente pela regra do Document Engine para
+  documentos `QUOTE`/`RECEIPT`.
+
+Upload de anexos:
+
+- provider: `StorageProvider`;
+- storage key gerada por UUID e nunca pelo nome original;
+- path controlado em `asset-lifecycle/<eventId>/attachments/<uuid>.<ext>`;
+- nome original salvo apenas como metadado sanitizado;
+- extensões permitidas: `pdf`, `png`, `jpg`, `jpeg`;
+- MIME permitido: `application/pdf`, `image/png`, `image/jpeg`;
+- validação binária:
+  - PDF inicia com `%PDF-`;
+  - PNG valida assinatura de 8 bytes;
+  - JPEG valida marcador inicial `FF D8 FF`;
+- limite: 5 MiB;
+- proteção contra path traversal por não aceitar path externo do usuário.
+
+Auditoria:
+
+- `ASSET_LIFECYCLE_EVENT_CREATED`;
+- `ASSET_LIFECYCLE_EVENT_AUTO_CREATED`;
+- `ASSET_LIFECYCLE_ATTACHMENT_UPLOADED`;
+- `ASSET_LIFECYCLE_ATTACHMENT_DELETED`.
+
+Audit metadata registra request ID, IP, user agent, ator, IDs do evento/equipamento/operação/documento
+e dados técnicos mínimos. Conteúdo binário/base64 do anexo nunca é gravado em audit log.
+
+Privacidade e exposição:
+
+- `TimelineAssembler` remove dependência de interpretação visual no cliente e retorna apenas
+  referências seguras;
+- o payload `timeline.user` não expõe e-mail;
+- timeline retorna apenas referências e metadados necessários;
+- PDFs gerados continuam sendo baixados pelo Document Engine, não pelo lifecycle;
+- eventos `DOCUMENT` guardam `documentId`, não duplicam arquivo nem conteúdo do PDF;
+- `metadata` é JSON auxiliar e deve ser tratada como não confiável para renderização HTML.
+
+Paginação e filtros:
+
+- `limit` máximo permanece 100;
+- filtros usam DTO validado (`UUID`, enum e datas ISO);
+- ordenação estável por `occurredAt` e `id`;
+- índices adicionais da Sprint 9.5 reduzem varredura para filtros por equipamento, tipo, operador,
+  documento e período.
+
+## Maintenance Planning security (Sprint 10)
+
+Maintenance Planning separa planejamento de execução. O backend não cria Operations
+automaticamente nesta sprint e não executa rotinas por cron.
+
+RBAC:
+
+- `OWNER` e `MANAGER`: leitura, criação, edição e desativação de planos;
+- `OWNER`, `MANAGER` e `OPERATOR`: criação/atualização de execuções planejadas;
+- `OWNER`, `MANAGER`, `OPERATOR` e `VIEWER`: leitura de planos, execuções e estatísticas.
+
+Controles de domínio:
+
+- `MaintenancePlan` é desativado por `active=false`; não há remoção física via API;
+- `MaintenanceExecution` pode ser vinculada a `Operation`, mas a Operation deve pertencer ao mesmo
+  equipamento do plano;
+- conclusão de execução atualiza `lastExecution`/`nextExecution` de forma transacional;
+- evento `MAINTENANCE` no Asset Lifecycle é emitido exclusivamente via `LifecyclePublisher`;
+- nenhum módulo cria `AssetLifecycleEvent` diretamente para manutenção.
+
+Validação:
+
+- DTOs validam UUIDs, enums, datas ISO, strings e paginação;
+- `limit` máximo é 100;
+- `recurrenceRule.frequency` aceita somente valores oficiais;
+- `recurrenceRule.interval` aceita inteiro de 1 a 3650;
+- parâmetros inválidos retornam erro padronizado.
+
+Recorrência:
+
+- `RecurringEngine` é isolado e determinístico;
+- não conhece PMOC, garantia, SLA ou regras específicas;
+- não usa cron;
+- recebe regra e data base, retorna próximas datas calculadas.
+
+Auditoria:
+
+- `MAINTENANCE_PLAN_CREATED`;
+- `MAINTENANCE_PLAN_UPDATED`;
+- `MAINTENANCE_PLAN_DELETED`;
+- `MAINTENANCE_EXECUTION_CREATED`;
+- `MAINTENANCE_EXECUTION_UPDATED`;
+- `MAINTENANCE_EXECUTION_COMPLETED`;
+- ao concluir execução, o Asset Lifecycle também registra auditoria automática do evento publicado.
+
+Privacidade:
+
+- payloads retornam usuário criador apenas com `id`, `name` e `username`;
+- notas são sanitizadas por trim/normalização de espaços;
+- nenhuma informação financeira é exposta pelo domínio;
+- metadata do evento de lifecycle armazena apenas referências necessárias (`maintenancePlanId`,
+  `maintenanceExecutionId`, `operationId`, nome do plano e notas).
+
+Performance e abuso:
+
+- índices cobrem `equipmentId/active`, `active/nextExecution`, `type/active`,
+  `priority/nextExecution`, `maintenancePlanId/scheduledAt`, `status/scheduledAt` e `executedAt`;
+- endpoints continuam protegidos pelo rate limit global;
+- listagens são paginadas e validadas.
+
+## PMOC Compliance security (Sprint 11)
+
+PMOC é uma especialização de Maintenance Planning. Não existe agenda, execução, timeline ou motor de
+documentos paralelo.
+
+RBAC:
+
+- `OWNER` e `MANAGER`: criação, edição e desativação de PMOC e ambientes;
+- `OWNER`, `MANAGER`, `OPERATOR` e `VIEWER`: leitura, compliance e estatísticas.
+
+Controles de relacionamento:
+
+- PMOC exige `Organization`, `Customer`, `Equipment` e exatamente um `MaintenancePlan`;
+- equipamento principal deve pertencer ao cliente informado;
+- equipamentos monitorados também devem pertencer ao mesmo cliente;
+- ambiente só pode referenciar equipamento já controlado pelo PMOC;
+- desativação de PMOC também desativa o `MaintenancePlan`;
+- não há duplicação de registros de `Equipment`.
+
+Compliance:
+
+- status é calculado pelo backend;
+- parâmetros considerados: PMOC ativo, MaintenancePlan ativo, vigência, execuções pendentes,
+  execuções vencidas e próximas execuções;
+- `ComplianceEvaluator` foi criado apenas como ponto de extensão; motor genérico de compliance
+  permanece fora de escopo.
+
+Asset Lifecycle:
+
+- eventos PMOC são publicados via `LifecyclePublisher`;
+- eventos adicionados: `PMOC_CREATED`, `PMOC_UPDATED`, `PMOC_COMPLETED`, `PMOC_EXPIRED`;
+- nenhum serviço PMOC cria `AssetLifecycleEvent` diretamente;
+- conclusão de `MaintenanceExecution` vinculada ao PMOC publica `PMOC_COMPLETED`.
+
+Document Engine:
+
+- PMOC usa `DocumentTemplateType.PMOC`;
+- `/pmoc/:id/compliance` expõe preparação documental via `DocumentConfigurationService`;
+- não há renderer/PDF próprio no domínio PMOC.
+
+Validação:
+
+- DTOs validam UUIDs, datas ISO, arrays únicos, limites de array, strings, enums e paginação;
+- `recurrenceRule` é validada pelo `RecurringEngine`;
+- `limit` máximo é 100;
+- datas inválidas ou intervalo `endDate < startDate` são rejeitados.
+
+Auditoria:
+
+- `PMOC_CREATED`;
+- `PMOC_UPDATED`;
+- `PMOC_DELETED`;
+- `PMOC_ENVIRONMENT_CREATED`;
+- `PMOC_ENVIRONMENT_UPDATED`;
+- `PMOC_ENVIRONMENT_DELETED`.
+
+Performance:
+
+- índices em `customerId/active`, `equipmentId/active`, `organizationId/active`, `active/endDate`,
+  ambientes por PMOC e vínculos de equipamentos;
+- listagens paginadas;
+- stats calculados sem expor dados financeiros.

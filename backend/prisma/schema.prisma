@@ -88,6 +88,52 @@ enum SignatureMode {
   HYBRID
 }
 
+enum AssetLifecycleEventType {
+  INSTALLATION
+  INSPECTION
+  PREVENTIVE
+  CORRECTIVE
+  MAINTENANCE
+  PMOC_CREATED
+  PMOC_UPDATED
+  PMOC_COMPLETED
+  PMOC_EXPIRED
+  PART_REPLACEMENT
+  WARRANTY
+  DOCUMENT
+  NOTE
+  CUSTOM
+}
+
+enum MaintenancePlanType {
+  PREVENTIVE
+  INSPECTION
+  WARRANTY
+  CUSTOM
+}
+
+enum MaintenancePriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum MaintenanceExecutionStatus {
+  PLANNED
+  LINKED
+  COMPLETED
+  CANCELED
+}
+
+enum PmocComplianceStatus {
+  COMPLIANT
+  WARNING
+  OVERDUE
+  NON_COMPLIANT
+  IN_PROGRESS
+}
+
 model SystemSetting {
   id        String   @id @default(uuid()) @db.Uuid
   key       String   @unique @db.VarChar(150)
@@ -112,27 +158,29 @@ model AuditLog {
 }
 
 model User {
-  id                 String           @id @default(uuid()) @db.Uuid
-  email              String           @unique @db.VarChar(254)
-  username           String           @unique @db.VarChar(50)
-  name               String           @db.VarChar(150)
-  passwordHash       String           @map("password_hash") @db.VarChar(255)
-  role               Role
-  avatarAssetId      String?          @unique @map("avatar_asset_id") @db.Uuid
-  phone              String?          @db.VarChar(30)
-  jobTitle           String?          @map("job_title") @db.VarChar(100)
-  notes              String?          @db.Text
-  mustChangePassword Boolean          @default(false) @map("must_change_password")
-  isActive           Boolean          @default(true) @map("is_active")
-  disabledAt         DateTime?        @map("disabled_at") @db.Timestamptz(3)
-  lastLoginAt        DateTime?        @map("last_login_at") @db.Timestamptz(3)
-  createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt          DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
-  refreshTokens      RefreshToken[]
-  preferences        UserPreferences?
-  permission         UserPermission?
-  avatarAsset        UserAvatarAsset? @relation(fields: [avatarAssetId], references: [id], onDelete: SetNull)
-  operations         Operation[]
+  id                   String                @id @default(uuid()) @db.Uuid
+  email                String                @unique @db.VarChar(254)
+  username             String                @unique @db.VarChar(50)
+  name                 String                @db.VarChar(150)
+  passwordHash         String                @map("password_hash") @db.VarChar(255)
+  role                 Role
+  avatarAssetId        String?               @unique @map("avatar_asset_id") @db.Uuid
+  phone                String?               @db.VarChar(30)
+  jobTitle             String?               @map("job_title") @db.VarChar(100)
+  notes                String?               @db.Text
+  mustChangePassword   Boolean               @default(false) @map("must_change_password")
+  isActive             Boolean               @default(true) @map("is_active")
+  disabledAt           DateTime?             @map("disabled_at") @db.Timestamptz(3)
+  lastLoginAt          DateTime?             @map("last_login_at") @db.Timestamptz(3)
+  createdAt            DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+  refreshTokens        RefreshToken[]
+  preferences          UserPreferences?
+  permission           UserPermission?
+  avatarAsset          UserAvatarAsset?      @relation(fields: [avatarAssetId], references: [id], onDelete: SetNull)
+  operations           Operation[]
+  assetLifecycleEvents AssetLifecycleEvent[]
+  maintenancePlans     MaintenancePlan[]
 
   @@map("users")
 }
@@ -169,6 +217,7 @@ model Organization {
   settings       OrganizationSettings?
   assets         BrandAsset[]
   templates      DocumentTemplate[]
+  pmocPlans      PmocPlan[]
 
   @@map("organizations")
 }
@@ -203,23 +252,23 @@ model BrandAsset {
 }
 
 model DocumentTemplate {
-  id             String               @id @default(uuid()) @db.Uuid
-  organizationId String               @map("organization_id") @db.Uuid
-  type           DocumentTemplateType
-  name           String               @db.VarChar(120)
-  headerContent  String               @map("header_content") @db.Text
-  footerContent  String               @map("footer_content") @db.Text
-  observations   String               @db.Text
-  isDefault      Boolean              @default(false) @map("is_default")
-  isSystem       Boolean              @default(false) @map("is_system")
-  isActive       Boolean              @default(true) @map("is_active")
-  requiresSignature Boolean           @default(false) @map("requires_signature")
-  signatureMode     SignatureMode     @default(NONE) @map("signature_mode")
-  signatureId       String?           @map("signature_id") @db.Uuid
-  createdAt      DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt      DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
-  organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  signature      Signature?           @relation(fields: [signatureId], references: [id], onDelete: SetNull)
+  id                String               @id @default(uuid()) @db.Uuid
+  organizationId    String               @map("organization_id") @db.Uuid
+  type              DocumentTemplateType
+  name              String               @db.VarChar(120)
+  headerContent     String               @map("header_content") @db.Text
+  footerContent     String               @map("footer_content") @db.Text
+  observations      String               @db.Text
+  isDefault         Boolean              @default(false) @map("is_default")
+  isSystem          Boolean              @default(false) @map("is_system")
+  isActive          Boolean              @default(true) @map("is_active")
+  requiresSignature Boolean              @default(false) @map("requires_signature")
+  signatureMode     SignatureMode        @default(NONE) @map("signature_mode")
+  signatureId       String?              @map("signature_id") @db.Uuid
+  createdAt         DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
+  organization      Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  signature         Signature?           @relation(fields: [signatureId], references: [id], onDelete: SetNull)
 
   @@index([organizationId, type])
   @@index([organizationId, isDefault])
@@ -229,17 +278,17 @@ model DocumentTemplate {
 }
 
 model Signature {
-  id              String             @id @default(uuid()) @db.Uuid
-  name            String             @db.VarChar(120)
-  title           String             @db.VarChar(120)
-  imageStorageKey String?            @unique @map("image_storage_key") @db.VarChar(255)
-  mimeType        String?            @map("mime_type") @db.VarChar(100)
-  originalFileName String?           @map("original_file_name") @db.VarChar(255)
-  fileSize        Int?               @map("file_size")
-  active          Boolean            @default(true)
-  createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt       DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
-  templates       DocumentTemplate[]
+  id               String             @id @default(uuid()) @db.Uuid
+  name             String             @db.VarChar(120)
+  title            String             @db.VarChar(120)
+  imageStorageKey  String?            @unique @map("image_storage_key") @db.VarChar(255)
+  mimeType         String?            @map("mime_type") @db.VarChar(100)
+  originalFileName String?            @map("original_file_name") @db.VarChar(255)
+  fileSize         Int?               @map("file_size")
+  active           Boolean            @default(true)
+  createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+  templates        DocumentTemplate[]
 
   @@index([active, name])
   @@map("signatures")
@@ -304,6 +353,7 @@ model Customer {
   attachments    CustomerAttachment[]
   equipments     Equipment[]
   operations     Operation[]
+  pmocPlans      PmocPlan[]
 
   @@index([name])
   @@index([email])
@@ -367,35 +417,40 @@ model CustomerAttachment {
 }
 
 model Equipment {
-  id                 String                @id @default(uuid()) @db.Uuid
-  customerId         String                @map("customer_id") @db.Uuid
-  addressId          String?               @map("address_id") @db.Uuid
-  parentEquipmentId  String?               @map("parent_equipment_id") @db.Uuid
+  id                 String                     @id @default(uuid()) @db.Uuid
+  customerId         String                     @map("customer_id") @db.Uuid
+  addressId          String?                    @map("address_id") @db.Uuid
+  parentEquipmentId  String?                    @map("parent_equipment_id") @db.Uuid
   type               EquipmentType
-  status             EquipmentStatus       @default(ACTIVE)
-  name               String                @db.VarChar(180)
-  tag                String?               @db.VarChar(80)
-  manufacturer       String?               @db.VarChar(120)
-  model              String?               @db.VarChar(120)
-  serialNumber       String?               @map("serial_number") @db.VarChar(120)
-  capacity           String?               @db.VarChar(80)
-  voltage            String?               @db.VarChar(40)
-  installationDate   DateTime?             @map("installation_date") @db.Date
-  warrantyExpiration DateTime?             @map("warranty_expiration") @db.Date
-  observations       String?               @db.Text
-  qrToken            String                @unique @default(uuid()) @map("qr_token") @db.Uuid
-  qrCode             String                @unique @map("qr_code") @db.VarChar(100)
-  isActive           Boolean               @default(true) @map("is_active")
-  disabledAt         DateTime?             @map("disabled_at") @db.Timestamptz(3)
-  createdAt          DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt          DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
-  customer           Customer              @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  address            CustomerAddress?      @relation(fields: [addressId], references: [id], onDelete: SetNull)
-  parent             Equipment?            @relation("EquipmentHierarchy", fields: [parentEquipmentId], references: [id], onDelete: SetNull)
-  children           Equipment[]           @relation("EquipmentHierarchy")
+  status             EquipmentStatus            @default(ACTIVE)
+  name               String                     @db.VarChar(180)
+  tag                String?                    @db.VarChar(80)
+  manufacturer       String?                    @db.VarChar(120)
+  model              String?                    @db.VarChar(120)
+  serialNumber       String?                    @map("serial_number") @db.VarChar(120)
+  capacity           String?                    @db.VarChar(80)
+  voltage            String?                    @db.VarChar(40)
+  installationDate   DateTime?                  @map("installation_date") @db.Date
+  warrantyExpiration DateTime?                  @map("warranty_expiration") @db.Date
+  observations       String?                    @db.Text
+  qrToken            String                     @unique @default(uuid()) @map("qr_token") @db.Uuid
+  qrCode             String                     @unique @map("qr_code") @db.VarChar(100)
+  isActive           Boolean                    @default(true) @map("is_active")
+  disabledAt         DateTime?                  @map("disabled_at") @db.Timestamptz(3)
+  createdAt          DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(3)
+  customer           Customer                   @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  address            CustomerAddress?           @relation(fields: [addressId], references: [id], onDelete: SetNull)
+  parent             Equipment?                 @relation("EquipmentHierarchy", fields: [parentEquipmentId], references: [id], onDelete: SetNull)
+  children           Equipment[]                @relation("EquipmentHierarchy")
   attachments        EquipmentAttachment[]
   metrics            EquipmentMetric[]
   operations         Operation[]
+  lifecycleEvents    AssetLifecycleEvent[]
+  maintenancePlans   MaintenancePlan[]
+  pmocPrimaryPlans   PmocPlan[]
+  pmocLinks          PmocPlanEquipment[]
+  pmocEnvironments   PmocEnvironmentEquipment[]
 
   @@index([customerId, status])
   @@index([addressId])
@@ -440,29 +495,31 @@ model EquipmentMetric {
 /// reused by every produced document (OS, PMOC, Laudo, Relatório, Orçamento,
 /// Recibo). Each Work Order goes through exactly one Operation.
 model Operation {
-  id            String              @id @default(uuid()) @db.Uuid
-  number        Int                 @unique @default(autoincrement())
-  customerId    String              @map("customer_id") @db.Uuid
-  addressId     String?             @map("address_id") @db.Uuid
-  equipmentId   String?             @map("equipment_id") @db.Uuid
-  operatorId    String              @map("operator_id") @db.Uuid
-  type          OperationType
-  status        OperationStatus     @default(DRAFT)
-  scheduledFor  DateTime?           @map("scheduled_for") @db.Timestamptz(3)
-  startedAt     DateTime?           @map("started_at") @db.Timestamptz(3)
-  completedAt   DateTime?           @map("completed_at") @db.Timestamptz(3)
-  checklist     Json                @default("[]")
-  observations  String?             @db.Text
-  signatureData String?             @map("signature_data") @db.Text
-  signedAt      DateTime?           @map("signed_at") @db.Timestamptz(3)
-  createdAt     DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt     DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
-  customer      Customer            @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  address       CustomerAddress?    @relation(fields: [addressId], references: [id], onDelete: SetNull)
-  equipment     Equipment?          @relation(fields: [equipmentId], references: [id], onDelete: SetNull)
-  operator      User                @relation(fields: [operatorId], references: [id], onDelete: Restrict)
-  photos        OperationPhoto[]
-  documents     OperationDocument[]
+  id                   String                @id @default(uuid()) @db.Uuid
+  number               Int                   @unique @default(autoincrement())
+  customerId           String                @map("customer_id") @db.Uuid
+  addressId            String?               @map("address_id") @db.Uuid
+  equipmentId          String?               @map("equipment_id") @db.Uuid
+  operatorId           String                @map("operator_id") @db.Uuid
+  type                 OperationType
+  status               OperationStatus       @default(DRAFT)
+  scheduledFor         DateTime?             @map("scheduled_for") @db.Timestamptz(3)
+  startedAt            DateTime?             @map("started_at") @db.Timestamptz(3)
+  completedAt          DateTime?             @map("completed_at") @db.Timestamptz(3)
+  checklist            Json                  @default("[]")
+  observations         String?               @db.Text
+  signatureData        String?               @map("signature_data") @db.Text
+  signedAt             DateTime?             @map("signed_at") @db.Timestamptz(3)
+  createdAt            DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+  customer             Customer              @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  address              CustomerAddress?      @relation(fields: [addressId], references: [id], onDelete: SetNull)
+  equipment            Equipment?            @relation(fields: [equipmentId], references: [id], onDelete: SetNull)
+  operator             User                  @relation(fields: [operatorId], references: [id], onDelete: Restrict)
+  photos               OperationPhoto[]
+  documents            OperationDocument[]
+  lifecycleEvents      AssetLifecycleEvent[]
+  maintenanceExecution MaintenanceExecution?
 
   @@index([customerId, createdAt])
   @@index([equipmentId, createdAt])
@@ -489,22 +546,185 @@ model OperationPhoto {
 /// type via DocumentTemplateType; the Work Order is generated automatically as a
 /// DRAFT when an Operation is created. PDF generation is future scope.
 model OperationDocument {
-  id             String                  @id @default(uuid()) @db.Uuid
-  operationId    String                  @map("operation_id") @db.Uuid
-  type           DocumentTemplateType
-  number         String                  @db.VarChar(40)
-  status         OperationDocumentStatus @default(DRAFT)
-  storageKey     String?                 @unique @map("storage_key") @db.VarChar(255)
-  mimeType       String?                 @map("mime_type") @db.VarChar(100)
-  fileSize       Int?                    @map("file_size")
-  renderedAt     DateTime?               @map("rendered_at") @db.Timestamptz(3)
-  renderMetadata Json?                   @map("render_metadata")
-  createdAt      DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt      DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
-  operation      Operation               @relation(fields: [operationId], references: [id], onDelete: Cascade)
+  id              String                  @id @default(uuid()) @db.Uuid
+  operationId     String                  @map("operation_id") @db.Uuid
+  type            DocumentTemplateType
+  number          String                  @db.VarChar(40)
+  status          OperationDocumentStatus @default(DRAFT)
+  storageKey      String?                 @unique @map("storage_key") @db.VarChar(255)
+  mimeType        String?                 @map("mime_type") @db.VarChar(100)
+  fileSize        Int?                    @map("file_size")
+  renderedAt      DateTime?               @map("rendered_at") @db.Timestamptz(3)
+  renderMetadata  Json?                   @map("render_metadata")
+  createdAt       DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
+  operation       Operation               @relation(fields: [operationId], references: [id], onDelete: Cascade)
+  lifecycleEvents AssetLifecycleEvent[]
 
   @@unique([operationId, type])
   @@index([type, status])
   @@index([renderedAt])
   @@map("operation_documents")
+}
+
+model AssetLifecycleEvent {
+  id          String                     @id @default(uuid()) @db.Uuid
+  equipmentId String                     @map("equipment_id") @db.Uuid
+  operationId String?                    @map("operation_id") @db.Uuid
+  documentId  String?                    @map("document_id") @db.Uuid
+  type        AssetLifecycleEventType
+  occurredAt  DateTime                   @map("occurred_at") @db.Timestamptz(3)
+  performedBy String?                    @map("performed_by") @db.Uuid
+  description String                     @db.Text
+  metadata    Json                       @default("{}")
+  createdAt   DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
+  equipment   Equipment                  @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+  operation   Operation?                 @relation(fields: [operationId], references: [id], onDelete: SetNull)
+  document    OperationDocument?         @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  performer   User?                      @relation(fields: [performedBy], references: [id], onDelete: SetNull)
+  attachments AssetLifecycleAttachment[]
+
+  @@index([equipmentId, occurredAt], map: "asset_lifecycle_eq_at_idx")
+  @@index([equipmentId, type, occurredAt], map: "asset_lifecycle_eq_type_at_idx")
+  @@index([equipmentId, performedBy, occurredAt], map: "asset_lifecycle_eq_performer_at_idx")
+  @@index([occurredAt, id], map: "asset_lifecycle_at_id_idx")
+  @@index([operationId])
+  @@index([documentId])
+  @@index([documentId, type], map: "asset_lifecycle_doc_type_idx")
+  @@index([type, occurredAt])
+  @@index([performedBy, occurredAt])
+  @@map("asset_lifecycle_events")
+}
+
+model AssetLifecycleAttachment {
+  id               String              @id @default(uuid()) @db.Uuid
+  eventId          String              @map("event_id") @db.Uuid
+  storageKey       String              @unique @map("storage_key") @db.VarChar(255)
+  originalFileName String              @map("original_file_name") @db.VarChar(255)
+  mimeType         String              @map("mime_type") @db.VarChar(100)
+  fileSize         Int                 @map("file_size")
+  category         String              @db.VarChar(80)
+  deletedAt        DateTime?           @map("deleted_at") @db.Timestamptz(3)
+  createdAt        DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  event            AssetLifecycleEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId, createdAt])
+  @@index([deletedAt])
+  @@map("asset_lifecycle_attachments")
+}
+
+model MaintenancePlan {
+  id             String                 @id @default(uuid()) @db.Uuid
+  equipmentId    String                 @map("equipment_id") @db.Uuid
+  name           String                 @db.VarChar(140)
+  description    String?                @db.Text
+  type           MaintenancePlanType
+  active         Boolean                @default(true)
+  priority       MaintenancePriority    @default(MEDIUM)
+  recurrenceRule Json                   @map("recurrence_rule")
+  firstExecution DateTime               @map("first_execution") @db.Timestamptz(3)
+  nextExecution  DateTime               @map("next_execution") @db.Timestamptz(3)
+  lastExecution  DateTime?              @map("last_execution") @db.Timestamptz(3)
+  createdBy      String?                @map("created_by") @db.Uuid
+  createdAt      DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime               @updatedAt @map("updated_at") @db.Timestamptz(3)
+  equipment      Equipment              @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+  creator        User?                  @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+  executions     MaintenanceExecution[]
+  pmocPlan       PmocPlan?
+
+  @@index([equipmentId, active])
+  @@index([active, nextExecution])
+  @@index([type, active])
+  @@index([priority, nextExecution])
+  @@map("maintenance_plans")
+}
+
+model MaintenanceExecution {
+  id                String                     @id @default(uuid()) @db.Uuid
+  maintenancePlanId String                     @map("maintenance_plan_id") @db.Uuid
+  operationId       String?                    @unique @map("operation_id") @db.Uuid
+  scheduledAt       DateTime                   @map("scheduled_at") @db.Timestamptz(3)
+  executedAt        DateTime?                  @map("executed_at") @db.Timestamptz(3)
+  status            MaintenanceExecutionStatus @default(PLANNED)
+  notes             String?                    @db.Text
+  createdAt         DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
+  plan              MaintenancePlan            @relation(fields: [maintenancePlanId], references: [id], onDelete: Cascade)
+  operation         Operation?                 @relation(fields: [operationId], references: [id], onDelete: SetNull)
+
+  @@index([maintenancePlanId, scheduledAt])
+  @@index([status, scheduledAt])
+  @@index([executedAt])
+  @@map("maintenance_executions")
+}
+
+model PmocPlan {
+  id                    String              @id @default(uuid()) @db.Uuid
+  organizationId        String              @map("organization_id") @db.Uuid
+  customerId            String              @map("customer_id") @db.Uuid
+  equipmentId           String              @map("equipment_id") @db.Uuid
+  maintenancePlanId     String              @unique @map("maintenance_plan_id") @db.Uuid
+  responsibleTechnician String              @map("responsible_technician") @db.VarChar(150)
+  artNumber             String?             @map("art_number") @db.VarChar(80)
+  contractNumber        String?             @map("contract_number") @db.VarChar(80)
+  startDate             DateTime            @map("start_date") @db.Date
+  endDate               DateTime            @map("end_date") @db.Date
+  active                Boolean             @default(true)
+  observations          String?             @db.Text
+  createdAt             DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
+  organization          Organization        @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  customer              Customer            @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  equipment             Equipment           @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+  maintenancePlan       MaintenancePlan     @relation(fields: [maintenancePlanId], references: [id], onDelete: Cascade)
+  environments          PmocEnvironment[]
+  equipments            PmocPlanEquipment[]
+
+  @@index([customerId, active])
+  @@index([equipmentId, active])
+  @@index([organizationId, active])
+  @@index([active, endDate])
+  @@map("pmoc_plans")
+}
+
+model PmocEnvironment {
+  id           String                     @id @default(uuid()) @db.Uuid
+  pmocPlanId   String                     @map("pmoc_plan_id") @db.Uuid
+  name         String                     @db.VarChar(140)
+  area         String?                    @db.VarChar(80)
+  occupancy    Int?
+  observations String?                    @db.Text
+  createdAt    DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(3)
+  pmocPlan     PmocPlan                   @relation(fields: [pmocPlanId], references: [id], onDelete: Cascade)
+  equipments   PmocEnvironmentEquipment[]
+
+  @@index([pmocPlanId, name])
+  @@map("pmoc_environments")
+}
+
+model PmocPlanEquipment {
+  id          String    @id @default(uuid()) @db.Uuid
+  pmocPlanId  String    @map("pmoc_plan_id") @db.Uuid
+  equipmentId String    @map("equipment_id") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  pmocPlan    PmocPlan  @relation(fields: [pmocPlanId], references: [id], onDelete: Cascade)
+  equipment   Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+
+  @@unique([pmocPlanId, equipmentId])
+  @@index([equipmentId])
+  @@map("pmoc_plan_equipments")
+}
+
+model PmocEnvironmentEquipment {
+  id            String          @id @default(uuid()) @db.Uuid
+  environmentId String          @map("environment_id") @db.Uuid
+  equipmentId   String          @map("equipment_id") @db.Uuid
+  createdAt     DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  environment   PmocEnvironment @relation(fields: [environmentId], references: [id], onDelete: Cascade)
+  equipment     Equipment       @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+
+  @@unique([environmentId, equipmentId])
+  @@index([equipmentId])
+  @@map("pmoc_environment_equipments")
 }

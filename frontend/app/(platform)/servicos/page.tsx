@@ -6,7 +6,7 @@
  * Consome o Demo Dataset; preparado para a futura Ordem de Serviço.
  */
 import { useMemo, useState } from "react";
-import { Briefcase, FileText } from "lucide-react";
+import { Briefcase } from "lucide-react";
 import { PageHeader } from "@platform/components/page-header";
 import { DataTable, type Column } from "@platform/components/data-table";
 import { ExportButton } from "@platform/components/export-button";
@@ -16,7 +16,6 @@ import { SkeletonList } from "@erp/ui/skeletons";
 import { ComingSoonState, ErrorState } from "@erp/ui/states";
 import { EmptyState } from "@erp/ui/empty-state";
 import { Drawer } from "@erp/ui/drawer";
-import { Timeline, type TimelineEvent } from "@erp/ui/timeline";
 import { operationsApi, useQuery, type DemoService, type DemoServiceStatus, type DemoOrderType, type ServicesData } from "@erp/api";
 import { formatDate } from "@erp/utils";
 
@@ -99,7 +98,6 @@ export default function ServicosPage() {
 }
 
 function ServiceDetail({ service }: { service: DemoService }) {
-  const events: TimelineEvent[] = service.history.map((h, i) => ({ id: `${service.id}-${i}`, at: h.at, kind: h.kind, label: h.label }));
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -112,12 +110,9 @@ function ServiceDetail({ service }: { service: DemoService }) {
         <Row label="Data" value={formatDate(service.date)} />
         <Row label="Documentos" value={`${service.documents.length}`} />
       </div>
-      <div>
-        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)] mb-2 flex items-center gap-1.5"><FileText className="h-3.5 w-3.5" /> Histórico</h3>
-        <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
-          <Timeline events={events} />
-        </div>
-      </div>
+      <p className="rounded-[var(--radius-lg)] border border-dashed border-[var(--color-border)] bg-[var(--color-muted)]/30 p-4 text-sm text-[var(--color-muted-foreground)]">
+        O histórico oficial do ativo agora é exibido nas telas de Cliente e Equipamento via Asset Lifecycle.
+      </p>
     </div>
   );
 }

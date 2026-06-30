@@ -1,18 +1,5 @@
-/**
- * Document model — architecture only (Sprint 1).
- *
- * Generation is the backend's exclusive responsibility. The frontend prepares
- * the reusable view layer for the future flow:
- *
- *   Operador → preenche formulário → assinatura → backend monta documento
- *           → frontend recebe PDF → preview → download
- *
- * Nothing here generates a document. These types describe what the frontend
- * will receive and render once the backend document endpoints exist.
- */
 import type { DocumentTemplateType } from "./index";
 
-/** Mirrors the backend DocumentTemplateType (PMOC, Orçamento, Recibo, Laudo…). */
 export type DocumentKind = DocumentTemplateType;
 
 export const DOCUMENT_KIND_LABEL: Record<DocumentKind, string> = {
@@ -24,43 +11,100 @@ export const DOCUMENT_KIND_LABEL: Record<DocumentKind, string> = {
   PMOC: "PMOC",
 };
 
-/** Lifecycle of a document as seen by the frontend. */
-export type DocumentStatus =
-  | "draft" // form not yet submitted
-  | "pending_signature" // awaiting in-field signature
-  | "generating" // backend is assembling the PDF
-  | "ready" // PDF received, can preview/download
-  | "error"; // generation failed
+export type DocumentComponent =
+  | { id: string; kind: "metadata"; items: Array<{ label: string; value: string }>; keepTogether?: boolean }
+  | { id: string; kind: "paragraph"; text: string; emphasis?: "normal" | "strong"; keepTogether?: boolean }
+  | {
+      id: string;
+      kind: "table";
+      columns: Array<{ key: string; label: string; width?: number }>;
+      rows: Array<Record<string, string>>;
+      keepTogether?: boolean;
+    }
+  | { id: string; kind: "list"; items: string[]; keepTogether?: boolean }
+  | {
+      id: string;
+      kind: "image";
+      sourceId: string;
+      caption: string | null;
+      mimeType: string;
+      fileSize: number;
+      keepTogether?: boolean;
+    }
+  | { id: string; kind: "qrCode"; label: string; value: string; keepTogether?: boolean }
+  | {
+      id: string;
+      kind: "checklist";
+      items: Array<{ label: string; done: boolean; note: string | null }>;
+      keepTogether?: boolean;
+    }
+  | {
+      id: string;
+      kind: "signaturePlaceholder";
+      label: string;
+      strategy: "none" | "fixed" | "collected" | "hybrid";
+      signedAt: string | null;
+      keepTogether?: boolean;
+    }
+  | { id: string; kind: "observation"; text: string; keepTogether?: boolean };
 
-/**
- * A document produced (or to be produced) by the backend.
- * `content` carries the rendered file once `status === "ready"`. The frontend
- * never fills `content` itself — it only renders what the backend returns.
- */
-export type GeneratedDocument = {
-  id: string;
-  kind: DocumentKind;
-  title: string;
-  status: DocumentStatus;
-  /** ISO timestamp of generation, when available. */
-  generatedAt?: string | null;
-  /** Rendered file payload (provided by the backend when ready). */
-  content?: {
-    mimeType: string; // typically application/pdf
-    /** base64 of the rendered file, or a fetchable URL — backend's choice. */
-    base64?: string;
-    url?: string;
-    fileName: string;
-  } | null;
-  /** Reason when status === "error". */
-  error?: string | null;
+export type DocumentBlueprint = {
+  version: "1.0";
+  metadata: {
+    operationId: string;
+    documentId: string | null;
+    documentType: DocumentKind;
+    documentNumber: string;
+    generatedAt: string;
+    locale: "pt-BR";
+    timezone: string;
+    currency: string;
+    organization: {
+      legalName: string;
+      tradeName: string;
+      cnpj: string;
+      email: string;
+      phone: string;
+      city: string;
+      state: string;
+      primaryColor: string;
+      secondaryColor: string;
+    };
+  };
+  header: {
+    title: string;
+    subtitle?: string;
+    organizationName: string;
+    documentNumber: string;
+  };
+  footer: { content: string; generatedAt: string };
+  sections: Array<{
+    id: string;
+    title: string;
+    critical?: boolean;
+    components: DocumentComponent[];
+  }>;
 };
 
-/** Build a browser data URL from a ready document's base64 content. */
-export function toDataUrl(doc: GeneratedDocument): string | null {
-  if (doc.content?.url) return doc.content.url;
-  if (doc.content?.base64 && doc.content.mimeType) {
-    return `data:${doc.content.mimeType};base64,${doc.content.base64}`;
-  }
-  return null;
+export type DocumentRenderResult = {
+  id: string;
+  operationId: string;
+  type: DocumentKind;
+  number: string;
+  status: "DRAFT" | "READY" | "VALIDATED" | "SENT";
+  mimeType: string | null;
+  fileSize: number | null;
+  renderedAt: string | null;
+  renderMetadata: Record<string, unknown> | null;
+  createdAt: string;
+  updatedAt: string;
+  downloadReady: boolean;
+};
+
+export type DocumentDownloadResult = DocumentRenderResult & {
+  contentBase64: string;
+};
+
+export function documentDataUrl(download: DocumentDownloadResult): string {
+  return `data:${download.mimeType ?? "application/pdf"};base64,${download.contentBase64}`;
 }

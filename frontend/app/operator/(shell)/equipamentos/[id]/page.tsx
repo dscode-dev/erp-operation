@@ -1,22 +1,22 @@
 "use client";
 
-import { use } from "react";
+import { use, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Activity, Plus } from "lucide-react";
 import { SkeletonCard } from "@erp/ui/skeletons";
 import { AsyncBoundary } from "@erp/ui/states";
 import { StatusPill } from "@erp/ui/status-pill";
 import { QrFoundation } from "@platform/components/qr-foundation";
-import { Timeline } from "@erp/ui/timeline";
-import { operationsToTimeline } from "@erp/ui/operations/operation-shared";
-import { equipmentsApi, operationApi, useQuery, type EquipmentDetail } from "@erp/api";
+import { AssetTimeline } from "@erp/ui/assets/asset-timeline";
+import { OperationDetailDrawer } from "@platform/components/operation-detail-drawer";
+import { equipmentsApi, useQuery, type EquipmentDetail } from "@erp/api";
 import { formatDate, formatDateTime } from "@erp/utils";
 import { EQUIPMENT_STATUS_LABEL, EQUIPMENT_STATUS_PILL, EQUIPMENT_TYPE_LABEL } from "@platform/equipment-display";
 
 export default function OperatorEquipamentoConsult({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const [operationId, setOperationId] = useState<string | null>(null);
   const detail = useQuery<EquipmentDetail>((signal) => equipmentsApi.getEquipment(id, { signal }), [id]);
-  const history = useQuery((signal) => operationApi.listOperations({ equipmentId: id, limit: 30, signal }), [id]);
 
   return (
     <div className="px-4 pt-4 pb-24 space-y-4">
@@ -69,17 +69,12 @@ export default function OperatorEquipamentoConsult({ params }: { params: Promise
               </Card>
             )}
 
-            <Card title={`Histórico (${history.data?.items.length ?? 0})`}>
-              {history.loading && !history.data ? (
-                <p className="text-sm text-[var(--color-muted-foreground)]">Carregando…</p>
-              ) : (history.data?.items.length ?? 0) === 0 ? (
-                <p className="text-sm text-[var(--color-muted-foreground)]">Nenhuma operação registrada.</p>
-              ) : (
-                <Timeline events={operationsToTimeline(history.data?.items ?? [])} />
-              )}
+            <Card title="Timeline">
+              <AssetTimeline equipmentId={e.id} compact onOpenOperation={setOperationId} />
             </Card>
 
             <QrFoundation qrCode={e.qrCode} qrToken={e.qrToken} />
+            <OperationDetailDrawer operationId={operationId} open={operationId !== null} onClose={() => setOperationId(null)} />
           </>
         )}
       </AsyncBoundary>

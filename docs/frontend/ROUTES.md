@@ -1,11 +1,37 @@
-# ROUTES — Sprint 3
+# ROUTES — Frontend
+
+## Sprint 7 — Asset Lifecycle
+
+- `/equipamentos/[id]`: detalhes do equipamento com abas Resumo, Informações, Timeline,
+  Documentos, Métricas e Anexos. Timeline consome `/equipments/:id/lifecycle` e stats consomem
+  `/equipments/:id/lifecycle/stats`.
+- `/clientes/[id]`: timeline consolidada do cliente via `/asset-lifecycle?customerId=...`.
+- `/`: dashboard adiciona widgets reais de ciclo de vida usando `/asset-lifecycle`.
+- `/operator/equipamentos/[id]`: PWA/operator usa o mesmo `AssetTimeline`.
+- `CustomerDetailDrawer`, `EquipmentDetailDrawer` e `OperationDetailDrawer`: históricos usam
+  Asset Lifecycle, sem timeline local.
+
+Eventos de timeline:
+
+- `documentId` abre `DocumentViewer`;
+- `operationId` abre `OperationDetailDrawer`.
+
+## Sprint 6 — Documentos
+
+- `/documentos`: Central Documental real. Consome `/operations` para listar `OperationDocument` e abre `DocumentViewer` com endpoints oficiais de preview/render/download.
+- `/settings`: inclui seções **Documentos** (`GET /documents/configuration`) e **Assinaturas** (`/signatures`).
+- `/reports`: Gestão de Modelos/Templates. Exibe configuração real dos templates e administra assinatura por template.
+- `/operator/documents`: documentos reais filtrados pelo cliente selecionado; usa `/operations?customerId=...` e `DocumentViewer`.
+- `OperationDetailDrawer`: documentos relacionados abrem o mesmo `DocumentViewer`.
+
+Rotas antigas de preview local/demo foram removidas das telas de documentos. Ordens/Serviços demo não exibem mais rascunho local de documento.
 
 Dois apps no mesmo runtime Next, separados por pathname (`app/app-providers.tsx`). Ver `ARCHITECTURE.md`.
 
 ## Platform (gestão · desktop-first)
 
 `/login`, `/trocar-senha` (escopo platform) + shell autenticado em `app/(platform)/…`:
-`/`, `/agenda`, `/operacoes` (**Backlog #004** — domínio operacional real, lista `/operations` + drawer), `/servicos`, `/ordens`, `/clientes` (+`/[id]`), `/equipamentos` (+`/[id]`), `/produtos`, `/financial`, `/usuarios`, `/profile`, `/settings`, `/reports` (+`/visita`), `/documentos` (central — mescla documentos reais de Operations + demo), `/demo-ready` (modo apresentação). Sprint 4: Ordens e Produtos passam a consumir o Demo Dataset (`demo.orders.v1`/`demo.products.v1`).
+`/`, `/agenda`, `/operacoes` (**Backlog #004** — domínio operacional real, lista `/operations` + drawer), `/servicos`, `/ordens`, `/clientes` (+`/[id]`), `/equipamentos` (+`/[id]`), `/produtos`, `/financial`, `/usuarios`, `/profile`, `/settings`, `/reports` (+`/visita`), `/documentos` (central documental real via Document Engine), `/demo-ready` (modo apresentação). Sprint 4: Ordens e Produtos passam a consumir o Demo Dataset (`demo.orders.v1`/`demo.products.v1`).
 
 ## Operator (campo · mobile-first)
 
