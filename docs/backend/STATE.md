@@ -2,11 +2,11 @@
 
 ## Current milestone
 
-**Sprint 12 — Inventory & Materials Domain (Produção)**
+**Sprint 13 — Pricing Domain (Produção)**
 Status: concluída em 1 de julho de 2026.
 
-As Sprints 0, 1, 2, 3, 3.5, 4, 5, 6, 7, 8, 9, 9.5, 10 e 11 foram preservadas. A Sprint 12 adiciona
-somente o domínio backend de inventário e materiais, sem alteração de frontend.
+As Sprints 0, 1, 2, 3, 3.5, 4, 5, 6, 7, 8, 9, 9.5, 10, 11 e 12 foram preservadas. A Sprint 13
+adiciona somente o domínio backend de Pricing, sem alteração de frontend.
 
 Sprint 4 introduz o primeiro domínio operacional de produção: Customer. Organization continua
 representando a empresa dona da instalação; Customer representa o cliente atendido por ela.
@@ -81,6 +81,14 @@ Sprint 11 cria o domínio oficial **PMOC Compliance** como especialização de M
 PMOC não possui agenda, calendário, execução, timeline ou documento paralelos: usa
 `MaintenancePlan`, `MaintenanceExecution`, `Operation`, `AssetLifecycle` e `Document Engine`.
 
+Sprint 12 cria **Inventory & Materials**, separando Product Catalog, Inventory Item e Stock
+Movement. Product continua técnico; Inventory controla apenas estoque físico; consumo em Operation
+publica `PART_REPLACEMENT` via `LifecyclePublisher`.
+
+Sprint 13 cria **Pricing** como a única fonte de informações comerciais de produtos. Product não
+armazena preço e Inventory não armazena custo. Alterações comerciais criam nova vigência em
+`ProductPricing`, preservando histórico.
+
 ## Architecture
 
 - NestJS 11, TypeScript estrito, PostgreSQL e Prisma.
@@ -109,6 +117,7 @@ src/modules/
 ├── maintenance-planning/
 ├── organization/
 ├── pmoc-compliance/
+├── pricing/
 ├── signatures/
 └── users/
 ```
@@ -131,6 +140,8 @@ Migrations:
 12. `20260630130000_asset_lifecycle_refinement`
 13. `20260630150000_maintenance_planning_domain`
 14. `20260630170000_pmoc_compliance_domain`
+15. `20260701120000_inventory_materials_domain`
+16. `20260701150000_pricing_domain`
 
 Sprint 3.5 não criou migrations e não alterou `schema.prisma`.
 
@@ -1110,6 +1121,83 @@ Seed:
   coerente quando existem Operations;
 - não cria novo Demo Dataset;
 - o sistema funciona sem dados de demonstração.
+
+Verificação executada:
+
+- `DATABASE_URL=postgresql://user:pass@localhost:5432/db npx prisma validate`;
+- `DATABASE_URL=postgresql://user:pass@localhost:5432/db npx prisma generate`;
+- `npm run build`;
+- `npm run lint`.
+
+## Sprint 13 — Pricing Domain
+
+Domínio criado:
+
+- `src/modules/pricing`;
+- `PricingModule` importado no `AppModule`;
+- `PricingService` como serviço central para resolver preço vigente, custo vigente, margem,
+  vigência e histórico;
+- `PricingController` expondo a API oficial;
+- contratos internos em `pricing.types.ts` para futuros consumidores (`BUDGET`, `FINANCIAL`,
+  `INVENTORY`, `OPERATION`);
+- constantes de auditoria em `src/shared/constants/pricing.constants.ts`.
+
+Entidade:
+
+- `ProductPricing`.
+
+Campos comerciais:
+
+- `costPrice`;
+- `replacementCost`;
+- `averageCost`;
+- `salePrice`;
+- `minimumSalePrice`;
+- `suggestedSalePrice`;
+- `marginPercentage`;
+- `validFrom`;
+- `validUntil`;
+- `active`.
+
+Migration criada:
+
+- `20260701150000_pricing_domain`.
+
+Decisões arquiteturais:
+
+- Product permanece catálogo técnico, sem preço;
+- Inventory permanece estoque físico, sem custo;
+- Pricing é a única fonte comercial;
+- alterações de preço criam nova vigência em `ProductPricing`;
+- `PATCH /pricing/:id` cria uma revisão com nova vigência e desativa o registro anterior;
+- `PricingService.resolveForConsumer` prepara consumo interno futuro por Budget, Financial,
+  Inventory e Operations;
+- vigências ativas sobrepostas são rejeitadas.
+
+Endpoints adicionados:
+
+| Method | Path                                  | Access         |
+| ------ | ------------------------------------- | -------------- |
+| GET    | `/api/v1/pricing/stats`               | OWNER, MANAGER |
+| GET    | `/api/v1/pricing`                     | OWNER, MANAGER |
+| GET    | `/api/v1/pricing/:id`                 | OWNER, MANAGER |
+| GET    | `/api/v1/products/:id/pricing`        | OWNER, MANAGER |
+| POST   | `/api/v1/products/:id/pricing`        | OWNER          |
+| PATCH  | `/api/v1/pricing/:id`                 | OWNER          |
+| GET    | `/api/v1/pricing/history/:productId`  | OWNER, MANAGER |
+
+Auditoria:
+
+- `PRICING_CREATED`;
+- `PRICING_UPDATED`;
+- `PRICING_DEACTIVATED`;
+- `PRICING_RESOLVED` reservado para uso futuro controlado.
+
+Seed:
+
+- seed idempotente cria preços coerentes para produtos existentes;
+- não cria novo Demo Dataset;
+- dados comerciais são inseridos apenas em `ProductPricing`.
 
 Verificação executada:
 

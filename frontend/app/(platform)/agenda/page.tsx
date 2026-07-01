@@ -9,10 +9,12 @@
  * altura fixa: nada ultrapassa os limites; excedente vira "+N mais".
  */
 import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon } from "lucide-react";
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Plus } from "lucide-react";
 import { PageHeader } from "@platform/components/page-header";
 import { AgendaEventDrawer } from "@platform/components/agenda-event-drawer";
+import { OperationCreationDrawer } from "@platform/components/operation-creation-drawer";
 import { Drawer } from "@erp/ui/drawer";
+import { Gate } from "@erp/ui/auth/gate";
 import { StatusPill, type Status } from "@erp/ui/status-pill";
 import { ErrorState } from "@erp/ui/states";
 import { financialApi, useQuery, type DemoScheduleItem, type DemoScheduleState, type ScheduleData } from "@erp/api";
@@ -45,6 +47,7 @@ export default function AgendaPage() {
   const [cursor, setCursor] = useState(() => startOfMonth(new Date()));
   const [selected, setSelected] = useState<DemoScheduleItem | null>(null);
   const [dayList, setDayList] = useState<{ date: Date; items: DemoScheduleItem[] } | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
 
   // 6-week grid covering the month (Monday-first).
   const gridStart = useMemo(() => {
@@ -106,6 +109,13 @@ export default function AgendaPage() {
         eyebrow={<span className="inline-flex items-center gap-1.5"><CalendarIcon className="h-3 w-3" /> Planejamento</span>}
         title="Agenda"
         description="Calendário mensal dos atendimentos da operação."
+        actions={
+          <Gate roles={["OWNER", "MANAGER"]} permission="canSchedules">
+            <button onClick={() => setCreateOpen(true)} className="inline-flex items-center gap-2 rounded-[var(--radius-md)] bg-[var(--color-primary)] text-[var(--color-primary-foreground)] px-3 h-9 text-sm font-medium">
+              <Plus className="h-4 w-4" /> Novo agendamento
+            </button>
+          </Gate>
+        }
       />
 
       {/* Toolbar */}
@@ -197,6 +207,7 @@ export default function AgendaPage() {
 
       {/* Event drawer */}
       <AgendaEventDrawer event={selected} open={selected !== null} onClose={() => setSelected(null)} />
+      <OperationCreationDrawer open={createOpen} mode="schedule" onClose={() => setCreateOpen(false)} onCreated={() => sched.refetch()} />
 
       {/* "+N mais" day drawer */}
       <Drawer

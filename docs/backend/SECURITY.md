@@ -865,3 +865,56 @@ Dados sensíveis:
 - movimentos retornam referências mínimas de usuário, produto, estoque e Operation;
 - Asset Lifecycle recebe apenas referências necessárias, sem duplicar documentos ou informações
   financeiras.
+
+## Pricing security (Sprint 13)
+
+Pricing contém dados comerciais e deve ser tratado como informação sensível. Product permanece
+técnico e Inventory permanece físico.
+
+RBAC:
+
+- `OWNER`: cria e revisa preços;
+- `MANAGER`: lê preços, custos, margens, histórico e estatísticas;
+- `OPERATOR`: sem acesso;
+- `VIEWER`: sem acesso.
+
+Isolamento de responsabilidade:
+
+- `Product` não recebe campos de preço;
+- `InventoryItem` não recebe campos de custo;
+- futuros domínios devem consumir `PricingService`, não consultar `ProductPricing` diretamente.
+
+Histórico e vigência:
+
+- mudança de preço cria novo `ProductPricing`;
+- valores comerciais antigos não são sobrescritos;
+- o registro anterior pode ser encerrado/desativado para evitar sobreposição;
+- vigências ativas sobrepostas são rejeitadas com `PRICING_OVERLAP`;
+- preço vigente é resolvido por `active`, `validFrom` e `validUntil`.
+
+Validação monetária:
+
+- DTOs aceitam apenas números não negativos com até duas casas decimais;
+- `validUntil <= validFrom` é rejeitado;
+- `salePrice < minimumSalePrice` é rejeitado;
+- `suggestedSalePrice < minimumSalePrice` é rejeitado;
+- margem negativa inconsistente é rejeitada com `PRICING_INVALID_MARGIN`.
+
+Auditoria:
+
+- `PRICING_CREATED`;
+- `PRICING_UPDATED`;
+- `PRICING_DEACTIVATED`;
+- `PRICING_RESOLVED` reservado para trilhas futuras de consumo interno.
+
+Performance e abuso:
+
+- listagens são paginadas;
+- índices cobrem organização/ativo, produto/ativo/vigência e preços vencidos;
+- endpoints continuam protegidos por JWT, RBAC e rate limit global.
+
+Exposição:
+
+- operadores não recebem custo, preço ou margem;
+- payloads comerciais devem ser usados somente em telas administrativas/comerciais;
+- nenhum dado financeiro de clientes é introduzido nesta sprint.

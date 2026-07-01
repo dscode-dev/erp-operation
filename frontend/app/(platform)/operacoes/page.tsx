@@ -7,7 +7,7 @@
  */
 import { Suspense, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { ClipboardList } from "lucide-react";
+import { ClipboardList, Plus } from "lucide-react";
 import { PageHeader } from "@platform/components/page-header";
 import { DataTable, type Column } from "@platform/components/data-table";
 import { Pagination } from "@platform/components/pagination";
@@ -18,6 +18,8 @@ import { SkeletonList } from "@erp/ui/skeletons";
 import { EmptyState } from "@erp/ui/empty-state";
 import { ErrorState } from "@erp/ui/states";
 import { OperationDetailDrawer } from "@platform/components/operation-detail-drawer";
+import { OperationCreationDrawer } from "@platform/components/operation-creation-drawer";
+import { Gate } from "@erp/ui/auth/gate";
 import { OPERATION_STATUS, OPERATION_TYPE_LABEL, operationCode } from "@erp/ui/operations/operation-shared";
 import { operationApi, useQuery, type OperationSummary, type OperationStatus } from "@erp/api";
 import { useDebounce, formatDate } from "@erp/utils";
@@ -40,6 +42,7 @@ function OperacoesInner() {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
   const debounced = useDebounce(search, 300);
 
   const list = useQuery(
@@ -78,19 +81,26 @@ function OperacoesInner() {
         title="Operações"
         description="Domínio operacional central. Cada operação origina a Ordem de Serviço e os documentos relacionados."
         actions={
-          <ExportButton
-            label="Exportar"
-            fileName="operacoes"
-            rows={(list.data?.items ?? []).map((o) => ({
-              numero: operationCode(o.number),
-              cliente: o.customer?.name ?? "",
-              equipamento: o.equipment?.name ?? "",
-              operador: o.operator?.name ?? "",
-              tipo: OPERATION_TYPE_LABEL[o.type],
-              data: formatDate(o.completedAt ?? o.createdAt),
-              status: OPERATION_STATUS[o.status].label,
-            }))}
-          />
+          <div className="flex items-center gap-2">
+            <ExportButton
+              label="Exportar"
+              fileName="operacoes"
+              rows={(list.data?.items ?? []).map((o) => ({
+                numero: operationCode(o.number),
+                cliente: o.customer?.name ?? "",
+                equipamento: o.equipment?.name ?? "",
+                operador: o.operator?.name ?? "",
+                tipo: OPERATION_TYPE_LABEL[o.type],
+                data: formatDate(o.completedAt ?? o.createdAt),
+                status: OPERATION_STATUS[o.status].label,
+              }))}
+            />
+            <Gate roles={["OWNER", "MANAGER", "OPERATOR"]}>
+              <button onClick={() => setCreateOpen(true)} className="inline-flex items-center gap-2 rounded-[var(--radius-md)] bg-[var(--color-primary)] text-[var(--color-primary-foreground)] px-3 h-9 text-sm font-medium">
+                <Plus className="h-4 w-4" /> Nova operação
+              </button>
+            </Gate>
+          </div>
         }
       />
 
@@ -118,6 +128,7 @@ function OperacoesInner() {
       ) : null}
 
       <OperationDetailDrawer operationId={detailId} open={detailId !== null} onClose={() => setDetailId(null)} />
+      <OperationCreationDrawer open={createOpen} mode="operation" onClose={() => setCreateOpen(false)} onCreated={(op) => { setDetailId(op.id); list.refetch(); }} />
     </div>
   );
 }

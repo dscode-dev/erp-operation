@@ -32,6 +32,8 @@ export * as operationApi from "./operation";
 export * as documentsApi from "./documents";
 export * as signaturesApi from "./signatures";
 export * as assetLifecycleApi from "./asset-lifecycle";
+export * as inventoryApi from "./inventory";
+export * as pricingApi from "./pricing";
 
 export { isDemoDisabled, DemoUnavailableError } from "./demo";
 export type { DashboardData } from "./dashboard";

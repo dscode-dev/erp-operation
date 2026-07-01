@@ -1,5 +1,72 @@
 # ARCHITECTURE — Frontend
 
+## Frontend Sprint 9 — Architecture Inspection & Creation Flow Consolidation
+
+Criações operacionais foram consolidadas sobre um único fluxo:
+
+```text
+Agenda / Operações / Serviços / OS
+↓
+OperationCreationDrawer
+↓
+operationApi.createOperation
+↓
+Backend Operation + OS rascunho
+```
+
+Decisões:
+
+- não criar domínio `Service` paralelo no frontend;
+- não criar OS isolada no frontend;
+- Agenda usa Operation agendada enquanto não existir endpoint dedicado de agenda;
+- selects reutilizáveis ficam em `apps/platform/components/entity-select.tsx`;
+- `OperationCreationDrawer` concentra validação, stepper, loading, erro, sucesso e confirmação;
+- RBAC visual continua via `<Gate>` e backend continua a fronteira real de autorização.
+
+Limitação de contrato:
+
+- `CreateOperationDto` do backend atual não aceita `operatorId` e usa o ator autenticado como
+  operador. A UI já possui `UserSelect`, mas não envia `operatorId` para evitar erro
+  `forbidNonWhitelisted`. A delegação real deve ser implementada em contrato backend futuro.
+
+## Frontend Sprint 8 — Inventory, Materials & Pricing
+
+Integração adicionada sem alterar backend:
+
+```text
+packages/api/inventory.ts
+packages/api/pricing.ts
+↓
+app/(platform)/produtos
+OperationDetailDrawer
+Dashboard
+```
+
+Decisões:
+
+- `Product` continua representando catálogo técnico; a UI não adiciona preço no produto.
+- `InventoryItem` continua representando estoque físico; a UI não adiciona custo no estoque.
+- `ProductPricing` é consumido exclusivamente por `pricingApi`.
+- saldo físico nunca é alterado por edição direta; a UI registra `StockMovement`.
+- consumo de materiais em Operation é delegado ao backend, que cria movimento e publica lifecycle.
+- RBAC é aplicado por `<Gate>`, mas 401/403 do backend continuam sendo a autoridade final.
+- A Sprint 8 não cria novas rotas fora de `/produtos`; a central usa abas para reduzir dispersão.
+- Nenhum Demo Dataset novo foi criado; `demo.products.v1` deixou de alimentar `/produtos`.
+
+Fluxo de materiais:
+
+```text
+OperationDetailDrawer
+↓
+GET /operations/:id/materials
+↓
+produto + inventory item + quantidade
+↓
+POST /operations/:id/materials
+↓
+backend cria StockMovement + AssetLifecycle
+```
+
 ## Backlog — Document Template Preview
 
 O preview de modelos agora é independente de documentos emitidos:

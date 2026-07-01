@@ -1,5 +1,51 @@
 # ROUTES — Frontend
 
+## Frontend Sprint 9 — Navigation UX & Creation Flows
+
+Menu lateral:
+
+- Visão Geral: `/`, `/agenda`;
+- Operação: `/operacoes`, `/servicos`, `/ordens`, `/documentos`;
+- Cadastros: `/clientes`, `/equipamentos`, `/produtos`;
+- Gestão: `/reports`, `/financial`, `/usuarios`;
+- Sistema: `/settings`, `/profile`, `/demo-ready`.
+
+Novos fluxos:
+
+- `/agenda`: botão **Novo agendamento** abre `OperationCreationDrawer` em modo agenda.
+- `/operacoes`: botão **Nova operação** abre `OperationCreationDrawer` em modo operação.
+- `/servicos`: botão **Novo serviço** abre o mesmo fluxo, sem criar domínio Service paralelo.
+- `/ordens`: botão **Nova OS** cria Operation; o backend gera a OS rascunho relacionada.
+
+Limitação conhecida:
+
+- ainda não existe domínio dedicado de Agenda;
+- delegação para operador é capturada visualmente, mas o backend atual atribui a Operation ao ator autenticado;
+- edição avançada/preview automático da OS após criação fica para sprint futura.
+
+## Frontend Sprint 8 — Inventory, Materials & Pricing
+
+- `/produtos`: central operacional real para produtos, estoque, fornecedores, pricing e movimentos.
+  - Catálogo consome `GET /products`.
+  - Detalhe do produto consome estoque associado e `GET /products/:id/pricing` quando permitido.
+  - Cadastro/edição consome `POST/PATCH /products`.
+  - Desativação consome `DELETE /products/:id`.
+  - Estoque consome `GET/PATCH /inventory/:id`, `GET /inventory/stats` e `POST /inventory/movements`.
+  - Fornecedores consomem `GET/POST/PATCH/DELETE /suppliers`.
+  - Pricing consome `GET /pricing`, `GET /pricing/stats`, `POST /products/:id/pricing`, `PATCH /pricing/:id` e `GET /pricing/history/:productId`.
+- `/`: dashboard adiciona widgets reais de Inventory/Pricing.
+- `OperationDetailDrawer`: adiciona seção **Materiais utilizados** com:
+  - `GET /operations/:id/materials`;
+  - `POST /operations/:id/materials`;
+  - `DELETE /operations/:id/materials/:id`.
+
+RBAC visual:
+
+- OWNER/MANAGER administram catálogo, estoque e fornecedores;
+- OPERATOR pode registrar consumo/movimentação operacional;
+- Pricing aparece somente para OWNER/MANAGER;
+- revisão de Pricing somente OWNER.
+
 ## Backlog — Document Template Preview
 
 - `/reports`: o botão **Visualizar** abre o drawer atual e renderiza o modelo com:

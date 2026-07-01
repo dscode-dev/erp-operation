@@ -6,7 +6,7 @@
  * Consome o Demo Dataset; preparado para a futura Ordem de Serviço.
  */
 import { useMemo, useState } from "react";
-import { Briefcase } from "lucide-react";
+import { Briefcase, Plus } from "lucide-react";
 import { PageHeader } from "@platform/components/page-header";
 import { DataTable, type Column } from "@platform/components/data-table";
 import { ExportButton } from "@platform/components/export-button";
@@ -17,6 +17,8 @@ import { SkeletonList } from "@erp/ui/skeletons";
 import { ComingSoonState, ErrorState } from "@erp/ui/states";
 import { EmptyState } from "@erp/ui/empty-state";
 import { Drawer } from "@erp/ui/drawer";
+import { Gate } from "@erp/ui/auth/gate";
+import { OperationCreationDrawer } from "@platform/components/operation-creation-drawer";
 import { operationsApi, useQuery, type DemoService, type DemoServiceStatus, type DemoOrderType, type ServicesData } from "@erp/api";
 import { formatDate } from "@erp/utils";
 
@@ -38,6 +40,7 @@ export default function ServicosPage() {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
   const [detail, setDetail] = useState<DemoService | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
   const services = useQuery<ServicesData>((s) => operationsApi.getServices({ signal: s }), []);
 
   const rows = useMemo(() => {
@@ -67,11 +70,18 @@ export default function ServicosPage() {
         title="Serviços"
         description="Histórico operacional consolidado (Demo Dataset). Base para a futura Ordem de Serviço."
         actions={
-          <ExportButton
-            label="Exportar"
-            fileName="servicos"
+          <div className="flex items-center gap-2">
+            <ExportButton
+              label="Exportar"
+              fileName="servicos"
               rows={rows.map((s) => ({ cliente: s.customer, equipamento: s.equipment, tipo: TYPE_LABEL[s.type], operador: s.operator, data: formatDate(s.date), status: STATUS[s.status].label }))}
-          />
+            />
+            <Gate roles={["OWNER", "MANAGER", "OPERATOR"]}>
+              <button onClick={() => setCreateOpen(true)} className="inline-flex items-center gap-2 rounded-[var(--radius-md)] bg-[var(--color-primary)] text-[var(--color-primary-foreground)] px-3 h-9 text-sm font-medium">
+                <Plus className="h-4 w-4" /> Novo serviço
+              </button>
+            </Gate>
+          </div>
         }
       />
 
@@ -100,6 +110,7 @@ export default function ServicosPage() {
       <Drawer open={detail !== null} onClose={() => setDetail(null)} eyebrow="Serviço" title={detail ? `${detail.customer}` : ""} width="max-w-xl">
         {detail && <ServiceDetail service={detail} />}
       </Drawer>
+      <OperationCreationDrawer open={createOpen} mode="service" onClose={() => setCreateOpen(false)} onCreated={() => services.refetch()} />
     </div>
   );
 }

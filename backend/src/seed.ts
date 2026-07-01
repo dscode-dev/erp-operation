@@ -32,6 +32,7 @@ async function main(): Promise<void> {
     log: (event) => process.stdout.write(`${JSON.stringify(event)}\n`),
   });
   await seedInventoryMaterials();
+  await seedProductPricing();
 }
 
 async function seedOwner(email: string): Promise<void> {
@@ -398,6 +399,71 @@ async function seedInventoryMaterials(): Promise<void> {
       });
     }
   });
+}
+
+async function seedProductPricing(): Promise<void> {
+  const organization = await prisma.organization.findFirst({
+    orderBy: { createdAt: 'asc' },
+    select: { id: true },
+  });
+  if (!organization) return;
+
+  const pricings = [
+    {
+      sku: 'HVAC-FILTRO-G4-001',
+      costPrice: 42.5,
+      replacementCost: 45,
+      averageCost: 43.8,
+      salePrice: 78,
+      minimumSalePrice: 68,
+      suggestedSalePrice: 82,
+    },
+    {
+      sku: 'HVAC-GAS-R410A-KG',
+      costPrice: 88,
+      replacementCost: 92,
+      averageCost: 89.5,
+      salePrice: 145,
+      minimumSalePrice: 128,
+      suggestedSalePrice: 152,
+    },
+    {
+      sku: 'HVAC-CAP-45UF',
+      costPrice: 31,
+      replacementCost: 34,
+      averageCost: 32,
+      salePrice: 69,
+      minimumSalePrice: 58,
+      suggestedSalePrice: 72,
+    },
+  ];
+
+  for (const item of pricings) {
+    const product = await prisma.product.findUnique({ where: { sku: item.sku }, select: { id: true } });
+    if (!product) continue;
+    const existing = await prisma.productPricing.findFirst({
+      where: { organizationId: organization.id, productId: product.id, active: true },
+      select: { id: true },
+    });
+    if (existing) continue;
+    const marginPercentage =
+      item.salePrice === 0 ? 0 : Number((((item.salePrice - item.averageCost) / item.salePrice) * 100).toFixed(2));
+    await prisma.productPricing.create({
+      data: {
+        organizationId: organization.id,
+        productId: product.id,
+        costPrice: item.costPrice,
+        replacementCost: item.replacementCost,
+        averageCost: item.averageCost,
+        salePrice: item.salePrice,
+        minimumSalePrice: item.minimumSalePrice,
+        suggestedSalePrice: item.suggestedSalePrice,
+        marginPercentage,
+        validFrom: new Date('2026-07-01T00:00:00.000Z'),
+        active: true,
+      },
+    });
+  }
 }
 
 main()

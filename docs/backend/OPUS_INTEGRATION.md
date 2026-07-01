@@ -1047,3 +1047,95 @@ Próximos endpoints previstos:
 - orçamento integrado a materiais;
 - múltiplos almoxarifados;
 - código de barras/QR de estoque.
+
+## Pricing — Sprint 13
+
+Pricing concentra custo, preço, margem e vigência. Não existe preço em `Product`; não existe custo em
+`InventoryItem`.
+
+Endpoints disponíveis:
+
+```http
+GET   /pricing/stats
+GET   /pricing
+GET   /pricing/:id
+GET   /products/:id/pricing
+POST  /products/:id/pricing
+PATCH /pricing/:id
+GET   /pricing/history/:productId
+```
+
+Paginação:
+
+`GET /pricing` e `GET /pricing/history/:productId` usam o envelope paginado padrão:
+
+```ts
+type Paginated<T> = {
+  items: T[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+};
+```
+
+Campos importantes:
+
+- `costPrice`: custo base;
+- `replacementCost`: custo de reposição;
+- `averageCost`: custo médio;
+- `salePrice`: preço vigente de venda;
+- `minimumSalePrice`: piso comercial;
+- `suggestedSalePrice`: preço sugerido;
+- `marginPercentage`: margem calculada/validada pelo backend;
+- `validFrom` / `validUntil`: vigência;
+- `active`: preço ativo para resolução.
+
+Fluxo recomendado:
+
+```ts
+const current = await api.get(`/products/${productId}/pricing`);
+const history = await api.get(`/pricing/history/${productId}?page=1&limit=20`);
+```
+
+Criar preço:
+
+```ts
+await api.post(`/products/${productId}/pricing`, {
+  costPrice: 42.5,
+  replacementCost: 45,
+  averageCost: 43.8,
+  salePrice: 78,
+  minimumSalePrice: 68,
+  suggestedSalePrice: 82,
+  validFrom: '2026-07-01T00:00:00.000Z',
+});
+```
+
+Revisar preço:
+
+```ts
+await api.patch(`/pricing/${pricingId}`, {
+  salePrice: 84,
+  validFrom: '2026-08-01T00:00:00.000Z',
+});
+```
+
+O PATCH cria uma nova vigência. A UI deve tratar o retorno como novo registro.
+
+Mocks que podem ser removidos:
+
+- preço hardcoded em produto;
+- margem calculada somente no frontend;
+- custos simulados em estoque;
+- histórico comercial local.
+
+Próximos endpoints previstos:
+
+- tabelas de preço;
+- orçamento;
+- financeiro;
+- descontos;
+- contratos comerciais.

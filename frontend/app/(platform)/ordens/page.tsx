@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ClipboardList } from "lucide-react";
+import { ClipboardList, Plus } from "lucide-react";
 import { PageHeader } from "@platform/components/page-header";
 import { DataTable, type Column } from "@platform/components/data-table";
 import { ExportButton } from "@platform/components/export-button";
@@ -13,6 +13,8 @@ import { SkeletonList } from "@erp/ui/skeletons";
 import { ComingSoonState, ErrorState } from "@erp/ui/states";
 import { EmptyState } from "@erp/ui/empty-state";
 import { Drawer } from "@erp/ui/drawer";
+import { Gate } from "@erp/ui/auth/gate";
+import { OperationCreationDrawer } from "@platform/components/operation-creation-drawer";
 import { operationsApi, useQuery, type DemoOrder, type DemoOrderStatus, type OrdersData } from "@erp/api";
 import { formatCurrencyBRL, formatDateTime } from "@erp/utils";
 
@@ -49,6 +51,7 @@ export default function OrdensPage() {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
   const [detail, setDetail] = useState<DemoOrder | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
   const orders = useQuery<OrdersData>((signal) => operationsApi.getOrders({ signal }), []);
 
   const rows = useMemo(() => {
@@ -78,11 +81,18 @@ export default function OrdensPage() {
         title="Ordens de Serviço"
         description="Acompanhamento das OS (Demo Dataset — domínio de OS é escopo futuro)."
         actions={
-          <ExportButton
-            label="Exportar"
-            fileName="ordens-servico"
-            rows={rows.map((o) => ({ os: o.number, servico: o.title, cliente: o.customer, tipo: TYPE_LABEL[o.type], valor: o.value, status: STATUS_LABEL[o.status] }))}
-          />
+          <div className="flex items-center gap-2">
+            <ExportButton
+              label="Exportar"
+              fileName="ordens-servico"
+              rows={rows.map((o) => ({ os: o.number, servico: o.title, cliente: o.customer, tipo: TYPE_LABEL[o.type], valor: o.value, status: STATUS_LABEL[o.status] }))}
+            />
+            <Gate roles={["OWNER", "MANAGER", "OPERATOR"]}>
+              <button onClick={() => setCreateOpen(true)} className="inline-flex items-center gap-2 rounded-[var(--radius-md)] bg-[var(--color-primary)] text-[var(--color-primary-foreground)] px-3 h-9 text-sm font-medium">
+                <Plus className="h-4 w-4" /> Nova OS
+              </button>
+            </Gate>
+          </div>
         }
       />
 
@@ -110,6 +120,7 @@ export default function OrdensPage() {
       <Drawer open={detail !== null} onClose={() => setDetail(null)} eyebrow="Ordem de Serviço" title={detail ? `${detail.number} · ${detail.title}` : ""} width="max-w-2xl">
         {detail && <OrderDetail order={detail} />}
       </Drawer>
+      <OperationCreationDrawer open={createOpen} mode="work-order" onClose={() => setCreateOpen(false)} onCreated={() => orders.refetch()} />
     </div>
   );
 }

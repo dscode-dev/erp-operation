@@ -229,6 +229,7 @@ model Organization {
   templates      DocumentTemplate[]
   pmocPlans      PmocPlan[]
   inventoryItems InventoryItem[]
+  productPricings ProductPricing[]
 
   @@map("organizations")
 }
@@ -761,6 +762,7 @@ model Product {
   updatedAt            DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
   inventoryItems       InventoryItem[]
   operationParts       OperationPart[]
+  pricings             ProductPricing[]
 
   @@index([name])
   @@index([category, isActive])
@@ -851,4 +853,30 @@ model OperationPart {
   @@index([productId])
   @@index([inventoryItemId])
   @@map("operation_parts")
+}
+
+model ProductPricing {
+  id                 String       @id @default(uuid()) @db.Uuid
+  organizationId     String       @map("organization_id") @db.Uuid
+  productId          String       @map("product_id") @db.Uuid
+  costPrice          Decimal      @map("cost_price") @db.Decimal(14, 2)
+  replacementCost    Decimal      @map("replacement_cost") @db.Decimal(14, 2)
+  averageCost        Decimal      @map("average_cost") @db.Decimal(14, 2)
+  salePrice          Decimal      @map("sale_price") @db.Decimal(14, 2)
+  minimumSalePrice   Decimal      @map("minimum_sale_price") @db.Decimal(14, 2)
+  suggestedSalePrice Decimal      @map("suggested_sale_price") @db.Decimal(14, 2)
+  marginPercentage   Decimal      @map("margin_percentage") @db.Decimal(7, 2)
+  validFrom          DateTime     @map("valid_from") @db.Timestamptz(3)
+  validUntil         DateTime?    @map("valid_until") @db.Timestamptz(3)
+  active             Boolean      @default(true)
+  createdAt          DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  product            Product      @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, active])
+  @@index([productId, active, validFrom])
+  @@index([productId, validFrom, validUntil])
+  @@index([validUntil])
+  @@map("product_pricings")
 }

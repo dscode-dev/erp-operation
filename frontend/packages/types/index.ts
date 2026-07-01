@@ -637,6 +637,8 @@ export type CreateOperationPayload = {
   customerId: string;
   addressId?: string | null;
   equipmentId?: string | null;
+  /** UI-ready delegation field. Backend currently assigns the authenticated actor. */
+  operatorId?: string | null;
   type: OperationType;
   status?: OperationStatus;
   scheduledFor?: string | null;
@@ -647,6 +649,212 @@ export type CreateOperationPayload = {
   signatureData?: string | null;
   signedAt?: string | null;
   photos?: { dataUrl: string; caption?: string | null }[];
+};
+
+/* ============ Inventory / Materials / Pricing ============ */
+
+export type Product = {
+  id: string;
+  sku: string;
+  internalCode: string | null;
+  manufacturerCode: string | null;
+  name: string;
+  unit: string;
+  brand: string | null;
+  model: string | null;
+  category: string | null;
+  technicalDescription: string | null;
+  weight: string | number | null;
+  dimensions: string | null;
+  isActive: boolean;
+  disabledAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  inventoryItems?: InventoryItem[];
+};
+
+export type ProductPayload = Partial<{
+  sku: string;
+  internalCode: string | null;
+  manufacturerCode: string | null;
+  name: string;
+  unit: string;
+  brand: string | null;
+  model: string | null;
+  category: string | null;
+  technicalDescription: string | null;
+  weight: number | null;
+  dimensions: string | null;
+  isActive: boolean;
+}>;
+
+export type InventoryItem = {
+  id: string;
+  organizationId: string;
+  productId: string;
+  currentQuantity: string | number;
+  minimumQuantity: string | number;
+  idealQuantity: string | number;
+  reservedQuantity: string | number;
+  availableQuantity: string | number;
+  location: string | null;
+  isActive: boolean;
+  disabledAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  product?: Product;
+  organization?: { id: string; legalName: string; tradeName: string };
+};
+
+export type InventoryUpdatePayload = Partial<{
+  minimumQuantity: number;
+  idealQuantity: number;
+  reservedQuantity: number;
+  location: string | null;
+  isActive: boolean;
+}>;
+
+export type StockMovementType = "IN" | "OUT" | "ADJUSTMENT" | "TRANSFER" | "CONSUMPTION" | "RETURN";
+
+export type StockMovement = {
+  id: string;
+  inventoryItemId: string;
+  quantity: string | number;
+  type: StockMovementType;
+  reason: string;
+  operationId: string | null;
+  userId: string;
+  occurredAt: string;
+  createdAt: string;
+  inventoryItem?: InventoryItem;
+  operation?: { id: string; number: number; equipmentId: string | null; customerId: string | null } | null;
+  user?: { id: string; name: string; email?: string };
+};
+
+export type StockMovementPayload = {
+  inventoryItemId: string;
+  quantity: number;
+  type: StockMovementType;
+  reason: string;
+  operationId?: string | null;
+  occurredAt?: string;
+};
+
+export type InventoryStats = {
+  totalItems: number;
+  activeProducts: number;
+  minimumStockAlerts: number;
+  productsWithoutStock: number;
+  consumptionMovementsLast30Days: number;
+  consumptionByPeriod: unknown;
+  consumptionByEquipment: Array<{ equipment?: { id: string; name: string } | null; quantity: string | number }>;
+  consumptionByCustomer: Array<{ customer?: { id: string; name: string; tradeName?: string | null } | null; quantity: string | number }>;
+  productsMostUsed: Array<{ product: Pick<Product, "id" | "name" | "sku">; quantity: string | number; occurrences: number }>;
+};
+
+export type Supplier = {
+  id: string;
+  legalName: string;
+  tradeName: string | null;
+  document: string | null;
+  contacts: unknown[];
+  address: Record<string, unknown>;
+  notes: string | null;
+  isActive: boolean;
+  disabledAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SupplierPayload = Partial<{
+  legalName: string;
+  tradeName: string | null;
+  document: string | null;
+  contacts: unknown[];
+  address: Record<string, unknown>;
+  notes: string | null;
+  isActive: boolean;
+}>;
+
+export type OperationPart = {
+  id: string;
+  operationId: string;
+  productId: string;
+  inventoryItemId: string;
+  quantity: string | number;
+  notes: string | null;
+  deletedAt: string | null;
+  createdAt: string;
+  product: Product;
+  inventoryItem: InventoryItem;
+};
+
+export type OperationMaterialPayload = {
+  productId: string;
+  inventoryItemId: string;
+  quantity: number;
+  notes?: string | null;
+};
+
+export type ProductPricing = {
+  id: string;
+  organizationId: string;
+  productId: string;
+  costPrice: string | number;
+  replacementCost: string | number;
+  averageCost: string | number;
+  salePrice: string | number;
+  minimumSalePrice: string | number;
+  suggestedSalePrice: string | number;
+  marginPercentage: string | number;
+  validFrom: string;
+  validUntil: string | null;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+  product?: Product;
+};
+
+export type ResolvedProductPricing = {
+  pricingId: string;
+  organizationId: string;
+  productId: string;
+  costPrice: string;
+  replacementCost: string;
+  averageCost: string;
+  salePrice: string;
+  minimumSalePrice: string;
+  suggestedSalePrice: string;
+  marginPercentage: string;
+  validFrom: string;
+  validUntil: string | null;
+  active: boolean;
+  resolvedAt: string;
+};
+
+export type ProductPricingPayload = {
+  costPrice: number;
+  replacementCost: number;
+  averageCost: number;
+  salePrice: number;
+  minimumSalePrice: number;
+  suggestedSalePrice: number;
+  marginPercentage?: number;
+  validFrom: string;
+  validUntil?: string | null;
+  active?: boolean;
+};
+
+export type PricingStats = {
+  productsWithoutPrice: number;
+  expiredPrices: number;
+  highestMargins: ProductPricing[];
+  lowestMargins: ProductPricing[];
+  averageCost: string | number;
+  averageSalePrice: string | number;
+  averageMarginPercentage: string | number;
+  activePricings: number;
+  evaluatedAt: string;
 };
 
 /* ============ Demo bridge (dashboard / schedule / finance) ============ */

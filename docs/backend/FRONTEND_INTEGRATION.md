@@ -1380,3 +1380,80 @@ Erros principais:
 - `INVENTORY_NEGATIVE_STOCK`: consumo/saída deixaria saldo negativo;
 - `INVENTORY_PRODUCT_MISMATCH`: item de estoque não pertence ao produto selecionado;
 - `OPERATION_NOT_FOUND`: Operation inexistente.
+
+## Pricing (Sprint 13)
+
+Pricing é a única fonte de dados comerciais dos produtos. O frontend não deve procurar preço em
+`Product` nem custo em `InventoryItem`.
+
+Endpoints disponíveis:
+
+```http
+GET   /pricing/stats?at=
+GET   /pricing?page=1&limit=20&productId=&active=&at=&expired=&search=
+GET   /pricing/:id
+GET   /products/:id/pricing
+POST  /products/:id/pricing
+PATCH /pricing/:id
+GET   /pricing/history/:productId?page=1&limit=20
+```
+
+Roles para UI:
+
+- OWNER: cria e revisa preços;
+- MANAGER: visualiza preços, custos, margens, histórico e estatísticas;
+- OPERATOR/VIEWER: não devem exibir menus ou telas de Pricing.
+
+Payload de criação:
+
+```ts
+type ProductPricingPayload = {
+  costPrice: number;
+  replacementCost: number;
+  averageCost: number;
+  salePrice: number;
+  minimumSalePrice: number;
+  suggestedSalePrice: number;
+  marginPercentage?: number;
+  validFrom: string;
+  validUntil?: string | null;
+  active?: boolean;
+};
+```
+
+Revisão de preço:
+
+```ts
+await api.patch(`/pricing/${pricingId}`, {
+  salePrice: 84,
+  minimumSalePrice: 72,
+  suggestedSalePrice: 88,
+  validFrom: '2026-08-01T00:00:00.000Z',
+});
+```
+
+O `PATCH` retorna um novo `ProductPricing`. Não atualizar a linha antiga em memória como se fosse o
+mesmo registro; invalidar:
+
+- `GET /pricing`;
+- `GET /pricing/:id`;
+- `GET /products/:id/pricing`;
+- `GET /pricing/history/:productId`;
+- `GET /pricing/stats`.
+
+UX recomendada:
+
+- mostrar o preço vigente usando `GET /products/:id/pricing`;
+- mostrar evolução usando `GET /pricing/history/:productId`;
+- destacar preços vencidos com `validUntil < now`;
+- ao criar/revisar, prevenir datas óbvias inválidas no formulário, mas manter o backend como fonte
+  final de validação;
+- não exibir Pricing para operadores.
+
+Erros principais:
+
+- `PRICING_NOT_FOUND`: produto sem preço vigente ou registro inexistente;
+- `PRICING_OVERLAP`: vigência sobreposta;
+- `PRICING_INVALID_PERIOD`: `validUntil` menor/igual a `validFrom`;
+- `PRICING_INVALID_MARGIN`: preço abaixo do mínimo, margem negativa ou sugestão menor que mínimo;
+- `PRODUCT_NOT_FOUND`: produto inexistente ou inativo.

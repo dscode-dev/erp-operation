@@ -15,7 +15,9 @@ import { useAuth } from "@erp/ui/auth/auth-provider";
 import { Gate } from "@erp/ui/auth/gate";
 import {
   dashboardApi, usersApi, customersApi, financialApi, assetLifecycleApi, useQuery,
+  inventoryApi, pricingApi,
   type AssetLifecycleEvent, type DashboardData, type DemoScheduleState, type FinancialData,
+  type InventoryStats, type PricingStats, type StockMovement,
 } from "@erp/api";
 import { firstName, formatNumber, formatCurrencyBRL, formatDateTime } from "@erp/utils";
 
@@ -39,6 +41,9 @@ export default function PlatformHome() {
   );
   const customers = useQuery((signal) => customersApi.listCustomers({ limit: 100, signal }), []);
   const lifecycle = useQuery((signal) => assetLifecycleApi.listLifecycle({ limit: 12, signal }), []);
+  const inventory = useQuery<InventoryStats>((signal) => inventoryApi.getInventoryStats({ signal }), []);
+  const movements = useQuery((signal) => inventoryApi.listStockMovements({ limit: 5, signal }), []);
+  const pricing = useQuery<PricingStats | null>((signal) => (hasRole("OWNER", "MANAGER") ? pricingApi.getPricingStats({ signal }) : Promise.resolve(null)), [session?.role]);
 
   const counters = dash.data?.demo?.["demo.dashboard.v1"].counters;
   const schedule = dash.data?.demo?.["demo.schedule.v1"].items ?? [];
@@ -72,6 +77,15 @@ export default function PlatformHome() {
       </DashboardSection>
 
       <AssetLifecycleWidgets loading={lifecycle.loading} error={lifecycle.error} events={lifecycle.data?.items ?? []} onRetry={lifecycle.refetch} />
+
+      <InventoryPricingWidgets
+        inventory={inventory.data}
+        pricing={pricing.data}
+        movements={movements.data?.items ?? []}
+        loading={(inventory.loading && !inventory.data) || (movements.loading && !movements.data)}
+        error={inventory.error || movements.error || pricing.error}
+        onRetry={() => { inventory.refetch(); movements.refetch(); pricing.refetch(); }}
+      />
 
       {/* Indicadores financeiros (gated) */}
       <Gate roles={["OWNER", "MANAGER"]} permission="canFinancial">
@@ -118,6 +132,60 @@ export default function PlatformHome() {
         )}
       </div>
     </div>
+  );
+}
+
+function InventoryPricingWidgets({
+  inventory,
+  pricing,
+  movements,
+  loading,
+  error,
+  onRetry,
+}: {
+  inventory: InventoryStats | null;
+  pricing: PricingStats | null;
+  movements: StockMovement[];
+  loading: boolean;
+  error: unknown;
+  onRetry: () => void;
+}) {
+  return (
+    <DashboardSection title="Estoque e pricing" action={<Link href="/produtos" className="text-xs font-medium text-[var(--color-primary)] hover:underline">ver produtos</Link>}>
+      {loading ? (
+        <div className="grid gap-3 grid-cols-2 lg:grid-cols-5">{Array.from({ length: 5 }).map((_, i) => <SkeletonCard key={i} />)}</div>
+      ) : error && !inventory ? (
+        <ErrorState error={error} onRetry={onRetry} title="Estoque indisponível" />
+      ) : (
+        <div className="grid gap-4 lg:grid-cols-[repeat(5,minmax(0,1fr))]">
+          <MetricCard label="Produtos críticos" value={formatNumber(inventory?.minimumStockAlerts ?? 0)} trend={(inventory?.minimumStockAlerts ?? 0) > 0 ? "up" : "flat"} icon="AlertTriangle" />
+          <MetricCard label="Sem estoque" value={formatNumber(inventory?.productsWithoutStock ?? 0)} trend={(inventory?.productsWithoutStock ?? 0) > 0 ? "up" : "flat"} icon="PackageX" />
+          <MetricCard label="Sem preço" value={pricing ? formatNumber(pricing.productsWithoutPrice) : "—"} trend={pricing?.productsWithoutPrice ? "up" : "flat"} icon="DollarSign" />
+          <MetricCard label="Consumo recente" value={formatNumber(inventory?.consumptionMovementsLast30Days ?? 0)} icon="History" />
+          <MetricCard label="Preços vencidos" value={pricing ? formatNumber(pricing.expiredPrices) : "—"} trend={pricing?.expiredPrices ? "up" : "flat"} icon="BadgeAlert" />
+          <div className="lg:col-span-5 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] shadow-[var(--shadow-card)] overflow-hidden">
+            {movements.length === 0 ? (
+              <EmptyState icon={ShieldCheck} title="Sem movimentações recentes" description="Entradas, saídas e consumos aparecerão aqui." />
+            ) : (
+              <ul className="divide-y divide-[var(--color-border)]">
+                {movements.map((movement) => (
+                  <li key={movement.id} className="flex items-center gap-3 p-3">
+                    <span className="grid h-9 w-9 place-items-center rounded-full bg-[var(--color-muted)] text-[var(--color-muted-foreground)]">
+                      <Wallet className="h-4 w-4" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium truncate">{movement.inventoryItem?.product?.name ?? movement.reason}</div>
+                      <div className="text-caption truncate">{movement.type} · {movement.reason}</div>
+                    </div>
+                    <span className="font-mono text-xs">{formatNumber(Number(movement.quantity))}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+    </DashboardSection>
   );
 }
 

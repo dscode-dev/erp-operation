@@ -1,5 +1,41 @@
 # COMPONENTS — Frontend
 
+## Frontend Sprint 9 — Navigation UX & Creation Flows
+
+| Item | Local | Uso |
+|---|---|---|
+| `CustomerSelect` | `apps/platform/components/entity-select.tsx` | Seleção reutilizável de cliente |
+| `CustomerAddressSelect` | `apps/platform/components/entity-select.tsx` | Endereço do cliente selecionado |
+| `EquipmentSelect` | `apps/platform/components/entity-select.tsx` | Equipamentos filtrados por cliente |
+| `UserSelect` | `apps/platform/components/entity-select.tsx` | Seleção visual de responsável |
+| `DateTimePicker` | `apps/platform/components/entity-select.tsx` | Data/hora para agendamento |
+| `ServiceTypeSelect` | `apps/platform/components/entity-select.tsx` | Tipo oficial da Operation |
+| `OperationCreationDrawer` | `apps/platform/components/operation-creation-drawer.tsx` | Drawer/wizard reutilizado por Agenda, Operações, Serviços e OS |
+
+Decisão: esses componentes ficam em `apps/platform/components` porque são fluxos específicos da
+Platform. Se o Operator ou outro app precisar deles no futuro, podem ser promovidos para
+`packages/ui`.
+
+## Frontend Sprint 8 — Inventory, Materials & Pricing
+
+| Item | Local | Uso |
+|---|---|---|
+| `inventoryApi` | `packages/api/inventory.ts` | Products, Inventory Items, Stock Movements, Suppliers e Operation Materials |
+| `pricingApi` | `packages/api/pricing.ts` | Pricing, preço vigente, stats e histórico |
+| Tipos Inventory/Pricing | `packages/types/index.ts` | Contratos reais das Sprints 12/13 do backend |
+| Central real de produtos | `app/(platform)/produtos/page.tsx` | Abas Catálogo, Estoque, Fornecedores, Preços e Movimentos |
+| `ProductFormDrawer` real | `apps/platform/components/product-form-drawer.tsx` | Criação/edição de produto via `/products` |
+| Materiais na Operation | `apps/platform/components/operation-detail-drawer.tsx` | Seção **Materiais utilizados** via `/operations/:id/materials` |
+| Dashboard Inventory/Pricing | `app/(platform)/page.tsx` | Widgets reais de estoque, pricing e movimentações |
+
+Regras:
+
+- saldo não é editado diretamente no frontend; movimentações usam `POST /inventory/movements`;
+- consumo de material em Operation usa `POST /operations/:id/materials`;
+- Pricing não é exibido para OPERATOR/VIEWER;
+- criação/revisão de Pricing fica restrita a OWNER;
+- nenhum mock ou novo Demo Dataset foi adicionado.
+
 ## Backlog — Document Template Preview
 
 | Item | Local | Uso |

@@ -3015,3 +3015,185 @@ Eventos de auditoria:
 - `MATERIAL_CONSUMED`, `MATERIAL_RETURNED`.
 
 Migration: `20260701120000_inventory_materials_domain`.
+
+## Pricing
+
+Sprint 13 adiciona o domínio oficial de Pricing. Preço e custo não existem em `Product` nem em
+`InventoryItem`. A única fonte comercial é `ProductPricing`.
+
+Roles:
+
+- leitura e estatísticas: `OWNER`, `MANAGER`;
+- criação/revisão de preços: `OWNER`;
+- `OPERATOR` e `VIEWER` não acessam Pricing.
+
+Tipo:
+
+```ts
+type ProductPricing = {
+  id: string;
+  organizationId: string;
+  productId: string;
+  costPrice: string;
+  replacementCost: string;
+  averageCost: string;
+  salePrice: string;
+  minimumSalePrice: string;
+  suggestedSalePrice: string;
+  marginPercentage: string;
+  validFrom: string;
+  validUntil?: string | null;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+  product: {
+    id: string;
+    sku: string;
+    internalCode?: string | null;
+    name: string;
+    unit: string;
+    brand?: string | null;
+    model?: string | null;
+    category?: string | null;
+    isActive: boolean;
+  };
+};
+```
+
+### GET `/api/v1/pricing/stats`
+
+Query:
+
+- `at?: string`.
+
+Response 200:
+
+```json
+{
+  "success": true,
+  "data": {
+    "productsWithoutPrice": 1,
+    "expiredPrices": 0,
+    "highestMargins": [],
+    "lowestMargins": [],
+    "averageCost": "55.10",
+    "averageSalePrice": "97.33",
+    "averageMarginPercentage": "42.80",
+    "activePricings": 3,
+    "evaluatedAt": "2026-07-01T12:00:00.000Z"
+  }
+}
+```
+
+### GET `/api/v1/pricing`
+
+Query:
+
+- `page?: number`;
+- `limit?: number`;
+- `productId?: string`;
+- `active?: boolean`;
+- `at?: string`;
+- `expired?: boolean`;
+- `search?: string`.
+
+Response 200: lista paginada de `ProductPricing`.
+
+### GET `/api/v1/pricing/:id`
+
+Response 200: `ProductPricing`.
+
+### GET `/api/v1/products/:id/pricing`
+
+Resolve o preço vigente do produto.
+
+Response 200:
+
+```json
+{
+  "success": true,
+  "data": {
+    "pricingId": "3ffbc3d5-88e2-4241-9d13-e3f43b322ac8",
+    "organizationId": "f398fb45-16d3-4278-b531-2c4e16a5297b",
+    "productId": "4d375bb8-151f-4e84-b151-7a0c57a8cb93",
+    "costPrice": "42.50",
+    "replacementCost": "45.00",
+    "averageCost": "43.80",
+    "salePrice": "78.00",
+    "minimumSalePrice": "68.00",
+    "suggestedSalePrice": "82.00",
+    "marginPercentage": "43.85",
+    "validFrom": "2026-07-01T00:00:00.000Z",
+    "validUntil": null,
+    "active": true,
+    "resolvedAt": "2026-07-01T12:00:00.000Z"
+  }
+}
+```
+
+### POST `/api/v1/products/:id/pricing`
+
+Cria uma nova vigência de preço para o produto. Vigências ativas sobrepostas são rejeitadas.
+
+```json
+{
+  "costPrice": 42.5,
+  "replacementCost": 45,
+  "averageCost": 43.8,
+  "salePrice": 78,
+  "minimumSalePrice": 68,
+  "suggestedSalePrice": 82,
+  "validFrom": "2026-07-01T00:00:00.000Z",
+  "validUntil": null,
+  "active": true
+}
+```
+
+`marginPercentage` é opcional. Quando omitido, o backend calcula a margem a partir de
+`salePrice` e `averageCost`.
+
+Response 201: `ProductPricing` criado.
+
+### PATCH `/api/v1/pricing/:id`
+
+Cria uma revisão histórica baseada no preço anterior. Não sobrescreve valores comerciais antigos.
+
+Payload parcial:
+
+```json
+{
+  "salePrice": 84,
+  "minimumSalePrice": 72,
+  "suggestedSalePrice": 88,
+  "validFrom": "2026-08-01T00:00:00.000Z"
+}
+```
+
+Response 200: nova revisão criada. O registro anterior é desativado e sua vigência é encerrada.
+
+### GET `/api/v1/pricing/history/:productId`
+
+Query: `page`, `limit`.
+
+Response 200: evolução paginada de preços do produto, ordenada por `validFrom desc`.
+
+Erros:
+
+| HTTP | Code                     | Condition                              |
+| ---- | ------------------------ | -------------------------------------- |
+| 400  | `VALIDATION_ERROR`       | Payload/query inválido                 |
+| 400  | `PRICING_INVALID_MARGIN` | Preço/margem comercial inconsistente   |
+| 400  | `PRICING_INVALID_PERIOD` | Vigência inválida                      |
+| 401  | `AUTH_TOKEN_INVALID`     | Token ausente/inválido                 |
+| 403  | `AUTH_FORBIDDEN`         | Papel sem permissão                    |
+| 404  | `PRODUCT_NOT_FOUND`      | Produto inexistente/inativo            |
+| 404  | `PRICING_NOT_FOUND`      | Registro/preço vigente inexistente     |
+| 409  | `PRICING_OVERLAP`        | Vigência sobreposta a preço ativo      |
+
+Eventos de auditoria:
+
+- `PRICING_CREATED`;
+- `PRICING_UPDATED`;
+- `PRICING_DEACTIVATED`.
+
+Migration: `20260701150000_pricing_domain`.

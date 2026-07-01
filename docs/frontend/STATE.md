@@ -1,6 +1,68 @@
-# STATE — Frontend Sprint 7 (Asset Lifecycle Integration)
+# STATE — Frontend Sprint 9 (Architecture Inspection, Navigation UX & Creation Flows)
 
-Status: Concluída ✅ — 30 de junho de 2026. Next.js 15 · App Router · TypeScript. Timelines oficiais agora consomem exclusivamente o Asset Lifecycle do backend.
+Status: Concluída ✅ — 1 de julho de 2026. Next.js 15 · App Router · TypeScript. Navegação reorganizada e fluxos de criação consolidados sobre Operation real.
+
+## Frontend Sprint 9 — Architecture Inspection, Navigation UX & Creation Flows
+
+- Sidebar reorganizada:
+  - Visão Geral: Dashboard, Agenda;
+  - Operação: Operações, Serviços, Ordens de Serviço, Documentos;
+  - Cadastros: Clientes, Equipamentos, Produtos;
+  - Gestão: Relatórios, Financeiro, Usuários;
+  - Sistema: Configurações, Perfil, Modo demo.
+- Criados componentes reutilizáveis em `apps/platform/components`:
+  - `CustomerSelect`;
+  - `CustomerAddressSelect`;
+  - `EquipmentSelect`;
+  - `UserSelect`;
+  - `DateTimePicker`;
+  - `ServiceTypeSelect`;
+  - `OperationCreationDrawer`.
+- Fluxos de criação adicionados:
+  - Agenda: **Novo agendamento** cria Operation agendada real;
+  - Operações: **Nova operação** cria Operation real;
+  - Serviços: **Novo serviço** usa o mesmo fluxo de Operation;
+  - Ordens de Serviço: **Nova OS** cria Operation real e depende do backend para gerar OS rascunho.
+- `OperationCreationDrawer` evita criar domínios paralelos: Agenda, Serviços e OS continuam usando Operation.
+- RBAC visual aplicado com `<Gate>`:
+  - Agenda usa `canSchedules`;
+  - Operações/Serviços/OS usam OWNER/MANAGER/OPERATOR;
+  - backend segue como autoridade final.
+- Limitação documentada: o backend atual cria Operation com `operatorId = actor.id`; o seletor de operador fica preparado na UI, mas a delegação persistida depende de contrato backend futuro.
+
+Validação:
+
+- `npm run build` passou.
+- `npm run lint` passou com warnings pré-existentes de `<img>` e export anônimo.
+
+## Frontend Sprint 8 — Inventory, Materials & Pricing Integration
+
+- `@erp/api/inventory` criado para Products, Inventory Items, Stock Movements, Suppliers e Operation Materials.
+- `@erp/api/pricing` criado para Pricing, stats, preço vigente e histórico.
+- Tipos adicionados em `@erp/types`: `Product`, `InventoryItem`, `StockMovement`, `Supplier`, `OperationPart`, `ProductPricing`, `ResolvedProductPricing`, `InventoryStats` e `PricingStats`.
+- `/produtos` deixou de usar `operationsApi.getProducts`/`demo.products.v1` e virou central real com abas:
+  - Catálogo;
+  - Estoque;
+  - Fornecedores;
+  - Preços;
+  - Movimentos.
+- `ProductFormDrawer` agora cria/edita produto via backend.
+- Página de produtos exibe SKU, código interno, fabricante, marca, modelo, categoria, unidade, status, estoque associado e preço vigente quando permitido.
+- Estoque exibe saldo atual, mínimo, ideal, reservado, disponível, localização, status crítico e histórico de movimentações.
+- Fornecedores têm listagem, cadastro, edição, desativação, busca e paginação.
+- Pricing exibe custo, reposição, custo médio, venda, mínimo, sugerido, margem, vigência e histórico; criação/revisão somente OWNER.
+- `OperationDetailDrawer` ganhou seção **Materiais utilizados**, consumindo `GET /operations/:id/materials`, adicionando/removendo materiais por endpoints reais.
+- Dashboard consome `/inventory/stats`, `/inventory/movements` e `/pricing/stats` para widgets reais.
+- RBAC respeitado por `<Gate>` e por tratamento de 403 da API; backend continua autoridade final.
+
+Validação:
+
+- `npm run build` passou.
+- `npm run lint` passou com warnings pré-existentes de `<img>` e export anônimo.
+
+## Sprint 7 — Asset Lifecycle Integration
+
+Status: Concluída ✅ — 30 de junho de 2026. Timelines oficiais agora consomem exclusivamente o Asset Lifecycle do backend.
 
 ## Backlog — Document Template Preview
 

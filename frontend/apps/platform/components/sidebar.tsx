@@ -42,10 +42,15 @@ type NavGroup = { label: string; items: NavItem[] };
 
 const groups: NavGroup[] = [
   {
-    label: "Operação",
+    label: "Visão Geral",
     items: [
       { label: "Dashboard", href: "/", icon: LayoutDashboard },
       { label: "Agenda", href: "/agenda", icon: Calendar },
+    ],
+  },
+  {
+    label: "Operação",
+    items: [
       { label: "Operações", href: "/operacoes", icon: ClipboardCheck },
       { label: "Serviços", href: "/servicos", icon: Briefcase },
       { label: "Ordens de Serviço", href: "/ordens", icon: ClipboardList },
