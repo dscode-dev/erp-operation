@@ -219,3 +219,19 @@ reutilizado por OS/PMOC/Laudo/Relatório/Visita/Orçamento/Recibo (sem forms
 duplicados). Páginas: `/operacoes` (Platform). Operator: o Wizard cria uma
 Operation real e a OS rascunho. Histórico oficial em Equipamento/Cliente vem de
 `/asset-lifecycle`.
+
+## Sprint — Assignment Domain + Operator Workflow
+
+| Item | Local | Uso |
+|---|---|---|
+| `AssignmentCard` | `apps/operator/components/assignment-card.tsx` | card mobile-first para fila de campo do Operator |
+| `ASSIGNMENT_STATUS_*` | `packages/ui/assignments/assignment-shared.ts` | labels, status pills e CTA principal por estado |
+| `assignmentsApi` | `packages/api/assignments.ts` | client real do domínio `/assignments` |
+| `AssignmentSection` | `apps/platform/components/operation-detail-drawer.tsx` | seção da Operation com responsável, status, histórico e reatribuição |
+
+Regras:
+
+- cards do Operator consomem `Assignment`, não snapshots;
+- timeline da execução vem de `/assignments/history/:operationId`;
+- reatribuição usa `UserSelect` existente e `PATCH /assignments/:id/reassign`;
+- não há componente local de agenda/OS paralelo.

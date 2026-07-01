@@ -1466,3 +1466,34 @@ Erros principais:
 - `PRICING_INVALID_PERIOD`: `validUntil` menor/igual a `validFrom`;
 - `PRICING_INVALID_MARGIN`: preço abaixo do mínimo, margem negativa ou sugestão menor que mínimo;
 - `PRODUCT_NOT_FOUND`: produto inexistente ou inativo.
+
+## Assignments e Operator Workflow
+
+O frontend deve tratar Assignment como camada de execução da Operation. Não criar agenda, serviço ou
+OS paralelos.
+
+Fluxos:
+
+- Platform cria Operation com `operatorId`; o backend cria Assignment automaticamente;
+- Agenda Platform é uma visão de calendário sobre `/assignments`;
+- Operation Drawer consulta `/assignments?operationId=...` e `/assignments/history/:operationId`;
+- OWNER/MANAGER reatribuem com `PATCH /assignments/:id/reassign`;
+- Operator Home/Agenda/Minhas Ordens usam `GET /assignments/my`;
+- detalhe Operator usa `GET /assignments/:id` e controla `accept`, `start`, `complete`, `reject`.
+
+Statuses para UI:
+
+- `ASSIGNED`: Agendado / botão Aceitar;
+- `ACCEPTED`: Aceito / botão Iniciar;
+- `STARTED`: Em execução / botão Continuar ou Concluir;
+- `COMPLETED`: Concluído;
+- `REJECTED`: Recusado;
+- `CANCELED`: Cancelado;
+- `PAUSED`: Preparado para futuro.
+
+Erros esperados:
+
+- `ASSIGNMENT_OPERATOR_FORBIDDEN`: operador tentou agir em ordem que não é dele;
+- `ASSIGNMENT_INVALID_TRANSITION`: tentou iniciar sem aceitar ou concluir sem iniciar;
+- `ASSIGNMENT_NOT_FOUND`: Assignment inexistente;
+- `OPERATION_OPERATOR_INVALID`: usuário delegado inválido.

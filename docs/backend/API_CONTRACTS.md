@@ -3207,3 +3207,70 @@ Eventos de auditoria:
 - `PRICING_DEACTIVATED`.
 
 Migration: `20260701150000_pricing_domain`.
+
+## Assignments (execução operacional)
+
+`Assignment` é a camada oficial de execução da `Operation`. Não cria agenda paralela nem OS
+paralela: controla responsável, aceite, início, conclusão e histórico operacional.
+
+Endpoints:
+
+| Método | Rota                                | Roles                         | Descrição |
+| ------ | ----------------------------------- | ----------------------------- | --------- |
+| GET    | `/assignments`                      | OWNER/MANAGER/OPERATOR/VIEWER | Lista paginada. OPERATOR vê apenas as próprias Assignments |
+| GET    | `/assignments/my`                   | OWNER/MANAGER/OPERATOR        | Fila do usuário autenticado |
+| GET    | `/assignments/:id`                  | OWNER/MANAGER/OPERATOR/VIEWER | Detalhe da Assignment |
+| GET    | `/assignments/history/:operationId` | OWNER/MANAGER/OPERATOR/VIEWER | Histórico imutável da Operation |
+| POST   | `/assignments`                      | OWNER/MANAGER                 | Cria Assignment para Operation existente |
+| PATCH  | `/assignments/:id/reassign`         | OWNER/MANAGER                 | Reatribui responsável |
+| PATCH  | `/assignments/:id/accept`           | OWNER/MANAGER/OPERATOR        | Operador responsável aceita |
+| PATCH  | `/assignments/:id/reject`           | OWNER/MANAGER/OPERATOR        | Operador responsável recusa |
+| PATCH  | `/assignments/:id/start`            | OWNER/MANAGER/OPERATOR        | Inicia execução após aceite |
+| PATCH  | `/assignments/:id/complete`         | OWNER/MANAGER/OPERATOR        | Conclui execução após início |
+
+Query listagem: `page`, `limit`, `operationId`, `assignedTo`, `customerId`, `equipmentId`, `status`.
+
+Statuses: `ASSIGNED`, `ACCEPTED`, `STARTED`, `PAUSED`, `COMPLETED`, `CANCELED`, `REJECTED`.
+
+Eventos de histórico: `ASSIGNED`, `REASSIGNED`, `ACCEPTED`, `STARTED`, `PAUSED`, `RESUMED`,
+`REJECTED`, `COMPLETED`, `CANCELED`.
+
+Payloads:
+
+```json
+{ "operationId": "<uuid>", "assignedTo": "<uuid>", "notes": "opcional" }
+```
+
+```json
+{ "assignedTo": "<uuid>", "notes": "motivo opcional" }
+```
+
+```json
+{ "rejectionReason": "Motivo da recusa" }
+```
+
+```json
+{ "notes": "Observação final opcional" }
+```
+
+Regras:
+
+- criação de `Operation` cria uma `Assignment` automaticamente;
+- `OWNER`/`MANAGER` podem criar e reatribuir;
+- somente o `assignedTo` pode aceitar, recusar, iniciar ou concluir;
+- iniciar exige status `ACCEPTED`;
+- concluir exige status `STARTED`;
+- concluir Assignment atualiza a Operation para `COMPLETED` e dispara integrações existentes.
+
+Erros:
+
+| HTTP | Code                            | Condition |
+| ---- | ------------------------------- | --------- |
+| 400  | `VALIDATION_ERROR`              | Payload/query inválido |
+| 400  | `OPERATION_OPERATOR_INVALID`    | Operador inválido/inativo/sem perfil operacional |
+| 403  | `ASSIGNMENT_OPERATOR_FORBIDDEN` | Operador tentando agir em Assignment de outro usuário |
+| 404  | `ASSIGNMENT_NOT_FOUND`          | Assignment inexistente |
+| 404  | `OPERATION_NOT_FOUND`           | Operation inexistente |
+| 409  | `ASSIGNMENT_INVALID_TRANSITION` | Estado atual não permite transição |
+
+Migration: `20260701170000_assignment_domain`.

@@ -1146,3 +1146,61 @@ Próximos endpoints previstos:
 - financeiro;
 - descontos;
 - contratos comerciais.
+
+## Assignment Domain + Operator Workflow
+
+Use Assignment para todo fluxo de campo do Operator. A Operation continua sendo a entidade principal;
+Assignment apenas controla execução.
+
+Endpoints disponíveis:
+
+```http
+GET   /assignments?page=1&limit=20&operationId=&assignedTo=&customerId=&equipmentId=&status=
+GET   /assignments/my?page=1&limit=20&status=
+GET   /assignments/:id
+GET   /assignments/history/:operationId
+POST  /assignments
+PATCH /assignments/:id/reassign
+PATCH /assignments/:id/accept
+PATCH /assignments/:id/reject
+PATCH /assignments/:id/start
+PATCH /assignments/:id/complete
+```
+
+Payloads:
+
+```ts
+type CreateAssignmentPayload = {
+  operationId: string;
+  assignedTo: string;
+  notes?: string | null;
+};
+
+type ReassignAssignmentPayload = {
+  assignedTo: string;
+  notes?: string | null;
+};
+```
+
+Estados:
+
+- `ASSIGNED`: mostrar CTA Aceitar;
+- `ACCEPTED`: mostrar CTA Iniciar;
+- `STARTED`: mostrar CTA Continuar/Concluir;
+- `COMPLETED`: somente leitura;
+- `REJECTED`/`CANCELED`: somente leitura;
+- `PAUSED`: reservado para retomada futura.
+
+Observações UX:
+
+- Home Operator deve priorizar Hoje, Minhas atividades, Em andamento, Próximas e Atrasadas;
+- Minhas Ordens deve consumir somente `/assignments/my`;
+- Timeline da Assignment vem de `/assignments/history/:operationId`;
+- Platform Agenda é apenas visão de Assignments; não criar domínio local de agenda;
+- Operation Drawer deve exibir responsável, status e histórico de Assignment.
+
+Mocks que podem ser removidos:
+
+- schedule demo no Operator Home/Agenda/Services;
+- cards locais de serviços;
+- timeline local de execução do operador.

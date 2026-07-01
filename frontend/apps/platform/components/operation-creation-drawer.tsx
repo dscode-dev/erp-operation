@@ -130,6 +130,7 @@ export function OperationCreationDrawer({
         type,
         status: mode === "schedule" ? "DRAFT" : "IN_PROGRESS",
         scheduledFor,
+        operatorId: operatorId || null,
         checklist: checklist.map((label) => ({ label, done: false })),
         observations: observations || null,
       });
@@ -173,8 +174,8 @@ export function OperationCreationDrawer({
       <div className="space-y-5">
         <p className="text-sm text-[var(--color-muted-foreground)]">{copy.description}</p>
         {operatorId && (
-          <div className="rounded-[var(--radius-md)] border border-[var(--color-warning)]/30 bg-[var(--color-warning)]/10 px-3 py-2 text-sm text-[var(--color-warning)]">
-            Delegação visual selecionada. O backend atual ainda atribui a Operation ao usuário autenticado.
+          <div className="rounded-[var(--radius-md)] border border-[var(--color-info)]/30 bg-[var(--color-info)]/10 px-3 py-2 text-sm text-[var(--color-info)]">
+            O backend criará a Assignment para o operador selecionado e manterá a trilha de auditoria.
           </div>
         )}
         {error && <div className="rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 px-3 py-2 text-sm text-[var(--color-danger)]">{error}</div>}

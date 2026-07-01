@@ -959,3 +959,42 @@ AppSec:
 - delegação inválida retorna `OPERATION_OPERATOR_INVALID`;
 - não há alteração no Asset Lifecycle para delegação;
 - endpoints continuam sob JWT, `RoleGuard`, validação global e rate limit global.
+
+## Assignment security
+
+Assignment é uma camada operacional sensível porque controla execução de campo.
+
+RBAC:
+
+- `OWNER` e `MANAGER`: listam, criam e reatribuem Assignments;
+- `OPERATOR`: lista apenas as próprias Assignments e só executa transições das próprias ordens;
+- `VIEWER`: somente leitura, sem transições.
+
+Transições protegidas:
+
+- aceitar/recusar/iniciar/concluir exige `actor.id === assignedTo`;
+- iniciar exige `ASSIGNED → ACCEPTED → STARTED`;
+- concluir exige `STARTED → COMPLETED`;
+- reatribuição não é permitida para Assignments finais (`COMPLETED`, `CANCELED`).
+
+Auditoria e histórico:
+
+- `AssignmentHistory` é imutável;
+- eventos: `ASSIGNED`, `REASSIGNED`, `ACCEPTED`, `STARTED`, `PAUSED`, `RESUMED`, `REJECTED`,
+  `COMPLETED`, `CANCELED`;
+- auditoria: `ASSIGNMENT_CREATED`, `ASSIGNMENT_REASSIGNED`, `ASSIGNMENT_ACCEPTED`,
+  `ASSIGNMENT_STARTED`, `ASSIGNMENT_REJECTED`, `ASSIGNMENT_COMPLETED`.
+
+Asset Lifecycle:
+
+- eventos operacionais de assignment são publicados exclusivamente via `LifecyclePublisher`;
+- nenhuma camada cria `AssetLifecycleEvent` diretamente;
+- eventos são publicados apenas quando a Operation possui equipamento.
+
+AppSec:
+
+- DTOs validam UUID, paginação, status e strings;
+- transições inválidas retornam `ASSIGNMENT_INVALID_TRANSITION`;
+- tentativa de agir em Assignment de outro operador retorna `ASSIGNMENT_OPERATOR_FORBIDDEN`;
+- criação/reatribuição valida usuário ativo, não desativado e com perfil operacional;
+- endpoints seguem JWT, `RoleGuard`, rate limit global e envelope global de erro.

@@ -2,11 +2,12 @@
 
 ## Current milestone
 
-**Sprint 13 — Pricing Domain (Produção)**
+**Sprint — Assignment Domain + Operator Workflow**
 Status: concluída em 1 de julho de 2026.
 
-As Sprints 0, 1, 2, 3, 3.5, 4, 5, 6, 7, 8, 9, 9.5, 10, 11 e 12 foram preservadas. A Sprint 13
-adiciona somente o domínio backend de Pricing, sem alteração de frontend.
+As Sprints 0, 1, 2, 3, 3.5, 4, 5, 6, 7, 8, 9, 9.5, 10, 11, 12 e 13 foram
+preservadas. Esta sprint adiciona o domínio Assignment e integra o fluxo Operator sem criar agenda,
+serviço ou OS paralelos.
 
 Sprint 4 introduz o primeiro domínio operacional de produção: Customer. Organization continua
 representando a empresa dona da instalação; Customer representa o cliente atendido por ela.
@@ -106,6 +107,7 @@ Módulos:
 ```text
 src/modules/
 ├── auth/
+├── assignments/
 ├── asset-lifecycle/
 ├── config/
 ├── customers/
@@ -142,6 +144,7 @@ Migrations:
 14. `20260630170000_pmoc_compliance_domain`
 15. `20260701120000_inventory_materials_domain`
 16. `20260701150000_pricing_domain`
+17. `20260701170000_assignment_domain`
 
 Sprint 3.5 não criou migrations e não alterou `schema.prisma`.
 
@@ -1128,6 +1131,9 @@ Verificação executada:
 - `DATABASE_URL=postgresql://user:pass@localhost:5432/db npx prisma generate`;
 - `npm run build`;
 - `npm run lint`.
+- `npm test`.
+- `npm test`.
+- `npm test`.
 
 ## Sprint 13 — Pricing Domain
 
@@ -1252,3 +1258,78 @@ Verificação executada:
 - `npm run lint`;
 - `npm test`;
 - `git diff --check`.
+
+## Sprint — Assignment Domain + Operator Workflow
+
+Domínio criado:
+
+- `src/modules/assignments`;
+- `AssignmentsModule` importado no `AppModule`;
+- `AssignmentsService` como único ponto de escrita de Assignment;
+- `AssignmentsController` expondo a API oficial;
+- constantes de auditoria em `src/shared/constants/assignments.constants.ts`.
+
+Entidades:
+
+- `Assignment`;
+- `AssignmentHistory`.
+
+Enums:
+
+- `AssignmentStatus`: `ASSIGNED`, `ACCEPTED`, `STARTED`, `PAUSED`, `COMPLETED`, `CANCELED`,
+  `REJECTED`;
+- `AssignmentEventType`: `ASSIGNED`, `REASSIGNED`, `ACCEPTED`, `STARTED`, `PAUSED`, `RESUMED`,
+  `REJECTED`, `COMPLETED`, `CANCELED`;
+- `AssetLifecycleEventType` expandido com `ASSIGNMENT_CREATED`, `ASSIGNMENT_REASSIGNED`,
+  `ASSIGNMENT_ACCEPTED`, `ASSIGNMENT_STARTED`, `ASSIGNMENT_COMPLETED`.
+
+Migration criada:
+
+- `20260701170000_assignment_domain`.
+
+Integração com Operations:
+
+- `OperationsService.create` cria Assignment automaticamente dentro da mesma transação;
+- `operatorId` da Operation continua sendo a referência operacional principal;
+- reatribuição atualiza `Operation.operatorId`;
+- conclusão de Assignment atualiza a Operation para `COMPLETED` e sincroniza Asset Lifecycle e
+  Maintenance Planning existentes.
+
+Histórico:
+
+- toda mudança cria `AssignmentHistory`;
+- histórico nunca é sobrescrito;
+- controller não altera Assignment diretamente.
+
+Endpoints adicionados:
+
+| Method | Path                                      | Access |
+| ------ | ----------------------------------------- | ------ |
+| GET    | `/api/v1/assignments`                     | OWNER, MANAGER, OPERATOR, VIEWER |
+| GET    | `/api/v1/assignments/my`                  | OWNER, MANAGER, OPERATOR |
+| GET    | `/api/v1/assignments/:id`                 | OWNER, MANAGER, OPERATOR, VIEWER |
+| GET    | `/api/v1/assignments/history/:operationId`| OWNER, MANAGER, OPERATOR, VIEWER |
+| POST   | `/api/v1/assignments`                     | OWNER, MANAGER |
+| PATCH  | `/api/v1/assignments/:id/reassign`        | OWNER, MANAGER |
+| PATCH  | `/api/v1/assignments/:id/accept`          | OWNER, MANAGER, OPERATOR |
+| PATCH  | `/api/v1/assignments/:id/reject`          | OWNER, MANAGER, OPERATOR |
+| PATCH  | `/api/v1/assignments/:id/start`           | OWNER, MANAGER, OPERATOR |
+| PATCH  | `/api/v1/assignments/:id/complete`        | OWNER, MANAGER, OPERATOR |
+
+AppSec:
+
+- UUID validation;
+- RBAC;
+- proteção contra aceitar/iniciar/concluir Assignment de outro operador;
+- proteção contra iniciar sem aceitar;
+- proteção contra concluir sem iniciar;
+- transações para estado, histórico, auditoria e lifecycle;
+- usuário delegado precisa estar ativo e possuir perfil operacional.
+
+Verificação executada:
+
+- `DATABASE_URL=postgresql://user:pass@localhost:5432/db npx prisma validate`;
+- `DATABASE_URL=postgresql://user:pass@localhost:5432/db npx prisma generate`;
+- `npm run build`;
+- `npm run lint`.
+- `npm test`.

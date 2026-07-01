@@ -110,6 +110,17 @@ Sessão escopo `operator`. Três zonas sob `app/operator/`:
 
 Navegação inferior: Início · Agenda · Atendimentos · Clientes · Perfil.
 
+### Assignment Workflow
+
+- `/agenda`: Platform visualiza Assignments reais em calendário; não usa agenda paralela.
+- `/operacoes`: `OperationDetailDrawer` exibe seção Assignment e permite reatribuição para
+  OWNER/MANAGER.
+- `/operator`: Home de campo com métricas Hoje, Em andamento, Próximas e Atrasadas via
+  `/assignments/my`.
+- `/operator/services`: Minhas Ordens, lista de Assignments reais.
+- `/operator/services/[id]`: detalhe da Assignment com aceitar, recusar, iniciar e concluir.
+- `/operator/agenda`: agenda cronológica do operador baseada em Assignments.
+
 ### Wizard de atendimento (`/operator/atendimento`)
 
 10 etapas: Cliente → Endereço → Equipamento → Tipo → Checklist → Observações → Fotos → Assinatura → Resumo → Enviar (sucesso). Full-screen, fora do shell (sem bottom nav).

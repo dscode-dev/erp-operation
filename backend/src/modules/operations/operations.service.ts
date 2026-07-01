@@ -18,6 +18,7 @@ import {
 import { ApplicationException } from '../../shared/exceptions/application.exception';
 import type { AuthenticatedUser } from '../../shared/types/authenticated-user.type';
 import { LifecyclePublisher } from '../asset-lifecycle/lifecycle-publisher.service';
+import { AssignmentsService } from '../assignments/assignments.service';
 import { PrismaService } from '../database/prisma.service';
 import { MaintenancePlanningService } from '../maintenance-planning/maintenance-planning.service';
 import type {
@@ -68,6 +69,7 @@ export class OperationsService {
     @Inject(STORAGE_PROVIDER_TOKEN) private readonly storage: StorageProviderContract,
     private readonly lifecycle: LifecyclePublisher,
     private readonly maintenance: MaintenancePlanningService,
+    private readonly assignments: AssignmentsService,
   ) {}
 
   async list(query: ListOperationsQueryDto): Promise<unknown> {
@@ -205,6 +207,17 @@ export class OperationsService {
           ),
         });
       }
+      await this.assignments.createForOperationTx(
+        tx,
+        {
+          operationId: operation.id,
+          assignedBy: actor.id,
+          assignedTo: operation.operatorId,
+          notes: dto.observations ?? null,
+        },
+        actor.id,
+        context,
+      );
       await this.lifecycle.publishOperationCompletedTx(tx, operation.id, actor.id, context);
       await this.maintenance.syncOperationCompletedTx(tx, operation.id, actor.id, context);
       return operation.id;

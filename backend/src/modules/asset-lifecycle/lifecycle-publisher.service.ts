@@ -365,6 +365,64 @@ export class LifecyclePublisher {
     });
   }
 
+  async publishAssignmentEventTx(
+    tx: Prisma.TransactionClient,
+    input: {
+      assignmentId: string;
+      operationId: string;
+      actorId: string;
+      type:
+        | typeof AssetLifecycleEventType.ASSIGNMENT_CREATED
+        | typeof AssetLifecycleEventType.ASSIGNMENT_REASSIGNED
+        | typeof AssetLifecycleEventType.ASSIGNMENT_ACCEPTED
+        | typeof AssetLifecycleEventType.ASSIGNMENT_STARTED
+        | typeof AssetLifecycleEventType.ASSIGNMENT_COMPLETED;
+      occurredAt?: Date;
+      description: string;
+      metadata?: Record<string, unknown>;
+    },
+    context?: Partial<AssetLifecycleAuditContext>,
+  ): Promise<void> {
+    const operation = await tx.operation.findUnique({
+      where: { id: input.operationId },
+      select: { id: true, number: true, equipmentId: true, operatorId: true },
+    });
+    if (!operation?.equipmentId) return;
+
+    const event = await tx.assetLifecycleEvent.create({
+      data: {
+        equipmentId: operation.equipmentId,
+        operationId: operation.id,
+        type: input.type,
+        occurredAt: input.occurredAt ?? new Date(),
+        performedBy: input.actorId,
+        description: this.clean(input.description),
+        metadata: {
+          assignmentId: input.assignmentId,
+          operationId: operation.id,
+          operationNumber: operation.number,
+          assignedOperatorId: operation.operatorId,
+          ...(input.metadata ?? {}),
+        },
+      },
+    });
+    await tx.auditLog.create({
+      data: this.auditInput(
+        ASSET_LIFECYCLE_AUDIT_ACTIONS.EVENT_AUTO_CREATED,
+        ASSET_LIFECYCLE_RESOURCE,
+        input.actorId,
+        this.safeContext(context),
+        {
+          eventId: event.id,
+          equipmentId: operation.equipmentId,
+          operationId: operation.id,
+          assignmentId: input.assignmentId,
+          type: input.type,
+        },
+      ),
+    });
+  }
+
   private async validateReferences(dto: CreateAssetLifecycleEventDto): Promise<void> {
     const equipment = await this.prisma.equipment.findUnique({
       where: { id: dto.equipmentId },

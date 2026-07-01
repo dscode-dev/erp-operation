@@ -454,6 +454,11 @@ export type AssetLifecycleEventType =
   | "PREVENTIVE"
   | "CORRECTIVE"
   | "MAINTENANCE"
+  | "ASSIGNMENT_CREATED"
+  | "ASSIGNMENT_REASSIGNED"
+  | "ASSIGNMENT_ACCEPTED"
+  | "ASSIGNMENT_STARTED"
+  | "ASSIGNMENT_COMPLETED"
   | "PART_REPLACEMENT"
   | "WARRANTY"
   | "DOCUMENT"
@@ -637,7 +642,7 @@ export type CreateOperationPayload = {
   customerId: string;
   addressId?: string | null;
   equipmentId?: string | null;
-  /** UI-ready delegation field. Backend currently assigns the authenticated actor. */
+  /** Delegates the resulting Operation/Assignment when allowed by backend RBAC. */
   operatorId?: string | null;
   type: OperationType;
   status?: OperationStatus;
@@ -649,6 +654,79 @@ export type CreateOperationPayload = {
   signatureData?: string | null;
   signedAt?: string | null;
   photos?: { dataUrl: string; caption?: string | null }[];
+};
+
+/* ============ Assignments (operator workflow) ============ */
+
+export type AssignmentStatus =
+  | "ASSIGNED"
+  | "ACCEPTED"
+  | "STARTED"
+  | "PAUSED"
+  | "COMPLETED"
+  | "CANCELED"
+  | "REJECTED";
+
+export type AssignmentEventType =
+  | "ASSIGNED"
+  | "REASSIGNED"
+  | "ACCEPTED"
+  | "STARTED"
+  | "PAUSED"
+  | "RESUMED"
+  | "REJECTED"
+  | "COMPLETED"
+  | "CANCELED";
+
+export type AssignmentUser = Pick<TeamUser, "id" | "name" | "username" | "role">;
+
+export type AssignmentOperation = Omit<OperationDetail, "photos"> & {
+  photos?: OperationPhoto[];
+};
+
+export type Assignment = {
+  id: string;
+  operationId: string;
+  assignedBy: string;
+  assignedTo: string;
+  status: AssignmentStatus;
+  assignedAt: string;
+  acceptedAt: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  canceledAt: string | null;
+  rejectedAt: string | null;
+  rejectionReason: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  assigner: AssignmentUser;
+  assignee: AssignmentUser;
+  operation: AssignmentOperation;
+};
+
+export type AssignmentHistoryItem = {
+  id: string;
+  assignmentId: string;
+  operationId: string;
+  event: AssignmentEventType;
+  actorId: string;
+  previousStatus: AssignmentStatus | null;
+  newStatus: AssignmentStatus;
+  notes: string | null;
+  createdAt: string;
+  actor: AssignmentUser;
+};
+
+export type CreateAssignmentPayload = {
+  operationId: string;
+  assignedTo: string;
+  notes?: string | null;
+};
+
+export type ReassignAssignmentPayload = {
+  assignedTo: string;
+  notes?: string | null;
 };
 
 /* ============ Inventory / Materials / Pricing ============ */

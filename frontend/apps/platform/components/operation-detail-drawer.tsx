@@ -16,8 +16,10 @@ import { OperationView } from "@erp/ui/operations/operation-view";
 import { OPERATION_STATUS, OPERATION_TYPE_LABEL, operationCode } from "@erp/ui/operations/operation-shared";
 import { DocumentViewer } from "@erp/ui/documents/document-viewer";
 import { Gate } from "@erp/ui/auth/gate";
-import { inventoryApi, operationApi, useQuery, type InventoryItem, type OperationDetail, type OperationDocument, type OperationPart, type Product } from "@erp/api";
+import { assignmentsApi, inventoryApi, operationApi, useQuery, type Assignment, type InventoryItem, type OperationDetail, type OperationDocument, type OperationPart, type Product } from "@erp/api";
 import { formatNumber } from "@erp/utils";
+import { ASSIGNMENT_STATUS_LABEL, assignmentTime } from "@erp/ui/assignments/assignment-shared";
+import { UserSelect } from "./entity-select";
 
 export function OperationDetailDrawer({
   operationId,
@@ -30,6 +32,10 @@ export function OperationDetailDrawer({
 }) {
   const detail = useQuery<OperationDetail | null>(
     (signal) => (operationId ? operationApi.getOperation(operationId, { signal }) : Promise.resolve(null)),
+    [operationId],
+  );
+  const assignmentQuery = useQuery(
+    (signal) => (operationId ? assignmentsApi.listAssignments({ operationId, limit: 1, signal }) : Promise.resolve({ items: [], pagination: { page: 1, limit: 1, total: 0, totalPages: 0 } })),
     [operationId],
   );
   const [photoSources, setPhotoSources] = useState<Record<string, string>>({});
@@ -70,6 +76,8 @@ export function OperationDetailDrawer({
             <StatusChip tone={OPERATION_STATUS[op.status].tone} dot>{OPERATION_STATUS[op.status].label}</StatusChip>
           </div>
 
+          <AssignmentSection assignment={assignmentQuery.data?.items[0] ?? null} loading={assignmentQuery.loading} onRefresh={() => { assignmentQuery.refetch(); detail.refetch(); }} />
+
           <section className="space-y-2">
             <h3 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)]">Timeline</h3>
             <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
@@ -93,6 +101,103 @@ export function OperationDetailDrawer({
         )}
       </Drawer>
     </Drawer>
+  );
+}
+
+function AssignmentSection({
+  assignment,
+  loading,
+  onRefresh,
+}: {
+  assignment: Assignment | null;
+  loading: boolean;
+  onRefresh: () => void;
+}) {
+  const [operatorId, setOperatorId] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setOperatorId(assignment?.assignedTo ?? "");
+    setError(null);
+  }, [assignment?.assignedTo]);
+
+  async function reassign() {
+    if (!assignment || !operatorId || operatorId === assignment.assignedTo) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await assignmentsApi.reassignAssignment(assignment.id, { assignedTo: operatorId });
+      onRefresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Não foi possível reatribuir.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)]">Assignment</h3>
+        {assignment && <StatusChip tone="info">{ASSIGNMENT_STATUS_LABEL[assignment.status]}</StatusChip>}
+      </div>
+      <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
+        {loading && !assignment ? (
+          <SkeletonList rows={2} />
+        ) : !assignment ? (
+          <p className="text-sm text-[var(--color-muted-foreground)]">Esta Operation ainda não possui Assignment.</p>
+        ) : (
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Info label="Responsável" value={assignment.assignee.name} />
+              <Info label="Atribuído em" value={assignmentTime(assignment.assignedAt)} />
+              <Info label="Status" value={ASSIGNMENT_STATUS_LABEL[assignment.status]} />
+            </div>
+            <AssignmentHistory operationId={assignment.operationId} />
+            <Gate roles={["OWNER", "MANAGER"]}>
+              <div className="space-y-2 rounded-[var(--radius-md)] border border-[var(--color-border)] p-3">
+                <UserSelect value={operatorId} onChange={setOperatorId} />
+                {error && <p className="text-xs text-[var(--color-danger)]">{error}</p>}
+                <button onClick={reassign} disabled={saving || !operatorId || operatorId === assignment.assignedTo} className="rounded-[var(--radius-md)] bg-[var(--color-primary)] text-[var(--color-primary-foreground)] px-3 h-9 text-sm font-medium disabled:opacity-50">
+                  {saving ? "Reatribuindo…" : "Reatribuir"}
+                </button>
+              </div>
+            </Gate>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function AssignmentHistory({ operationId }: { operationId: string }) {
+  const history = useQuery((signal) => assignmentsApi.getAssignmentHistory(operationId, { signal }), [operationId]);
+  if (history.loading && !history.data) return <SkeletonList rows={2} />;
+  if (history.error && !history.data) return <ErrorState error={history.error} onRetry={history.refetch} />;
+  const items = history.data ?? [];
+  return (
+    <ol className="space-y-2">
+      {items.map((item) => (
+        <li key={item.id} className="flex gap-2 text-xs text-[var(--color-muted-foreground)]">
+          <span className="mt-1 h-2 w-2 rounded-full bg-[var(--color-primary)]" />
+          <span>
+            <span className="font-medium text-[var(--color-foreground)]">{item.actor.name}</span>{" "}
+            {item.event.toLowerCase().replaceAll("_", " ")} · {new Date(item.createdAt).toLocaleString("pt-BR")}
+            {item.notes ? <span className="block">{item.notes}</span> : null}
+          </span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function Info({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div className="text-[11px] uppercase tracking-wider text-[var(--color-muted-foreground)]">{label}</div>
+      <div className="text-sm font-medium">{value}</div>
+    </div>
   );
 }
 

@@ -17,6 +17,7 @@ import { InternalDemoModule } from './modules/internal-demo/internal-demo.module
 import { CustomersModule } from './modules/customers/customers.module';
 import { EquipmentsModule } from './modules/equipments/equipments.module';
 import { OperationsModule } from './modules/operations/operations.module';
+import { AssignmentsModule } from './modules/assignments/assignments.module';
 import { DocumentEngineModule } from './modules/document-engine/document-engine.module';
 import { SignaturesModule } from './modules/signatures/signatures.module';
 import { AssetLifecycleModule } from './modules/asset-lifecycle/asset-lifecycle.module';
@@ -50,6 +51,7 @@ import { ResponseEnvelopeInterceptor } from './shared/interceptors/response-enve
     CustomersModule,
     EquipmentsModule,
     OperationsModule,
+    AssignmentsModule,
     DocumentEngineModule,
     SignaturesModule,
     AssetLifecycleModule,

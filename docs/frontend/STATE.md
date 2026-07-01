@@ -174,6 +174,26 @@ Pendências conscientes:
 - O backend ainda não aplica assinatura fixa/coletada no PDF; o frontend apenas persiste e exibe a configuração.
 - Editor visual, workflow, aprovação, versionamento, ICP/DocuSign e assinatura eletrônica continuam fora do escopo.
 
+## Sprint — Assignment Domain + Operator Workflow
+
+Integração concluída:
+
+- `packages/api/assignments.ts` criado para consumir `/assignments`;
+- tipos `Assignment`, `AssignmentStatus`, `AssignmentHistoryItem` adicionados em `@erp/types`;
+- `OperationCreationDrawer` envia `operatorId` e passa a criar Operation + Assignment automaticamente;
+- `/agenda` da Platform passou a ser uma visão de calendário sobre Assignments reais;
+- `OperationDetailDrawer` mostra responsável, status, histórico e permite reatribuição para
+  OWNER/MANAGER;
+- Operator Home passou a usar `/assignments/my`;
+- `/operator/services` virou **Minhas ordens** reais;
+- `/operator/agenda` mostra a agenda de campo por Assignments;
+- `/operator/services/[id]` controla aceite, início, conclusão e recusa via backend.
+
+Validação:
+
+- `npm run build` passou;
+- `npm run lint` passou com warnings antigos de `<img>` fora do escopo.
+
 ## STAGE 0 — Branding
 
 Identidade do cliente (Climatize) aplicada: `logo.PNG`/`favicon.PNG` copiados para `frontend/public/brand/` + `app/icon.png` (favicon) + `app/apple-icon.png` (iOS). Componente `@erp/ui/brand` (`BrandLogo`) usado no **login**, **sidebar** e **top bar do operador**. Tema azul/branco definitivo (Sprint 3); troca dinâmica de cores do OWNER preservada.

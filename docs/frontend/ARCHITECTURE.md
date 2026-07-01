@@ -318,3 +318,31 @@ Promoção a monorepo real: mover `app/(platform)+login+trocar-senha` para
 `apps/platform` (Next app) e `app/operator/*` para `apps/operator` (Next app),
 mantendo `packages/*` como workspaces. Como nenhum produto importa o outro e
 todo compartilhamento passa por `@erp/*`, a divisão é mecânica.
+
+## Assignment Domain + Operator Workflow
+
+Assignment é consumido como domínio real no frontend:
+
+```text
+Operation
+↓
+Assignment
+↓
+Operator workflow
+```
+
+Camadas:
+
+- `packages/api/assignments.ts`: único client HTTP de Assignment;
+- `packages/types`: contratos compartilhados;
+- `packages/ui/assignments`: labels e helpers visuais;
+- Platform: criação/agenda/drawer consomem Assignment;
+- Operator: Home, Agenda, Minhas Ordens e detalhe consomem `/assignments/my`.
+
+Regras arquiteturais:
+
+- frontend não interpreta autorização; backend decide RBAC e transições;
+- frontend não cria agenda, OS ou serviço paralelo;
+- timeline de execução vem do backend;
+- fluxo visual do Operator apenas chama transições oficiais (`accept`, `start`, `complete`,
+  `reject`).

@@ -81,6 +81,28 @@ enum OperationDocumentStatus {
   SENT
 }
 
+enum AssignmentStatus {
+  ASSIGNED
+  ACCEPTED
+  STARTED
+  PAUSED
+  COMPLETED
+  CANCELED
+  REJECTED
+}
+
+enum AssignmentEventType {
+  ASSIGNED
+  REASSIGNED
+  ACCEPTED
+  STARTED
+  PAUSED
+  RESUMED
+  REJECTED
+  COMPLETED
+  CANCELED
+}
+
 enum SignatureMode {
   NONE
   FIXED
@@ -94,6 +116,11 @@ enum AssetLifecycleEventType {
   PREVENTIVE
   CORRECTIVE
   MAINTENANCE
+  ASSIGNMENT_CREATED
+  ASSIGNMENT_REASSIGNED
+  ASSIGNMENT_ACCEPTED
+  ASSIGNMENT_STARTED
+  ASSIGNMENT_COMPLETED
   PMOC_CREATED
   PMOC_UPDATED
   PMOC_COMPLETED
@@ -188,6 +215,9 @@ model User {
   permission           UserPermission?
   avatarAsset          UserAvatarAsset?      @relation(fields: [avatarAssetId], references: [id], onDelete: SetNull)
   operations           Operation[]
+  assignmentsCreated   Assignment[]          @relation("AssignmentAssignedBy")
+  assignmentsReceived  Assignment[]          @relation("AssignmentAssignedTo")
+  assignmentEvents     AssignmentHistory[]   @relation("AssignmentHistoryActor")
   assetLifecycleEvents AssetLifecycleEvent[]
   maintenancePlans     MaintenancePlan[]
   stockMovements       StockMovement[]
@@ -530,6 +560,8 @@ model Operation {
   operator             User                  @relation(fields: [operatorId], references: [id], onDelete: Restrict)
   photos               OperationPhoto[]
   documents            OperationDocument[]
+  assignment           Assignment?
+  assignmentHistory    AssignmentHistory[]
   lifecycleEvents      AssetLifecycleEvent[]
   maintenanceExecution MaintenanceExecution?
   parts                OperationPart[]
@@ -540,6 +572,54 @@ model Operation {
   @@index([operatorId, createdAt])
   @@index([status, createdAt])
   @@map("operations")
+}
+
+model Assignment {
+  id              String              @id @default(uuid()) @db.Uuid
+  operationId     String              @unique @map("operation_id") @db.Uuid
+  assignedBy      String              @map("assigned_by") @db.Uuid
+  assignedTo      String              @map("assigned_to") @db.Uuid
+  status          AssignmentStatus    @default(ASSIGNED)
+  assignedAt      DateTime            @default(now()) @map("assigned_at") @db.Timestamptz(3)
+  acceptedAt      DateTime?           @map("accepted_at") @db.Timestamptz(3)
+  startedAt       DateTime?           @map("started_at") @db.Timestamptz(3)
+  completedAt     DateTime?           @map("completed_at") @db.Timestamptz(3)
+  canceledAt      DateTime?           @map("canceled_at") @db.Timestamptz(3)
+  rejectedAt      DateTime?           @map("rejected_at") @db.Timestamptz(3)
+  rejectionReason String?             @map("rejection_reason") @db.Text
+  notes           String?             @db.Text
+  createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
+  operation       Operation           @relation(fields: [operationId], references: [id], onDelete: Cascade)
+  assigner        User                @relation("AssignmentAssignedBy", fields: [assignedBy], references: [id], onDelete: Restrict)
+  assignee        User                @relation("AssignmentAssignedTo", fields: [assignedTo], references: [id], onDelete: Restrict)
+  history         AssignmentHistory[]
+
+  @@index([assignedTo, status, assignedAt])
+  @@index([assignedBy, assignedAt])
+  @@index([status, assignedAt])
+  @@map("assignments")
+}
+
+model AssignmentHistory {
+  id             String                @id @default(uuid()) @db.Uuid
+  assignmentId   String                @map("assignment_id") @db.Uuid
+  operationId    String                @map("operation_id") @db.Uuid
+  event          AssignmentEventType
+  actorId        String                @map("actor_id") @db.Uuid
+  previousStatus AssignmentStatus?     @map("previous_status")
+  newStatus      AssignmentStatus      @map("new_status")
+  notes          String?               @db.Text
+  createdAt      DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  assignment     Assignment            @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  operation      Operation             @relation(fields: [operationId], references: [id], onDelete: Cascade)
+  actor          User                  @relation("AssignmentHistoryActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([assignmentId, createdAt])
+  @@index([operationId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([event, createdAt])
+  @@map("assignment_history")
 }
 
 model OperationPhoto {

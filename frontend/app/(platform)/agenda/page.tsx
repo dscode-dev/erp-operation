@@ -3,33 +3,29 @@
 /**
  * Agenda (Platform) — calendário mensal de produção.
  *
- * Navegação por mês/ano/Hoje; cada navegação consulta o backend
- * (`getScheduleRange(from, to)` sobre o Demo Dataset, pronto para o domínio real
- * de Agenda). Eventos clicáveis abrem um Drawer lateral. Layout de célula com
+ * Navegação por mês/ano/Hoje; a agenda é uma visão de Assignments reais.
+ * Eventos clicáveis abrem um Drawer lateral. Layout de célula com
  * altura fixa: nada ultrapassa os limites; excedente vira "+N mais".
  */
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Plus } from "lucide-react";
 import { PageHeader } from "@platform/components/page-header";
-import { AgendaEventDrawer } from "@platform/components/agenda-event-drawer";
 import { OperationCreationDrawer } from "@platform/components/operation-creation-drawer";
 import { Drawer } from "@erp/ui/drawer";
 import { Gate } from "@erp/ui/auth/gate";
-import { StatusPill, type Status } from "@erp/ui/status-pill";
+import { StatusPill } from "@erp/ui/status-pill";
 import { ErrorState } from "@erp/ui/states";
-import { financialApi, useQuery, type DemoScheduleItem, type DemoScheduleState, type ScheduleData } from "@erp/api";
+import { assignmentsApi, useQuery, type Assignment, type AssignmentStatus } from "@erp/api";
+import { ASSIGNMENT_STATUS_LABEL, ASSIGNMENT_STATUS_PILL } from "@erp/ui/assignments/assignment-shared";
 
-const STATE_COLOR: Record<DemoScheduleState, string> = {
-  OVERDUE: "var(--color-danger)",
-  IN_PROGRESS: "var(--color-primary)",
-  SCHEDULED: "var(--color-info)",
-  DONE: "var(--color-success)",
-};
-const STATE_PILL: Record<DemoScheduleState, Status> = {
-  OVERDUE: "danger",
-  IN_PROGRESS: "in_progress",
-  SCHEDULED: "scheduled",
-  DONE: "done",
+const STATE_COLOR: Record<AssignmentStatus, string> = {
+  ASSIGNED: "var(--color-info)",
+  ACCEPTED: "var(--color-success)",
+  STARTED: "var(--color-primary)",
+  PAUSED: "var(--color-warning)",
+  COMPLETED: "var(--color-success)",
+  CANCELED: "var(--color-danger)",
+  REJECTED: "var(--color-danger)",
 };
 
 const MONTHS = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
@@ -45,8 +41,8 @@ function sameDay(a: Date, b: Date) { return dayKey(a) === dayKey(b); }
 export default function AgendaPage() {
   const today = useMemo(() => new Date(), []);
   const [cursor, setCursor] = useState(() => startOfMonth(new Date()));
-  const [selected, setSelected] = useState<DemoScheduleItem | null>(null);
-  const [dayList, setDayList] = useState<{ date: Date; items: DemoScheduleItem[] } | null>(null);
+  const [selected, setSelected] = useState<Assignment | null>(null);
+  const [dayList, setDayList] = useState<{ date: Date; items: Assignment[] } | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
 
   // 6-week grid covering the month (Monday-first).
@@ -73,26 +69,27 @@ export default function AgendaPage() {
     [gridStart],
   );
 
-  // Each navigation re-queries the backend for the visible range.
-  const sched = useQuery<ScheduleData>(
-    (signal) => financialApi.getScheduleRange(gridStart, gridEnd, { signal }),
+  // Assignments are the execution layer of Operations; Agenda is only a calendar view.
+  const assignments = useQuery(
+    (signal) => assignmentsApi.listAssignments({ limit: 100, signal }),
     [gridStart.getTime(), gridEnd.getTime()],
   );
 
   const byDay = useMemo(() => {
-    const map = new Map<string, DemoScheduleItem[]>();
-    for (const it of sched.data?.items ?? []) {
-      const d = new Date(it.startsAt);
+    const map = new Map<string, Assignment[]>();
+    for (const it of assignments.data?.items ?? []) {
+      const d = new Date(it.operation.scheduledFor ?? it.assignedAt);
       if (Number.isNaN(d.getTime())) continue;
+      if (d < gridStart || d > gridEnd) continue;
       const k = dayKey(d);
       if (!map.has(k)) map.set(k, []);
       map.get(k)!.push(it);
     }
-    for (const arr of map.values()) arr.sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+    for (const arr of map.values()) arr.sort((a, b) => (a.operation.scheduledFor ?? a.assignedAt).localeCompare(b.operation.scheduledFor ?? b.assignedAt));
     return map;
-  }, [sched.data]);
+  }, [assignments.data, gridStart, gridEnd]);
 
-  const totalEvents = sched.data?.items.length ?? 0;
+  const totalEvents = assignments.data?.items.length ?? 0;
   const years = useMemo(() => {
     const y = today.getFullYear();
     return Array.from({ length: 7 }, (_, i) => y - 3 + i);
@@ -132,13 +129,13 @@ export default function AgendaPage() {
           {years.map((y) => <option key={y} value={y}>{y}</option>)}
         </select>
         <span className="ml-auto text-caption inline-flex items-center gap-2">
-          {sched.loading && <span className="h-3 w-3 rounded-full border-2 border-[var(--color-primary)] border-t-transparent animate-spin" />}
-          {!sched.loading && `${totalEvents} evento(s)`}
+          {assignments.loading && <span className="h-3 w-3 rounded-full border-2 border-[var(--color-primary)] border-t-transparent animate-spin" />}
+          {!assignments.loading && `${totalEvents} assignment(s)`}
         </span>
       </div>
 
-      {sched.error && !sched.data ? (
-        <ErrorState error={sched.error} onRetry={sched.refetch} />
+      {assignments.error && !assignments.data ? (
+        <ErrorState error={assignments.error} onRetry={assignments.refetch} />
       ) : (
         <div key={`${cursor.getFullYear()}-${cursor.getMonth()}`} className="animate-fade-in rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] shadow-[var(--shadow-card)] overflow-hidden">
           {/* Weekday header */}
@@ -166,7 +163,7 @@ export default function AgendaPage() {
                       {date.getDate()}
                     </span>
                   </div>
-                  {sched.loading && !sched.data ? (
+                  {assignments.loading && !assignments.data ? (
                     <div className="mt-1 space-y-1">
                       <div className="skeleton h-4" /><div className="skeleton h-4 w-2/3" />
                     </div>
@@ -177,12 +174,12 @@ export default function AgendaPage() {
                           key={ev.id}
                           type="button"
                           onClick={() => setSelected(ev)}
-                          title={ev.title}
+                          title={ev.operation.customer?.name ?? `Operation #${ev.operation.number}`}
                           className="w-full text-left rounded-[4px] px-1.5 py-0.5 text-[11px] leading-tight truncate hover:brightness-95 transition"
-                          style={{ background: `color-mix(in srgb, ${STATE_COLOR[ev.state]} 14%, var(--color-card))`, color: STATE_COLOR[ev.state], boxShadow: `inset 2px 0 0 0 ${STATE_COLOR[ev.state]}` }}
+                          style={{ background: `color-mix(in srgb, ${STATE_COLOR[ev.status]} 14%, var(--color-card))`, color: STATE_COLOR[ev.status], boxShadow: `inset 2px 0 0 0 ${STATE_COLOR[ev.status]}` }}
                         >
-                          <span className="font-mono text-[10px] opacity-80 mr-1">{new Date(ev.startsAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
-                          {ev.title}
+                          <span className="font-mono text-[10px] opacity-80 mr-1">{new Date(ev.operation.scheduledFor ?? ev.assignedAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
+                          {ev.operation.customer?.name ?? `OP-${String(ev.operation.number).padStart(6, "0")}`}
                         </button>
                       ))}
                       {extra > 0 && (
@@ -197,7 +194,7 @@ export default function AgendaPage() {
             })}
           </div>
 
-          {!sched.loading && totalEvents === 0 && (
+          {!assignments.loading && totalEvents === 0 && (
             <div className="px-4 py-3 text-center text-sm text-[var(--color-muted-foreground)] border-t border-[var(--color-border)]">
               Nenhum agendamento em {MONTHS[cursor.getMonth()].toLowerCase()} de {cursor.getFullYear()}.
             </div>
@@ -206,8 +203,21 @@ export default function AgendaPage() {
       )}
 
       {/* Event drawer */}
-      <AgendaEventDrawer event={selected} open={selected !== null} onClose={() => setSelected(null)} />
-      <OperationCreationDrawer open={createOpen} mode="schedule" onClose={() => setCreateOpen(false)} onCreated={() => sched.refetch()} />
+      <Drawer open={selected !== null} onClose={() => setSelected(null)} eyebrow="Assignment" title={selected ? `OP-${String(selected.operation.number).padStart(6, "0")}` : ""} width="max-w-md">
+        {selected && (
+          <div className="space-y-4">
+            <StatusPill status={ASSIGNMENT_STATUS_PILL[selected.status]} label={ASSIGNMENT_STATUS_LABEL[selected.status]} />
+            <div>
+              <h3 className="font-semibold">{selected.operation.customer?.name ?? "Cliente não informado"}</h3>
+              <p className="text-sm text-[var(--color-muted-foreground)]">{selected.operation.equipment?.name ?? "Sem equipamento"} · {selected.assignee.name}</p>
+            </div>
+            <div className="text-sm text-[var(--color-muted-foreground)]">
+              {new Date(selected.operation.scheduledFor ?? selected.assignedAt).toLocaleString("pt-BR")}
+            </div>
+          </div>
+        )}
+      </Drawer>
+      <OperationCreationDrawer open={createOpen} mode="schedule" onClose={() => setCreateOpen(false)} onCreated={() => assignments.refetch()} />
 
       {/* "+N mais" day drawer */}
       <Drawer
@@ -222,12 +232,12 @@ export default function AgendaPage() {
             {dayList.items.map((ev) => (
               <li key={ev.id}>
                 <button type="button" onClick={() => { setSelected(ev); setDayList(null); }} className="w-full text-left flex items-center gap-3 rounded-[var(--radius-md)] border border-[var(--color-border)] p-3 hover:bg-[var(--color-muted)] transition-colors">
-                  <span className="font-mono text-xs text-[var(--color-muted-foreground)] w-14 shrink-0">{new Date(ev.startsAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-medium truncate">{ev.title}</span>
-                    <span className="block text-caption truncate">{ev.customer}</span>
-                  </span>
-                  <StatusPill status={STATE_PILL[ev.state]} />
+                    <span className="font-mono text-xs text-[var(--color-muted-foreground)] w-14 shrink-0">{new Date(ev.operation.scheduledFor ?? ev.assignedAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-medium truncate">{ev.operation.customer?.name ?? `OP-${String(ev.operation.number).padStart(6, "0")}`}</span>
+                      <span className="block text-caption truncate">{ev.operation.equipment?.name ?? "Sem equipamento"} · {ev.assignee.name}</span>
+                    </span>
+                  <StatusPill status={ASSIGNMENT_STATUS_PILL[ev.status]} label={ASSIGNMENT_STATUS_LABEL[ev.status]} />
                 </button>
               </li>
             ))}
