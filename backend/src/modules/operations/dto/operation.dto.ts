@@ -44,6 +44,7 @@ export class CreateOperationDto {
   @IsUUID('4') customerId!: string;
   @IsOptional() @IsUUID('4') addressId?: string;
   @IsOptional() @IsUUID('4') equipmentId?: string;
+  @IsOptional() @IsUUID('4') operatorId?: string;
   @IsEnum(OperationType) type!: OperationType;
   @IsOptional() @IsEnum(OperationStatus) status?: OperationStatus;
   @IsOptional() @IsDateString() scheduledFor?: string;

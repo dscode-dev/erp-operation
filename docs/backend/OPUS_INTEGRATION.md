@@ -378,11 +378,18 @@ OS nasce de uma Operation; criar uma Operation gera automaticamente um
 
 Endpoints: `GET /operations` (lista/filtros `customerId,equipmentId,operatorId,type,status,search`),
 `GET /operations/stats`, `GET /operations/:id`, `GET /operations/photos/:photoId`
-(base64), `POST /operations` (cria + OS rascunho; operador = usuário autenticado),
+(base64), `POST /operations` (cria + OS rascunho; `operatorId` opcional para delegação por OWNER/MANAGER),
 `PATCH /operations/:id`. Fotos como data URL (PNG/JPEG, máx. 16 × 5 MiB);
 assinatura como data URL (texto). O histórico de equipamento/cliente é derivado de
 `/operations` por `equipmentId`/`customerId`. Migration:
 `20260627150000_operation_domain_foundation`.
+
+Ao criar Operation, `OWNER` e `MANAGER` podem enviar `operatorId` para delegar a
+execução. Sem `operatorId`, o backend usa o próprio usuário autenticado.
+`OPERATOR` nunca delega; se enviar `operatorId`, a API atribui ao próprio operador
+após validação do UUID. O usuário delegado deve estar ativo, não desativado e ter
+perfil operacional (`OWNER`, `MANAGER` ou `OPERATOR`). Erro:
+`OPERATION_OPERATOR_INVALID`.
 
 ## Document Engine (Sprint 6)
 

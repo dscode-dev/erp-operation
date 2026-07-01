@@ -821,6 +821,15 @@ Domínio operacional central. O **Operator** finaliza o wizard chamando
 fotos como data URL, assinatura) — o backend cria a Operation e gera a **OS em
 rascunho** automaticamente; a tela de sucesso mostra `OS #000001 criada`.
 
+Delegação de operador: a Platform pode enviar `operatorId` opcional no
+`POST /operations`. `OWNER` e `MANAGER` delegam a execução para o usuário
+informado; se omitirem, a operação fica no próprio usuário autenticado.
+`OPERATOR` não delega: caso o frontend envie `operatorId`, o backend valida o UUID,
+mas atribui silenciosamente ao próprio operador autenticado. `VIEWER` não cria
+Operation. Erros de delegação retornam `OPERATION_OPERATOR_INVALID` quando o
+usuário informado não existe, está inativo/desativado ou não possui perfil
+operacional permitido.
+
 A **Platform** lista em `/operacoes` (`GET /operations`) e abre um drawer com
 Timeline + Checklist + Fotos (`GET /operations/photos/:id`) + Observações +
 Assinatura + Documentos relacionados (preview via `DocumentPaper`). O histórico de

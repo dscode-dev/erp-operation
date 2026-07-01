@@ -1476,7 +1476,7 @@ sequencial da operação (`OS-000001`).
 | GET    | `/operations/stats`           | OWNER/MANAGER/OPERATOR/VIEWER | `{ total, byStatus }`                                                                      |
 | GET    | `/operations/:id`             | OWNER/MANAGER/OPERATOR/VIEWER | Detalhe (customer, address, equipment, operator, checklist, photos, documents, signature)  |
 | GET    | `/operations/photos/:photoId` | OWNER/MANAGER/OPERATOR/VIEWER | Foto em base64 (`{ mimeType, contentBase64, ... }`)                                        |
-| POST   | `/operations`                 | OWNER/MANAGER/OPERATOR        | Cria a Operation (operador = usuário autenticado) + OS rascunho                            |
+| POST   | `/operations`                 | OWNER/MANAGER/OPERATOR        | Cria a Operation + OS rascunho. OWNER/MANAGER podem delegar via `operatorId`; OPERATOR sempre cria para si |
 | PATCH  | `/operations/:id`             | OWNER/MANAGER/OPERATOR        | Atualiza status/datas/checklist/observações                                                |
 
 `POST /operations` (body):
@@ -1486,6 +1486,7 @@ sequencial da operação (`OS-000001`).
   "customerId": "<uuid>", // obrigatório
   "addressId": "<uuid>", // opcional (deve pertencer ao cliente)
   "equipmentId": "<uuid>", // opcional (deve pertencer ao cliente)
+  "operatorId": "<uuid>", // opcional; delegação permitida apenas para OWNER/MANAGER
   "type": "PREVENTIVA", // PREVENTIVA|CORRETIVA|INSTALACAO|PROJETO
   "status": "COMPLETED", // opcional, default DRAFT
   "startedAt": "<iso>",
@@ -1498,12 +1499,21 @@ sequencial da operação (`OS-000001`).
 }
 ```
 
+Delegação: `OWNER` e `MANAGER` podem informar `operatorId`. Se omitido, o backend
+usa o usuário autenticado. `OPERATOR` não delega: mesmo enviando `operatorId`, a
+operação é atribuída ao próprio usuário autenticado e o campo enviado é ignorado
+após validação de UUID. O operador informado precisa existir, estar ativo, não
+estar desativado e possuir perfil operacional (`OWNER`, `MANAGER` ou `OPERATOR`).
+Como a instalação é single-company, a validação de organização é garantida pelo
+banco isolado da empresa; não há atribuição cross-tenant.
+
 Fotos: PNG/JPEG (data URL), máx. 16 por operação, 5 MiB cada; persistidas via
 storage provider. Assinatura: data URL armazenada como texto.
 
 Errors: `CUSTOMER_NOT_FOUND` (404), `VALIDATION_ERROR` (400, endereço/equipamento
 fora do cliente), `OPERATION_PHOTO_INVALID` (400), `OPERATION_NOT_FOUND` (404),
-`OPERATION_PHOTO_NOT_FOUND` (404).
+`OPERATION_PHOTO_NOT_FOUND` (404), `OPERATION_OPERATOR_INVALID` (400, operador
+delegado inexistente, inativo, desativado ou sem perfil operacional).
 
 Migration: `20260627150000_operation_domain_foundation` (tabelas `operations`,
 `operation_photos`, `operation_documents` + enums).

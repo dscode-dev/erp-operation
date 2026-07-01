@@ -918,3 +918,44 @@ Exposição:
 - operadores não recebem custo, preço ou margem;
 - payloads comerciais devem ser usados somente em telas administrativas/comerciais;
 - nenhum dado financeiro de clientes é introduzido nesta sprint.
+
+## Operation delegation security backlog
+
+Delegação de Operations é autorizada exclusivamente no backend.
+
+RBAC:
+
+- `OWNER`: pode informar `operatorId` ao criar Operation;
+- `MANAGER`: pode informar `operatorId` ao criar Operation;
+- `OPERATOR`: nunca delega; caso envie `operatorId`, o backend atribui ao próprio operador
+  autenticado e registra o valor ignorado na auditoria de criação;
+- `VIEWER`: permanece sem permissão para criar Operation.
+
+Validação do operador delegado:
+
+- `operatorId` é validado como UUID pelo DTO;
+- o usuário delegado deve existir;
+- o usuário delegado deve estar ativo;
+- o usuário delegado não pode possuir `disabledAt`;
+- o usuário delegado deve possuir perfil operacional permitido (`OWNER`, `MANAGER` ou `OPERATOR`);
+- `VIEWER` não pode ser operador responsável de uma Operation criada por delegação.
+
+Isolamento organizacional:
+
+- Orbit é single-company por instalação;
+- usuários e operações residem no banco isolado da empresa;
+- não existe `tenant_id` compartilhado nem atribuição cross-tenant possível nesta arquitetura;
+- a regra de “mesma organização” é garantida pelo isolamento físico do banco da instalação.
+
+Auditoria:
+
+- `OPERATION_CREATED` registra criador, operador responsável, flag `delegated` e eventual
+  `ignoredOperatorId`;
+- `OPERATION_DELEGATED` é criado somente quando `actor.id !== operatorId`;
+- o evento inclui `operationId`, número da Operation, cliente, criador e usuário delegado.
+
+AppSec:
+
+- delegação inválida retorna `OPERATION_OPERATOR_INVALID`;
+- não há alteração no Asset Lifecycle para delegação;
+- endpoints continuam sob JWT, `RoleGuard`, validação global e rate limit global.

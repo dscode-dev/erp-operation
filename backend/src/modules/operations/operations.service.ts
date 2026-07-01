@@ -1,5 +1,5 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import { DocumentTemplateType, Prisma } from '@prisma/client';
+import { DocumentTemplateType, Prisma, Role } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import {
   STORAGE_PROVIDER_TOKEN,
@@ -55,6 +55,11 @@ const OPERATION_LIST_INCLUDE = {
 } satisfies Prisma.OperationInclude;
 
 type DecodedPhoto = { buffer: Buffer; mimeType: string; ext: string; caption: string | null };
+type OperationAssignment = {
+  operatorId: string;
+  delegated: boolean;
+  ignoredOperatorId?: string;
+};
 
 @Injectable()
 export class OperationsService {
@@ -135,6 +140,7 @@ export class OperationsService {
         HttpStatus.BAD_REQUEST,
       );
     }
+    const assignment = await this.resolveOperatorAssignment(dto.operatorId, actor);
 
     // Operation + auto Work Order draft are created atomically. The OS number is
     // derived from the operation sequential number.
@@ -144,7 +150,7 @@ export class OperationsService {
           customerId: dto.customerId,
           addressId: dto.addressId ?? null,
           equipmentId: dto.equipmentId ?? null,
-          operatorId: actor.id,
+          operatorId: assignment.operatorId,
           type: dto.type,
           status: dto.status ?? 'DRAFT',
           scheduledFor: dto.scheduledFor ? new Date(dto.scheduledFor) : null,
@@ -174,9 +180,31 @@ export class OperationsService {
             operationId: operation.id,
             number: operation.number,
             customerId: operation.customerId,
+            createdBy: actor.id,
+            operatorId: operation.operatorId,
+            delegated: assignment.delegated,
+            ignoredOperatorId: assignment.ignoredOperatorId ?? null,
           },
         ),
       });
+      if (assignment.delegated) {
+        await tx.auditLog.create({
+          data: this.audit(
+            OPERATION_AUDIT_ACTIONS.OPERATION_DELEGATED,
+            OPERATION_RESOURCE,
+            actor,
+            context,
+            {
+              operationId: operation.id,
+              number: operation.number,
+              customerId: operation.customerId,
+              createdBy: actor.id,
+              operatorId: operation.operatorId,
+              delegatedUserId: operation.operatorId,
+            },
+          ),
+        });
+      }
       await this.lifecycle.publishOperationCompletedTx(tx, operation.id, actor.id, context);
       await this.maintenance.syncOperationCompletedTx(tx, operation.id, actor.id, context);
       return operation.id;
@@ -337,6 +365,52 @@ export class OperationsService {
           HttpStatus.BAD_REQUEST,
         );
     }
+  }
+
+  private async resolveOperatorAssignment(
+    requestedOperatorId: string | undefined,
+    actor: AuthenticatedUser,
+  ): Promise<OperationAssignment> {
+    if (!requestedOperatorId) {
+      return { operatorId: actor.id, delegated: false };
+    }
+
+    if (actor.role === Role.OPERATOR) {
+      return { operatorId: actor.id, delegated: false, ignoredOperatorId: requestedOperatorId };
+    }
+
+    if (actor.role !== Role.OWNER && actor.role !== Role.MANAGER) {
+      throw new ApplicationException(
+        ERROR_CODES.FORBIDDEN,
+        'Only OWNER and MANAGER users can delegate operations',
+        HttpStatus.FORBIDDEN,
+      );
+    }
+
+    const operator = await this.prisma.user.findUnique({
+      where: { id: requestedOperatorId },
+      select: { id: true, role: true, isActive: true, disabledAt: true },
+    });
+    if (!operator || !operator.isActive || operator.disabledAt) {
+      throw new ApplicationException(
+        ERROR_CODES.OPERATION_OPERATOR_INVALID,
+        'Assigned operator must exist and be active',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    if (
+      operator.role !== Role.OWNER &&
+      operator.role !== Role.MANAGER &&
+      operator.role !== Role.OPERATOR
+    ) {
+      throw new ApplicationException(
+        ERROR_CODES.OPERATION_OPERATOR_INVALID,
+        'Assigned operator must have an operational role',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    return { operatorId: operator.id, delegated: operator.id !== actor.id };
   }
 
   private async operationOrThrow(

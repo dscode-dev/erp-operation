@@ -680,7 +680,7 @@ Verificações específicas:
 ## Backlog #004 — Operações (OS + Formulários Base)
 
 - Novo domínio **Operation** (real, Prisma): `Operation`, `OperationPhoto`, `OperationDocument` + enums `OperationType`/`OperationStatus`/`OperationDocumentStatus`. Migration `20260627150000_operation_domain_foundation`.
-- Módulo `operations` (controller/service/dto): `GET /operations` (filtros), `/stats`, `/:id`, `/photos/:id` (base64), `POST /operations` (cria + **OS rascunho** automática `WORK_ORDER/DRAFT`, número `OS-000001` derivado do sequencial), `PATCH /:id`. Operador = usuário autenticado; fotos via storage provider (data URL, PNG/JPEG, 16 × 5 MiB); assinatura como texto.
+- Módulo `operations` (controller/service/dto): `GET /operations` (filtros), `/stats`, `/:id`, `/photos/:id` (base64), `POST /operations` (cria + **OS rascunho** automática `WORK_ORDER/DRAFT`, número `OS-000001` derivado do sequencial), `PATCH /:id`. Operador = usuário autenticado por padrão; `OWNER`/`MANAGER` podem delegar via `operatorId`; fotos via storage provider (data URL, PNG/JPEG, 16 × 5 MiB); assinatura como texto.
 - Toda OS nasce de uma Operation; `OperationDocument` reusa `DocumentTemplateType` (fundação única para OS/PMOC/Laudo/Relatório/Visita/Orçamento/Recibo). Histórico de equipamento/cliente derivado de `/operations` (sem duplicação). PDF oficial é gerado pelo Document Engine da Sprint 6.
 - Validado com `prisma generate` + `tsc --noEmit` (sem banco neste ambiente; migration roda no deploy).
 
@@ -1205,3 +1205,50 @@ Verificação executada:
 - `DATABASE_URL=postgresql://user:pass@localhost:5432/db npx prisma generate`;
 - `npm run build`;
 - `npm run lint`.
+
+## Backlog — Delegação de Operações (OWNER / MANAGER)
+
+Escopo concluído:
+
+- `CreateOperationDto` passou a aceitar `operatorId?: uuid`;
+- `OperationsService.create` agora resolve o operador responsável antes de criar a Operation;
+- `OWNER` e `MANAGER` podem delegar a Operation para outro usuário operacional;
+- se `operatorId` não for informado, o operador permanece sendo o usuário autenticado;
+- `OPERATOR` continua criando apenas em nome próprio; se enviar `operatorId`, o backend ignora a
+  delegação e mantém `actor.id`;
+- `VIEWER` permanece sem permissão de criação pelo `RoleGuard`.
+
+Validações aplicadas:
+
+- `operatorId` validado como UUID pelo DTO;
+- usuário delegado precisa existir;
+- usuário delegado precisa estar ativo;
+- usuário delegado não pode estar desativado (`disabledAt`);
+- usuário delegado precisa possuir perfil operacional (`OWNER`, `MANAGER` ou `OPERATOR`);
+- por arquitetura single-company, usuários pertencem ao banco isolado da instalação; não existe
+  atribuição cross-tenant em banco compartilhado.
+
+Auditoria:
+
+- `OPERATION_CREATED` registra `createdBy`, `operatorId`, `delegated` e `ignoredOperatorId`;
+- `OPERATION_DELEGATED` é registrado somente quando `actor.id !== operatorId`.
+
+Migrations:
+
+- nenhuma migration criada; alteração apenas contratual/serviço.
+
+Documentação atualizada:
+
+- `API_CONTRACTS.md`;
+- `FRONTEND_INTEGRATION.md`;
+- `OPUS_INTEGRATION.md`;
+- `SECURITY.md`;
+- `STATE.md`.
+
+Verificação executada:
+
+- `DATABASE_URL=postgresql://user:pass@localhost:5432/db npx prisma validate`;
+- `npm run build`;
+- `npm run lint`;
+- `npm test`;
+- `git diff --check`.
