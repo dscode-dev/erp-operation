@@ -35,6 +35,7 @@ function EquipamentosInner() {
   const [type] = useState<EquipmentType | "">("");
   const [customerId, setCustomerId] = useState(customerIdFromUrl);
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const debounced = useDebounce(search, 300);
@@ -48,14 +49,14 @@ function EquipamentosInner() {
     (signal) =>
       equipmentsApi.listEquipments({
         page,
-        limit: 20,
+        limit,
         search: debounced || undefined,
         status: status || undefined,
         type: type || undefined,
         customerId: customerId || undefined,
         signal,
       }),
-    [page, debounced, status, type, customerId],
+    [page, limit, debounced, status, type, customerId],
   );
   const stats = useQuery((signal) => equipmentsApi.getEquipmentStats({ signal }), []);
   const customers = useQuery((signal) => customersApi.listCustomers({ page: 1, limit: 100, signal }), []);
@@ -185,7 +186,11 @@ function EquipamentosInner() {
       ) : list.data ? (
         <div className="space-y-3">
           <DataTable columns={columns} rows={list.data.items} onRowClick={(e) => setDetailId(e.id)} />
-          <Pagination pagination={list.data.pagination} onPageChange={setPage} />
+          <Pagination
+            pagination={list.data.pagination}
+            onPageChange={setPage}
+            onPageSizeChange={(next) => { setLimit(next); setPage(1); }}
+          />
         </div>
       ) : null}
 

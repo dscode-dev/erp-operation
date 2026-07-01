@@ -107,7 +107,7 @@ export function TemplateFormDrawer({
       <div className="space-y-4">
         {error && <div className="rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 px-3 py-2 text-sm text-[var(--color-danger)]">{error}</div>}
         <Field label="Nome do modelo">
-          <input value={form.name} onChange={(e) => set("name", e.target.value)} className={inputCls} />
+          <input autoFocus value={form.name} onChange={(e) => set("name", e.target.value)} className={inputCls} />
         </Field>
         <Field label="Cabeçalho">
           <textarea value={form.headerContent} onChange={(e) => set("headerContent", e.target.value)} rows={3} className={`${inputCls} h-auto py-2 resize-none`} placeholder="Texto/observações de cabeçalho…" />

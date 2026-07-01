@@ -148,6 +148,23 @@ Proteções de AppSec:
 - conteúdo base64 do PDF só é retornado no endpoint de download e não entra no AuditLog;
 - eventos auditados: `DOCUMENT_PREVIEWED`, `DOCUMENT_RENDERED`, `DOCUMENT_DOWNLOADED`.
 
+### Template preview security
+
+Backlog Document Template Preview adiciona `GET /documents/templates/:templateId/preview`.
+
+Proteções:
+
+- usa `TemplatePreviewContext`, sem `Operation`, sem `Customer`, sem `Equipment` e sem Demo Dataset;
+- `templateId` é validado como UUID v4 por DTO;
+- templates inexistentes retornam `TEMPLATE_NOT_FOUND`;
+- templates inativos retornam `TEMPLATE_INACTIVE`;
+- `QUOTE` e `RECEIPT` continuam restritos a `OWNER`;
+- assinaturas `FIXED`/`HYBRID` continuam exigindo assinatura ativa e imagem no storage;
+- assets de branding/assinatura são resolvidos exclusivamente pelo `DocumentAssetResolver`;
+- assets ausentes retornam erro controlado (`STORAGE_FILE_NOT_FOUND`);
+- Renderer e PDF Engine permanecem sem acesso a banco/storage;
+- AuditLog registra `TEMPLATE_PREVIEWED` sem armazenar conteúdo base64 sensível além do Blueprint retornado ao usuário autorizado.
+
 ## Document Configuration & Signature security
 
 Sprint 7 adiciona configuração documental persistida e domínio de assinaturas. A regra principal é:

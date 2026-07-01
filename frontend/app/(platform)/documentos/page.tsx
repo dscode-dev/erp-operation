@@ -5,6 +5,7 @@ import { FileText } from "lucide-react";
 import { PageHeader } from "@platform/components/page-header";
 import { DataTable, type Column } from "@platform/components/data-table";
 import { ExportButton } from "@platform/components/export-button";
+import { Pagination } from "@platform/components/pagination";
 import { FilterBar } from "@erp/ui/filter-bar";
 import { StatusChip, type ChipTone } from "@erp/ui/status-chip";
 import { SkeletonList } from "@erp/ui/skeletons";
@@ -45,7 +46,9 @@ type DocumentRow = {
 };
 
 export default function DocumentosPage() {
-  const ops = useQuery((s) => operationApi.listOperations({ limit: 100, signal: s }), []);
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
+  const ops = useQuery((s) => operationApi.listOperations({ page, limit, signal: s }), [page, limit]);
   const [detail, setDetail] = useState<DocumentRow | null>(null);
 
   const [search, setSearch] = useState("");
@@ -142,29 +145,29 @@ export default function DocumentosPage() {
         }
       />
 
-      <FilterBar search={search} onSearch={setSearch} searchPlaceholder="Buscar por documento, cliente, equipamento…">
-        <select value={customer} onChange={(e) => setCustomer(e.target.value)} className={selectCls} aria-label="Cliente">
+      <FilterBar search={search} onSearch={(value) => { setSearch(value); setPage(1); }} searchPlaceholder="Buscar por documento, cliente, equipamento…">
+        <select value={customer} onChange={(e) => { setCustomer(e.target.value); setPage(1); }} className={selectCls} aria-label="Cliente">
           <option value="">Todos os clientes</option>
           {distinct("customer").map((v) => <option key={v} value={v}>{v}</option>)}
         </select>
-        <select value={equipment} onChange={(e) => setEquipment(e.target.value)} className={selectCls} aria-label="Equipamento">
+        <select value={equipment} onChange={(e) => { setEquipment(e.target.value); setPage(1); }} className={selectCls} aria-label="Equipamento">
           <option value="">Todos os equipamentos</option>
           {distinct("equipment").map((v) => <option key={v} value={v}>{v}</option>)}
         </select>
-        <select value={operator} onChange={(e) => setOperator(e.target.value)} className={selectCls} aria-label="Operador">
+        <select value={operator} onChange={(e) => { setOperator(e.target.value); setPage(1); }} className={selectCls} aria-label="Operador">
           <option value="">Todos os operadores</option>
           {distinct("operator").map((v) => <option key={v} value={v}>{v}</option>)}
         </select>
-        <select value={kind} onChange={(e) => setKind(e.target.value as DocumentKind | "")} className={selectCls} aria-label="Tipo">
+        <select value={kind} onChange={(e) => { setKind(e.target.value as DocumentKind | ""); setPage(1); }} className={selectCls} aria-label="Tipo">
           <option value="">Todos os tipos</option>
           {KINDS.map((k) => <option key={k} value={k}>{DOCUMENT_KIND_LABEL[k]}</option>)}
         </select>
-        <select value={status} onChange={(e) => setStatus(e.target.value as OperationDocumentStatus | "")} className={selectCls} aria-label="Status">
+        <select value={status} onChange={(e) => { setStatus(e.target.value as OperationDocumentStatus | ""); setPage(1); }} className={selectCls} aria-label="Status">
           <option value="">Todos os status</option>
           {STATUSES.map((s) => <option key={s} value={s}>{STATUS[s].label}</option>)}
         </select>
-        <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className={selectCls} aria-label="De" />
-        <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className={selectCls} aria-label="Até" />
+        <input type="date" value={from} onChange={(e) => { setFrom(e.target.value); setPage(1); }} className={selectCls} aria-label="De" />
+        <input type="date" value={to} onChange={(e) => { setTo(e.target.value); setPage(1); }} className={selectCls} aria-label="Até" />
       </FilterBar>
 
       {ops.loading && all.length === 0 ? (
@@ -174,7 +177,16 @@ export default function DocumentosPage() {
       ) : rows.length === 0 ? (
         <EmptyState icon={FileText} title="Nenhum documento" description="Registre operações ou ajuste os filtros." />
       ) : (
-        <DataTable columns={columns} rows={rows} onRowClick={(d) => setDetail(d)} />
+        <div className="space-y-3">
+          <DataTable columns={columns} rows={rows} onRowClick={(d) => setDetail(d)} />
+          {ops.data && (
+            <Pagination
+              pagination={ops.data.pagination}
+              onPageChange={setPage}
+              onPageSizeChange={(next) => { setLimit(next); setPage(1); }}
+            />
+          )}
+        </div>
       )}
 
       <Drawer open={detail !== null} onClose={() => setDetail(null)} eyebrow="Documento" title={detail?.number ?? ""} width="max-w-[1280px]">

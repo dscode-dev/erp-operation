@@ -1692,6 +1692,75 @@ Response 200:
 }
 ```
 
+### GET `/api/v1/documents/templates/:templateId/preview`
+
+Roles: `OWNER`, `MANAGER`, `OPERATOR`, `VIEWER` respeitando restrição financeira (`QUOTE` e
+`RECEIPT` somente `OWNER`).
+
+Gera preview oficial de um `DocumentTemplate` sem `Operation`, sem `Customer`, sem `Equipment` e
+sem Demo Dataset. O retorno é o mesmo `DocumentBlueprint` usado pelos demais previews.
+
+Fluxo interno:
+
+```text
+DocumentTemplate
+↓
+DocumentContextService.buildTemplatePreviewContext(templateId)
+↓
+DocumentBuilder
+↓
+DocumentBlueprint
+↓
+DocumentViewer
+```
+
+Response 200:
+
+```json
+{
+  "success": true,
+  "data": {
+    "version": "1.0",
+    "metadata": {
+      "operationId": "8498a905-49f1-4e77-99a4-e84e5151f5ed",
+      "documentId": null,
+      "documentType": "WORK_ORDER",
+      "documentNumber": "MODELO-WORK_ORDER",
+      "generatedAt": "2026-07-01T10:00:00.000Z",
+      "locale": "pt-BR",
+      "timezone": "America/Recife",
+      "currency": "BRL",
+      "organization": {
+        "legalName": "Climatize Nordeste LTDA",
+        "tradeName": "Climatize Nordeste",
+        "cnpj": "00.000.000/0001-00",
+        "email": "contato@example.com",
+        "phone": "+55 81 99999-9999",
+        "city": "Recife",
+        "state": "PE",
+        "primaryColor": "#111827",
+        "secondaryColor": "#2563EB"
+      }
+    },
+    "header": {
+      "title": "OS padrão",
+      "subtitle": "Pré-visualização de modelo",
+      "organizationName": "Climatize Nordeste",
+      "documentNumber": "MODELO-WORK_ORDER"
+    },
+    "footer": {
+      "content": "Texto de rodapé do template",
+      "generatedAt": "2026-07-01T10:00:00.000Z"
+    },
+    "sections": []
+  }
+}
+```
+
+Erros principais: common protected errors, `VALIDATION_ERROR`, `TEMPLATE_NOT_FOUND`,
+`TEMPLATE_INACTIVE`, `SIGNATURE_NOT_FOUND`, `SIGNATURE_INACTIVE`, `SIGNATURE_IMAGE_REQUIRED`,
+`STORAGE_FILE_NOT_FOUND`, `DOCUMENT_FORBIDDEN_TYPE`, `DOCUMENT_SIZE_LIMIT_EXCEEDED`.
+
 ### POST `/api/v1/documents/operations/:operationId/:type/render`
 
 Roles: `OWNER`, `MANAGER`, `OPERATOR` respeitando restrição financeira.

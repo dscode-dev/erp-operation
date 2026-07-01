@@ -24,6 +24,7 @@ type StatusFilter = "all" | "active" | "inactive";
 export default function UsuariosPage() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
   const [role, setRole] = useState<Role | "">("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const debounced = useDebounce(search, 300);
@@ -33,8 +34,8 @@ export default function UsuariosPage() {
   const [editing, setEditing] = useState<TeamUser | null>(null);
 
   const list = useQuery(
-    (signal) => usersApi.listUsers({ page, limit: 20, search: debounced || undefined, signal }),
-    [page, debounced],
+    (signal) => usersApi.listUsers({ page, limit, search: debounced || undefined, signal }),
+    [page, limit, debounced],
   );
 
   // Role/status filters are applied client-side over the current page.
@@ -118,7 +119,13 @@ export default function UsuariosPage() {
       ) : (
         <div className="space-y-3">
           <DataTable columns={columns} rows={rows} onRowClick={(u) => setDetail(u)} />
-          {list.data && <Pagination pagination={list.data.pagination} onPageChange={setPage} />}
+          {list.data && (
+            <Pagination
+              pagination={list.data.pagination}
+              onPageChange={setPage}
+              onPageSizeChange={(next) => { setLimit(next); setPage(1); }}
+            />
+          )}
         </div>
       )}
 

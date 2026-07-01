@@ -1,5 +1,24 @@
 # ROUTES — Frontend
 
+## Backlog — Document Template Preview
+
+- `/reports`: o botão **Visualizar** abre o drawer atual e renderiza o modelo com:
+  - `GET /documents/templates/:templateId/preview`;
+  - `DocumentViewer source={{ templateId }}`.
+- O preview de modelo não depende mais de `/operations`, não cria Operation fictícia e não tem fallback local.
+- Templates sem registro persistido exibem estado "Template indisponível"; templates inativos/erros de renderização são tratados pelo `DocumentViewer`.
+
+## Backlog — Paginação Global + Modelos de Relatórios
+
+- `/reports`: agora é a biblioteca de **Modelos de Documentos**, não lista documentos emitidos.
+  - Cards mostram ícone, nome, descrição, status, assinatura obrigatória, modo/fixa, template padrão e última atualização.
+  - **Visualizar** abre drawer com duas colunas: metadados/configuração à esquerda e `DocumentViewer` à direita.
+  - O preview usa exclusivamente o backend (`/documents/templates/:templateId/preview`) através do `DocumentViewer`.
+  - **Configurar** abre o `TemplateFormDrawer` existente.
+  - **Novo Modelo** abre o mesmo drawer, escolhendo o tipo no cabeçalho.
+- `/clientes`, `/equipamentos`, `/operacoes`, `/usuarios`, `/documentos`, `/servicos`, `/ordens`, `/produtos` e `/financial`: usam o componente padrão de paginação.
+- `/documentos`: mantém a Central Documental real, paginada pela consulta de `/operations`.
+
 ## Sprint 7 — Asset Lifecycle
 
 - `/equipamentos/[id]`: detalhes do equipamento com abas Resumo, Informações, Timeline,

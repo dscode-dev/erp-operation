@@ -214,7 +214,7 @@ Módulo: `src/modules/document-engine`.
 
 Camadas:
 
-- `builder/DocumentBuilderService`: recebe uma Operation e monta um `DocumentBlueprint`;
+- `builder/DocumentBuilderService`: recebe `OperationDocumentContext` ou `TemplatePreviewContext` e monta um `DocumentBlueprint`;
 - `blueprint/document-blueprint.types`: modelo oficial independente de PDF com Header, Footer,
   Section, Paragraph, Table, List, Image, QR Code, Checklist, SignaturePlaceholder, Observation e
   Metadata;
@@ -244,6 +244,7 @@ Endpoints criados:
 | Method | Path                                                      | Access                           |
 | ------ | --------------------------------------------------------- | -------------------------------- |
 | GET    | `/api/v1/documents/operations/:operationId/:type/preview` | OWNER, MANAGER, OPERATOR, VIEWER |
+| GET    | `/api/v1/documents/templates/:templateId/preview`          | OWNER, MANAGER, OPERATOR, VIEWER |
 | POST   | `/api/v1/documents/operations/:operationId/:type/render`  | OWNER, MANAGER, OPERATOR         |
 | GET    | `/api/v1/documents/:documentId/preview`                   | OWNER, MANAGER, OPERATOR, VIEWER |
 | POST   | `/api/v1/documents/:documentId/render`                    | OWNER, MANAGER, OPERATOR         |
@@ -254,6 +255,7 @@ Documentos financeiros (`QUOTE`, `RECEIPT`) são bloqueados para não-OWNER por 
 Audit events:
 
 - `DOCUMENT_PREVIEWED`;
+- `TEMPLATE_PREVIEWED`;
 - `DOCUMENT_RENDERED`;
 - `DOCUMENT_DOWNLOADED`.
 
@@ -267,6 +269,14 @@ Limites de AppSec:
 - sanitização de texto antes do Blueprint e do PDF;
 - storage key gerada por UUID para evitar path traversal;
 - renderer/PDF engine não acessam banco de dados.
+
+Backlog Document Template Preview:
+
+- `TemplatePreviewContext` criado para renderizar modelos sem `Operation`, `Customer` ou `Equipment`;
+- `DocumentContextService.buildTemplatePreviewContext(templateId)` monta organização, settings, brand assets, template, assinatura e placeholders oficiais;
+- `DocumentBuilderService` aceita contexto operacional ou contexto de preview de modelo e reutiliza o mesmo Blueprint/Renderer;
+- endpoint `GET /api/v1/documents/templates/:templateId/preview` retorna o mesmo `DocumentBlueprint` usado pelos previews de documentos emitidos;
+- não há renderização PDF definitiva nem criação de `OperationDocument` para preview de template.
 
 ### Document Configuration & Signature Domain
 

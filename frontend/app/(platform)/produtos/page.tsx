@@ -5,6 +5,7 @@ import { Package, Plus } from "lucide-react";
 import { PageHeader } from "@platform/components/page-header";
 import { DataTable, type Column } from "@platform/components/data-table";
 import { ExportButton } from "@platform/components/export-button";
+import { Pagination } from "@platform/components/pagination";
 import { MetricCard } from "@erp/ui/metric-card";
 import { FilterBar, FilterChip } from "@erp/ui/filter-bar";
 import { StatusChip, type ChipTone } from "@erp/ui/status-chip";
@@ -32,10 +33,12 @@ const FILTERS: Array<{ key: "all" | DemoProductStatus; label: string }> = [
 export default function ProdutosPage() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | DemoProductStatus>("all");
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
   const [formOpen, setFormOpen] = useState(false);
   const products = useQuery<ProductsData>((signal) => operationsApi.getProducts({ signal }), []);
 
-  const all = products.data?.items ?? [];
+  const all = useMemo(() => products.data?.items ?? [], [products.data?.items]);
   const rows = useMemo(() => {
     let items = all;
     if (filter !== "all") items = items.filter((p) => p.status === filter);
@@ -43,6 +46,7 @@ export default function ProdutosPage() {
     if (q) items = items.filter((p) => [p.sku, p.name, p.category].join(" ").toLowerCase().includes(q));
     return items;
   }, [all, filter, search]);
+  const paginatedRows = useMemo(() => rows.slice((page - 1) * limit, page * limit), [rows, page, limit]);
 
   const stats = useMemo(() => ({
     total: all.length,
@@ -95,9 +99,9 @@ export default function ProdutosPage() {
         </div>
       ) : null}
 
-      <FilterBar search={search} onSearch={setSearch} searchPlaceholder="Buscar por SKU, produto, categoria…">
+      <FilterBar search={search} onSearch={(value) => { setSearch(value); setPage(1); }} searchPlaceholder="Buscar por SKU, produto, categoria…">
         {FILTERS.map((f) => (
-          <FilterChip key={f.key} active={filter === f.key} onClick={() => setFilter(f.key)}>{f.label}</FilterChip>
+          <FilterChip key={f.key} active={filter === f.key} onClick={() => { setFilter(f.key); setPage(1); }}>{f.label}</FilterChip>
         ))}
       </FilterBar>
 
@@ -110,10 +114,17 @@ export default function ProdutosPage() {
       ) : rows.length === 0 ? (
         <EmptyState icon={Package} title="Nenhum produto" description="Ajuste os filtros." />
       ) : (
-        <DataTable columns={columns} rows={rows} />
+        <div className="space-y-3">
+          <DataTable columns={columns} rows={paginatedRows} />
+          <Pagination pagination={pageMeta(page, limit, rows.length)} onPageChange={setPage} onPageSizeChange={(next) => { setLimit(next); setPage(1); }} />
+        </div>
       )}
 
       <ProductFormDrawer open={formOpen} onClose={() => setFormOpen(false)} />
     </div>
   );
+}
+
+function pageMeta(page: number, limit: number, total: number) {
+  return { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) };
 }

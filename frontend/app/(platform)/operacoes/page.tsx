@@ -38,6 +38,7 @@ function OperacoesInner() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<"all" | OperationStatus>("all");
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
   const [detailId, setDetailId] = useState<string | null>(null);
   const debounced = useDebounce(search, 300);
 
@@ -45,14 +46,14 @@ function OperacoesInner() {
     (signal) =>
       operationApi.listOperations({
         page,
-        limit: 20,
+        limit,
         search: debounced || undefined,
         status: status === "all" ? undefined : status,
         customerId,
         equipmentId,
         signal,
       }),
-    [page, debounced, status, customerId, equipmentId],
+    [page, limit, debounced, status, customerId, equipmentId],
   );
 
   const columns = useMemo<Column<OperationSummary>[]>(
@@ -108,7 +109,11 @@ function OperacoesInner() {
       ) : list.data ? (
         <div className="space-y-3">
           <DataTable columns={columns} rows={list.data.items} onRowClick={(o) => setDetailId(o.id)} />
-          <Pagination pagination={list.data.pagination} onPageChange={setPage} />
+          <Pagination
+            pagination={list.data.pagination}
+            onPageChange={setPage}
+            onPageSizeChange={(next) => { setLimit(next); setPage(1); }}
+          />
         </div>
       ) : null}
 

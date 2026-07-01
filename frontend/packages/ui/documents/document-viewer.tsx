@@ -25,7 +25,8 @@ import { formatBytes } from "@erp/utils";
 
 type Source =
   | { documentId: string; operationId?: string; type?: DocumentKind }
-  | { operationId: string; type: DocumentKind; documentId?: string | null };
+  | { operationId: string; type: DocumentKind; documentId?: string | null }
+  | { templateId: string; documentId?: string | null; operationId?: string; type?: DocumentKind };
 
 export function DocumentViewer({
   source,
@@ -63,7 +64,10 @@ export function DocumentViewer({
     setLoading(true);
     setError(null);
     const operationSource = source.operationId && source.type ? { operationId: source.operationId, type: source.type } : null;
-    const load = documentId
+    const templateSource = "templateId" in source ? source.templateId : null;
+    const load = templateSource
+      ? documentsApi.previewTemplateDocument(templateSource, { signal: controller.signal })
+      : documentId
       ? documentsApi.previewDocument(documentId, { signal: controller.signal })
       : operationSource
         ? documentsApi.previewOperationDocument(operationSource.operationId, operationSource.type, { signal: controller.signal })
@@ -96,7 +100,10 @@ export function DocumentViewer({
     setError(null);
     try {
       const operationSource = source.operationId && source.type ? { operationId: source.operationId, type: source.type } : null;
-      const result = documentId
+      const templateSource = "templateId" in source ? source.templateId : null;
+      const result = templateSource
+        ? null
+        : documentId
         ? await documentsApi.renderDocument(documentId)
         : operationSource
           ? await documentsApi.renderOperationDocument(operationSource.operationId, operationSource.type)

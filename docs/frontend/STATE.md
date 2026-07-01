@@ -2,6 +2,53 @@
 
 Status: Concluída ✅ — 30 de junho de 2026. Next.js 15 · App Router · TypeScript. Timelines oficiais agora consomem exclusivamente o Asset Lifecycle do backend.
 
+## Backlog — Document Template Preview
+
+Status: Concluído ✅ — 1 de julho de 2026.
+
+- `DocumentViewer` passou a aceitar `source={{ templateId }}`.
+- `@erp/api/documents` adicionou `previewTemplateDocument(templateId)`.
+- `/reports` removeu a dependência de uma Operation real para preview de modelo.
+- O drawer de preview mantém duas colunas, mas a coluna direita agora chama exclusivamente:
+  - `GET /documents/templates/:templateId/preview`.
+- Sem `DocumentPaper`, sem preview local, sem Demo Dataset e sem Operation fictícia.
+- Templates inexistentes/inativos e erros de renderização são tratados pelo estado padrão de erro do `DocumentViewer`.
+
+Validação:
+
+- `npm run lint` passou com warnings pré-existentes de `<img>`/export anônimo fora do escopo.
+- `npm run build` passou.
+
+## Backlog — Paginação Global + Modelos de Relatórios
+
+Status: Concluído ✅ — 1 de julho de 2026. Backlog frontend; posteriormente refinado pelo preview oficial de template do backend.
+
+- `Pagination` virou o componente padrão para listagens da Platform: primeira, anterior, próxima, última, página atual, total, total de páginas e troca de tamanho de página.
+- Listagens com backend paginado preservam filtros/ordenação ao trocar página/tamanho:
+  - `/clientes`;
+  - `/equipamentos`;
+  - `/operacoes`;
+  - `/usuarios`;
+  - `/documentos` usando a paginação de `/operations`.
+- Listagens ainda baseadas em dataset local/demo receberam paginação client-side com o mesmo componente, sem carregar todos os registros na tabela:
+  - `/servicos`;
+  - `/ordens`;
+  - `/produtos`;
+  - `/financial`.
+- `/reports` foi refeito como **Modelos de Documentos**:
+  - cards modernos e compactos;
+  - badges de ativo/inativo, assinatura obrigatória, assinatura fixa/modo e template padrão;
+  - ações principais reduzidas a **Visualizar** e **Configurar**;
+  - botão **Novo Modelo** no cabeçalho usando o `TemplateFormDrawer` existente.
+- Preview de modelo não usa `DocumentPaper` nem preview local. O drawer reutiliza `DocumentViewer` e consome o preview oficial do backend por `templateId`.
+- `TemplateFormDrawer` preservado e evoluído apenas em UX, com foco automático no nome.
+- Exclusão de modelo disponível por confirmação no drawer de preview, respeitando proteção de templates de sistema pelo backend.
+
+Validação:
+
+- `npm run lint` passou com warnings pré-existentes de `<img>`/export anônimo fora do escopo.
+- `npm run build` passou.
+
 ## Sprint 7 — Asset Lifecycle Integration
 
 - `@erp/api/asset-lifecycle` integrado aos endpoints oficiais:

@@ -6,6 +6,7 @@ import { PageHeader } from "@platform/components/page-header";
 import { DashboardSection } from "@platform/components/dashboard-section";
 import { MetricCard } from "@erp/ui/metric-card";
 import { ExportButton } from "@platform/components/export-button";
+import { Pagination } from "@platform/components/pagination";
 import { SkeletonCard } from "@erp/ui/skeletons";
 import { ComingSoonState, ErrorState } from "@erp/ui/states";
 import { Gate } from "@erp/ui/auth/gate";
@@ -16,10 +17,13 @@ const PERIODS = ["7 dias", "30 dias", "90 dias"] as const;
 
 export default function FinancialPage() {
   const [period, setPeriod] = useState<(typeof PERIODS)[number]>("30 dias");
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
   const fin = useQuery<FinancialData>((signal) => financialApi.getFinancial({ signal }), []);
 
   const finance = fin.data?.finance;
   const entries = useMemo(() => finance?.entries ?? [], [finance]);
+  const paginatedEntries = useMemo(() => entries.slice((page - 1) * limit, page * limit), [entries, page, limit]);
 
   const metrics = useMemo(() => {
     if (!finance) return null;
@@ -113,7 +117,7 @@ export default function FinancialPage() {
                 <ComingSoonState title="Sem lançamentos" description="Nenhum lançamento no período." />
               ) : (
                 <ul className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] shadow-[var(--shadow-card)] divide-y divide-[var(--color-border)]">
-                  {entries.map((e) => (
+                  {paginatedEntries.map((e) => (
                     <li key={e.id} className="flex items-center gap-3 p-3.5">
                       {e.kind === "ENTRY" ? (
                         <ArrowUpCircle className="h-5 w-5 text-[var(--color-success)]" />
@@ -128,12 +132,25 @@ export default function FinancialPage() {
                   ))}
                 </ul>
               )}
+              {entries.length > 0 && (
+                <div className="mt-3">
+                  <Pagination
+                    pagination={pageMeta(page, limit, entries.length)}
+                    onPageChange={setPage}
+                    onPageSizeChange={(next) => { setLimit(next); setPage(1); }}
+                  />
+                </div>
+              )}
             </DashboardSection>
           </>
         )}
       </div>
     </Gate>
   );
+}
+
+function pageMeta(page: number, limit: number, total: number) {
+  return { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) };
 }
 
 function ComparativeChart({ entradas, saidas, despesas }: { entradas: number; saidas: number; despesas: number }) {

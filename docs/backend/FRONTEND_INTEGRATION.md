@@ -848,6 +848,16 @@ GET  /documents/operations/:operationId/:type/preview
 POST /documents/operations/:operationId/:type/render
 ```
 
+Fluxo de preview de modelo, sem Operation e sem documento emitido:
+
+```http
+GET /documents/templates/:templateId/preview
+```
+
+Use este endpoint na tela de Modelos de Documentos/Relatórios. Ele retorna o mesmo
+`DocumentBlueprint` do preview oficial e deve ser aberto pelo `DocumentViewer`. Não criar Operation
+fictícia, não usar Demo Dataset e não montar preview local no frontend.
+
 Tipos:
 
 ```ts

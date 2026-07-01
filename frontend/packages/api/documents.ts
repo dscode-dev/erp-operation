@@ -27,6 +27,10 @@ export function previewDocument(documentId: string, opts?: { signal?: AbortSigna
   return api.get<DocumentBlueprint>(`/documents/${documentId}/preview`, opts);
 }
 
+export function previewTemplateDocument(templateId: string, opts?: { signal?: AbortSignal }): Promise<DocumentBlueprint> {
+  return api.get<DocumentBlueprint>(`/documents/templates/${templateId}/preview`, opts);
+}
+
 export function renderDocument(documentId: string): Promise<DocumentRenderResult> {
   return api.post<DocumentRenderResult>(`/documents/${documentId}/render`);
 }

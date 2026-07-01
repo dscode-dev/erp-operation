@@ -72,6 +72,37 @@ export class DocumentEngineService {
     return this.previewOperation(document.operationId, document.type, actor, context);
   }
 
+  async previewTemplate(
+    templateId: string,
+    actor: AuthenticatedUser,
+    context: DocumentAuditContext,
+  ): Promise<unknown> {
+    const template = await this.prisma.documentTemplate.findUnique({
+      where: { id: templateId },
+      select: { type: true },
+    });
+    if (!template) {
+      throw new ApplicationException(
+        ERROR_CODES.TEMPLATE_NOT_FOUND,
+        'Document template was not found',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    this.assertTypeAccess(template.type, actor);
+    const blueprint = await this.builder.buildFromTemplate(templateId);
+    await this.audit(
+      DOCUMENT_ENGINE_AUDIT_ACTIONS.TEMPLATE_PREVIEWED,
+      DOCUMENT_ENGINE_RESOURCE,
+      actor,
+      context,
+      {
+        templateId,
+        documentType: blueprint.metadata.documentType,
+      },
+    );
+    return blueprint;
+  }
+
   async renderOperation(
     operationId: string,
     type: DocumentTemplateType,

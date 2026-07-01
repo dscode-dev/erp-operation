@@ -1,5 +1,5 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { DocumentTemplateType, Prisma, SignatureMode } from '@prisma/client';
+import { BrandAssetType, DocumentTemplateType, Prisma, SignatureMode } from '@prisma/client';
 import { ERROR_CODES } from '../../../shared/constants/error-codes.constants';
 import { ApplicationException } from '../../../shared/exceptions/application.exception';
 import { PrismaService } from '../../database/prisma.service';
@@ -70,6 +70,7 @@ export interface DocumentSignatureContext {
 }
 
 export interface DocumentContext {
+  kind: 'operation';
   operation: DocumentContextOperation;
   configuration: DocumentConfiguration;
   template: DocumentConfigurationTemplate | null;
@@ -82,6 +83,29 @@ export interface DocumentContext {
     images: ResolvedDocumentAsset[];
   };
 }
+
+export interface TemplatePreviewContext {
+  kind: 'templatePreview';
+  configuration: DocumentConfiguration;
+  template: DocumentConfigurationTemplate;
+  signature: DocumentSignatureContext;
+  placeholders: {
+    documentNumber: string;
+    generatedAt: string;
+    customerName: string;
+    equipmentName: string;
+    operatorName: string;
+  };
+  assets: {
+    signature: ResolvedDocumentAsset | null;
+    logo: ResolvedDocumentAsset | null;
+    watermark: ResolvedDocumentAsset | null;
+    qrCode: ResolvedDocumentAsset | null;
+    images: ResolvedDocumentAsset[];
+  };
+}
+
+export type DocumentBuildContext = DocumentContext | TemplatePreviewContext;
 
 @Injectable()
 export class DocumentContextService {
@@ -112,6 +136,7 @@ export class DocumentContextService {
     const signature = await this.resolveSignature(template, operation);
 
     return {
+      kind: 'operation',
       operation,
       configuration,
       template,
@@ -126,9 +151,88 @@ export class DocumentContextService {
     };
   }
 
+  async buildTemplatePreviewContext(templateId: string): Promise<TemplatePreviewContext> {
+    const template = await this.prisma.documentTemplate.findUnique({
+      where: { id: templateId },
+      select: {
+        id: true,
+        organizationId: true,
+        type: true,
+        name: true,
+        headerContent: true,
+        footerContent: true,
+        observations: true,
+        isDefault: true,
+        isSystem: true,
+        isActive: true,
+        requiresSignature: true,
+        signatureMode: true,
+        signatureId: true,
+        createdAt: true,
+        updatedAt: true,
+        signature: {
+          select: {
+            id: true,
+            name: true,
+            title: true,
+            imageStorageKey: true,
+            mimeType: true,
+            fileSize: true,
+            active: true,
+          },
+        },
+      },
+    });
+
+    if (!template) {
+      throw new ApplicationException(
+        ERROR_CODES.TEMPLATE_NOT_FOUND,
+        'Document template was not found',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    if (!template.isActive) {
+      throw new ApplicationException(
+        ERROR_CODES.TEMPLATE_INACTIVE,
+        'Document template is inactive and cannot be previewed',
+        HttpStatus.CONFLICT,
+      );
+    }
+
+    const [configuration, logo] = await Promise.all([
+      this.configuration.getConfigurationForType(template.type),
+      this.resolveLatestBrandAsset(template.organizationId, BrandAssetType.LOGO),
+    ]);
+    const signature = await this.resolveSignature(template, null);
+
+    return {
+      kind: 'templatePreview',
+      configuration: {
+        ...configuration,
+        defaultTemplate: template,
+      },
+      template,
+      signature,
+      placeholders: {
+        documentNumber: `MODELO-${template.type}`,
+        generatedAt: new Date().toISOString(),
+        customerName: 'Cliente',
+        equipmentName: 'Equipamento',
+        operatorName: 'Operador',
+      },
+      assets: {
+        signature: signature.fixedSignature?.image ?? null,
+        logo,
+        watermark: null,
+        qrCode: null,
+        images: [],
+      },
+    };
+  }
+
   private async resolveSignature(
     template: DocumentConfigurationTemplate | null,
-    operation: DocumentContextOperation,
+    operation: DocumentContextOperation | null,
   ): Promise<DocumentSignatureContext> {
     const mode = template?.signatureMode ?? SignatureMode.NONE;
     const requiresSignature = Boolean(template?.requiresSignature && mode !== SignatureMode.NONE);
@@ -136,7 +240,7 @@ export class DocumentContextService {
       mode === SignatureMode.COLLECTED || mode === SignatureMode.HYBRID
         ? {
             label: 'Assinatura do cliente/responsável',
-            signedAt: operation.signedAt?.toISOString() ?? null,
+            signedAt: operation?.signedAt?.toISOString() ?? null,
           }
         : null;
 
@@ -200,5 +304,21 @@ export class DocumentContextService {
       },
       collectedSignature,
     };
+  }
+
+  private async resolveLatestBrandAsset(
+    organizationId: string,
+    type: BrandAssetType,
+  ): Promise<ResolvedDocumentAsset | null> {
+    const asset = await this.prisma.brandAsset.findFirst({
+      where: { organizationId, type },
+      orderBy: { createdAt: 'desc' },
+      select: { storageKey: true, mimeType: true, fileSize: true },
+    });
+    if (!asset) return null;
+    return this.assets.resolveLogo(asset.storageKey, {
+      mimeType: asset.mimeType,
+      fileSize: asset.fileSize,
+    });
   }
 }

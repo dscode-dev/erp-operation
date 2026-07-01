@@ -18,6 +18,7 @@ import { useDebounce } from "@erp/utils";
 export default function ClientesPage() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
   const debounced = useDebounce(search, 300);
 
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -25,8 +26,8 @@ export default function ClientesPage() {
   const [editing, setEditing] = useState<Customer | null>(null);
 
   const list = useQuery(
-    (signal) => customersApi.listCustomers({ page, limit: 20, search: debounced || undefined, signal }),
-    [page, debounced],
+    (signal) => customersApi.listCustomers({ page, limit, search: debounced || undefined, signal }),
+    [page, limit, debounced],
   );
   const stats = useQuery((signal) => customersApi.getCustomerStats({ signal }), []);
 
@@ -136,7 +137,11 @@ export default function ClientesPage() {
         <div className="space-y-3">
           {/* Rows open the detail drawer instead of navigating. */}
           <DataTable columns={columns} rows={list.data.items} onRowClick={(c) => setDetailId(c.id)} />
-          <Pagination pagination={list.data.pagination} onPageChange={setPage} />
+          <Pagination
+            pagination={list.data.pagination}
+            onPageChange={setPage}
+            onPageSizeChange={(next) => { setLimit(next); setPage(1); }}
+          />
         </div>
       ) : null}
 

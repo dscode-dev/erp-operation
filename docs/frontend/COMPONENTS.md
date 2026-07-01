@@ -1,5 +1,39 @@
 # COMPONENTS — Frontend
 
+## Backlog — Document Template Preview
+
+| Item | Local | Uso |
+|---|---|---|
+| `documentsApi.previewTemplateDocument` | `packages/api/documents.ts` | Consome `GET /documents/templates/:templateId/preview` |
+| `DocumentViewer` com `templateId` | `packages/ui/documents/document-viewer.tsx` | Preview oficial de modelo sem Operation |
+| `/reports` integrado | `app/(platform)/reports/page.tsx` | Drawer de modelo usa `DocumentViewer source={{ templateId }}` |
+
+Regra: previews de modelos não usam `DocumentPaper`, não criam Operation, não consultam Demo Dataset e não possuem fallback local.
+
+## Backlog — Paginação Global + Modelos de Relatórios
+
+| Item | Local | Uso |
+|---|---|---|
+| `Pagination` atualizado | `apps/platform/components/pagination.tsx` | Paginação padrão da Platform com page size, primeira/anterior/próxima/última e totais |
+| `TemplateFormDrawer` reutilizado | `apps/platform/components/template-form-drawer.tsx` | Criar/configurar modelos, incluindo assinatura obrigatória, modo e assinatura fixa |
+| `DocumentViewer` reutilizado | `packages/ui/documents/document-viewer.tsx` | Preview oficial dos modelos por `templateId`; sem `DocumentPaper` local na página de Relatórios |
+| `ConfirmDialog` reutilizado | `packages/ui/confirm-dialog.tsx` | Confirmação de exclusão de modelo |
+| Cards de modelo | `app/(platform)/reports/page.tsx` | Biblioteca de Modelos de Documentos com badges, hover e ações discretas |
+
+Listagens padronizadas com `Pagination`:
+
+- Clientes;
+- Equipamentos;
+- Operações;
+- Usuários;
+- Documentos;
+- Serviços;
+- Ordens;
+- Produtos;
+- Financeiro.
+
+Regra: filtros e ordenação não são perdidos ao mudar página ou tamanho da página. Quando o endpoint já possui paginação, a tela envia `page`/`limit`; quando o domínio ainda é demo/local, a paginação é aplicada no array já filtrado, usando o mesmo componente visual.
+
 ## Sprint 7 — Asset Lifecycle Integration
 
 | Item | Local | Uso |

@@ -18,7 +18,9 @@ import type {
 } from '../blueprint/document-blueprint.types';
 import {
   DocumentContextService,
+  type DocumentBuildContext,
   type DocumentContext,
+  type TemplatePreviewContext,
 } from '../context/document-context.service';
 
 type ChecklistItem = { label: string; done: boolean; note: string | null };
@@ -32,8 +34,25 @@ export class DocumentBuilderService {
     type: DocumentTemplateType,
   ): Promise<DocumentBlueprint> {
     const context = await this.context.create(operationId, type);
+    return this.buildFromContext(context);
+  }
+
+  async buildFromTemplate(templateId: string): Promise<DocumentBlueprint> {
+    const context = await this.context.buildTemplatePreviewContext(templateId);
+    return this.buildFromContext(context);
+  }
+
+  private buildFromContext(context: DocumentBuildContext): DocumentBlueprint {
+    if (context.kind === 'templatePreview') {
+      return this.buildTemplatePreviewBlueprint(context);
+    }
+    return this.buildOperationBlueprint(context);
+  }
+
+  private buildOperationBlueprint(context: DocumentContext): DocumentBlueprint {
     const { operation, configuration } = context;
     const { organization, settings } = configuration;
+    const { type } = configuration;
 
     const document = operation.documents.find((item) => item.type === type) ?? {
       id: null,
@@ -75,6 +94,50 @@ export class DocumentBuilderService {
       },
       footer: {
         content: this.clean(`Gerado por ${organization.tradeName} · ${organization.email}`),
+        generatedAt,
+      },
+      sections,
+    };
+  }
+
+  private buildTemplatePreviewBlueprint(context: TemplatePreviewContext): DocumentBlueprint {
+    const { configuration, template, placeholders } = context;
+    const { organization, settings } = configuration;
+    const generatedAt = placeholders.generatedAt;
+    const sections = this.templatePreviewSections(context);
+    this.assertBlueprintLimits(sections);
+
+    return {
+      version: '1.0',
+      metadata: {
+        operationId: template.id,
+        documentId: null,
+        documentType: template.type,
+        documentNumber: placeholders.documentNumber,
+        generatedAt,
+        locale: 'pt-BR',
+        timezone: settings.timezone,
+        currency: settings.currency,
+        organization: {
+          legalName: this.clean(organization.legalName),
+          tradeName: this.clean(organization.tradeName),
+          cnpj: this.clean(organization.cnpj),
+          email: this.clean(organization.email),
+          phone: this.clean(organization.phone),
+          city: this.clean(organization.city),
+          state: this.clean(organization.state),
+          primaryColor: organization.primaryColor,
+          secondaryColor: organization.secondaryColor,
+        },
+      },
+      header: {
+        title: this.clean(template.name || this.titleFor(template.type)),
+        subtitle: 'Pré-visualização de modelo',
+        organizationName: this.clean(organization.tradeName || organization.legalName),
+        documentNumber: placeholders.documentNumber,
+      },
+      footer: {
+        content: this.clean(template.footerContent || `Modelo gerado por ${organization.tradeName}`),
         generatedAt,
       },
       sections,
@@ -238,7 +301,90 @@ export class DocumentBuilderService {
     return sections;
   }
 
-  private signatureComponent(context: DocumentContext): DocumentBlueprintComponent | null {
+  private templatePreviewSections(context: TemplatePreviewContext): DocumentSection[] {
+    const { template, placeholders } = context;
+    const sections: DocumentSection[] = [
+      {
+        id: 'template-summary',
+        title: 'Resumo do modelo',
+        critical: true,
+        components: [
+          this.metadata('template-metadata', [
+            ['Nome', template.name],
+            ['Tipo', template.type],
+            ['Status', template.isActive ? 'Ativo' : 'Inativo'],
+            ['Template padrão', template.isDefault ? 'Sim' : 'Não'],
+            ['Assinatura obrigatória', template.requiresSignature ? 'Sim' : 'Não'],
+            ['Modo de assinatura', template.signatureMode],
+            ['Atualizado em', this.date(template.updatedAt)],
+          ]),
+        ],
+      },
+      {
+        id: 'template-content',
+        title: 'Conteúdo configurado',
+        critical: true,
+        components: [
+          {
+            id: 'template-header-content',
+            kind: 'paragraph',
+            text: this.clean(template.headerContent || 'Cabeçalho não configurado.'),
+            keepTogether: true,
+          },
+          {
+            id: 'template-footer-content',
+            kind: 'paragraph',
+            text: this.clean(template.footerContent || 'Rodapé não configurado.'),
+            keepTogether: true,
+          },
+          {
+            id: 'template-observations',
+            kind: 'observation',
+            text: this.clean(template.observations || 'Sem observações.'),
+            keepTogether: true,
+          },
+        ],
+      },
+      {
+        id: 'official-placeholders',
+        title: 'Placeholders oficiais',
+        components: [
+          {
+            id: 'placeholder-table',
+            kind: 'table',
+            keepTogether: true,
+            columns: [
+              { key: 'field', label: 'Campo', width: 0.38 },
+              { key: 'value', label: 'Valor de preview', width: 0.62 },
+            ],
+            rows: [
+              { field: 'Cliente', value: placeholders.customerName },
+              { field: 'Equipamento', value: placeholders.equipmentName },
+              { field: 'Operador', value: placeholders.operatorName },
+              { field: 'Número do documento', value: placeholders.documentNumber },
+              { field: 'Data de geração', value: generatedDate(placeholders.generatedAt) },
+            ].map((row) => ({
+              field: this.clean(row.field),
+              value: this.clean(row.value),
+            })),
+          },
+        ],
+      },
+    ];
+
+    const signature = this.signatureComponent(context);
+    if (signature) {
+      sections.push({
+        id: 'signature',
+        title: 'Assinatura',
+        critical: true,
+        components: [signature],
+      });
+    }
+    return sections;
+  }
+
+  private signatureComponent(context: DocumentBuildContext): DocumentBlueprintComponent | null {
     const { signature } = context;
     if (!signature.requiresSignature || signature.signatureMode === SignatureMode.NONE) return null;
 
@@ -379,4 +525,8 @@ export class DocumentBuilderService {
       );
     }
   }
+}
+
+function generatedDate(value: string): string {
+  return new Date(value).toISOString();
 }

@@ -1,5 +1,50 @@
 # ARCHITECTURE — Frontend
 
+## Backlog — Document Template Preview
+
+O preview de modelos agora é independente de documentos emitidos:
+
+```text
+DocumentTemplate
+↓
+documentsApi.previewTemplateDocument(templateId)
+↓
+DocumentViewer
+↓
+DocumentBlueprint oficial do backend
+```
+
+Decisões:
+
+- `DocumentViewer` aceita `source={{ templateId }}` e chama `GET /documents/templates/:templateId/preview`.
+- `/reports` não consulta mais uma Operation real para pré-visualizar modelos.
+- Não existe preview local, `DocumentPaper`, Demo Dataset ou Operation fictícia nesse fluxo.
+- Renderização definitiva de PDF para modelos continua fora do escopo; o viewer recebe `canRender=false` e `canDownload=false`.
+- Erros de template inexistente, inativo, assinatura inválida, asset ausente e renderização são exibidos pelos estados padrão do Orbit/DocumentViewer.
+
+## Backlog — Paginação Global + Modelos de Relatórios
+
+A Platform passou a ter paginação visual e comportamental padronizada:
+
+```text
+filtros/ordenação
+↓
+query backend paginada ou array local já filtrado
+↓
+Pagination
+↓
+tabela/lista/card grid
+```
+
+Decisões:
+
+- `apps/platform/components/pagination.tsx` é o único componente de paginação usado nas listagens da Platform.
+- Trocar página ou tamanho de página não limpa filtros nem ordenação; filtros alterados resetam a página para `1`.
+- Não foram criados endpoints nem contratos novos.
+- Telas cujo backend já retorna `Paginated<T>` enviam `page` e `limit`.
+- Telas ainda dependentes de dataset/demo aplicam paginação client-side sobre o resultado filtrado para evitar renderizar a lista completa.
+- `/reports` não gera documento nem monta preview local: a biblioteca de modelos reutiliza `DocumentViewer`, que chama o preview oficial por `templateId`.
+
 ## Sprint 7 — Asset Lifecycle Integration
 
 O frontend não monta mais histórico operacional local para Cliente, Equipamento ou Operação. A

@@ -9,3 +9,7 @@ export class OperationDocumentParamsDto {
 export class DocumentIdParamsDto {
   @IsUUID('4') documentId!: string;
 }
+
+export class TemplatePreviewParamsDto {
+  @IsUUID('4') templateId!: string;
+}

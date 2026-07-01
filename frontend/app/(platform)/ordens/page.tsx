@@ -5,6 +5,7 @@ import { ClipboardList } from "lucide-react";
 import { PageHeader } from "@platform/components/page-header";
 import { DataTable, type Column } from "@platform/components/data-table";
 import { ExportButton } from "@platform/components/export-button";
+import { Pagination } from "@platform/components/pagination";
 import { FilterBar, FilterChip } from "@erp/ui/filter-bar";
 import { StatusPill, type Status } from "@erp/ui/status-pill";
 import { StatusChip } from "@erp/ui/status-chip";
@@ -45,6 +46,8 @@ const FILTERS: Array<{ key: "all" | DemoOrderStatus; label: string }> = [
 export default function OrdensPage() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | DemoOrderStatus>("all");
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
   const [detail, setDetail] = useState<DemoOrder | null>(null);
   const orders = useQuery<OrdersData>((signal) => operationsApi.getOrders({ signal }), []);
 
@@ -55,6 +58,7 @@ export default function OrdensPage() {
     if (q) items = items.filter((o) => [o.number, o.title, o.customer, o.operator].join(" ").toLowerCase().includes(q));
     return items;
   }, [orders.data, filter, search]);
+  const paginatedRows = useMemo(() => rows.slice((page - 1) * limit, page * limit), [rows, page, limit]);
 
   const columns: Column<DemoOrder>[] = [
     { key: "number", header: "OS", className: "w-[110px]", sortAccessor: (o) => o.number, cell: (o) => <span className="font-mono text-xs">{o.number}</span> },
@@ -82,9 +86,9 @@ export default function OrdensPage() {
         }
       />
 
-      <FilterBar search={search} onSearch={setSearch} searchPlaceholder="Buscar por OS, serviço, cliente…">
+      <FilterBar search={search} onSearch={(value) => { setSearch(value); setPage(1); }} searchPlaceholder="Buscar por OS, serviço, cliente…">
         {FILTERS.map((f) => (
-          <FilterChip key={f.key} active={filter === f.key} onClick={() => setFilter(f.key)}>{f.label}</FilterChip>
+          <FilterChip key={f.key} active={filter === f.key} onClick={() => { setFilter(f.key); setPage(1); }}>{f.label}</FilterChip>
         ))}
       </FilterBar>
 
@@ -97,7 +101,10 @@ export default function OrdensPage() {
       ) : rows.length === 0 ? (
         <EmptyState icon={ClipboardList} title="Nenhuma OS" description="Ajuste os filtros." />
       ) : (
-        <DataTable columns={columns} rows={rows} onRowClick={(o) => setDetail(o)} />
+        <div className="space-y-3">
+          <DataTable columns={columns} rows={paginatedRows} onRowClick={(o) => setDetail(o)} />
+          <Pagination pagination={pageMeta(page, limit, rows.length)} onPageChange={setPage} onPageSizeChange={(next) => { setLimit(next); setPage(1); }} />
+        </div>
       )}
 
       <Drawer open={detail !== null} onClose={() => setDetail(null)} eyebrow="Ordem de Serviço" title={detail ? `${detail.number} · ${detail.title}` : ""} width="max-w-2xl">
@@ -105,6 +112,10 @@ export default function OrdensPage() {
       </Drawer>
     </div>
   );
+}
+
+function pageMeta(page: number, limit: number, total: number) {
+  return { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) };
 }
 
 function OrderDetail({ order }: { order: DemoOrder }) {

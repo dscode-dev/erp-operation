@@ -394,6 +394,7 @@ Endpoints:
 ```http
 GET  /documents/operations/:operationId/:type/preview
 POST /documents/operations/:operationId/:type/render
+GET  /documents/templates/:templateId/preview
 GET  /documents/:documentId/preview
 POST /documents/:documentId/render
 GET  /documents/:documentId/download
@@ -416,6 +417,13 @@ Fluxo UX sugerido:
 4. Se `downloadReady=true`, chamar `GET /documents/:documentId/download`.
 5. Converter `contentBase64` para `Blob` com `mimeType=application/pdf`.
 
+Fluxo UX para Modelos de Documentos:
+
+1. Listar templates com `GET /organization/templates`.
+2. Ao clicar em "Visualizar modelo", chamar `GET /documents/templates/:templateId/preview`.
+3. Renderizar o retorno no `DocumentViewer`.
+4. Não criar Operation, não usar Demo Dataset e não usar preview local.
+
 Estados:
 
 - `DRAFT`: mostrar "Gerar PDF";
@@ -424,6 +432,10 @@ Estados:
 - `DOCUMENT_FORBIDDEN_TYPE`: esconder Orçamento/Recibo para MANAGER/OPERATOR/VIEWER;
 - `DOCUMENT_SIZE_LIMIT_EXCEEDED`: o documento ficou grande demais;
 - `DOCUMENT_RENDER_FAILED`: mostrar retry e incluir `X-Request-Id` no suporte.
+- `TEMPLATE_NOT_FOUND`: modelo removido/inexistente;
+- `TEMPLATE_INACTIVE`: modelo inativo;
+- `SIGNATURE_NOT_FOUND`, `SIGNATURE_INACTIVE`, `SIGNATURE_IMAGE_REQUIRED`: configuração de assinatura inválida;
+- `STORAGE_FILE_NOT_FOUND`: asset referenciado não existe no storage.
 
 Blueprint:
 

@@ -5,7 +5,11 @@ import { Roles } from '../../shared/decorators/roles.decorator';
 import type { AuthenticatedUser } from '../../shared/types/authenticated-user.type';
 import type { RequestWithId } from '../../shared/types/request-with-id.type';
 import { DocumentEngineService, contextFromRequest } from './document-engine.service';
-import { DocumentIdParamsDto, OperationDocumentParamsDto } from './dto/document-engine.dto';
+import {
+  DocumentIdParamsDto,
+  OperationDocumentParamsDto,
+  TemplatePreviewParamsDto,
+} from './dto/document-engine.dto';
 
 @Controller('documents')
 export class DocumentEngineController {
@@ -39,6 +43,16 @@ export class DocumentEngineController {
       actor,
       contextFromRequest(request),
     );
+  }
+
+  @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR, Role.VIEWER)
+  @Get('templates/:templateId/preview')
+  previewTemplate(
+    @Param() params: TemplatePreviewParamsDto,
+    @CurrentUser() actor: AuthenticatedUser,
+    @Req() request: RequestWithId,
+  ): Promise<unknown> {
+    return this.documents.previewTemplate(params.templateId, actor, contextFromRequest(request));
   }
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR, Role.VIEWER)

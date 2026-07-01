@@ -10,6 +10,7 @@ import { Briefcase } from "lucide-react";
 import { PageHeader } from "@platform/components/page-header";
 import { DataTable, type Column } from "@platform/components/data-table";
 import { ExportButton } from "@platform/components/export-button";
+import { Pagination } from "@platform/components/pagination";
 import { FilterBar, FilterChip } from "@erp/ui/filter-bar";
 import { StatusChip, type ChipTone } from "@erp/ui/status-chip";
 import { SkeletonList } from "@erp/ui/skeletons";
@@ -34,6 +35,8 @@ const TYPE_LABEL: Record<DemoOrderType, string> = {
 export default function ServicosPage() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<"all" | DemoServiceStatus>("all");
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
   const [detail, setDetail] = useState<DemoService | null>(null);
   const services = useQuery<ServicesData>((s) => operationsApi.getServices({ signal: s }), []);
 
@@ -44,6 +47,7 @@ export default function ServicosPage() {
     if (q) items = items.filter((s) => [s.customer, s.equipment, s.operator].join(" ").toLowerCase().includes(q));
     return items;
   }, [services.data, status, search]);
+  const paginatedRows = useMemo(() => rows.slice((page - 1) * limit, page * limit), [rows, page, limit]);
 
   const columns: Column<DemoService>[] = [
     {
@@ -66,16 +70,16 @@ export default function ServicosPage() {
           <ExportButton
             label="Exportar"
             fileName="servicos"
-            rows={rows.map((s) => ({ cliente: s.customer, equipamento: s.equipment, tipo: TYPE_LABEL[s.type], operador: s.operator, data: formatDate(s.date), status: STATUS[s.status].label }))}
+              rows={rows.map((s) => ({ cliente: s.customer, equipamento: s.equipment, tipo: TYPE_LABEL[s.type], operador: s.operator, data: formatDate(s.date), status: STATUS[s.status].label }))}
           />
         }
       />
 
-      <FilterBar search={search} onSearch={setSearch} searchPlaceholder="Buscar por cliente, equipamento, operador…">
-        <FilterChip active={status === "all"} onClick={() => setStatus("all")}>Todos</FilterChip>
-        <FilterChip active={status === "IN_PROGRESS"} onClick={() => setStatus("IN_PROGRESS")}>Em andamento</FilterChip>
-        <FilterChip active={status === "SCHEDULED"} onClick={() => setStatus("SCHEDULED")}>Agendados</FilterChip>
-        <FilterChip active={status === "DONE"} onClick={() => setStatus("DONE")}>Concluídos</FilterChip>
+      <FilterBar search={search} onSearch={(value) => { setSearch(value); setPage(1); }} searchPlaceholder="Buscar por cliente, equipamento, operador…">
+        <FilterChip active={status === "all"} onClick={() => { setStatus("all"); setPage(1); }}>Todos</FilterChip>
+        <FilterChip active={status === "IN_PROGRESS"} onClick={() => { setStatus("IN_PROGRESS"); setPage(1); }}>Em andamento</FilterChip>
+        <FilterChip active={status === "SCHEDULED"} onClick={() => { setStatus("SCHEDULED"); setPage(1); }}>Agendados</FilterChip>
+        <FilterChip active={status === "DONE"} onClick={() => { setStatus("DONE"); setPage(1); }}>Concluídos</FilterChip>
       </FilterBar>
 
       {services.loading && !services.data ? (
@@ -87,7 +91,10 @@ export default function ServicosPage() {
       ) : rows.length === 0 ? (
         <EmptyState icon={Briefcase} title="Nenhum serviço" description="Ajuste os filtros." />
       ) : (
-        <DataTable columns={columns} rows={rows} onRowClick={(s) => setDetail(s)} />
+        <div className="space-y-3">
+          <DataTable columns={columns} rows={paginatedRows} onRowClick={(s) => setDetail(s)} />
+          <Pagination pagination={pageMeta(page, limit, rows.length)} onPageChange={setPage} onPageSizeChange={(next) => { setLimit(next); setPage(1); }} />
+        </div>
       )}
 
       <Drawer open={detail !== null} onClose={() => setDetail(null)} eyebrow="Serviço" title={detail ? `${detail.customer}` : ""} width="max-w-xl">
@@ -95,6 +102,10 @@ export default function ServicosPage() {
       </Drawer>
     </div>
   );
+}
+
+function pageMeta(page: number, limit: number, total: number) {
+  return { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) };
 }
 
 function ServiceDetail({ service }: { service: DemoService }) {
