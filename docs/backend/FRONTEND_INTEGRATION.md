@@ -1285,3 +1285,98 @@ Erros principais:
 - `PMOC_PLAN_NOT_FOUND`: PMOC inexistente;
 - `PMOC_ENVIRONMENT_NOT_FOUND`: ambiente inexistente;
 - `VALIDATION_ERROR`: datas, enum, paginação ou payload inválido.
+
+## Inventory & Materials (Sprint 12)
+
+O backend expõe a fundação de estoque e materiais. O frontend deve tratar `Product` como catálogo e
+`InventoryItem` como saldo físico. Não calcular saldo localmente; sempre usar `currentQuantity`,
+`reservedQuantity` e `availableQuantity` retornados pela API.
+
+Endpoints disponíveis:
+
+```http
+GET    /products?page=1&limit=20&search=&category=&brand=&active=
+GET    /products/:id
+POST   /products
+PATCH  /products/:id
+DELETE /products/:id
+
+GET    /inventory?page=1&limit=20&search=&productId=&location=&critical=&active=
+GET    /inventory/:id
+PATCH  /inventory/:id
+GET    /inventory/stats
+POST   /inventory/movements
+GET    /inventory/movements?page=1&limit=20&inventoryItemId=&productId=&operationId=&type=&from=&to=
+
+GET    /suppliers?page=1&limit=20&search=&active=
+POST   /suppliers
+PATCH  /suppliers/:id
+DELETE /suppliers/:id
+
+GET    /operations/:id/materials
+POST   /operations/:id/materials
+DELETE /operations/:id/materials/:id
+```
+
+Roles para UI:
+
+- OWNER/MANAGER: gerenciam produtos, fornecedores, parâmetros de estoque e materiais de Operation;
+- OPERATOR: consulta produtos/estoque e pode registrar consumo/movimentação operacional;
+- VIEWER: somente leitura em produtos, estoque e materiais;
+- fornecedores ficam restritos a OWNER/MANAGER.
+
+Payload de produto:
+
+```ts
+type ProductPayload = {
+  sku: string;
+  internalCode?: string;
+  manufacturerCode?: string;
+  name: string;
+  unit: string;
+  brand?: string;
+  model?: string;
+  category?: string;
+  technicalDescription?: string;
+  weight?: number;
+  dimensions?: Record<string, unknown>;
+  isActive?: boolean;
+};
+```
+
+Payload de consumo em Operation:
+
+```ts
+await api.post(`/operations/${operationId}/materials`, {
+  productId,
+  inventoryItemId,
+  quantity: 1,
+  notes: 'Substituição de filtro saturado',
+});
+```
+
+Após consumo:
+
+- invalidar `GET /operations/:id/materials`;
+- invalidar `GET /inventory/:id`;
+- invalidar `GET /inventory/stats`;
+- invalidar `GET /equipments/:id/lifecycle` quando a Operation possuir equipamento.
+
+UX recomendada:
+
+- Produtos: tabela paginada com filtros por busca, categoria, marca e ativo;
+- Estoque: destacar `availableQuantity <= minimumQuantity` e itens sem saldo;
+- Movimentos: linha do tempo/auditoria paginada, sem edição;
+- Operation: seletor de produto + item de estoque, mostrando saldo disponível antes de consumir;
+- nunca permitir no cliente uma experiência que dependa de saldo calculado em memória.
+
+Erros principais:
+
+- `PRODUCT_CONFLICT`: SKU/código duplicado;
+- `PRODUCT_NOT_FOUND`: produto inexistente;
+- `SUPPLIER_CONFLICT`: documento duplicado;
+- `SUPPLIER_NOT_FOUND`: fornecedor inexistente;
+- `INVENTORY_ITEM_NOT_FOUND`: item de estoque inexistente;
+- `INVENTORY_NEGATIVE_STOCK`: consumo/saída deixaria saldo negativo;
+- `INVENTORY_PRODUCT_MISMATCH`: item de estoque não pertence ao produto selecionado;
+- `OPERATION_NOT_FOUND`: Operation inexistente.

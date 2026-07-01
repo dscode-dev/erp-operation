@@ -2,11 +2,11 @@
 
 ## Current milestone
 
-**Sprint 11 — PMOC Compliance Domain (Produção)**
-Status: concluída em 30 de junho de 2026.
+**Sprint 12 — Inventory & Materials Domain (Produção)**
+Status: concluída em 1 de julho de 2026.
 
-As Sprints 0, 1, 2, 3, 3.5, 4, 5 e 6 foram preservadas. Nenhum módulo operacional novo foi
-adicionado nesta sprint.
+As Sprints 0, 1, 2, 3, 3.5, 4, 5, 6, 7, 8, 9, 9.5, 10 e 11 foram preservadas. A Sprint 12 adiciona
+somente o domínio backend de inventário e materiais, sem alteração de frontend.
 
 Sprint 4 introduz o primeiro domínio operacional de produção: Customer. Organization continua
 representando a empresa dona da instalação; Customer representa o cliente atendido por ela.
@@ -1019,3 +1019,101 @@ Verificação executada até este registro:
 - `npm run build`.
 - `npm run lint`;
 - `npm test` com 7 suítes e 21 testes aprovados.
+
+## Sprint 12 — Inventory & Materials Domain
+
+Domínio criado:
+
+- `src/modules/inventory`;
+- `InventoryModule` importado no `AppModule`;
+- `InventoryService` como façade transacional para catálogo de produtos, estoque físico,
+  movimentações, fornecedores e materiais consumidos em Operations;
+- controllers separados para Product Catalog, Inventory, Suppliers e Operation Materials;
+- constantes de auditoria em `src/shared/constants/inventory.constants.ts`.
+
+Entidades:
+
+- `Product`: catálogo do produto. Não armazena saldo nem movimentações;
+- `Supplier`: cadastro de fornecedores para compras futuras;
+- `InventoryItem`: estoque físico associado a um `Product`, preparado para múltiplos almoxarifados;
+- `StockMovement`: evento imutável de estoque;
+- `OperationPart`: material/produto consumido por uma `Operation`.
+
+Enum:
+
+- `StockMovementType`: `IN`, `OUT`, `ADJUSTMENT`, `TRANSFER`, `CONSUMPTION`, `RETURN`.
+
+Migration criada:
+
+- `20260701120000_inventory_materials_domain`.
+
+Decisões arquiteturais:
+
+- Product Catalog e Inventory Item foram separados: produto descreve catálogo; item de inventário
+  representa saldo físico;
+- toda alteração de estoque cria `StockMovement`; não existe endpoint para editar movimentações;
+- `currentQuantity` e `availableQuantity` são recalculados no backend a partir das movimentações;
+- `availableQuantity = currentQuantity - reservedQuantity`;
+- saldo negativo é rejeitado transacionalmente;
+- consumo de materiais em Operation cria `OperationPart`, `StockMovement(CONSUMPTION)`, atualiza
+  estoque e publica `PART_REPLACEMENT` via `LifecyclePublisher`;
+- remoção de material de Operation é soft delete no `OperationPart` e gera `StockMovement(RETURN)`;
+- histórico de estoque e histórico do ativo permanecem separados, ligados por referências.
+
+Endpoints adicionados:
+
+| Method | Path                                      | Access                           |
+| ------ | ----------------------------------------- | -------------------------------- |
+| GET    | `/api/v1/products`                        | OWNER, MANAGER, OPERATOR, VIEWER |
+| GET    | `/api/v1/products/:id`                    | OWNER, MANAGER, OPERATOR, VIEWER |
+| POST   | `/api/v1/products`                        | OWNER, MANAGER                   |
+| PATCH  | `/api/v1/products/:id`                    | OWNER, MANAGER                   |
+| DELETE | `/api/v1/products/:id`                    | OWNER, MANAGER                   |
+| GET    | `/api/v1/inventory`                       | OWNER, MANAGER, OPERATOR, VIEWER |
+| GET    | `/api/v1/inventory/:id`                   | OWNER, MANAGER, OPERATOR, VIEWER |
+| PATCH  | `/api/v1/inventory/:id`                   | OWNER, MANAGER                   |
+| GET    | `/api/v1/inventory/stats`                 | OWNER, MANAGER, OPERATOR, VIEWER |
+| POST   | `/api/v1/inventory/movements`             | OWNER, MANAGER, OPERATOR         |
+| GET    | `/api/v1/inventory/movements`             | OWNER, MANAGER, OPERATOR, VIEWER |
+| GET    | `/api/v1/suppliers`                       | OWNER, MANAGER                   |
+| POST   | `/api/v1/suppliers`                       | OWNER, MANAGER                   |
+| PATCH  | `/api/v1/suppliers/:id`                   | OWNER, MANAGER                   |
+| DELETE | `/api/v1/suppliers/:id`                   | OWNER, MANAGER                   |
+| GET    | `/api/v1/operations/:id/materials`         | OWNER, MANAGER, OPERATOR, VIEWER |
+| POST   | `/api/v1/operations/:id/materials`         | OWNER, MANAGER, OPERATOR         |
+| DELETE | `/api/v1/operations/:id/materials/:id`     | OWNER, MANAGER                   |
+
+Auditoria:
+
+- `PRODUCT_CREATED`;
+- `PRODUCT_UPDATED`;
+- `PRODUCT_DELETED`;
+- `SUPPLIER_CREATED`;
+- `SUPPLIER_UPDATED`;
+- `SUPPLIER_DELETED`;
+- `INVENTORY_ITEM_CREATED`;
+- `INVENTORY_ITEM_UPDATED`;
+- `STOCK_MOVEMENT_CREATED`;
+- `MATERIAL_CONSUMED`;
+- `MATERIAL_RETURNED`.
+
+Integração com Asset Lifecycle:
+
+- `LifecyclePublisher.publishPartReplacementTx` publica `PART_REPLACEMENT`;
+- o evento referencia `operationId`, `operationPartId`, `productId`, `inventoryItemId`, quantidade
+  e nome do produto;
+- nenhum serviço de inventário cria `AssetLifecycleEvent` diretamente fora do publisher.
+
+Seed:
+
+- seed idempotente adiciona fornecedor, produtos HVAC, itens de estoque, entrada inicial e consumo
+  coerente quando existem Operations;
+- não cria novo Demo Dataset;
+- o sistema funciona sem dados de demonstração.
+
+Verificação executada:
+
+- `DATABASE_URL=postgresql://user:pass@localhost:5432/db npx prisma validate`;
+- `DATABASE_URL=postgresql://user:pass@localhost:5432/db npx prisma generate`;
+- `npm run build`;
+- `npm run lint`.

@@ -2728,3 +2728,290 @@ Eventos automáticos:
 - `PMOC_COMPLETED` quando uma execução PMOC é concluída via Maintenance Execution.
 
 Migration: `20260630170000_pmoc_compliance_domain`.
+
+## Inventory & Materials
+
+Sprint 12 adiciona o domínio de inventário e materiais. Todos os endpoints utilizam `/api/v1`,
+retornam o envelope padrão `{ "success": true, "data": ... }` e usam o formato global de erro.
+
+Conceitos:
+
+- `Product`: catálogo do produto, sem saldo;
+- `InventoryItem`: estoque físico de um produto;
+- `StockMovement`: movimentação imutável que altera saldo;
+- `Supplier`: fornecedor;
+- `OperationPart`: material consumido em uma Operation.
+
+Tipos:
+
+```ts
+type StockMovementType = 'IN' | 'OUT' | 'ADJUSTMENT' | 'TRANSFER' | 'CONSUMPTION' | 'RETURN';
+
+type Product = {
+  id: string;
+  sku: string;
+  internalCode?: string | null;
+  manufacturerCode?: string | null;
+  name: string;
+  unit: string;
+  brand?: string | null;
+  model?: string | null;
+  category?: string | null;
+  technicalDescription?: string | null;
+  weight?: string | null;
+  dimensions?: Record<string, unknown> | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type InventoryItem = {
+  id: string;
+  productId: string;
+  currentQuantity: string;
+  minimumQuantity: string;
+  idealQuantity: string;
+  reservedQuantity: string;
+  availableQuantity: string;
+  location?: string | null;
+  isActive: boolean;
+  product: Product;
+};
+```
+
+### GET `/api/v1/products`
+
+Query:
+
+- `page?: number`;
+- `limit?: number`;
+- `search?: string`;
+- `category?: string`;
+- `brand?: string`;
+- `active?: boolean`.
+
+Response 200:
+
+```json
+{
+  "success": true,
+  "data": {
+    "items": [],
+    "pagination": { "page": 1, "limit": 20, "total": 0, "totalPages": 0 }
+  }
+}
+```
+
+### GET `/api/v1/products/:id`
+
+Response 200: `Product` com `inventoryItems`.
+
+### POST `/api/v1/products`
+
+Roles: `OWNER`, `MANAGER`.
+
+```json
+{
+  "sku": "HVAC-FILTRO-G4-001",
+  "internalCode": "MAT-0001",
+  "manufacturerCode": "G4-600",
+  "name": "Filtro G4 600x600",
+  "unit": "UN",
+  "brand": "Tecfil",
+  "model": "G4",
+  "category": "Filtros",
+  "technicalDescription": "Filtro para AHU",
+  "weight": 1.2,
+  "dimensions": { "width": 600, "height": 600, "depth": 50 }
+}
+```
+
+Response 201: produto criado. O backend cria item de inventário inicial com saldo zero.
+
+### PATCH `/api/v1/products/:id`
+
+Payload parcial do cadastro. Response 200: produto atualizado.
+
+### DELETE `/api/v1/products/:id`
+
+Soft delete. Response 200:
+
+```json
+{ "success": true, "data": { "deleted": true } }
+```
+
+### GET `/api/v1/inventory`
+
+Query:
+
+- `page?: number`;
+- `limit?: number`;
+- `search?: string`;
+- `productId?: string`;
+- `location?: string`;
+- `critical?: boolean`;
+- `active?: boolean`.
+
+Response 200: lista paginada de `InventoryItem`.
+
+### GET `/api/v1/inventory/:id`
+
+Response 200: `InventoryItem` com produto.
+
+### PATCH `/api/v1/inventory/:id`
+
+Roles: `OWNER`, `MANAGER`.
+
+Permite atualizar parâmetros físicos do item, sem criar movimentação:
+
+```json
+{
+  "minimumQuantity": 5,
+  "idealQuantity": 20,
+  "reservedQuantity": 2,
+  "location": "Almoxarifado principal",
+  "isActive": true
+}
+```
+
+O saldo disponível é recalculado pelo backend.
+
+### GET `/api/v1/inventory/stats`
+
+Response 200:
+
+```json
+{
+  "success": true,
+  "data": {
+    "totalItems": 12,
+    "activeProducts": 8,
+    "minimumStockAlerts": 2,
+    "productsWithoutStock": 1,
+    "consumptionMovementsLast30Days": 6,
+    "consumptionByPeriod": [],
+    "consumptionByEquipment": [],
+    "consumptionByCustomer": [],
+    "productsMostUsed": []
+  }
+}
+```
+
+### POST `/api/v1/inventory/movements`
+
+Roles: `OWNER`, `MANAGER`, `OPERATOR`.
+
+```json
+{
+  "inventoryItemId": "f8165f3c-3e6b-4e2a-94a9-71402af96d0b",
+  "quantity": 10,
+  "type": "IN",
+  "reason": "Entrada inicial",
+  "operationId": null,
+  "occurredAt": "2026-07-01T12:00:00.000Z"
+}
+```
+
+Response 201: movimentação criada e estoque recalculado.
+
+### GET `/api/v1/inventory/movements`
+
+Query:
+
+- `page?: number`;
+- `limit?: number`;
+- `inventoryItemId?: string`;
+- `productId?: string`;
+- `operationId?: string`;
+- `type?: StockMovementType`;
+- `from?: string`;
+- `to?: string`.
+
+Response 200: lista paginada de movimentos. Movimentos não possuem endpoint de edição.
+
+### GET `/api/v1/suppliers`
+
+Roles: `OWNER`, `MANAGER`.
+
+Query: `page`, `limit`, `search`, `active`.
+
+Response 200: lista paginada.
+
+### POST `/api/v1/suppliers`
+
+```json
+{
+  "legalName": "Friopeças Distribuidora LTDA",
+  "tradeName": "Friopeças",
+  "document": "12.345.678/0001-90",
+  "contacts": [{ "name": "Comercial", "phone": "+55 81 3333-0000" }],
+  "address": { "city": "Recife", "state": "PE" },
+  "notes": "Fornecedor homologado"
+}
+```
+
+Response 201: fornecedor criado.
+
+### PATCH `/api/v1/suppliers/:id`
+
+Payload parcial. Response 200: fornecedor atualizado.
+
+### DELETE `/api/v1/suppliers/:id`
+
+Soft delete. Response 200:
+
+```json
+{ "success": true, "data": { "deleted": true } }
+```
+
+### GET `/api/v1/operations/:id/materials`
+
+Response 200: materiais vinculados à Operation.
+
+### POST `/api/v1/operations/:id/materials`
+
+Roles: `OWNER`, `MANAGER`, `OPERATOR`.
+
+```json
+{
+  "productId": "1f6ad0fb-24bb-481d-8154-7e22f32c1404",
+  "inventoryItemId": "f8165f3c-3e6b-4e2a-94a9-71402af96d0b",
+  "quantity": 1,
+  "notes": "Substituição de filtro saturado"
+}
+```
+
+Response 201: cria `OperationPart`, `StockMovement(CONSUMPTION)`, recalcula estoque e publica
+`PART_REPLACEMENT` no Asset Lifecycle quando a Operation possui equipamento.
+
+### DELETE `/api/v1/operations/:id/materials/:id`
+
+Roles: `OWNER`, `MANAGER`.
+
+Soft delete do material e criação de `StockMovement(RETURN)`.
+
+Erros:
+
+| HTTP | Code                         | Condition                                      |
+| ---- | ---------------------------- | ---------------------------------------------- |
+| 400  | `VALIDATION_ERROR`           | Payload/query inválido                         |
+| 400  | `INVENTORY_NEGATIVE_STOCK`   | Movimentação deixaria saldo negativo           |
+| 400  | `INVENTORY_PRODUCT_MISMATCH` | InventoryItem não pertence ao produto enviado  |
+| 401  | `AUTH_TOKEN_INVALID`         | Token ausente/inválido                         |
+| 403  | `AUTH_FORBIDDEN`             | Papel sem permissão                            |
+| 404  | `PRODUCT_NOT_FOUND`          | Produto inexistente                            |
+| 404  | `SUPPLIER_NOT_FOUND`         | Fornecedor inexistente                         |
+| 404  | `INVENTORY_ITEM_NOT_FOUND`   | Item de inventário inexistente                 |
+| 404  | `OPERATION_NOT_FOUND`        | Operation inexistente                          |
+| 409  | `PRODUCT_CONFLICT`           | SKU/código já cadastrado                       |
+| 409  | `SUPPLIER_CONFLICT`          | Documento de fornecedor já cadastrado          |
+
+Eventos de auditoria:
+
+- `PRODUCT_CREATED`, `PRODUCT_UPDATED`, `PRODUCT_DELETED`;
+- `SUPPLIER_CREATED`, `SUPPLIER_UPDATED`, `SUPPLIER_DELETED`;
+- `INVENTORY_ITEM_CREATED`, `INVENTORY_ITEM_UPDATED`;
+- `STOCK_MOVEMENT_CREATED`;
+- `MATERIAL_CONSUMED`, `MATERIAL_RETURNED`.
+
+Migration: `20260701120000_inventory_materials_domain`.

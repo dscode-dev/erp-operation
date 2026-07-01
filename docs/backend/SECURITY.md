@@ -806,3 +806,62 @@ Performance:
   ambientes por PMOC e vínculos de equipamentos;
 - listagens paginadas;
 - stats calculados sem expor dados financeiros.
+
+## Inventory & Materials security (Sprint 12)
+
+O domínio de inventário separa catálogo, estoque físico e movimentações. O objetivo de segurança é
+impedir alteração manual de saldo, manter trilha auditável e evitar consumo inconsistente.
+
+RBAC:
+
+- `OWNER` e `MANAGER`: criam/alteram/desativam produtos, fornecedores, parâmetros de estoque e
+  removem materiais de Operations;
+- `OPERATOR`: consulta produtos/estoque e registra movimentações operacionais ou consumo de
+  materiais;
+- `VIEWER`: somente leitura em produtos, estoque e materiais;
+- fornecedores são visíveis apenas para `OWNER` e `MANAGER`.
+
+Movimentações imutáveis:
+
+- `StockMovement` não possui endpoint de edição ou exclusão;
+- toda alteração de saldo cria nova movimentação;
+- remoção de material de Operation cria `RETURN`, preservando o movimento original;
+- `OperationPart` usa soft delete para preservar rastreabilidade.
+
+Proteção de estoque:
+
+- saldo é recalculado pelo backend após cada movimento;
+- `availableQuantity = currentQuantity - reservedQuantity`;
+- movimentações que deixariam `currentQuantity` ou `availableQuantity` negativos são rejeitadas com
+  `INVENTORY_NEGATIVE_STOCK`;
+- `OperationPart` valida que o `InventoryItem` pertence ao `Product` informado.
+
+Validação e sanitização:
+
+- DTOs validam UUIDs, enums, paginação, números positivos e strings;
+- `limit` máximo segue o padrão global de paginação;
+- filtros de data aceitam ISO date;
+- campos livres são normalizados por DTO/pipe global e não renderizam HTML.
+
+Auditoria:
+
+- `PRODUCT_CREATED`, `PRODUCT_UPDATED`, `PRODUCT_DELETED`;
+- `SUPPLIER_CREATED`, `SUPPLIER_UPDATED`, `SUPPLIER_DELETED`;
+- `INVENTORY_ITEM_CREATED`, `INVENTORY_ITEM_UPDATED`;
+- `STOCK_MOVEMENT_CREATED`;
+- `MATERIAL_CONSUMED`, `MATERIAL_RETURNED`;
+- consumo relevante em Operation também publica `PART_REPLACEMENT` via `LifecyclePublisher`.
+
+Integração transacional:
+
+- consumo em Operation cria material, movimento, recálculo de estoque e evento de lifecycle na mesma
+  transação;
+- conflitos de SKU, código interno e documento de fornecedor retornam erro controlado;
+- endpoints continuam protegidos por JWT, RBAC e rate limit global.
+
+Dados sensíveis:
+
+- o domínio não expõe dados financeiros;
+- movimentos retornam referências mínimas de usuário, produto, estoque e Operation;
+- Asset Lifecycle recebe apenas referências necessárias, sem duplicar documentos ou informações
+  financeiras.

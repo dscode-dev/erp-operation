@@ -306,6 +306,65 @@ export class LifecyclePublisher {
     }
   }
 
+  async publishPartReplacementTx(
+    tx: Prisma.TransactionClient,
+    input: {
+      equipmentId: string;
+      operationId: string;
+      actorId: string;
+      productId: string;
+      inventoryItemId: string;
+      operationPartId: string;
+      quantity: number;
+      productName: string;
+      occurredAt: Date;
+    },
+    context?: Partial<AssetLifecycleAuditContext>,
+  ): Promise<void> {
+    const existing = await tx.assetLifecycleEvent.findFirst({
+      where: {
+        operationId: input.operationId,
+        type: AssetLifecycleEventType.PART_REPLACEMENT,
+        metadata: { path: ['operationPartId'], equals: input.operationPartId },
+      },
+      select: { id: true },
+    });
+    if (existing) return;
+
+    const event = await tx.assetLifecycleEvent.create({
+      data: {
+        equipmentId: input.equipmentId,
+        operationId: input.operationId,
+        type: AssetLifecycleEventType.PART_REPLACEMENT,
+        occurredAt: input.occurredAt,
+        performedBy: input.actorId,
+        description: this.clean(`Part/material consumed: ${input.productName}`),
+        metadata: {
+          productId: input.productId,
+          inventoryItemId: input.inventoryItemId,
+          operationPartId: input.operationPartId,
+          quantity: input.quantity,
+          productName: input.productName,
+        },
+      },
+    });
+    await tx.auditLog.create({
+      data: this.auditInput(
+        ASSET_LIFECYCLE_AUDIT_ACTIONS.EVENT_AUTO_CREATED,
+        ASSET_LIFECYCLE_RESOURCE,
+        input.actorId,
+        this.safeContext(context),
+        {
+          eventId: event.id,
+          equipmentId: input.equipmentId,
+          operationId: input.operationId,
+          operationPartId: input.operationPartId,
+          type: AssetLifecycleEventType.PART_REPLACEMENT,
+        },
+      ),
+    });
+  }
+
   private async validateReferences(dto: CreateAssetLifecycleEventDto): Promise<void> {
     const equipment = await this.prisma.equipment.findUnique({
       where: { id: dto.equipmentId },

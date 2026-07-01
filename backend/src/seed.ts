@@ -1,4 +1,10 @@
-import { DocumentTemplateType, PrismaClient, Role } from '@prisma/client';
+import {
+  AssetLifecycleEventType,
+  DocumentTemplateType,
+  PrismaClient,
+  Role,
+  StockMovementType,
+} from '@prisma/client';
 import * as argon2 from 'argon2';
 import { randomBytes } from 'node:crypto';
 import { ARGON2_OPTIONS } from './infra/security/argon2.constants';
@@ -25,6 +31,7 @@ async function main(): Promise<void> {
   await seedDemoData(prisma, {
     log: (event) => process.stdout.write(`${JSON.stringify(event)}\n`),
   });
+  await seedInventoryMaterials();
 }
 
 async function seedOwner(email: string): Promise<void> {
@@ -203,6 +210,194 @@ function defaultTemplateName(type: DocumentTemplateType): string {
     PMOC: 'PMOC padrão',
   };
   return names[type];
+}
+
+async function seedInventoryMaterials(): Promise<void> {
+  const [organization, actor] = await Promise.all([
+    prisma.organization.findFirst({ orderBy: { createdAt: 'asc' }, select: { id: true } }),
+    prisma.user.findFirst({ where: { role: Role.OWNER }, orderBy: { createdAt: 'asc' }, select: { id: true } }),
+  ]);
+  if (!organization || !actor) return;
+
+  await prisma.supplier.upsert({
+    where: { document: '12.345.678/0001-90' },
+    create: {
+      legalName: 'Friopeças Distribuidora LTDA',
+      tradeName: 'Friopeças',
+      document: '12.345.678/0001-90',
+      contacts: [{ name: 'Atendimento Comercial', phone: '+55 81 3333-0101' }],
+      address: { city: 'Recife', state: 'PE' },
+      notes: 'Fornecedor inicial para insumos HVAC.',
+    },
+    update: {},
+  });
+
+  const products = [
+    {
+      sku: 'HVAC-FILTRO-G4-001',
+      internalCode: 'MAT-0001',
+      manufacturerCode: 'G4-600X600',
+      name: 'Filtro G4 600x600',
+      unit: 'UN',
+      brand: 'Tecfil',
+      model: 'G4',
+      category: 'Filtros',
+      technicalDescription: 'Filtro grosso G4 para sistemas de climatização.',
+      ideal: 24,
+      minimum: 6,
+      initial: 18,
+    },
+    {
+      sku: 'HVAC-GAS-R410A-KG',
+      internalCode: 'MAT-0002',
+      manufacturerCode: 'R410A',
+      name: 'Fluido refrigerante R410A',
+      unit: 'KG',
+      brand: 'Chemours',
+      model: 'R410A',
+      category: 'Refrigeração',
+      technicalDescription: 'Fluido refrigerante para sistemas split/VRF.',
+      ideal: 40,
+      minimum: 10,
+      initial: 26,
+    },
+    {
+      sku: 'HVAC-CAP-45UF',
+      internalCode: 'MAT-0003',
+      manufacturerCode: 'CAP-45UF-440V',
+      name: 'Capacitor 45µF 440V',
+      unit: 'UN',
+      brand: 'Epcos',
+      model: '45µF 440V',
+      category: 'Elétrica',
+      technicalDescription: 'Capacitor de partida/funcionamento para condensadoras.',
+      ideal: 12,
+      minimum: 3,
+      initial: 8,
+    },
+  ];
+
+  for (const item of products) {
+    const product = await prisma.product.upsert({
+      where: { sku: item.sku },
+      create: {
+        sku: item.sku,
+        internalCode: item.internalCode,
+        manufacturerCode: item.manufacturerCode,
+        name: item.name,
+        unit: item.unit,
+        brand: item.brand,
+        model: item.model,
+        category: item.category,
+        technicalDescription: item.technicalDescription,
+      },
+      update: {
+        name: item.name,
+        unit: item.unit,
+        brand: item.brand,
+        model: item.model,
+        category: item.category,
+        technicalDescription: item.technicalDescription,
+      },
+    });
+    const inventoryItem =
+      (await prisma.inventoryItem.findFirst({
+        where: { organizationId: organization.id, productId: product.id },
+      })) ??
+      (await prisma.inventoryItem.create({
+        data: {
+          organizationId: organization.id,
+          productId: product.id,
+          minimumQuantity: item.minimum,
+          idealQuantity: item.ideal,
+          location: 'Almoxarifado principal',
+        },
+      }));
+    const existingInitialMovement = await prisma.stockMovement.findFirst({
+      where: { inventoryItemId: inventoryItem.id, reason: 'Initial inventory seed' },
+      select: { id: true },
+    });
+    if (!existingInitialMovement) {
+      await prisma.stockMovement.create({
+        data: {
+          inventoryItemId: inventoryItem.id,
+          quantity: item.initial,
+          type: StockMovementType.IN,
+          reason: 'Initial inventory seed',
+          userId: actor.id,
+          occurredAt: new Date(),
+        },
+      });
+      await prisma.inventoryItem.update({
+        where: { id: inventoryItem.id },
+        data: { currentQuantity: item.initial, availableQuantity: item.initial },
+      });
+    }
+  }
+
+  const operation = await prisma.operation.findFirst({
+    where: { equipmentId: { not: null } },
+    orderBy: { createdAt: 'asc' },
+    select: { id: true, number: true, equipmentId: true },
+  });
+  if (!operation) return;
+  const product = await prisma.product.findUnique({ where: { sku: 'HVAC-FILTRO-G4-001' } });
+  if (!product) return;
+  const inventoryItem = await prisma.inventoryItem.findFirst({
+    where: { organizationId: organization.id, productId: product.id },
+  });
+  if (!inventoryItem) return;
+  const existingPart = await prisma.operationPart.findFirst({
+    where: { operationId: operation.id, productId: product.id, deletedAt: null },
+  });
+  if (existingPart) return;
+  await prisma.$transaction(async (tx) => {
+    const part = await tx.operationPart.create({
+      data: {
+        operationId: operation.id,
+        productId: product.id,
+        inventoryItemId: inventoryItem.id,
+        quantity: 1,
+        notes: 'Consumo inicial vinculado por seed.',
+      },
+    });
+    await tx.stockMovement.create({
+      data: {
+        inventoryItemId: inventoryItem.id,
+        quantity: 1,
+        type: StockMovementType.CONSUMPTION,
+        reason: `Consumed in operation #${operation.number}`,
+        operationId: operation.id,
+        userId: actor.id,
+        occurredAt: new Date(),
+      },
+    });
+    const current = Number(inventoryItem.currentQuantity) - 1;
+    await tx.inventoryItem.update({
+      where: { id: inventoryItem.id },
+      data: { currentQuantity: current, availableQuantity: current },
+    });
+    if (operation.equipmentId) {
+      await tx.assetLifecycleEvent.create({
+        data: {
+          equipmentId: operation.equipmentId,
+          operationId: operation.id,
+          type: AssetLifecycleEventType.PART_REPLACEMENT,
+          occurredAt: new Date(),
+          performedBy: actor.id,
+          description: `Part/material consumed: ${product.name}`,
+          metadata: {
+            productId: product.id,
+            inventoryItemId: inventoryItem.id,
+            operationPartId: part.id,
+            quantity: 1,
+            productName: product.name,
+            source: 'seed',
+          },
+        },
+      });
+    }
+  });
 }
 
 main()

@@ -944,3 +944,106 @@ Próximos endpoints previstos:
 - alertas de vencimento;
 - workflow de aprovação;
 - assinatura digital avançada.
+
+## Inventory & Materials — Sprint 12
+
+O backend agora possui o domínio oficial de inventário. Para frontend, a separação central é:
+
+- `Product`: catálogo, descrição técnica e códigos;
+- `InventoryItem`: saldo físico de um produto em uma localização;
+- `StockMovement`: histórico imutável de entradas, saídas, consumo e retorno;
+- `OperationPart`: material consumido em um atendimento.
+
+Endpoints disponíveis:
+
+```http
+GET    /products
+GET    /products/:id
+POST   /products
+PATCH  /products/:id
+DELETE /products/:id
+
+GET    /inventory
+GET    /inventory/:id
+PATCH  /inventory/:id
+GET    /inventory/stats
+POST   /inventory/movements
+GET    /inventory/movements
+
+GET    /suppliers
+POST   /suppliers
+PATCH  /suppliers/:id
+DELETE /suppliers/:id
+
+GET    /operations/:id/materials
+POST   /operations/:id/materials
+DELETE /operations/:id/materials/:id
+```
+
+Paginação:
+
+Todos os endpoints de listagem retornam:
+
+```ts
+type Paginated<T> = {
+  items: T[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+};
+```
+
+Campos importantes:
+
+- `Product.sku`: identificador comercial único;
+- `Product.internalCode`: código interno opcional e único;
+- `InventoryItem.currentQuantity`: saldo físico atual recalculado pelo backend;
+- `InventoryItem.reservedQuantity`: reserva administrativa;
+- `InventoryItem.availableQuantity`: saldo disponível;
+- `StockMovement.type`: `IN`, `OUT`, `ADJUSTMENT`, `TRANSFER`, `CONSUMPTION`, `RETURN`;
+- `OperationPart.deletedAt`: indica material removido sem apagar histórico.
+
+Consumo de material:
+
+```ts
+await api.post(`/operations/${operationId}/materials`, {
+  productId,
+  inventoryItemId,
+  quantity: 1,
+  notes: 'Peça substituída em manutenção corretiva',
+});
+```
+
+Efeitos do backend:
+
+- cria `OperationPart`;
+- cria `StockMovement` do tipo `CONSUMPTION`;
+- recalcula `InventoryItem`;
+- rejeita saldo negativo;
+- publica `PART_REPLACEMENT` no Asset Lifecycle quando a Operation possui equipamento.
+
+Estados de UX:
+
+- item abaixo do mínimo: `Number(availableQuantity) <= Number(minimumQuantity)`;
+- item sem saldo: `Number(availableQuantity) <= 0`;
+- produto inativo: `isActive = false`;
+- movimento imutável: não exibir ação de editar movimento.
+
+Mocks que podem ser removidos:
+
+- estoque calculado localmente;
+- materiais de Operation simulados;
+- produtos mockados;
+- fornecedores mockados;
+- indicadores de consumo simulados.
+
+Próximos endpoints previstos:
+
+- compras;
+- cotações;
+- orçamento integrado a materiais;
+- múltiplos almoxarifados;
+- código de barras/QR de estoque.
