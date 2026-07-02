@@ -13,6 +13,7 @@ import {
 import { ERROR_CODES } from '../../shared/constants/error-codes.constants';
 import { ApplicationException } from '../../shared/exceptions/application.exception';
 import type { AuthenticatedUser } from '../../shared/types/authenticated-user.type';
+import { buildPaginatedResponse } from '../../shared/types/pagination.types';
 import type { RequestWithId } from '../../shared/types/request-with-id.type';
 import type {
   CreateSignatureDto,
@@ -75,15 +76,7 @@ export class SignaturesService {
       }),
       this.prisma.signature.count({ where }),
     ]);
-    return {
-      items,
-      pagination: {
-        page: query.page,
-        limit: query.limit,
-        total,
-        totalPages: Math.ceil(total / query.limit),
-      },
-    };
+    return buildPaginatedResponse(items, total, query.page, query.limit);
   }
 
   async get(id: string): Promise<SignatureResponse> {

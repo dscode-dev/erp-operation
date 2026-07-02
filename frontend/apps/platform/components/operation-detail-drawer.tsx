@@ -16,8 +16,8 @@ import { OperationView } from "@erp/ui/operations/operation-view";
 import { OPERATION_STATUS, OPERATION_TYPE_LABEL, operationCode } from "@erp/ui/operations/operation-shared";
 import { DocumentViewer } from "@erp/ui/documents/document-viewer";
 import { Gate } from "@erp/ui/auth/gate";
-import { assignmentsApi, inventoryApi, operationApi, useQuery, type Assignment, type InventoryItem, type OperationDetail, type OperationDocument, type OperationPart, type Product } from "@erp/api";
-import { formatNumber } from "@erp/utils";
+import { assignmentsApi, budgetsApi, inventoryApi, operationApi, pricingApi, useQuery, type Assignment, type Budget, type BudgetItemPayload, type BudgetPayload, type InventoryItem, type OperationDetail, type OperationDocument, type OperationPart, type Product, type ProductPricing } from "@erp/api";
+import { formatCurrencyBRL, formatNumber } from "@erp/utils";
 import { ASSIGNMENT_STATUS_LABEL, assignmentTime } from "@erp/ui/assignments/assignment-shared";
 import { UserSelect } from "./entity-select";
 
@@ -77,6 +77,8 @@ export function OperationDetailDrawer({
           </div>
 
           <AssignmentSection assignment={assignmentQuery.data?.items[0] ?? null} loading={assignmentQuery.loading} onRefresh={() => { assignmentQuery.refetch(); detail.refetch(); }} />
+
+          <OperationBudgetsSection operation={op} />
 
           <section className="space-y-2">
             <h3 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)]">Timeline</h3>
@@ -199,6 +201,175 @@ function Info({ label, value }: { label: string; value: string }) {
       <div className="text-sm font-medium">{value}</div>
     </div>
   );
+}
+
+function OperationBudgetsSection({ operation }: { operation: OperationDetail }) {
+  const budgets = useQuery((signal) => budgetsApi.listOperationBudgets(operation.id, { limit: 20, signal }), [operation.id]);
+  const [open, setOpen] = useState(false);
+
+  return (
+    <section className="space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)]">Orçamentos</h3>
+        <Gate roles={["OWNER", "MANAGER"]}>
+          <button onClick={() => setOpen(true)} className="rounded-[var(--radius-md)] border border-[var(--color-border)] px-2.5 h-8 text-xs hover:bg-[var(--color-muted)]">
+            Novo orçamento
+          </button>
+        </Gate>
+      </div>
+      <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
+        {budgets.loading && !budgets.data ? (
+          <SkeletonList rows={3} />
+        ) : budgets.error && !budgets.data ? (
+          <ErrorState error={budgets.error} onRetry={budgets.refetch} />
+        ) : (budgets.data?.items ?? []).length === 0 ? (
+          <p className="text-sm text-[var(--color-muted-foreground)]">Nenhum orçamento vinculado a esta Operation.</p>
+        ) : (
+          <ul className="space-y-2">
+            {(budgets.data?.items ?? []).map((budget) => (
+              <li key={budget.id} className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--color-border)] p-3">
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium truncate">ORC-{String(budget.number).padStart(6, "0")} · {budget.title}</span>
+                  <span className="block text-[11px] text-[var(--color-muted-foreground)]">Vence em {new Date(budget.expirationDate).toLocaleDateString("pt-BR")}</span>
+                </span>
+                <span className="flex items-center gap-2">
+                  <BudgetMiniStatus status={budget.status} />
+                  <span className="font-mono text-sm">{formatCurrencyBRL(Number(budget.total))}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+      <OperationBudgetCreationDrawer
+        open={open}
+        onClose={() => setOpen(false)}
+        operation={operation}
+        onSaved={() => {
+          setOpen(false);
+          budgets.refetch();
+        }}
+      />
+    </section>
+  );
+}
+
+function OperationBudgetCreationDrawer({
+  open,
+  onClose,
+  operation,
+  onSaved,
+}: {
+  open: boolean;
+  onClose: () => void;
+  operation: OperationDetail;
+  onSaved: () => void;
+}) {
+  const products = useQuery((signal) => (open ? inventoryApi.listProducts({ limit: 100, active: true, signal }) : Promise.resolve(null)), [open]);
+  const pricing = useQuery((signal) => (open ? pricingApi.listPricing({ limit: 100, active: true, signal }) : Promise.resolve(null)), [open]);
+  const [title, setTitle] = useState("Orçamento da operação");
+  const [expirationDate, setExpirationDate] = useState(operationNextDate(15));
+  const [productId, setProductId] = useState("");
+  const [quantity, setQuantity] = useState("1");
+  const [items, setItems] = useState<BudgetItemPayload[]>([]);
+  const [observations, setObservations] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setTitle("Orçamento da operação");
+    setExpirationDate(operationNextDate(15));
+    setItems([]);
+    setProductId("");
+    setQuantity("1");
+    setObservations("");
+    setError(null);
+  }, [open]);
+
+  useEffect(() => {
+    if (!productId && products.data?.items[0]) setProductId(products.data.items[0].id);
+  }, [productId, products.data]);
+
+  const priceByProduct = new Map((pricing.data?.items ?? []).map((row: ProductPricing) => [row.productId, row]));
+  const selectedPrice = productId ? priceByProduct.get(productId) : null;
+
+  function addItem() {
+    if (!productId || Number(quantity) <= 0) return;
+    setItems((current) => [...current, { productId, quantity: Number(quantity) }]);
+    setQuantity("1");
+  }
+
+  async function submit() {
+    if (!operation.customer?.id) {
+      setError("Operation sem cliente vinculado.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const payload: BudgetPayload = {
+        operationId: operation.id,
+        customerId: operation.customer.id,
+        customerAddressId: operation.address?.id ?? undefined,
+        equipmentId: operation.equipment?.id ?? undefined,
+        title,
+        expirationDate: new Date(expirationDate).toISOString(),
+        observations: observations || undefined,
+        status: "PENDING",
+        items,
+      };
+      await budgetsApi.createBudget(payload);
+      onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Não foi possível criar orçamento.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Drawer open={open} onClose={onClose} eyebrow="Orçamento" title="Novo orçamento da Operation" width="max-w-2xl" footer={<><button onClick={onClose} className="rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 h-9 text-sm hover:bg-[var(--color-muted)]">Cancelar</button><button onClick={submit} disabled={saving || !title || items.length === 0} className="rounded-[var(--radius-md)] bg-[var(--color-primary)] text-[var(--color-primary-foreground)] px-3 h-9 text-sm font-medium disabled:opacity-50">{saving ? "Salvando…" : "Salvar"}</button></>}>
+      <div className="space-y-4">
+        {error && <div className="rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 px-3 py-2 text-sm text-[var(--color-danger)]">{error}</div>}
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Título"><input value={title} onChange={(event) => setTitle(event.target.value)} className={inputCls} /></Field>
+          <Field label="Vencimento"><input type="date" value={expirationDate} onChange={(event) => setExpirationDate(event.target.value)} className={inputCls} /></Field>
+        </div>
+        <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] p-3">
+          <div className="grid gap-3 sm:grid-cols-[1fr_120px]">
+            <Field label="Produto">
+              <select value={productId} onChange={(event) => setProductId(event.target.value)} className={inputCls}>
+                {(products.data?.items ?? []).map((product: Product) => <option key={product.id} value={product.id}>{product.sku} · {product.name}</option>)}
+              </select>
+            </Field>
+            <Field label="Quantidade"><input type="number" min="0.001" step="0.001" value={quantity} onChange={(event) => setQuantity(event.target.value)} className={inputCls} /></Field>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+            <span className="text-xs text-[var(--color-muted-foreground)]">Preço vigente: {selectedPrice ? formatCurrencyBRL(Number(selectedPrice.salePrice)) : "não carregado"}</span>
+            <button onClick={addItem} disabled={!productId || !quantity} className="rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 h-9 text-sm hover:bg-[var(--color-muted)]">Adicionar item</button>
+          </div>
+        </div>
+        <ul className="space-y-2">
+          {items.map((item, index) => {
+            const product = products.data?.items.find((row) => row.id === item.productId);
+            return <li key={`${item.productId}-${index}`} className="flex items-center justify-between gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] p-2 text-sm"><span>{product?.name ?? item.productId}</span><span>{formatNumber(item.quantity)}</span><button onClick={() => setItems((current) => current.filter((_, i) => i !== index))} className="text-xs text-[var(--color-danger)]">remover</button></li>;
+          })}
+        </ul>
+        <Field label="Observações"><textarea value={observations} onChange={(event) => setObservations(event.target.value)} className={`${inputCls} min-h-20 py-2`} /></Field>
+      </div>
+    </Drawer>
+  );
+}
+
+function BudgetMiniStatus({ status }: { status: Budget["status"] }) {
+  const label: Record<Budget["status"], string> = { DRAFT: "Rascunho", PENDING: "Pendente", APPROVED: "Aprovado", REJECTED: "Rejeitado", EXPIRED: "Vencido", CANCELED: "Cancelado" };
+  const tone: Record<Budget["status"], "neutral" | "warning" | "success" | "danger"> = { DRAFT: "neutral", PENDING: "warning", APPROVED: "success", REJECTED: "danger", EXPIRED: "danger", CANCELED: "neutral" };
+  return <StatusChip tone={tone[status]}>{label[status]}</StatusChip>;
+}
+
+function operationNextDate(days: number): string {
+  return new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
 }
 
 function OperationMaterialsSection({ operationId }: { operationId: string }) {

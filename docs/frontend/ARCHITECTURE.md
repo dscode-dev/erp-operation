@@ -346,3 +346,37 @@ Regras arquiteturais:
 - timeline de execução vem do backend;
 - fluxo visual do Operator apenas chama transições oficiais (`accept`, `start`, `complete`,
   `reject`).
+
+## Budget Domain
+
+Budget é integrado como domínio comercial real da Platform:
+
+```text
+Product/Pricing
+↓
+Budget
+↓
+Operation (opcional)
+↓
+Document Engine / Asset Lifecycle
+```
+
+Camadas:
+
+- `packages/api/budgets.ts`: único client HTTP do domínio;
+- `packages/types`: contratos `Budget*`;
+- `/budgets`: Central Comercial;
+- `OperationDetailDrawer`: visão de orçamentos da Operation;
+- Dashboard: widgets reais via `/budgets/stats`.
+
+Regras arquiteturais:
+
+- frontend nunca calcula preço, custo, margem, subtotal ou total como fonte de verdade;
+- criação envia apenas cliente/operação/equipamento, data, observações e itens;
+- snapshots comerciais vêm exclusivamente do backend;
+- histórico vem de `/budgets/history/:id`;
+- emissão documental usa `POST /budgets/:id/render`;
+- download documental usa `GET /budgets/:id/download`;
+- visualização usa `DocumentViewer` com `documentId` oficial;
+- não existe `DocumentPaper`, renderer local ou preview de template como substituto do documento emitido;
+- RBAC visual usa `<Gate>`, mas backend é a autoridade final.

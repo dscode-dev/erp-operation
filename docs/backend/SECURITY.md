@@ -998,3 +998,160 @@ AppSec:
 - tentativa de agir em Assignment de outro operador retorna `ASSIGNMENT_OPERATOR_FORBIDDEN`;
 - criação/reatribuição valida usuário ativo, não desativado e com perfil operacional;
 - endpoints seguem JWT, `RoleGuard`, rate limit global e envelope global de erro.
+
+## Budget security
+
+Budget contém dados comerciais sensíveis: custos, preços, margens, descontos e potencial de
+faturamento.
+
+RBAC:
+
+- `OWNER` e `MANAGER`: acesso aos endpoints de Budget;
+- `OPERATOR`: sem acesso, pois não deve visualizar dados comerciais/financeiros;
+- `VIEWER`: sem acesso nesta V1 para evitar exposição de preços, custos e margem.
+
+Proteções comerciais:
+
+- `Product` continua sem preço;
+- `Inventory` continua sem custo/preço comercial;
+- `BudgetItem` armazena snapshots de custo, preço de venda e margem;
+- snapshots são criados via `PricingService`;
+- renderização futura de documento deve usar snapshots, nunca consultar `ProductPricing`.
+
+Integridade:
+
+- orçamento aprovado é imutável;
+- orçamentos finais (`REJECTED`, `EXPIRED`, `CANCELED`) não podem ser editados;
+- orçamento vencido não pode ser aprovado;
+- uma Operation não pode ter mais de um Budget aprovado;
+- relacionamentos são validados: customer, address, equipment e operation precisam ser coerentes;
+- exclusão é cancelamento lógico, não remoção física.
+
+Auditoria:
+
+- `BUDGET_CREATED`;
+- `BUDGET_UPDATED`;
+- `BUDGET_APPROVED`;
+- `BUDGET_REJECTED`;
+- `BUDGET_CANCELED`.
+
+Histórico:
+
+- `BudgetHistory` é imutável;
+- toda alteração relevante registra estado anterior, novo estado, ator, timestamp e metadata;
+- `BudgetApproval` registra decisões comerciais com ator, status, observação e timestamp.
+
+Asset Lifecycle:
+
+- aprovação publica `BUDGET_APPROVED` via `LifecyclePublisher`;
+- rejeição publica `BUDGET_REJECTED` via `LifecyclePublisher`;
+- eventos só são publicados quando há equipamento resolvido pelo Budget ou Operation.
+
+AppSec:
+
+- DTOs validam UUID, paginação, datas, valores monetários e itens;
+- rate limit global permanece aplicado;
+- erros usam envelope global;
+- dados sensíveis não são expostos a OPERATOR/VIEWER;
+- transações protegem criação/atualização, histórico, aprovação/rejeição, auditoria e lifecycle.
+
+## Budget document emission security
+
+O documento oficial de Budget contém dados comerciais sensíveis. A emissão segue as mesmas
+restrições do domínio Budget.
+
+RBAC:
+
+- `OWNER` e `MANAGER`: podem emitir e baixar documento de Budget;
+- `OPERATOR` e `VIEWER`: sem acesso.
+
+Proteções:
+
+- Budget não acessa storage diretamente;
+- Budget não chama `DocumentBuilder` diretamente;
+- emissão passa pelo Document Engine;
+- PDF é gerado apenas pelo PDF Engine;
+- download usa `DocumentAssetResolver`, nunca caminho de arquivo informado pelo cliente;
+- `OperationDocument.storageKey` não é retornado no detalhe de Budget;
+- `CANCELED` e `REJECTED` não podem emitir/baixar;
+- `BudgetItem` snapshots são a única fonte de preço/custo/margem no documento;
+- `ProductPricing` não é consultado durante renderização;
+- renderização substitui PDF anterior removendo storage antigo com tratamento seguro;
+- `BudgetHistory.DOCUMENT_RENDERED`, auditoria e Asset Lifecycle registram rastreabilidade.
+
+Concorrência:
+
+- `OperationDocument.budgetId` é único;
+- emissão usa `upsert` por `budgetId`, evitando múltiplos documentos oficiais para o mesmo Budget;
+- reemissões atualizam o mesmo documento lógico e substituem o arquivo renderizado.
+
+## Sprint 14.5 AppSec consolidation
+
+A Sprint 14.5 não criou funcionalidades de negócio. A revisão confirmou e documentou os seguintes
+pontos de segurança:
+
+- RBAC permanece aplicado nos controllers existentes;
+- validação global com whitelist/forbidNonWhitelisted segue ativa;
+- DTOs de UUID continuam usando validação UUID v4 nos parâmetros críticos;
+- Asset Lifecycle continua centralizado no `LifecyclePublisher`;
+- Timeline para frontend continua centralizada no `TimelineAssembler`;
+- Document Builder/Renderer/PDF Engine seguem sem acesso direto a storage;
+- renderização documental continua passando pelo `DocumentAssetResolver`;
+- paginação passou a usar helper compartilhado com `totalPages` mínimo `1`, evitando divergência de
+  contratos entre módulos;
+- nenhum storage key sensível foi adicionado a respostas públicas durante a consolidação;
+- nenhuma migration ou alteração de autorização foi introduzida nesta sprint.
+
+Teste de regressão adicionado:
+
+- `pagination.types.spec.ts` valida o formato comum de paginação.
+
+## Financial Core security
+
+Financial é o único domínio autorizado a representar dinheiro operacional no Orbit V1.
+
+RBAC:
+
+| Recurso | OWNER | MANAGER | OPERATOR | VIEWER |
+| ------- | ----- | ------- | -------- | ------ |
+| Contas financeiras | Total | Total | Não | Não |
+| Categorias financeiras | Total | Total | Não | Não |
+| Lançamentos financeiros | Total | Total | Não | Não |
+| Dashboard financeiro | Sim | Sim | Não | Não |
+
+Proteções:
+
+- Product, Inventory, Budget e Operations não armazenam saldo financeiro;
+- saldo atual fica somente em `FinancialAccount.currentBalance`;
+- lançamento pago atualiza saldo em transação;
+- pagamento duplicado é bloqueado;
+- lançamento cancelado não pode ser pago;
+- lançamento pago não pode ser cancelado na V1;
+- histórico financeiro é imutável;
+- contas/categorias usam soft delete;
+- DTOs validam UUID, datas, enums e valores monetários;
+- `originId` é opcional e não concede acesso por si só;
+- Asset Lifecycle financeiro só é publicado quando o `LifecyclePublisher` resolve equipamento por origem conhecida.
+
+Fora do escopo de segurança V1:
+
+- PIX;
+- boleto;
+- cartão;
+- integração bancária;
+- conciliação;
+- SPED/fiscal/NF-e;
+- contabilidade formal.
+
+Eventos auditados:
+
+- `FINANCIAL_ACCOUNT_CREATED`;
+- `FINANCIAL_ACCOUNT_UPDATED`;
+- `FINANCIAL_ACCOUNT_DELETED`;
+- `FINANCIAL_CATEGORY_CREATED`;
+- `FINANCIAL_CATEGORY_UPDATED`;
+- `FINANCIAL_CATEGORY_DELETED`;
+- `FINANCIAL_ENTRY_CREATED`;
+- `FINANCIAL_ENTRY_UPDATED`;
+- `FINANCIAL_ENTRY_PAID`;
+- `FINANCIAL_ENTRY_CANCELED`.

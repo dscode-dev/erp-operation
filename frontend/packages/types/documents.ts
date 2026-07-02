@@ -3,6 +3,7 @@ import type { DocumentTemplateType } from "./index";
 export type DocumentKind = DocumentTemplateType;
 
 export const DOCUMENT_KIND_LABEL: Record<DocumentKind, string> = {
+  BUDGET: "Orçamento",
   QUOTE: "Orçamento",
   WORK_ORDER: "Ordem de Serviço",
   RECEIPT: "Recibo",
@@ -51,7 +52,8 @@ export type DocumentComponent =
 export type DocumentBlueprint = {
   version: "1.0";
   metadata: {
-    operationId: string;
+    operationId: string | null;
+    budgetId?: string | null;
     documentId: string | null;
     documentType: DocumentKind;
     documentNumber: string;
@@ -88,7 +90,8 @@ export type DocumentBlueprint = {
 
 export type DocumentRenderResult = {
   id: string;
-  operationId: string;
+  operationId: string | null;
+  budgetId?: string | null;
   type: DocumentKind;
   number: string;
   status: "DRAFT" | "READY" | "VALIDATED" | "SENT";

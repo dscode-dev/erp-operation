@@ -42,8 +42,60 @@ const DOCUMENT_CONTEXT_OPERATION_INCLUDE = {
   documents: { orderBy: { createdAt: 'asc' as const } },
 } satisfies Prisma.OperationInclude;
 
+const DOCUMENT_CONTEXT_BUDGET_INCLUDE = {
+  customer: {
+    include: {
+      addresses: {
+        orderBy: [{ isPrimary: 'desc' as const }, { createdAt: 'asc' as const }],
+        take: 5,
+      },
+      contacts: {
+        orderBy: [{ isPrimary: 'desc' as const }, { createdAt: 'asc' as const }],
+        take: 5,
+      },
+    },
+  },
+  customerAddress: true,
+  equipment: {
+    include: {
+      customer: { select: { id: true, name: true } },
+      address: true,
+      parent: { select: { id: true, name: true, tag: true } },
+      children: {
+        select: { id: true, name: true, tag: true, status: true },
+        orderBy: { name: 'asc' as const },
+      },
+      metrics: { orderBy: { recordedAt: 'desc' as const }, take: 12 },
+      attachments: { orderBy: { createdAt: 'desc' as const }, take: 12 },
+    },
+  },
+  operation: { select: { id: true, number: true, type: true, status: true, equipmentId: true } },
+  creator: { select: { id: true, name: true, email: true, username: true, jobTitle: true } },
+  items: {
+    include: {
+      product: {
+        select: {
+          id: true,
+          sku: true,
+          name: true,
+          unit: true,
+          brand: true,
+          model: true,
+          category: true,
+        },
+      },
+    },
+    orderBy: { createdAt: 'asc' as const },
+  },
+  document: true,
+} satisfies Prisma.BudgetInclude;
+
 export type DocumentContextOperation = Prisma.OperationGetPayload<{
   include: typeof DOCUMENT_CONTEXT_OPERATION_INCLUDE;
+}>;
+
+export type DocumentContextBudget = Prisma.BudgetGetPayload<{
+  include: typeof DOCUMENT_CONTEXT_BUDGET_INCLUDE;
 }>;
 
 export interface ResolvedDocumentAsset {
@@ -105,7 +157,22 @@ export interface TemplatePreviewContext {
   };
 }
 
-export type DocumentBuildContext = DocumentContext | TemplatePreviewContext;
+export interface BudgetContext {
+  kind: 'budget';
+  budget: DocumentContextBudget;
+  configuration: DocumentConfiguration;
+  template: DocumentConfigurationTemplate | null;
+  signature: DocumentSignatureContext;
+  assets: {
+    signature: ResolvedDocumentAsset | null;
+    logo: ResolvedDocumentAsset | null;
+    watermark: ResolvedDocumentAsset | null;
+    qrCode: ResolvedDocumentAsset | null;
+    images: ResolvedDocumentAsset[];
+  };
+}
+
+export type DocumentBuildContext = DocumentContext | TemplatePreviewContext | BudgetContext;
 
 @Injectable()
 export class DocumentContextService {
@@ -223,6 +290,42 @@ export class DocumentContextService {
       assets: {
         signature: signature.fixedSignature?.image ?? null,
         logo,
+        watermark: null,
+        qrCode: null,
+        images: [],
+      },
+    };
+  }
+
+  async buildBudgetContext(budgetId: string): Promise<BudgetContext> {
+    const [budget, configuration] = await Promise.all([
+      this.prisma.budget.findUnique({
+        where: { id: budgetId },
+        include: DOCUMENT_CONTEXT_BUDGET_INCLUDE,
+      }),
+      this.configuration.getConfigurationForType(DocumentTemplateType.BUDGET),
+    ]);
+
+    if (!budget) {
+      throw new ApplicationException(
+        ERROR_CODES.BUDGET_NOT_FOUND,
+        'Budget was not found',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+
+    const template = configuration.defaultTemplate;
+    const signature = await this.resolveSignature(template, null);
+
+    return {
+      kind: 'budget',
+      budget,
+      configuration,
+      template,
+      signature,
+      assets: {
+        signature: signature.fixedSignature?.image ?? null,
+        logo: null,
         watermark: null,
         qrCode: null,
         images: [],

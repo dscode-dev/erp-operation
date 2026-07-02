@@ -194,6 +194,84 @@ Validação:
 - `npm run build` passou;
 - `npm run lint` passou com warnings antigos de `<img>` fora do escopo.
 
+## Frontend Sprint 10 — Budget Integration
+
+Integração concluída:
+
+- `packages/api/budgets.ts` criado para consumir a API oficial de Budget;
+- `@erp/types` expandido com `Budget`, `BudgetItem`, `BudgetApproval`, `BudgetHistory`,
+  `BudgetStats`, `BudgetStatus` e payloads;
+- `/budgets` criado como **Central Comercial**;
+- Sidebar adicionou **Orçamentos** para `OWNER`/`MANAGER`;
+- Dashboard (`/`) adicionou widgets reais de Budget via `GET /budgets/stats`;
+- `OperationDetailDrawer` ganhou seção **Orçamentos** consumindo
+  `GET /operations/:id/budgets` e criação vinculada à Operation.
+
+Endpoints integrados:
+
+- `GET /budgets`;
+- `GET /budgets/:id`;
+- `GET /operations/:id/budgets`;
+- `POST /budgets`;
+- `PATCH /budgets/:id/approve`;
+- `PATCH /budgets/:id/reject`;
+- `DELETE /budgets/:id`;
+- `GET /budgets/stats`;
+- `GET /budgets/history/:id`.
+
+UX implementada:
+
+- cards de métricas;
+- tabela paginada;
+- filtros cumulativos por busca, cliente, equipamento, status e período;
+- `BudgetDetailDrawer` com resumo, itens, histórico, aprovação, documento e timeline;
+- `BudgetCreationDrawer` consumindo Product/Pricing e enviando apenas itens para o backend;
+- ações de aprovar, rejeitar e cancelar com confirmação;
+- loading, skeleton, retry, empty states, badges e drawers responsivos.
+
+Document Engine:
+
+- preview do modelo `BUDGET` usa `DocumentViewer` com
+  `GET /documents/configuration/types/BUDGET` + `GET /documents/templates/:templateId/preview`;
+- render/download de PDF de orçamento emitido permanecem aguardando contrato backend específico de
+  Budget Document. Nenhum preview local foi criado.
+
+RBAC:
+
+- UI exibe Budget para `OWNER`/`MANAGER`, alinhada ao backend da Sprint 14;
+- `OPERATOR` não acessa o domínio comercial;
+- backend continua sendo a autoridade final para 401/403.
+
+Validação:
+
+- `npm run lint` passou;
+- `npm run build` passou.
+
+## Backlog — Budget Document Emission
+
+Integração concluída:
+
+- `packages/api/budgets.ts` expõe `renderBudget` e `downloadBudget`;
+- `/budgets` usa `BudgetDocumentPanel` no drawer de detalhe;
+- "Emitir Documento" chama `POST /budgets/:id/render`;
+- "Baixar PDF" chama `GET /budgets/:id/download`;
+- `DocumentViewer` recebe `documentId` oficial, sem preview local;
+- placeholder de documento futuro foi removido;
+- `Budget.document` é usado para reabrir documento já emitido;
+- Timeline reconhece o evento `DOCUMENT_RENDERED`.
+
+UX:
+
+- Budget `CANCELED`/`REJECTED` bloqueia emissão;
+- documento ausente mostra empty state com CTA;
+- erros de render/download aparecem no drawer;
+- download converte `contentBase64` oficial em Blob PDF.
+
+Validação:
+
+- `npm run lint` passou com warnings pré-existentes de `<img>` e config;
+- `npm run build` passou com os mesmos warnings pré-existentes.
+
 ## STAGE 0 — Branding
 
 Identidade do cliente (Climatize) aplicada: `logo.PNG`/`favicon.PNG` copiados para `frontend/public/brand/` + `app/icon.png` (favicon) + `app/apple-icon.png` (iOS). Componente `@erp/ui/brand` (`BrandLogo`) usado no **login**, **sidebar** e **top bar do operador**. Tema azul/branco definitivo (Sprint 3); troca dinâmica de cores do OWNER preservada.

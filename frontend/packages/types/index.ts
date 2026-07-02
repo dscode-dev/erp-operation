@@ -153,6 +153,7 @@ export type AvatarMeta = {
 export type BrandAssetType = "LOGO" | "HEADER" | "FOOTER";
 
 export type DocumentTemplateType =
+  | "BUDGET"
   | "QUOTE"
   | "WORK_ORDER"
   | "RECEIPT"
@@ -459,6 +460,13 @@ export type AssetLifecycleEventType =
   | "ASSIGNMENT_ACCEPTED"
   | "ASSIGNMENT_STARTED"
   | "ASSIGNMENT_COMPLETED"
+  | "BUDGET_APPROVED"
+  | "BUDGET_REJECTED"
+  | "DOCUMENT_RENDERED"
+  | "PMOC_CREATED"
+  | "PMOC_UPDATED"
+  | "PMOC_COMPLETED"
+  | "PMOC_EXPIRED"
   | "PART_REPLACEMENT"
   | "WARRANTY"
   | "DOCUMENT"
@@ -584,7 +592,8 @@ export type OperationChecklistItem = { label: string; done: boolean; note?: stri
 
 export type OperationDocument = {
   id: string;
-  operationId?: string;
+  operationId?: string | null;
+  budgetId?: string | null;
   type: DocumentTemplateType;
   number: string;
   status: OperationDocumentStatus;
@@ -933,6 +942,123 @@ export type PricingStats = {
   averageMarginPercentage: string | number;
   activePricings: number;
   evaluatedAt: string;
+};
+
+/* ============ Budget ============ */
+
+export type BudgetStatus = "DRAFT" | "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED" | "CANCELED";
+
+export type BudgetHistoryAction =
+  | "CREATED"
+  | "UPDATED"
+  | "SUBMITTED"
+  | "APPROVED"
+  | "REJECTED"
+  | "EXPIRED"
+  | "CANCELED"
+  | "DOCUMENT_RENDERED"
+  | "ITEM_ADDED"
+  | "ITEM_UPDATED"
+  | "ITEM_REMOVED";
+
+export type BudgetItem = {
+  id: string;
+  budgetId: string;
+  productId: string;
+  description: string;
+  quantity: string | number;
+  unit: string;
+  snapshotCost: string | number;
+  snapshotSalePrice: string | number;
+  snapshotMargin: string | number;
+  total: string | number;
+  createdAt: string;
+  product?: Product;
+};
+
+export type BudgetApproval = {
+  id: string;
+  budgetId: string;
+  actorId: string;
+  status: BudgetStatus;
+  observation: string | null;
+  createdAt: string;
+  actor?: Pick<TeamUser, "id" | "name" | "email" | "username">;
+};
+
+export type Budget = {
+  id: string;
+  organizationId: string;
+  operationId: string | null;
+  customerId: string;
+  customerAddressId: string | null;
+  equipmentId: string | null;
+  number: number;
+  status: BudgetStatus;
+  title: string;
+  description: string | null;
+  subtotal: string | number;
+  discount: string | number;
+  additional: string | number;
+  total: string | number;
+  expirationDate: string;
+  observations: string | null;
+  createdBy: string;
+  approvedAt: string | null;
+  rejectedAt: string | null;
+  canceledAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  customer?: Pick<Customer, "id" | "name" | "tradeName" | "email" | "phone">;
+  customerAddress?: CustomerAddress | null;
+  equipment?: Pick<EquipmentSummary, "id" | "name" | "tag" | "type" | "status"> | null;
+  operation?: { id: string; number: number; type: OperationType; status: OperationStatus; equipmentId: string | null; customerId: string };
+  creator?: Pick<TeamUser, "id" | "name" | "email" | "username" | "role">;
+  document?: OperationDocument | null;
+  items: BudgetItem[];
+  approvals: BudgetApproval[];
+};
+
+export type BudgetHistory = {
+  id: string;
+  budgetId: string;
+  actorId: string;
+  action: BudgetHistoryAction;
+  previousStatus: BudgetStatus | null;
+  newStatus: BudgetStatus;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  actor?: Pick<TeamUser, "id" | "name" | "email" | "username">;
+};
+
+export type BudgetStats = {
+  total: number;
+  approved: number;
+  rejected: number;
+  pending: number;
+  potentialRevenue: string | number;
+  averageTicket: string | number;
+};
+
+export type BudgetItemPayload = {
+  productId: string;
+  description?: string;
+  quantity: number;
+};
+
+export type BudgetPayload = {
+  operationId?: string | null;
+  customerId: string;
+  customerAddressId?: string | null;
+  equipmentId?: string | null;
+  title: string;
+  description?: string | null;
+  discount?: number;
+  additional?: number;
+  expirationDate: string;
+  observations?: string | null;
+  status?: Extract<BudgetStatus, "DRAFT" | "PENDING">;
+  items: BudgetItemPayload[];
 };
 
 /* ============ Demo bridge (dashboard / schedule / finance) ============ */

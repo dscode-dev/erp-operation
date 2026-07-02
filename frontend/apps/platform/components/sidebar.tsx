@@ -14,6 +14,7 @@ import {
   Package,
   BarChart3,
   Wallet,
+  ReceiptText,
   Shield,
   Settings,
   User,
@@ -69,6 +70,7 @@ const groups: NavGroup[] = [
     label: "Gestão",
     items: [
       { label: "Relatórios", href: "/reports", icon: BarChart3, permission: "canReports" },
+      { label: "Orçamentos", href: "/budgets", icon: ReceiptText, roles: ["OWNER", "MANAGER"] },
       { label: "Financeiro", href: "/financial", icon: Wallet, permission: "canFinancial" },
       { label: "Usuários", href: "/usuarios", icon: Shield, roles: ["OWNER", "MANAGER", "VIEWER"] },
     ],

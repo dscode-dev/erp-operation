@@ -19,6 +19,7 @@ import {
 import { ERROR_CODES } from '../../shared/constants/error-codes.constants';
 import { ApplicationException } from '../../shared/exceptions/application.exception';
 import type { AuthenticatedUser } from '../../shared/types/authenticated-user.type';
+import { buildPaginatedResponse, type PaginatedResponse } from '../../shared/types/pagination.types';
 import { PasswordService } from '../auth/password.service';
 import { PrismaService } from '../database/prisma.service';
 import type {
@@ -106,10 +107,7 @@ export class UsersService {
     private readonly storage: StorageProviderContract,
   ) {}
 
-  async list(query: ListUsersQueryDto): Promise<{
-    items: NormalizedUserResponse[];
-    pagination: { page: number; limit: number; total: number; totalPages: number };
-  }> {
+  async list(query: ListUsersQueryDto): Promise<PaginatedResponse<NormalizedUserResponse>> {
     const where: Prisma.UserWhereInput = query.search
       ? {
           OR: [
@@ -132,15 +130,12 @@ export class UsersService {
       }),
       this.prisma.user.count({ where }),
     ]);
-    return {
-      items: items.map((user) => this.withEffectivePermissions(user)),
-      pagination: {
-        page: query.page,
-        limit: query.limit,
-        total,
-        totalPages: Math.ceil(total / query.limit),
-      },
-    };
+    return buildPaginatedResponse(
+      items.map((user) => this.withEffectivePermissions(user)),
+      total,
+      query.page,
+      query.limit,
+    );
   }
 
   async get(id: string): Promise<NormalizedUserResponse> {

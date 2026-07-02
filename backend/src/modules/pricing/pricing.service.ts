@@ -4,6 +4,7 @@ import { ERROR_CODES } from '../../shared/constants/error-codes.constants';
 import { PRICING_AUDIT_ACTIONS, PRICING_RESOURCE } from '../../shared/constants/pricing.constants';
 import { ApplicationException } from '../../shared/exceptions/application.exception';
 import type { AuthenticatedUser } from '../../shared/types/authenticated-user.type';
+import { buildPaginatedResponse, type PaginatedResponse } from '../../shared/types/pagination.types';
 import { PrismaService } from '../database/prisma.service';
 import type {
   CreateProductPricingDto,
@@ -420,8 +421,8 @@ export class PricingService {
     return organization;
   }
 
-  private page<T>(items: T[], total: number, page: number, limit: number): { items: T[]; pagination: { page: number; limit: number; total: number; totalPages: number } } {
-    return { items, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } };
+  private page<T>(items: T[], total: number, page: number, limit: number): PaginatedResponse<T> {
+    return buildPaginatedResponse(items, total, page, limit);
   }
 
   private async auditTx(

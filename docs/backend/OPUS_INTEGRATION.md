@@ -207,6 +207,29 @@ screens (Ordens de Serviço e Produtos) until their production domains exist.
 - 409 `USER_LAST_OWNER`: explain protected last OWNER.
 - Upload errors: show 2 MiB avatar or 5 MiB branding limits.
 
+## Pagination contract after Sprint 14.5
+
+All paginated backend lists follow:
+
+```ts
+type Paginated<T> = {
+  items: T[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number; // minimum 1
+  };
+};
+```
+
+Frontend notes:
+
+- do not special-case `totalPages=0`; it should no longer happen;
+- keep active filters while navigating pages;
+- use `total === 0` for empty states;
+- Asset Lifecycle may include additional `timelineGroups` next to `items` and `pagination`.
+
 ## Mocks that can be removed now
 
 - authentication/session mocks;
@@ -1204,3 +1227,178 @@ Mocks que podem ser removidos:
 - schedule demo no Operator Home/Agenda/Services;
 - cards locais de serviços;
 - timeline local de execução do operador.
+
+## Budget Domain — Orçamentos comerciais
+
+Use estes endpoints para construir a futura área comercial/orçamentos. Não usar mocks de preço,
+subtotal ou margem.
+
+Endpoints disponíveis:
+
+```http
+GET    /budgets?page=1&limit=20&search=&status=&customerId=&equipmentId=&operationId=&from=&to=&expired=
+GET    /budgets/:id
+GET    /operations/:id/budgets?page=1&limit=20
+POST   /budgets
+PATCH  /budgets/:id
+PATCH  /budgets/:id/approve
+PATCH  /budgets/:id/reject
+DELETE /budgets/:id
+GET    /budgets/stats
+GET    /budgets/history/:id?page=1&limit=20
+```
+
+Campos importantes:
+
+- `number`: sequencial oficial do orçamento;
+- `status`: estado comercial;
+- `subtotal`, `discount`, `additional`, `total`: strings decimais vindas do backend;
+- `items[].snapshotCost`: custo congelado no momento da criação/revisão;
+- `items[].snapshotSalePrice`: preço de venda congelado;
+- `items[].snapshotMargin`: margem congelada;
+- `expirationDate`: data limite para aprovação;
+- `operationId`: opcional; uma Operation pode ter vários orçamentos;
+- `approvedAt` e `rejectedAt`: timestamps de decisão.
+
+Payload mínimo:
+
+```ts
+await api.post('/budgets', {
+  customerId,
+  operationId,
+  equipmentId,
+  title: 'Troca de componentes',
+  expirationDate: '2026-07-17T00:00:00.000Z',
+  status: 'PENDING',
+  items: [
+    { productId, quantity: 2, description: 'Filtro G4' },
+  ],
+});
+```
+
+Decisão:
+
+```ts
+await api.patch(`/budgets/${budgetId}/approve`, {
+  observation: 'Aprovado pelo cliente',
+});
+
+await api.patch(`/budgets/${budgetId}/reject`, {
+  observation: 'Cliente recusou a proposta',
+});
+```
+
+Estados para UI:
+
+- `DRAFT`: badge cinza/azul, permitir editar;
+- `PENDING`: badge amarelo, permitir editar/aprovar/rejeitar;
+- `APPROVED`: badge verde, somente leitura;
+- `REJECTED`: badge vermelho, somente leitura;
+- `EXPIRED`: badge laranja/vermelho, somente leitura;
+- `CANCELED`: badge cinza, somente leitura.
+
+Paginação:
+
+- todas as listagens retornam `{ items, pagination }`;
+- preservar filtros ao trocar `page` e `limit`.
+
+Observações de UX:
+
+- para adicionar item, mostrar produtos do catálogo e deixar o backend resolver preço;
+- se voltar `PRICING_NOT_FOUND`, abrir CTA para cadastro/revisão de preço;
+- se voltar `BUDGET_MULTIPLE_APPROVAL`, mostrar orçamento aprovado existente na Operation;
+- ao aprovar/rejeitar, atualizar Timeline do equipamento porque o backend publica eventos de lifecycle;
+- não exibir Budget para OPERATOR/VIEWER.
+
+Mocks que podem ser removidos:
+
+- orçamentos locais;
+- cálculo local de snapshot;
+- preço hardcoded em item de orçamento;
+- status comercial simulado;
+- timeline local de orçamento aprovado/rejeitado.
+
+Próximos endpoints previstos:
+
+- reserva futura de estoque;
+- conversão futura para financeiro;
+- envio futuro por e-mail/WhatsApp.
+
+## Budget Document Emission
+
+Endpoints disponíveis para a UI:
+
+- `POST /api/v1/budgets/:id/render`;
+- `GET /api/v1/budgets/:id/download`.
+
+Contrato de render:
+
+```ts
+type BudgetRenderResult = {
+  documentId: string;
+  preview: DocumentBlueprint;
+  download: string;
+  status: 'READY' | 'DRAFT' | 'VALIDATED' | 'SENT';
+  document: OperationDocument & { budgetId: string };
+};
+```
+
+Contrato de download:
+
+```ts
+type BudgetDownload = OperationDocument & {
+  budgetId: string;
+  contentBase64: string;
+};
+```
+
+Observações de UX:
+
+- Remover placeholder de "render/download futuro".
+- "Visualizar Documento" deve abrir `DocumentViewer` com `documentId` real.
+- "Emitir Documento" chama `POST /budgets/:id/render` e atualiza o Budget/drawer.
+- "Baixar PDF" chama `GET /budgets/:id/download`.
+- Não utilizar `GET /documents/templates/:templateId/preview` como documento emitido.
+- Se o Budget estiver `CANCELED` ou `REJECTED`, a emissão deve ficar bloqueada.
+- Em erro 404 de download, mostrar "Documento ainda não emitido".
+
+Mocks que podem ser removidos:
+
+- card de documento aguardando contrato backend;
+- qualquer fallback visual baseado apenas no template `BUDGET`;
+- qualquer download local de PDF.
+
+## Financial Core — Orbit V1
+
+Endpoints reais:
+
+- `GET/POST/PATCH/DELETE /financial/accounts`;
+- `GET/POST/PATCH/DELETE /financial/categories`;
+- `GET/POST/PATCH /financial/entries`;
+- `PATCH /financial/entries/:id/pay`;
+- `PATCH /financial/entries/:id/cancel`;
+- `GET /financial/stats`;
+- `GET /financial/history/:id`.
+
+Tipos principais:
+
+```ts
+type FinancialEntryType = 'RECEIVABLE' | 'PAYABLE' | 'TRANSFER';
+type FinancialEntryStatus = 'PENDING' | 'PAID' | 'CANCELED' | 'OVERDUE';
+type FinancialEntryOrigin = 'MANUAL' | 'BUDGET' | 'PURCHASE' | 'OPERATION' | 'PMOC' | 'OTHER';
+```
+
+Observações de UX:
+
+- exibir Financeiro apenas para OWNER/MANAGER;
+- usar `/financial/stats` para cards: receber hoje, pagar hoje, atrasados, saldo atual e saldo previsto;
+- `totalPages` segue o contrato global;
+- lançamento pago é final para a V1;
+- Budget aprovado não gera financeiro automaticamente;
+- conversão de Budget para lançamento será fluxo manual/futuro usando `origin=BUDGET`.
+
+Mocks que podem ser removidos:
+
+- cards financeiros locais;
+- listas locais de contas/categorias;
+- cálculo local de saldo atual/projetado.

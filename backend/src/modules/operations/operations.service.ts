@@ -17,6 +17,7 @@ import {
 } from '../../shared/constants/operations.constants';
 import { ApplicationException } from '../../shared/exceptions/application.exception';
 import type { AuthenticatedUser } from '../../shared/types/authenticated-user.type';
+import { buildPaginatedResponse } from '../../shared/types/pagination.types';
 import { LifecyclePublisher } from '../asset-lifecycle/lifecycle-publisher.service';
 import { AssignmentsService } from '../assignments/assignments.service';
 import { PrismaService } from '../database/prisma.service';
@@ -99,15 +100,7 @@ export class OperationsService {
       }),
       this.prisma.operation.count({ where }),
     ]);
-    return {
-      items,
-      pagination: {
-        page: query.page,
-        limit: query.limit,
-        total,
-        totalPages: Math.ceil(total / query.limit),
-      },
-    };
+    return buildPaginatedResponse(items, total, query.page, query.limit);
   }
 
   async stats(): Promise<Record<string, unknown>> {

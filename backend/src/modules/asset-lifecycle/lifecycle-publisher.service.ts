@@ -1,5 +1,5 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { AssetLifecycleEventType, OperationType, Prisma } from '@prisma/client';
+import { AssetLifecycleEventType, FinancialEntryOrigin, OperationType, Prisma } from '@prisma/client';
 import {
   ASSET_LIFECYCLE_AUDIT_ACTIONS,
   ASSET_LIFECYCLE_RESOURCE,
@@ -119,24 +119,38 @@ export class LifecyclePublisher {
         type: true,
         status: true,
         operationId: true,
+        budgetId: true,
         operation: { select: { equipmentId: true } },
+        budget: {
+          select: {
+            id: true,
+            number: true,
+            status: true,
+            total: true,
+            customerId: true,
+            equipmentId: true,
+            operationId: true,
+          },
+        },
         renderedAt: true,
       },
     });
-    if (!document?.operation.equipmentId) return;
+    const equipmentId = document?.operation?.equipmentId ?? document?.budget?.equipmentId ?? null;
+    if (!document || !equipmentId) return;
+    const eventType = document.budgetId ? AssetLifecycleEventType.DOCUMENT_RENDERED : AssetLifecycleEventType.DOCUMENT;
 
     const existing = await tx.assetLifecycleEvent.findFirst({
-      where: { documentId: document.id, type: AssetLifecycleEventType.DOCUMENT },
+      where: { documentId: document.id, type: eventType },
       select: { id: true },
     });
     if (existing) return;
 
     const event = await tx.assetLifecycleEvent.create({
       data: {
-        equipmentId: document.operation.equipmentId,
+        equipmentId,
         operationId: document.operationId,
         documentId: document.id,
-        type: AssetLifecycleEventType.DOCUMENT,
+        type: eventType,
         occurredAt: document.renderedAt ?? new Date(),
         performedBy: actorId,
         description: `Document ${document.number} rendered`,
@@ -146,6 +160,11 @@ export class LifecyclePublisher {
           documentNumber: document.number,
           renderStatus: document.status,
           renderedAt: document.renderedAt,
+          budgetId: document.budgetId,
+          budgetNumber: document.budget?.number ?? null,
+          budgetStatus: document.budget?.status ?? null,
+          budgetTotal: document.budget?.total?.toString() ?? null,
+          customerId: document.budget?.customerId ?? null,
         },
       },
     });
@@ -160,7 +179,8 @@ export class LifecyclePublisher {
           equipmentId: event.equipmentId,
           operationId: document.operationId,
           documentId: document.id,
-          type: AssetLifecycleEventType.DOCUMENT,
+          budgetId: document.budgetId,
+          type: eventType,
         },
       ),
     });
@@ -423,6 +443,159 @@ export class LifecyclePublisher {
     });
   }
 
+  async publishBudgetEventTx(
+    tx: Prisma.TransactionClient,
+    input: {
+      budgetId: string;
+      actorId: string;
+      type: typeof AssetLifecycleEventType.BUDGET_APPROVED | typeof AssetLifecycleEventType.BUDGET_REJECTED;
+      occurredAt?: Date;
+      description: string;
+      metadata?: Record<string, unknown>;
+    },
+    context?: Partial<AssetLifecycleAuditContext>,
+  ): Promise<void> {
+    const budget = await tx.budget.findUnique({
+      where: { id: input.budgetId },
+      select: {
+        id: true,
+        number: true,
+        status: true,
+        total: true,
+        operationId: true,
+        customerId: true,
+        equipmentId: true,
+        operation: { select: { id: true, number: true, type: true, status: true, equipmentId: true } },
+      },
+    });
+    const equipmentId = budget?.equipmentId ?? budget?.operation?.equipmentId ?? null;
+    if (!budget || !equipmentId) return;
+
+    const existing = await tx.assetLifecycleEvent.findFirst({
+      where: {
+        equipmentId,
+        type: input.type,
+        metadata: { path: ['budgetId'], equals: budget.id },
+      },
+      select: { id: true },
+    });
+    if (existing) return;
+
+    const event = await tx.assetLifecycleEvent.create({
+      data: {
+        equipmentId,
+        operationId: budget.operationId ?? null,
+        type: input.type,
+        occurredAt: input.occurredAt ?? new Date(),
+        performedBy: input.actorId,
+        description: this.clean(input.description),
+        metadata: {
+          budgetId: budget.id,
+          budgetNumber: budget.number,
+          budgetStatus: budget.status,
+          total: budget.total.toString(),
+          customerId: budget.customerId,
+          operationId: budget.operationId ?? null,
+          operationNumber: budget.operation?.number ?? null,
+          operationType: budget.operation?.type ?? null,
+          operationStatus: budget.operation?.status ?? null,
+          ...(input.metadata ?? {}),
+        },
+      },
+    });
+    await tx.auditLog.create({
+      data: this.auditInput(
+        ASSET_LIFECYCLE_AUDIT_ACTIONS.EVENT_AUTO_CREATED,
+        ASSET_LIFECYCLE_RESOURCE,
+        input.actorId,
+        this.safeContext(context),
+        {
+          eventId: event.id,
+          equipmentId,
+          operationId: budget.operationId ?? null,
+          budgetId: budget.id,
+          type: input.type,
+        },
+      ),
+    });
+  }
+
+  async publishFinancialEntryEventTx(
+    tx: Prisma.TransactionClient,
+    input: {
+      entryId: string;
+      actorId: string;
+      type:
+        | typeof AssetLifecycleEventType.FINANCIAL_ENTRY_CREATED
+        | typeof AssetLifecycleEventType.FINANCIAL_ENTRY_PAID
+        | typeof AssetLifecycleEventType.FINANCIAL_ENTRY_CANCELED;
+      occurredAt?: Date;
+      description: string;
+      metadata?: Record<string, unknown>;
+    },
+    context?: Partial<AssetLifecycleAuditContext>,
+  ): Promise<void> {
+    const entry = await tx.financialEntry.findUnique({
+      where: { id: input.entryId },
+      select: {
+        id: true,
+        type: true,
+        origin: true,
+        originId: true,
+        status: true,
+        amount: true,
+        description: true,
+      },
+    });
+    if (!entry) return;
+
+    const equipmentId = await this.resolveFinancialEquipmentId(tx, entry.origin, entry.originId);
+    if (!equipmentId) return;
+
+    const existing = await tx.assetLifecycleEvent.findFirst({
+      where: {
+        equipmentId,
+        type: input.type,
+        metadata: { path: ['financialEntryId'], equals: entry.id },
+      },
+      select: { id: true },
+    });
+    if (existing) return;
+
+    const event = await tx.assetLifecycleEvent.create({
+      data: {
+        equipmentId,
+        type: input.type,
+        occurredAt: input.occurredAt ?? new Date(),
+        performedBy: input.actorId,
+        description: this.clean(input.description),
+        metadata: {
+          financialEntryId: entry.id,
+          financialType: entry.type,
+          financialOrigin: entry.origin,
+          financialOriginId: entry.originId,
+          financialStatus: entry.status,
+          amount: entry.amount.toString(),
+          ...(input.metadata ?? {}),
+        },
+      },
+    });
+    await tx.auditLog.create({
+      data: this.auditInput(
+        ASSET_LIFECYCLE_AUDIT_ACTIONS.EVENT_AUTO_CREATED,
+        ASSET_LIFECYCLE_RESOURCE,
+        input.actorId,
+        this.safeContext(context),
+        {
+          eventId: event.id,
+          equipmentId,
+          financialEntryId: entry.id,
+          type: input.type,
+        },
+      ),
+    });
+  }
+
   private async validateReferences(dto: CreateAssetLifecycleEventDto): Promise<void> {
     const equipment = await this.prisma.equipment.findUnique({
       where: { id: dto.equipmentId },
@@ -467,7 +640,8 @@ export class LifecyclePublisher {
           HttpStatus.NOT_FOUND,
         );
       }
-      if (document.operation.equipmentId && document.operation.equipmentId !== dto.equipmentId) {
+      const documentEquipmentId = document.operation?.equipmentId;
+      if (documentEquipmentId && documentEquipmentId !== dto.equipmentId) {
         throw new ApplicationException(
           ERROR_CODES.VALIDATION_ERROR,
           'Document belongs to another equipment',
@@ -485,6 +659,39 @@ export class LifecyclePublisher {
       PROJETO: AssetLifecycleEventType.CUSTOM,
     };
     return mapping[type];
+  }
+
+  private async resolveFinancialEquipmentId(
+    tx: Prisma.TransactionClient,
+    origin: FinancialEntryOrigin,
+    originId: string | null,
+  ): Promise<string | null> {
+    if (!originId) return null;
+    if (origin === FinancialEntryOrigin.OPERATION) {
+      const operation = await tx.operation.findUnique({
+        where: { id: originId },
+        select: { equipmentId: true },
+      });
+      return operation?.equipmentId ?? null;
+    }
+    if (origin === FinancialEntryOrigin.BUDGET) {
+      const budget = await tx.budget.findUnique({
+        where: { id: originId },
+        select: {
+          equipmentId: true,
+          operation: { select: { equipmentId: true } },
+        },
+      });
+      return budget?.equipmentId ?? budget?.operation?.equipmentId ?? null;
+    }
+    if (origin === FinancialEntryOrigin.PMOC) {
+      const pmoc = await tx.pmocPlan.findUnique({
+        where: { id: originId },
+        select: { equipmentId: true },
+      });
+      return pmoc?.equipmentId ?? null;
+    }
+    return null;
   }
 
   private clean(value: string): string {

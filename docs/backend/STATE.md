@@ -1132,6 +1132,291 @@ Verificação executada:
 - `npm run build`;
 - `npm run lint`.
 - `npm test`.
+
+## Backlog — Budget Document Emission
+
+Fluxo oficial implementado:
+
+- Budget solicita emissão via `DocumentEngineService`;
+- Document Engine monta `BudgetContext`;
+- `DocumentBuilder.buildBudget()` gera o blueprint usando somente snapshots do Budget;
+- Renderer/PDF Engine continuam como única camada de renderização;
+- `OperationDocument` passa a aceitar `budgetId` e `operationId` nullable para documentos comerciais sem Operation;
+- download de Budget passa exclusivamente pelo Document Engine.
+
+Migration criada:
+
+- `20260702120000_budget_document_emission`.
+
+Schema:
+
+- `BudgetHistoryAction.DOCUMENT_RENDERED`;
+- `AssetLifecycleEventType.DOCUMENT_RENDERED`;
+- `OperationDocument.budgetId` único;
+- relação `Budget.document`;
+- `OperationDocument.operationId` opcional para Budget independente.
+
+Endpoints adicionados:
+
+| Method | Path | Access |
+| ------ | ---- | ------ |
+| POST | `/api/v1/budgets/:id/render` | OWNER, MANAGER |
+| GET | `/api/v1/budgets/:id/download` | OWNER, MANAGER |
+
+Decisões:
+
+- Budget não conversa diretamente com `DocumentBuilder`;
+- PDF não é gerado no módulo Budget;
+- render usa snapshots de `BudgetItem`, nunca consulta `ProductPricing`;
+- orçamentos `CANCELED` e `REJECTED` não podem emitir documento;
+- emissão cria `BudgetHistory.DOCUMENT_RENDERED` e auditoria;
+- lifecycle `DOCUMENT_RENDERED` é publicado via `LifecyclePublisher`;
+- paginação de tabelas utiliza os blocos do `LayoutEngine`/Renderer, repetindo cabeçalhos e preservando totais em bloco `keepTogether`.
+
+Verificação executada:
+
+- `DATABASE_URL=postgresql://postgres:postgres@localhost:5432/orbit npx prisma validate`;
+- `npx prisma generate`;
+- `npm run build`;
+- `npm run lint`;
+- `npm test`.
+
+## Backend Sprint 14.5 — Architectural Consolidation & Standardization
+
+Sprint de consolidação concluída sem criação de módulo de negócio e sem alteração funcional
+intencional de domínios.
+
+Revisão arquitetural:
+
+- módulos existentes inspecionados: Customers, Equipments, Assignments, Operations,
+  Asset Lifecycle, Maintenance Planning, PMOC, Inventory, Pricing, Budget, Document Engine,
+  Signatures e Users;
+- nenhuma dependência cíclica nova identificada;
+- publicação de Asset Lifecycle permanece centralizada no `LifecyclePublisher`;
+- `TimelineAssembler` permanece a única camada que monta payload de timeline para frontend;
+- Document Engine mantém separação entre Context/Builder/Renderer/PDF Engine.
+
+Padronizações aplicadas:
+
+- criado `src/shared/types/pagination.types.ts`;
+- criada função `buildPaginationMeta`;
+- criada função `buildPaginatedResponse`;
+- respostas paginadas agora usam semântica comum com `totalPages` mínimo `1`;
+- serviços paginados migrados para helper compartilhado quando não havia payload extra;
+- serviços com payload extra, como Asset Lifecycle, usam `buildPaginationMeta`.
+
+Serviços ajustados:
+
+- `CustomersService`;
+- `EquipmentsService`;
+- `AssignmentsService`;
+- `AssetLifecycleService`;
+- `OperationsService`;
+- `UsersService`;
+- `SignaturesService`;
+- `PricingService`;
+- `InventoryService`;
+- `BudgetsService`;
+- `MaintenancePlanningService`;
+- `PmocComplianceService`.
+
+Testes:
+
+- adicionado `test/pagination.types.spec.ts`;
+- cobertura de infraestrutura garante formato compartilhado e `totalPages` mínimo `1`.
+
+Migrations:
+
+- nenhuma migration criada nesta sprint.
+
+Verificação executada:
+
+- `DATABASE_URL=postgresql://postgres:postgres@localhost:5432/orbit npx prisma validate`;
+- `npm run build`;
+- `npm run lint`;
+- `npm test`.
+
+Recomendações para a próxima etapa:
+
+- antes do Financeiro, considerar extração progressiva de DTOs base para paginação/filtros;
+- revisar índices específicos quando as queries financeiras reais forem definidas;
+- manter Financial isolado de Product/Inventory, consumindo Pricing por serviço interno;
+- criar testes de integração para transições financeiras assim que o domínio existir.
+
+## Backend Sprint 15 — Financial Core (Orbit V1)
+
+Status: concluída em 2 de julho de 2026.
+
+V1 Freeze Rule aplicada: nenhum recurso fiscal, contábil, bancário, PIX, NF-e ou conciliação foi
+implementado. A sprint criou apenas o núcleo financeiro essencial.
+
+Módulo criado:
+
+- `src/modules/financial`.
+
+Entidades:
+
+- `FinancialAccount`;
+- `FinancialCategory`;
+- `FinancialEntry`;
+- `FinancialEntryAllocation`;
+- `FinancialHistory`.
+
+Enums:
+
+- `FinancialAccountType`: `CASH`, `BANK`, `CREDIT_CARD`, `DIGITAL_WALLET`, `OTHER`;
+- `FinancialCategoryType`: `INCOME`, `EXPENSE`, `TRANSFER`;
+- `FinancialEntryType`: `RECEIVABLE`, `PAYABLE`, `TRANSFER`;
+- `FinancialEntryStatus`: `PENDING`, `PAID`, `CANCELED`, `OVERDUE`;
+- `FinancialEntryOrigin`: `MANUAL`, `BUDGET`, `PURCHASE`, `OPERATION`, `PMOC`, `OTHER`;
+- `FinancialHistoryAction`: `CREATED`, `UPDATED`, `PAID`, `CANCELED`, `RESTORED`.
+
+Migration criada:
+
+- `20260702160000_financial_core`.
+
+Endpoints adicionados:
+
+| Method | Path | Access |
+| ------ | ---- | ------ |
+| GET | `/api/v1/financial/accounts` | OWNER, MANAGER |
+| POST | `/api/v1/financial/accounts` | OWNER, MANAGER |
+| PATCH | `/api/v1/financial/accounts/:id` | OWNER, MANAGER |
+| DELETE | `/api/v1/financial/accounts/:id` | OWNER, MANAGER |
+| GET | `/api/v1/financial/categories` | OWNER, MANAGER |
+| POST | `/api/v1/financial/categories` | OWNER, MANAGER |
+| PATCH | `/api/v1/financial/categories/:id` | OWNER, MANAGER |
+| DELETE | `/api/v1/financial/categories/:id` | OWNER, MANAGER |
+| GET | `/api/v1/financial/entries` | OWNER, MANAGER |
+| GET | `/api/v1/financial/entries/:id` | OWNER, MANAGER |
+| POST | `/api/v1/financial/entries` | OWNER, MANAGER |
+| PATCH | `/api/v1/financial/entries/:id` | OWNER, MANAGER |
+| PATCH | `/api/v1/financial/entries/:id/pay` | OWNER, MANAGER |
+| PATCH | `/api/v1/financial/entries/:id/cancel` | OWNER, MANAGER |
+| GET | `/api/v1/financial/stats` | OWNER, MANAGER |
+| GET | `/api/v1/financial/history/:id` | OWNER, MANAGER |
+
+Decisões:
+
+- Financial é o único domínio autorizado a representar dinheiro operacional no Orbit;
+- Product, Inventory e Budget continuam sem saldo financeiro;
+- Budget aprovado não gera lançamento automaticamente nesta sprint;
+- `FinancialOrigin.BUDGET` fica disponível para conversão futura;
+- `originId` opcional permite referência futura a Budget/Operation/PMOC sem relacionamento
+  polimórfico rígido;
+- Asset Lifecycle financeiro é publicado somente quando o `LifecyclePublisher` consegue resolver
+  equipamento pela origem; caso contrário, no-op seguro;
+- `TRANSFER` está modelado, mas sem fluxo avançado de múltiplas contas nesta V1.
+
+AppSec:
+
+- RBAC restrito a `OWNER` e `MANAGER`;
+- `OPERATOR` e `VIEWER` não acessam financeiro;
+- DTO validation para UUID, datas, valores monetários e enums;
+- transações em criação/pagamento/cancelamento;
+- proteção contra pagamento duplicado;
+- proteção contra cancelar lançamento pago;
+- histórico financeiro imutável;
+- soft delete em contas/categorias e cancelamento lógico em lançamentos;
+- auditoria para contas, categorias e lançamentos.
+
+Seeds:
+
+- contas financeiras padrão;
+- categorias de receita/despesa;
+- lançamentos pendentes coerentes, incluindo origem `BUDGET` quando houver orçamento.
+
+Testes:
+
+- `financial.service.spec.ts` cobre pagamento duplicado e cancelamento de lançamento pago;
+- testes totais: 9 suites, 25 testes.
+
+Verificação executada:
+
+- `DATABASE_URL=postgresql://postgres:postgres@localhost:5432/orbit npx prisma validate`;
+- `npx prisma generate`;
+- `npm run build`;
+- `npm run lint`;
+- `npm test`.
+
+## Backend Sprint 14 — Budget Domain
+
+Domínio criado:
+
+- `src/modules/budgets`;
+- `BudgetsModule` importado no `AppModule`;
+- `BudgetsService` como único ponto de regra comercial de orçamento;
+- `BudgetsController` expondo a API oficial;
+- constantes de auditoria em `src/shared/constants/budgets.constants.ts`.
+
+Entidades:
+
+- `Budget`;
+- `BudgetItem`;
+- `BudgetApproval`;
+- `BudgetHistory`.
+
+Enums:
+
+- `BudgetStatus`: `DRAFT`, `PENDING`, `APPROVED`, `REJECTED`, `EXPIRED`, `CANCELED`;
+- `BudgetHistoryAction`: `CREATED`, `UPDATED`, `SUBMITTED`, `APPROVED`, `REJECTED`,
+  `EXPIRED`, `CANCELED`, `ITEM_ADDED`, `ITEM_UPDATED`, `ITEM_REMOVED`;
+- `DocumentTemplateType` expandido com `BUDGET`;
+- `AssetLifecycleEventType` expandido com `BUDGET_APPROVED` e `BUDGET_REJECTED`.
+
+Migration criada:
+
+- `20260702100000_budget_domain`.
+
+Decisões arquiteturais:
+
+- Budget é independente de Operation; uma Operation pode ter zero, um ou vários orçamentos;
+- somente um orçamento pode ser aprovado por Operation;
+- preço/custo/margem ficam em snapshot no `BudgetItem`;
+- criação/atualização de itens usa `PricingService.resolveForConsumer(productId, 'BUDGET')`;
+- renderização futura não deve consultar `ProductPricing`; deve usar snapshots do orçamento;
+- `DELETE /budgets/:id` não remove fisicamente: cancela o orçamento quando ele ainda é editável;
+- histórico e aprovações são imutáveis.
+
+Integrações:
+
+- Operation referencia orçamentos por relação `Operation.budgets`;
+- Document Engine passa a possuir template `DocumentTemplateType.BUDGET`;
+- Asset Lifecycle recebe eventos `BUDGET_APPROVED` e `BUDGET_REJECTED` via `LifecyclePublisher`;
+- seed cria orçamento operacional idempotente usando produtos, pricing, customers e operations existentes.
+
+Endpoints adicionados:
+
+| Method | Path | Access |
+| ------ | ---- | ------ |
+| GET | `/api/v1/budgets` | OWNER, MANAGER |
+| GET | `/api/v1/budgets/:id` | OWNER, MANAGER |
+| GET | `/api/v1/operations/:id/budgets` | OWNER, MANAGER |
+| POST | `/api/v1/budgets` | OWNER, MANAGER |
+| PATCH | `/api/v1/budgets/:id` | OWNER, MANAGER |
+| PATCH | `/api/v1/budgets/:id/approve` | OWNER, MANAGER |
+| PATCH | `/api/v1/budgets/:id/reject` | OWNER, MANAGER |
+| DELETE | `/api/v1/budgets/:id` | OWNER, MANAGER |
+| GET | `/api/v1/budgets/stats` | OWNER, MANAGER |
+| GET | `/api/v1/budgets/history/:id` | OWNER, MANAGER |
+
+AppSec:
+
+- RBAC bloqueia OPERATOR/VIEWER do domínio comercial;
+- DTOs validam UUID, paginação, datas, valores monetários e arrays de itens;
+- valida relacionamento consistente entre customer, address, equipment e operation;
+- orçamento aprovado não pode ser editado/cancelado;
+- orçamento vencido não pode ser aprovado;
+- aprovação múltipla para a mesma Operation é bloqueada;
+- auditoria registra criação, alteração, aprovação, rejeição e cancelamento.
+
+Verificação executada:
+
+- `DATABASE_URL=postgresql://postgres:postgres@localhost:5432/orbit npx prisma validate`;
+- `npx prisma generate`;
+- `npm run build`;
+- `npm run lint`;
+- `npm test`.
 - `npm test`.
 - `npm test`.
 

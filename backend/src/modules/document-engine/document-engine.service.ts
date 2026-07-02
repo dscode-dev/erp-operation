@@ -1,5 +1,5 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { DocumentTemplateType, type OperationDocument, Prisma, Role } from '@prisma/client';
+import { BudgetHistoryAction, BudgetStatus, DocumentTemplateType, type OperationDocument, Prisma, Role } from '@prisma/client';
 import {
   DOCUMENT_ENGINE_AUDIT_ACTIONS,
   DOCUMENT_ENGINE_RESOURCE,
@@ -19,6 +19,7 @@ import { AppLoggerService } from '../../infra/logger/app-logger.service';
 import { LifecyclePublisher } from '../asset-lifecycle/lifecycle-publisher.service';
 import { PrismaService } from '../database/prisma.service';
 import { DocumentAssetResolver } from './assets/document-asset-resolver.service';
+import type { DocumentBlueprint } from './blueprint/document-blueprint.types';
 import { DocumentBuilderService } from './builder/document-builder.service';
 import { PdfEngineService } from './pdf/pdf-engine.service';
 import { DocumentRendererService } from './renderer/document-renderer.service';
@@ -28,6 +29,11 @@ export interface DocumentAuditContext {
   ip: string | null;
   userAgent: string | null;
 }
+
+type DocumentRequest =
+  | { source: 'operation'; operationId: string; type: DocumentTemplateType }
+  | { source: 'document'; documentId: string }
+  | { source: 'budget'; budgetId: string };
 
 @Injectable()
 export class DocumentEngineService {
@@ -69,6 +75,29 @@ export class DocumentEngineService {
     context: DocumentAuditContext,
   ): Promise<unknown> {
     const document = await this.documentOrThrow(documentId);
+    this.assertTypeAccess(document.type, actor);
+    if (document.budgetId) {
+      const blueprint = await this.builder.buildBudget(document.budgetId);
+      await this.audit(
+        DOCUMENT_ENGINE_AUDIT_ACTIONS.DOCUMENT_PREVIEWED,
+        DOCUMENT_ENGINE_RESOURCE,
+        actor,
+        context,
+        {
+          budgetId: document.budgetId,
+          documentType: document.type,
+          documentId: blueprint.metadata.documentId,
+        },
+      );
+      return blueprint;
+    }
+    if (!document.operationId) {
+      throw new ApplicationException(
+        ERROR_CODES.DOCUMENT_NOT_FOUND,
+        'Document is not linked to an operation or budget',
+        HttpStatus.CONFLICT,
+      );
+    }
     return this.previewOperation(document.operationId, document.type, actor, context);
   }
 
@@ -134,6 +163,53 @@ export class DocumentEngineService {
     return this.renderDocument(document.id, actor, context);
   }
 
+  async renderBudget(
+    budgetId: string,
+    actor: AuthenticatedUser,
+    context: DocumentAuditContext,
+  ): Promise<unknown> {
+    const request: DocumentRequest = { source: 'budget', budgetId };
+    this.assertTypeAccess(DocumentTemplateType.BUDGET, actor);
+    const budget = await this.budgetOrThrow(budgetId);
+    this.assertBudgetRenderable(budget.status);
+    const document = await this.prisma.operationDocument.upsert({
+      where: { budgetId },
+      create: {
+        budgetId,
+        operationId: budget.operationId,
+        type: DocumentTemplateType.BUDGET,
+        number: `ORC-${String(budget.number).padStart(6, '0')}`,
+        status: 'DRAFT',
+      },
+      update: {
+        operationId: budget.operationId,
+      },
+    });
+    const rendered = (await this.renderDocumentFromRequest(request, document.id, actor, context)) as Record<string, unknown>;
+    const preview = await this.builder.buildBudget(budgetId);
+    await this.prisma.budgetHistory.create({
+      data: {
+        budgetId,
+        actorId: actor.id,
+        action: BudgetHistoryAction.DOCUMENT_RENDERED,
+        previousStatus: budget.status,
+        newStatus: budget.status,
+        metadata: {
+          documentId: document.id,
+          documentNumber: document.number,
+          renderedAt: new Date().toISOString(),
+        },
+      },
+    });
+    return {
+      documentId: document.id,
+      preview,
+      download: `/api/v1/budgets/${budgetId}/download`,
+      status: rendered.status,
+      document: rendered,
+    };
+  }
+
   async renderDocument(
     documentId: string,
     actor: AuthenticatedUser,
@@ -142,11 +218,19 @@ export class DocumentEngineService {
     const document = await this.documentOrThrow(documentId);
     this.assertTypeAccess(document.type, actor);
     try {
-      const blueprint = await this.builder.buildFromOperation(document.operationId, document.type);
+      if (!document.budgetId && !document.operationId) {
+        throw new ApplicationException(
+          ERROR_CODES.DOCUMENT_NOT_FOUND,
+          'Document is not linked to an operation or budget',
+          HttpStatus.CONFLICT,
+        );
+      }
+      const blueprint = await this.buildBlueprintForDocument(document);
       const rendered = this.renderer.render(blueprint);
       const pdf = this.pdf.create(rendered);
       const stored = await this.assets.saveDocumentPdf({
         operationId: document.operationId,
+        sourceId: document.budgetId ?? document.operationId ?? document.id,
         documentType: document.type,
         content: pdf.buffer,
       });
@@ -180,6 +264,7 @@ export class DocumentEngineService {
             {
               documentId: document.id,
               operationId: document.operationId,
+              budgetId: document.budgetId,
               documentType: document.type,
               pageCount: pdf.pageCount,
               fileSize: pdf.buffer.length,
@@ -248,6 +333,27 @@ export class DocumentEngineService {
     };
   }
 
+  async downloadBudget(
+    budgetId: string,
+    actor: AuthenticatedUser,
+    context: DocumentAuditContext,
+  ): Promise<unknown> {
+    this.assertTypeAccess(DocumentTemplateType.BUDGET, actor);
+    const budget = await this.budgetOrThrow(budgetId);
+    this.assertBudgetRenderable(budget.status);
+    const document = await this.prisma.operationDocument.findUnique({
+      where: { budgetId },
+    });
+    if (!document) {
+      throw new ApplicationException(
+        ERROR_CODES.DOCUMENT_NOT_FOUND,
+        'Budget document was not rendered yet',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    return this.downloadDocument(document.id, actor, context);
+  }
+
   private assertTypeAccess(type: DocumentTemplateType, actor: AuthenticatedUser): void {
     if (FINANCIAL_DOCUMENT_TYPES.includes(type as never) && actor.role !== Role.OWNER) {
       throw new ApplicationException(
@@ -270,9 +376,60 @@ export class DocumentEngineService {
     return document;
   }
 
+  private async budgetOrThrow(id: string): Promise<{ id: string; number: number; status: BudgetStatus; operationId: string | null }> {
+    const budget = await this.prisma.budget.findUnique({
+      where: { id },
+      select: { id: true, number: true, status: true, operationId: true },
+    });
+    if (!budget) {
+      throw new ApplicationException(
+        ERROR_CODES.BUDGET_NOT_FOUND,
+        'Budget was not found',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    return budget;
+  }
+
+  private assertBudgetRenderable(status: BudgetStatus): void {
+    const blockedStatuses: BudgetStatus[] = [BudgetStatus.CANCELED, BudgetStatus.REJECTED];
+    if (blockedStatuses.includes(status)) {
+      throw new ApplicationException(
+        ERROR_CODES.BUDGET_INVALID_STATUS,
+        'Canceled or rejected budgets cannot be rendered',
+        HttpStatus.CONFLICT,
+      );
+    }
+  }
+
+  private async renderDocumentFromRequest(
+    request: DocumentRequest,
+    documentId: string,
+    actor: AuthenticatedUser,
+    context: DocumentAuditContext,
+  ): Promise<unknown> {
+    void request;
+    return this.renderDocument(documentId, actor, context);
+  }
+
+  private async buildBlueprintForDocument(document: OperationDocument): Promise<DocumentBlueprint> {
+    if (document.budgetId) {
+      return this.builder.buildBudget(document.budgetId);
+    }
+    if (!document.operationId) {
+      throw new ApplicationException(
+        ERROR_CODES.DOCUMENT_NOT_FOUND,
+        'Document is not linked to an operation or budget',
+        HttpStatus.CONFLICT,
+      );
+    }
+    return this.builder.buildFromOperation(document.operationId, document.type);
+  }
+
   private documentPayload(document: {
     id: string;
-    operationId: string;
+    operationId: string | null;
+    budgetId?: string | null;
     type: DocumentTemplateType;
     number: string;
     status: string;
@@ -287,6 +444,7 @@ export class DocumentEngineService {
     return {
       id: document.id,
       operationId: document.operationId,
+      budgetId: document.budgetId ?? null,
       type: document.type,
       number: document.number,
       status: document.status,

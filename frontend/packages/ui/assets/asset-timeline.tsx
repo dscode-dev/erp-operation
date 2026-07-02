@@ -6,6 +6,7 @@ import {
   BadgeCheck,
   CalendarDays,
   ChevronRight,
+  FileCheck2,
   FileText,
   PackageCheck,
   RefreshCw,
@@ -26,6 +27,7 @@ import { formatBytes, formatDateTime } from "@erp/utils";
 
 const ICONS: Record<string, LucideIcon> = {
   "badge-check": BadgeCheck,
+  "file-check-2": FileCheck2,
   "file-text": FileText,
   "package-check": PackageCheck,
   "search-check": Search,
@@ -42,6 +44,7 @@ const FILTERS: Array<{ label: string; type?: AssetLifecycleEventType }> = [
   { label: "Preventivas", type: "PREVENTIVE" },
   { label: "Corretivas", type: "CORRECTIVE" },
   { label: "Documentos", type: "DOCUMENT" },
+  { label: "Emitidos", type: "DOCUMENT_RENDERED" },
   { label: "Inspeções", type: "INSPECTION" },
 ];
 

@@ -31,6 +31,31 @@ export type ApiError = {
 Toda resposta possui header `X-Request-Id`. Guarde esse valor em logs de suporte quando uma chamada
 falhar.
 
+## Paginação padronizada
+
+Sprint 14.5 padronizou metadados de paginação no backend.
+
+```ts
+type Pagination = {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number; // mínimo 1, mesmo quando total=0
+};
+
+type Paginated<T> = {
+  items: T[];
+  pagination: Pagination;
+};
+```
+
+Regras para UI:
+
+- não assumir `totalPages=0` em listas vazias;
+- preservar filtros ao trocar `page`/`limit`;
+- usar `pagination.total` para empty states;
+- payloads enriquecidos podem trazer campos adicionais além de `items` e `pagination`.
+
 ## Auth recap
 
 Papéis oficiais:
@@ -1497,3 +1522,176 @@ Erros esperados:
 - `ASSIGNMENT_INVALID_TRANSITION`: tentou iniciar sem aceitar ou concluir sem iniciar;
 - `ASSIGNMENT_NOT_FOUND`: Assignment inexistente;
 - `OPERATION_OPERATOR_INVALID`: usuário delegado inválido.
+
+## Budget Domain
+
+Budget é o domínio comercial oficial. Não calcular preço, custo ou margem no frontend como fonte de
+verdade; o backend cria snapshots usando `PricingService`.
+
+Endpoints:
+
+```http
+GET    /budgets?page=1&limit=20&search=&status=&customerId=&equipmentId=&operationId=&from=&to=&expired=
+GET    /budgets/:id
+GET    /operations/:id/budgets?page=1&limit=20
+POST   /budgets
+PATCH  /budgets/:id
+PATCH  /budgets/:id/approve
+PATCH  /budgets/:id/reject
+DELETE /budgets/:id
+GET    /budgets/stats
+GET    /budgets/history/:id?page=1&limit=20
+```
+
+Roles para UI:
+
+- OWNER/MANAGER: mostrar menu de orçamentos, criar, editar, aprovar, rejeitar e cancelar;
+- OPERATOR/VIEWER: não mostrar telas/ações de Budget.
+
+Payload de criação:
+
+```ts
+type CreateBudgetPayload = {
+  operationId?: string;
+  customerId: string;
+  customerAddressId?: string;
+  equipmentId?: string;
+  title: string;
+  description?: string;
+  discount?: number;
+  additional?: number;
+  expirationDate: string;
+  observations?: string;
+  status?: 'DRAFT' | 'PENDING';
+  items: Array<{
+    productId: string;
+    description?: string;
+    quantity: number;
+  }>;
+};
+```
+
+Item retornado:
+
+```ts
+type BudgetItem = {
+  id: string;
+  productId: string;
+  description: string;
+  quantity: string;
+  unit: string;
+  snapshotCost: string;
+  snapshotSalePrice: string;
+  snapshotMargin: string;
+  total: string;
+};
+```
+
+Fluxo recomendado:
+
+1. Selecionar cliente/equipamento/operação.
+2. Selecionar produtos do catálogo.
+3. Enviar apenas `productId`, `quantity` e descrição opcional.
+4. Renderizar os snapshots retornados pelo backend.
+5. Para revisão de itens, enviar novamente a lista completa em `PATCH /budgets/:id`.
+
+Estados:
+
+- `DRAFT`: rascunho editável;
+- `PENDING`: enviado/aguardando decisão, ainda editável;
+- `APPROVED`: final, somente leitura;
+- `REJECTED`: final, somente leitura;
+- `EXPIRED`: final, somente leitura;
+- `CANCELED`: final, somente leitura.
+
+Regras de UX:
+
+- bloquear edição local quando `status` for final;
+- mostrar aviso quando `expirationDate < now`;
+- em `BUDGET_MULTIPLE_APPROVAL`, atualizar a lista da Operation e mostrar que já existe orçamento aprovado;
+- em `PRICING_NOT_FOUND`, orientar cadastro de preço vigente para o produto;
+- em `BUDGET_APPROVED`, invalidar cache da Operation, Budget, Timeline e stats.
+
+Integrações:
+
+- Operation Drawer pode consumir `GET /operations/:id/budgets`;
+- DocumentViewer deve usar o documento oficial retornado por `POST /budgets/:id/render`;
+- Timeline do equipamento receberá eventos `BUDGET_APPROVED` e `BUDGET_REJECTED` pelo Asset Lifecycle.
+
+## Budget Document Emission
+
+Fluxo de UI recomendado no `BudgetDetailDrawer`:
+
+1. Exibir dados comerciais do Budget.
+2. Em "Documento", se `budget.document?.id` existir, abrir `DocumentViewer` com `{ documentId }`.
+3. Se não existir documento, exibir CTA "Emitir Documento".
+4. Ao clicar, chamar `POST /api/v1/budgets/:id/render`.
+5. Usar `response.documentId` no `DocumentViewer`.
+6. Para download direto, chamar `GET /api/v1/budgets/:id/download`.
+
+Render:
+
+```ts
+const emitted = await api.post(`/budgets/${budgetId}/render`);
+// emitted.documentId
+// emitted.preview
+// emitted.download
+// emitted.document.status === 'READY'
+```
+
+Download:
+
+```ts
+const file = await api.get(`/budgets/${budgetId}/download`);
+// file.contentBase64 deve ser convertido para Blob application/pdf no frontend.
+```
+
+Estados de UX:
+
+- `CANCELED` e `REJECTED`: esconder/desabilitar emissão e mostrar aviso;
+- documento ainda não emitido: empty state com CTA de emissão;
+- `DOCUMENT_DOWNLOAD_NOT_READY`: orientar o usuário a emitir novamente;
+- `DOCUMENT_RENDER_FAILED`: mostrar retry; não criar fallback local;
+- `BUDGET_INVALID_STATUS`: atualizar o Budget e refletir estado final.
+
+O frontend nunca deve:
+
+- montar PDF de Budget;
+- recalcular preços/margens para documento;
+- consultar `ProductPricing` para render;
+- acessar storage diretamente;
+- usar preview de template como documento emitido.
+
+## Financial Core integration
+
+Financial é o único domínio autorizado a representar dinheiro no Orbit.
+
+Rotas disponíveis:
+
+- `/financial/accounts`;
+- `/financial/categories`;
+- `/financial/entries`;
+- `/financial/stats`;
+- `/financial/history/:entryId`.
+
+RBAC para UI:
+
+- `OWNER` e `MANAGER`: exibir módulo financeiro;
+- `OPERATOR` e `VIEWER`: esconder navegação e tratar 403 como bloqueio definitivo.
+
+Fluxo recomendado:
+
+1. Carregar contas e categorias.
+2. Criar lançamentos com `accountId`, `categoryId`, `type`, `amount`, `dueDate`.
+3. Usar `origin='BUDGET'` + `originId=budget.id` somente quando o usuário converter manualmente um orçamento.
+4. Para liquidar, chamar `PATCH /financial/entries/:id/pay`.
+5. Para cancelar pendente, chamar `PATCH /financial/entries/:id/cancel`.
+6. Usar `/financial/stats` para cards do dashboard financeiro.
+
+Não fazer no frontend:
+
+- calcular saldo como fonte da verdade;
+- alterar saldo de conta diretamente;
+- cancelar lançamento pago;
+- gerar financeiro automaticamente ao aprovar Budget;
+- criar PIX, boleto, fiscal ou conciliação na V1.

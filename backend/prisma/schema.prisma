@@ -21,6 +21,7 @@ enum BrandAssetType {
 }
 
 enum DocumentTemplateType {
+  BUDGET
   QUOTE
   WORK_ORDER
   RECEIPT
@@ -103,6 +104,29 @@ enum AssignmentEventType {
   CANCELED
 }
 
+enum BudgetStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+  EXPIRED
+  CANCELED
+}
+
+enum BudgetHistoryAction {
+  CREATED
+  UPDATED
+  SUBMITTED
+  APPROVED
+  REJECTED
+  EXPIRED
+  CANCELED
+  ITEM_ADDED
+  ITEM_UPDATED
+  ITEM_REMOVED
+  DOCUMENT_RENDERED
+}
+
 enum SignatureMode {
   NONE
   FIXED
@@ -121,6 +145,8 @@ enum AssetLifecycleEventType {
   ASSIGNMENT_ACCEPTED
   ASSIGNMENT_STARTED
   ASSIGNMENT_COMPLETED
+  BUDGET_APPROVED
+  BUDGET_REJECTED
   PMOC_CREATED
   PMOC_UPDATED
   PMOC_COMPLETED
@@ -128,6 +154,10 @@ enum AssetLifecycleEventType {
   PART_REPLACEMENT
   WARRANTY
   DOCUMENT
+  DOCUMENT_RENDERED
+  FINANCIAL_ENTRY_CREATED
+  FINANCIAL_ENTRY_PAID
+  FINANCIAL_ENTRY_CANCELED
   NOTE
   CUSTOM
 }
@@ -168,6 +198,50 @@ enum StockMovementType {
   TRANSFER
   CONSUMPTION
   RETURN
+}
+
+enum FinancialAccountType {
+  CASH
+  BANK
+  CREDIT_CARD
+  DIGITAL_WALLET
+  OTHER
+}
+
+enum FinancialCategoryType {
+  INCOME
+  EXPENSE
+  TRANSFER
+}
+
+enum FinancialEntryType {
+  RECEIVABLE
+  PAYABLE
+  TRANSFER
+}
+
+enum FinancialEntryStatus {
+  PENDING
+  PAID
+  CANCELED
+  OVERDUE
+}
+
+enum FinancialEntryOrigin {
+  MANUAL
+  BUDGET
+  PURCHASE
+  OPERATION
+  PMOC
+  OTHER
+}
+
+enum FinancialHistoryAction {
+  CREATED
+  UPDATED
+  PAID
+  CANCELED
+  RESTORED
 }
 
 model SystemSetting {
@@ -221,6 +295,11 @@ model User {
   assetLifecycleEvents AssetLifecycleEvent[]
   maintenancePlans     MaintenancePlan[]
   stockMovements       StockMovement[]
+  budgetsCreated       Budget[]              @relation("BudgetCreatedBy")
+  budgetApprovals      BudgetApproval[]      @relation("BudgetApprovalActor")
+  budgetHistoryEvents  BudgetHistory[]       @relation("BudgetHistoryActor")
+  financialEntriesCreated FinancialEntry[]    @relation("FinancialEntryCreatedBy")
+  financialHistoryEvents  FinancialHistory[]  @relation("FinancialHistoryActor")
 
   @@map("users")
 }
@@ -260,6 +339,10 @@ model Organization {
   pmocPlans      PmocPlan[]
   inventoryItems InventoryItem[]
   productPricings ProductPricing[]
+  budgets         Budget[]
+  financialAccounts FinancialAccount[]
+  financialCategories FinancialCategory[]
+  financialEntries FinancialEntry[]
 
   @@map("organizations")
 }
@@ -396,6 +479,7 @@ model Customer {
   equipments     Equipment[]
   operations     Operation[]
   pmocPlans      PmocPlan[]
+  budgets        Budget[]
 
   @@index([name])
   @@index([email])
@@ -421,6 +505,7 @@ model CustomerAddress {
   customer   Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
   equipments Equipment[]
   operations Operation[]
+  budgets    Budget[]
 
   @@index([customerId, isPrimary])
   @@map("customer_addresses")
@@ -493,6 +578,7 @@ model Equipment {
   pmocPrimaryPlans   PmocPlan[]
   pmocLinks          PmocPlanEquipment[]
   pmocEnvironments   PmocEnvironmentEquipment[]
+  budgets            Budget[]
 
   @@index([customerId, status])
   @@index([addressId])
@@ -566,6 +652,7 @@ model Operation {
   maintenanceExecution MaintenanceExecution?
   parts                OperationPart[]
   stockMovements       StockMovement[]
+  budgets              Budget[]
 
   @@index([customerId, createdAt])
   @@index([equipmentId, createdAt])
@@ -641,7 +728,8 @@ model OperationPhoto {
 /// DRAFT when an Operation is created. PDF generation is future scope.
 model OperationDocument {
   id              String                  @id @default(uuid()) @db.Uuid
-  operationId     String                  @map("operation_id") @db.Uuid
+  operationId     String?                 @map("operation_id") @db.Uuid
+  budgetId        String?                 @unique @map("budget_id") @db.Uuid
   type            DocumentTemplateType
   number          String                  @db.VarChar(40)
   status          OperationDocumentStatus @default(DRAFT)
@@ -652,10 +740,12 @@ model OperationDocument {
   renderMetadata  Json?                   @map("render_metadata")
   createdAt       DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
-  operation       Operation               @relation(fields: [operationId], references: [id], onDelete: Cascade)
+  operation       Operation?              @relation(fields: [operationId], references: [id], onDelete: Cascade)
+  budget          Budget?                 @relation(fields: [budgetId], references: [id], onDelete: SetNull)
   lifecycleEvents AssetLifecycleEvent[]
 
   @@unique([operationId, type])
+  @@index([budgetId])
   @@index([type, status])
   @@index([renderedAt])
   @@map("operation_documents")
@@ -843,6 +933,7 @@ model Product {
   inventoryItems       InventoryItem[]
   operationParts       OperationPart[]
   pricings             ProductPricing[]
+  budgetItems          BudgetItem[]
 
   @@index([name])
   @@index([category, isActive])
@@ -959,4 +1050,207 @@ model ProductPricing {
   @@index([productId, validFrom, validUntil])
   @@index([validUntil])
   @@map("product_pricings")
+}
+
+model Budget {
+  id                String           @id @default(uuid()) @db.Uuid
+  organizationId    String           @map("organization_id") @db.Uuid
+  operationId       String?          @map("operation_id") @db.Uuid
+  customerId        String           @map("customer_id") @db.Uuid
+  customerAddressId String?          @map("customer_address_id") @db.Uuid
+  equipmentId       String?          @map("equipment_id") @db.Uuid
+  number            Int              @unique @default(autoincrement())
+  status            BudgetStatus     @default(DRAFT)
+  title             String           @db.VarChar(180)
+  description       String?          @db.Text
+  subtotal          Decimal          @default(0) @db.Decimal(14, 2)
+  discount          Decimal          @default(0) @db.Decimal(14, 2)
+  additional        Decimal          @default(0) @db.Decimal(14, 2)
+  total             Decimal          @default(0) @db.Decimal(14, 2)
+  expirationDate    DateTime         @map("expiration_date") @db.Timestamptz(3)
+  observations      String?          @db.Text
+  createdBy         String           @map("created_by") @db.Uuid
+  approvedAt        DateTime?        @map("approved_at") @db.Timestamptz(3)
+  rejectedAt        DateTime?        @map("rejected_at") @db.Timestamptz(3)
+  canceledAt        DateTime?        @map("canceled_at") @db.Timestamptz(3)
+  createdAt         DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+  organization      Organization     @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  operation         Operation?       @relation(fields: [operationId], references: [id], onDelete: SetNull)
+  customer          Customer         @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  customerAddress   CustomerAddress? @relation(fields: [customerAddressId], references: [id], onDelete: SetNull)
+  equipment         Equipment?       @relation(fields: [equipmentId], references: [id], onDelete: SetNull)
+  creator           User             @relation("BudgetCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
+  items             BudgetItem[]
+  approvals         BudgetApproval[]
+  history           BudgetHistory[]
+  document          OperationDocument?
+
+  @@index([organizationId, status, createdAt])
+  @@index([operationId, status])
+  @@index([customerId, createdAt])
+  @@index([equipmentId, createdAt])
+  @@index([expirationDate])
+  @@map("budgets")
+}
+
+model BudgetItem {
+  id                String   @id @default(uuid()) @db.Uuid
+  budgetId          String   @map("budget_id") @db.Uuid
+  productId         String   @map("product_id") @db.Uuid
+  description       String   @db.Text
+  quantity          Decimal  @db.Decimal(12, 3)
+  unit              String   @db.VarChar(20)
+  snapshotCost      Decimal  @map("snapshot_cost") @db.Decimal(14, 2)
+  snapshotSalePrice Decimal  @map("snapshot_sale_price") @db.Decimal(14, 2)
+  snapshotMargin    Decimal  @map("snapshot_margin") @db.Decimal(7, 2)
+  total             Decimal  @db.Decimal(14, 2)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  budget            Budget   @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  product           Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([budgetId])
+  @@index([productId])
+  @@map("budget_items")
+}
+
+model BudgetApproval {
+  id          String       @id @default(uuid()) @db.Uuid
+  budgetId    String       @map("budget_id") @db.Uuid
+  actorId     String       @map("actor_id") @db.Uuid
+  status      BudgetStatus
+  observation String?      @db.Text
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  budget      Budget       @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  actor       User         @relation("BudgetApprovalActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([budgetId, createdAt])
+  @@index([actorId, createdAt])
+  @@map("budget_approvals")
+}
+
+model BudgetHistory {
+  id             String              @id @default(uuid()) @db.Uuid
+  budgetId       String              @map("budget_id") @db.Uuid
+  actorId        String              @map("actor_id") @db.Uuid
+  action         BudgetHistoryAction
+  previousStatus BudgetStatus?       @map("previous_status")
+  newStatus      BudgetStatus        @map("new_status")
+  metadata       Json                @default("{}")
+  createdAt      DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  budget         Budget              @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  actor          User                @relation("BudgetHistoryActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([budgetId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([action, createdAt])
+  @@map("budget_history")
+}
+
+model FinancialAccount {
+  id             String               @id @default(uuid()) @db.Uuid
+  organizationId String               @map("organization_id") @db.Uuid
+  name           String               @db.VarChar(140)
+  type           FinancialAccountType
+  description    String?              @db.Text
+  openingBalance Decimal              @default(0) @map("opening_balance") @db.Decimal(14, 2)
+  currentBalance Decimal              @default(0) @map("current_balance") @db.Decimal(14, 2)
+  active         Boolean              @default(true)
+  deletedAt      DateTime?            @map("deleted_at") @db.Timestamptz(3)
+  createdAt      DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
+  organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  entries        FinancialEntry[]
+
+  @@index([organizationId, active])
+  @@index([type, active])
+  @@map("financial_accounts")
+}
+
+model FinancialCategory {
+  id             String                @id @default(uuid()) @db.Uuid
+  organizationId String                @map("organization_id") @db.Uuid
+  name           String                @db.VarChar(140)
+  type           FinancialCategoryType
+  color          String?               @db.VarChar(20)
+  icon           String?               @db.VarChar(80)
+  active         Boolean               @default(true)
+  deletedAt      DateTime?             @map("deleted_at") @db.Timestamptz(3)
+  createdAt      DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+  organization   Organization          @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  entries        FinancialEntry[]
+  allocations    FinancialEntryAllocation[]
+
+  @@index([organizationId, type, active])
+  @@index([name])
+  @@map("financial_categories")
+}
+
+model FinancialEntry {
+  id             String                      @id @default(uuid()) @db.Uuid
+  organizationId String                      @map("organization_id") @db.Uuid
+  accountId      String                      @map("account_id") @db.Uuid
+  categoryId     String                      @map("category_id") @db.Uuid
+  type           FinancialEntryType
+  origin         FinancialEntryOrigin        @default(MANUAL)
+  originId       String?                     @map("origin_id") @db.Uuid
+  amount         Decimal                     @db.Decimal(14, 2)
+  dueDate        DateTime                    @map("due_date") @db.Timestamptz(3)
+  paidAt         DateTime?                   @map("paid_at") @db.Timestamptz(3)
+  description    String                      @db.VarChar(180)
+  notes          String?                     @db.Text
+  status         FinancialEntryStatus        @default(PENDING)
+  createdBy      String                      @map("created_by") @db.Uuid
+  canceledAt     DateTime?                   @map("canceled_at") @db.Timestamptz(3)
+  deletedAt      DateTime?                   @map("deleted_at") @db.Timestamptz(3)
+  createdAt      DateTime                    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime                    @updatedAt @map("updated_at") @db.Timestamptz(3)
+  organization   Organization                @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  account        FinancialAccount            @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  category       FinancialCategory           @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  creator        User                        @relation("FinancialEntryCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
+  allocations    FinancialEntryAllocation[]
+  history        FinancialHistory[]
+
+  @@index([organizationId, status, dueDate])
+  @@index([accountId, status, dueDate])
+  @@index([categoryId, dueDate])
+  @@index([type, status, dueDate])
+  @@index([origin, originId])
+  @@index([createdBy, createdAt])
+  @@map("financial_entries")
+}
+
+model FinancialEntryAllocation {
+  id         String            @id @default(uuid()) @db.Uuid
+  entryId    String            @map("entry_id") @db.Uuid
+  categoryId String            @map("category_id") @db.Uuid
+  amount     Decimal           @db.Decimal(14, 2)
+  notes      String?           @db.Text
+  createdAt  DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  entry      FinancialEntry    @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  category   FinancialCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  @@index([entryId])
+  @@index([categoryId])
+  @@map("financial_entry_allocations")
+}
+
+model FinancialHistory {
+  id             String                 @id @default(uuid()) @db.Uuid
+  entryId        String                 @map("entry_id") @db.Uuid
+  actorId        String                 @map("actor_id") @db.Uuid
+  action         FinancialHistoryAction
+  previousStatus FinancialEntryStatus?  @map("previous_status")
+  newStatus      FinancialEntryStatus   @map("new_status")
+  metadata       Json                   @default("{}")
+  createdAt      DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  entry          FinancialEntry         @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  actor          User                   @relation("FinancialHistoryActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([entryId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([action, createdAt])
+  @@map("financial_history")
 }

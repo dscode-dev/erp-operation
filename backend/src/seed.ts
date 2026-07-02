@@ -1,6 +1,14 @@
 import {
   AssetLifecycleEventType,
+  BudgetHistoryAction,
+  BudgetStatus,
   DocumentTemplateType,
+  FinancialAccountType,
+  FinancialCategoryType,
+  FinancialEntryOrigin,
+  FinancialEntryStatus,
+  FinancialEntryType,
+  FinancialHistoryAction,
   PrismaClient,
   Role,
   StockMovementType,
@@ -33,6 +41,8 @@ async function main(): Promise<void> {
   });
   await seedInventoryMaterials();
   await seedProductPricing();
+  await seedBudgets();
+  await seedFinancialCore();
 }
 
 async function seedOwner(email: string): Promise<void> {
@@ -203,6 +213,7 @@ async function seedOrganization(): Promise<void> {
 
 function defaultTemplateName(type: DocumentTemplateType): string {
   const names: Record<DocumentTemplateType, string> = {
+    BUDGET: 'Orçamento padrão',
     QUOTE: 'Orçamento padrão',
     WORK_ORDER: 'Ordem de serviço padrão',
     RECEIPT: 'Recibo padrão',
@@ -464,6 +475,216 @@ async function seedProductPricing(): Promise<void> {
       },
     });
   }
+}
+
+async function seedBudgets(): Promise<void> {
+  const [organization, actor, operation] = await Promise.all([
+    prisma.organization.findFirst({ orderBy: { createdAt: 'asc' }, select: { id: true } }),
+    prisma.user.findFirst({ where: { role: Role.OWNER }, orderBy: { createdAt: 'asc' }, select: { id: true } }),
+    prisma.operation.findFirst({
+      where: { equipmentId: { not: null } },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, customerId: true, addressId: true, equipmentId: true },
+    }),
+  ]);
+  if (!organization || !actor || !operation) return;
+
+  const existing = await prisma.budget.findFirst({
+    where: { operationId: operation.id, title: 'Orçamento de manutenção HVAC' },
+    select: { id: true },
+  });
+  if (existing) return;
+
+  const products = await prisma.product.findMany({
+    where: { sku: { in: ['HVAC-FILTRO-G4-001', 'HVAC-GAS-R410A-KG'] }, isActive: true },
+    include: {
+      pricings: {
+        where: { organizationId: organization.id, active: true },
+        orderBy: { validFrom: 'desc' },
+        take: 1,
+      },
+    },
+  });
+  const items = products
+    .filter((product) => product.pricings.length > 0)
+    .map((product, index) => {
+      const pricing = product.pricings[0];
+      const quantity = index === 0 ? 2 : 1;
+      const total = quantity * Number(pricing.salePrice);
+      return {
+        productId: product.id,
+        description: product.name,
+        quantity,
+        unit: product.unit,
+        snapshotCost: pricing.costPrice,
+        snapshotSalePrice: pricing.salePrice,
+        snapshotMargin: pricing.marginPercentage,
+        total,
+      };
+    });
+  if (!items.length) return;
+
+  const subtotal = items.reduce((sum, item) => sum + Number(item.total), 0);
+  const discount = 0;
+  const additional = 0;
+  const budget = await prisma.budget.create({
+    data: {
+      organizationId: organization.id,
+      operationId: operation.id,
+      customerId: operation.customerId,
+      customerAddressId: operation.addressId,
+      equipmentId: operation.equipmentId,
+      status: BudgetStatus.PENDING,
+      title: 'Orçamento de manutenção HVAC',
+      description: 'Orçamento inicial gerado a partir de produtos e preços reais cadastrados.',
+      subtotal,
+      discount,
+      additional,
+      total: subtotal - discount + additional,
+      expirationDate: new Date(Date.now() + 15 * 86_400_000),
+      observations: 'Seed operacional para desenvolvimento e demonstração.',
+      createdBy: actor.id,
+      items: { createMany: { data: items } },
+    },
+    select: { id: true, number: true },
+  });
+  await prisma.budgetHistory.create({
+    data: {
+      budgetId: budget.id,
+      actorId: actor.id,
+      action: BudgetHistoryAction.CREATED,
+      newStatus: BudgetStatus.PENDING,
+      metadata: { source: 'seed', items: items.length },
+    },
+  });
+  process.stdout.write(`${JSON.stringify({ event: 'budget_seed_created', budget })}\n`);
+}
+
+async function seedFinancialCore(): Promise<void> {
+  const [organization, actor, budget] = await Promise.all([
+    prisma.organization.findFirst({ orderBy: { createdAt: 'asc' }, select: { id: true } }),
+    prisma.user.findFirst({ where: { role: Role.OWNER }, orderBy: { createdAt: 'asc' }, select: { id: true } }),
+    prisma.budget.findFirst({ orderBy: { createdAt: 'asc' }, select: { id: true, total: true } }),
+  ]);
+  if (!organization || !actor) return;
+
+  const cash = await prisma.financialAccount.upsert({
+    where: { id: '00000000-0000-4000-8000-000000000151' },
+    create: {
+      id: '00000000-0000-4000-8000-000000000151',
+      organizationId: organization.id,
+      name: 'Caixa operacional',
+      type: FinancialAccountType.CASH,
+      description: 'Conta caixa padrão da instalação.',
+      openingBalance: 1500,
+      currentBalance: 1500,
+      active: true,
+    },
+    update: {},
+    select: { id: true },
+  });
+
+  const bank = await prisma.financialAccount.upsert({
+    where: { id: '00000000-0000-4000-8000-000000000152' },
+    create: {
+      id: '00000000-0000-4000-8000-000000000152',
+      organizationId: organization.id,
+      name: 'Banco principal',
+      type: FinancialAccountType.BANK,
+      description: 'Conta bancária operacional para recebimentos e pagamentos.',
+      openingBalance: 8500,
+      currentBalance: 8500,
+      active: true,
+    },
+    update: {},
+    select: { id: true },
+  });
+
+  const income = await prisma.financialCategory.upsert({
+    where: { id: '00000000-0000-4000-8000-000000000161' },
+    create: {
+      id: '00000000-0000-4000-8000-000000000161',
+      organizationId: organization.id,
+      name: 'Serviços técnicos',
+      type: FinancialCategoryType.INCOME,
+      color: '#16A34A',
+      icon: 'wrench',
+      active: true,
+    },
+    update: {},
+    select: { id: true },
+  });
+
+  const expense = await prisma.financialCategory.upsert({
+    where: { id: '00000000-0000-4000-8000-000000000162' },
+    create: {
+      id: '00000000-0000-4000-8000-000000000162',
+      organizationId: organization.id,
+      name: 'Materiais e peças',
+      type: FinancialCategoryType.EXPENSE,
+      color: '#DC2626',
+      icon: 'package',
+      active: true,
+    },
+    update: {},
+    select: { id: true },
+  });
+
+  const entries = [
+    {
+      id: '00000000-0000-4000-8000-000000000171',
+      accountId: bank.id,
+      categoryId: income.id,
+      type: FinancialEntryType.RECEIVABLE,
+      origin: budget ? FinancialEntryOrigin.BUDGET : FinancialEntryOrigin.MANUAL,
+      originId: budget?.id ?? null,
+      amount: budget ? Number(budget.total) : 1250,
+      dueDate: new Date(Date.now() + 5 * 86_400_000),
+      description: 'Recebimento previsto de serviço aprovado',
+    },
+    {
+      id: '00000000-0000-4000-8000-000000000172',
+      accountId: cash.id,
+      categoryId: expense.id,
+      type: FinancialEntryType.PAYABLE,
+      origin: FinancialEntryOrigin.MANUAL,
+      originId: null,
+      amount: 320,
+      dueDate: new Date(Date.now() + 2 * 86_400_000),
+      description: 'Compra prevista de materiais de manutenção',
+    },
+  ];
+
+  for (const entry of entries) {
+    const exists = await prisma.financialEntry.findUnique({ where: { id: entry.id }, select: { id: true } });
+    if (exists) continue;
+    await prisma.financialEntry.create({
+      data: {
+        id: entry.id,
+        organizationId: organization.id,
+        accountId: entry.accountId,
+        categoryId: entry.categoryId,
+        type: entry.type,
+        origin: entry.origin,
+        originId: entry.originId,
+        amount: entry.amount,
+        dueDate: entry.dueDate,
+        description: entry.description,
+        status: FinancialEntryStatus.PENDING,
+        createdBy: actor.id,
+        history: {
+          create: {
+            actorId: actor.id,
+            action: FinancialHistoryAction.CREATED,
+            newStatus: FinancialEntryStatus.PENDING,
+            metadata: { source: 'seed' },
+          },
+        },
+      },
+    });
+  }
+
+  process.stdout.write(`${JSON.stringify({ event: 'financial_seed_completed', entries: entries.length })}\n`);
 }
 
 main()

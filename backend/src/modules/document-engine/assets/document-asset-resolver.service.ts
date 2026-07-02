@@ -9,7 +9,8 @@ import {
 } from '../../../infra/storage/storage-provider.type';
 
 export interface SaveDocumentPdfInput {
-  operationId: string;
+  operationId?: string | null;
+  sourceId?: string;
   documentType: string;
   content: Buffer;
 }
@@ -34,7 +35,8 @@ export class DocumentAssetResolver {
   ) {}
 
   async saveDocumentPdf(input: SaveDocumentPdfInput): Promise<StoredFile> {
-    const storageKey = `${DOCUMENT_STORAGE_PREFIX}/${input.operationId}/${input.documentType.toLowerCase()}-${randomUUID()}.pdf`;
+    const sourceId = input.operationId ?? input.sourceId ?? 'standalone';
+    const storageKey = `${DOCUMENT_STORAGE_PREFIX}/${sourceId}/${input.documentType.toLowerCase()}-${randomUUID()}.pdf`;
     return this.storage.save({ storageKey, content: input.content });
   }
 

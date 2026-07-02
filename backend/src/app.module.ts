@@ -25,6 +25,8 @@ import { MaintenancePlanningModule } from './modules/maintenance-planning/mainte
 import { PmocComplianceModule } from './modules/pmoc-compliance/pmoc-compliance.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
 import { PricingModule } from './modules/pricing/pricing.module';
+import { BudgetsModule } from './modules/budgets/budgets.module';
+import { FinancialModule } from './modules/financial/financial.module';
 import { GlobalExceptionFilter } from './shared/filters/global-exception.filter';
 import { RequestLoggingInterceptor } from './shared/interceptors/request-logging.interceptor';
 import { ResponseEnvelopeInterceptor } from './shared/interceptors/response-envelope.interceptor';
@@ -59,6 +61,8 @@ import { ResponseEnvelopeInterceptor } from './shared/interceptors/response-enve
     PmocComplianceModule,
     InventoryModule,
     PricingModule,
+    BudgetsModule,
+    FinancialModule,
     HealthModule,
   ],
   providers: [

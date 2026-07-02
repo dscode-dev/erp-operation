@@ -15,6 +15,7 @@ import {
 import { ERROR_CODES } from '../../shared/constants/error-codes.constants';
 import { ApplicationException } from '../../shared/exceptions/application.exception';
 import type { AuthenticatedUser } from '../../shared/types/authenticated-user.type';
+import { buildPaginatedResponse, type PaginatedResponse } from '../../shared/types/pagination.types';
 import { LifecyclePublisher } from '../asset-lifecycle/lifecycle-publisher.service';
 import { PrismaService } from '../database/prisma.service';
 import { DocumentConfigurationService } from '../document-engine/configuration/document-configuration.service';
@@ -663,16 +664,8 @@ export class PmocComplianceService implements ComplianceEvaluator<{
     return [...new Set(values)];
   }
 
-  private page<T>(
-    items: T[],
-    page: number,
-    limit: number,
-    total: number,
-  ): {
-    items: T[];
-    pagination: { page: number; limit: number; total: number; totalPages: number };
-  } {
-    return { items, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } };
+  private page<T>(items: T[], page: number, limit: number, total: number): PaginatedResponse<T> {
+    return buildPaginatedResponse(items, total, page, limit);
   }
 
   private audit(

@@ -18,6 +18,7 @@ import type {
 } from '../blueprint/document-blueprint.types';
 import {
   DocumentContextService,
+  type BudgetContext,
   type DocumentBuildContext,
   type DocumentContext,
   type TemplatePreviewContext,
@@ -42,9 +43,17 @@ export class DocumentBuilderService {
     return this.buildFromContext(context);
   }
 
+  async buildBudget(budgetId: string): Promise<DocumentBlueprint> {
+    const context = await this.context.buildBudgetContext(budgetId);
+    return this.buildFromContext(context);
+  }
+
   private buildFromContext(context: DocumentBuildContext): DocumentBlueprint {
     if (context.kind === 'templatePreview') {
       return this.buildTemplatePreviewBlueprint(context);
+    }
+    if (context.kind === 'budget') {
+      return this.buildBudgetBlueprint(context);
     }
     return this.buildOperationBlueprint(context);
   }
@@ -138,6 +147,51 @@ export class DocumentBuilderService {
       },
       footer: {
         content: this.clean(template.footerContent || `Modelo gerado por ${organization.tradeName}`),
+        generatedAt,
+      },
+      sections,
+    };
+  }
+
+  private buildBudgetBlueprint(context: BudgetContext): DocumentBlueprint {
+    const { budget, configuration } = context;
+    const { organization, settings } = configuration;
+    const generatedAt = new Date().toISOString();
+    const number = budget.document?.number ?? `ORC-${String(budget.number).padStart(6, '0')}`;
+    const sections = this.budgetSections(context);
+    this.assertBlueprintLimits(sections);
+
+    return {
+      version: '1.0',
+      metadata: {
+        operationId: budget.operationId ?? budget.id,
+        documentId: budget.document?.id ?? null,
+        documentType: DocumentTemplateType.BUDGET,
+        documentNumber: number,
+        generatedAt,
+        locale: 'pt-BR',
+        timezone: settings.timezone,
+        currency: settings.currency,
+        organization: {
+          legalName: this.clean(organization.legalName),
+          tradeName: this.clean(organization.tradeName),
+          cnpj: this.clean(organization.cnpj),
+          email: this.clean(organization.email),
+          phone: this.clean(organization.phone),
+          city: this.clean(organization.city),
+          state: this.clean(organization.state),
+          primaryColor: organization.primaryColor,
+          secondaryColor: organization.secondaryColor,
+        },
+      },
+      header: {
+        title: 'Orçamento',
+        subtitle: budget.operation ? `Operação ${String(budget.operation.number).padStart(6, '0')}` : budget.title,
+        organizationName: this.clean(organization.tradeName || organization.legalName),
+        documentNumber: number,
+      },
+      footer: {
+        content: this.clean(context.template?.footerContent || `Gerado por ${organization.tradeName} · ${organization.email}`),
         generatedAt,
       },
       sections,
@@ -384,6 +438,144 @@ export class DocumentBuilderService {
     return sections;
   }
 
+  private budgetSections(context: BudgetContext): DocumentSection[] {
+    const { budget, template } = context;
+    const address = budget.customerAddress ?? budget.customer.addresses[0] ?? null;
+    const primaryContact = budget.customer.contacts[0] ?? null;
+    const sections: DocumentSection[] = [
+      {
+        id: 'budget-summary',
+        title: 'Resumo do orçamento',
+        critical: true,
+        components: [
+          this.metadata('budget-metadata', [
+            ['Número', `ORC-${String(budget.number).padStart(6, '0')}`],
+            ['Título', budget.title],
+            ['Status', budget.status],
+            ['Validade', this.date(budget.expirationDate)],
+            ['Responsável', budget.creator.name],
+            ['Criado em', this.date(budget.createdAt)],
+          ]),
+        ],
+      },
+      {
+        id: 'budget-customer',
+        title: 'Cliente e local',
+        critical: true,
+        components: [
+          this.metadata('budget-customer-metadata', [
+            ['Razão/Nome', budget.customer.name],
+            ['Nome fantasia', budget.customer.tradeName ?? '—'],
+            ['Documento', budget.customer.cnpj ?? budget.customer.cpf ?? '—'],
+            [
+              'Contato',
+              primaryContact
+                ? `${primaryContact.name}${primaryContact.phone ? ` · ${primaryContact.phone}` : ''}`
+                : budget.customer.phone ?? '—',
+            ],
+            ['Endereço', address ? this.address(address) : '—'],
+          ]),
+        ],
+      },
+    ];
+
+    if (budget.equipment) {
+      sections.push({
+        id: 'budget-equipment',
+        title: 'Equipamento',
+        critical: true,
+        components: [
+          this.metadata('budget-equipment-metadata', [
+            ['Nome', budget.equipment.name],
+            ['Tag', budget.equipment.tag ?? '—'],
+            ['Tipo', budget.equipment.type],
+            ['Fabricante', budget.equipment.manufacturer ?? '—'],
+            ['Modelo', budget.equipment.model ?? '—'],
+            ['Nº de série', budget.equipment.serialNumber ?? '—'],
+            ['QR Code', budget.equipment.qrCode],
+          ]),
+        ],
+      });
+    }
+
+    if (template?.headerContent) {
+      sections.push({
+        id: 'budget-template-header',
+        title: 'Cabeçalho',
+        components: [{ id: 'budget-header-content', kind: 'paragraph', text: this.clean(template.headerContent) }],
+      });
+    }
+
+    sections.push({
+      id: 'budget-items',
+      title: 'Itens do orçamento',
+      critical: true,
+      components: [
+        {
+          id: 'budget-items-table',
+          kind: 'table',
+          columns: [
+            { key: 'item', label: 'Item', width: 0.34 },
+            { key: 'quantity', label: 'Qtd.', width: 0.12 },
+            { key: 'unit', label: 'Un.', width: 0.1 },
+            { key: 'unitPrice', label: 'Valor un.', width: 0.18 },
+            { key: 'margin', label: 'Margem', width: 0.12 },
+            { key: 'total', label: 'Total', width: 0.14 },
+          ],
+          rows: budget.items.map((item) => ({
+            item: this.clean(item.description || item.product.name),
+            quantity: this.decimal(item.quantity),
+            unit: this.clean(item.unit),
+            unitPrice: this.money(item.snapshotSalePrice),
+            margin: `${this.decimal(item.snapshotMargin)}%`,
+            total: this.money(item.total),
+          })),
+        },
+      ],
+    });
+
+    sections.push({
+      id: 'budget-totals',
+      title: 'Totais',
+      critical: true,
+      components: [
+        this.metadata('budget-totals-metadata', [
+          ['Subtotal', this.money(budget.subtotal)],
+          ['Desconto', this.money(budget.discount)],
+          ['Adicional', this.money(budget.additional)],
+          ['Total', this.money(budget.total)],
+        ]),
+      ],
+    });
+
+    if (budget.description || budget.observations || template?.observations) {
+      sections.push({
+        id: 'budget-observations',
+        title: 'Observações',
+        components: [
+          {
+            id: 'budget-observations-content',
+            kind: 'observation',
+            text: this.clean([budget.description, budget.observations, template?.observations].filter(Boolean).join('\n')),
+            keepTogether: true,
+          },
+        ],
+      });
+    }
+
+    const signature = this.signatureComponent(context);
+    if (signature) {
+      sections.push({
+        id: 'signature',
+        title: 'Assinatura',
+        critical: true,
+        components: [signature],
+      });
+    }
+
+    return sections;
+  }
+
   private signatureComponent(context: DocumentBuildContext): DocumentBlueprintComponent | null {
     const { signature } = context;
     if (!signature.requiresSignature || signature.signatureMode === SignatureMode.NONE) return null;
@@ -480,8 +672,23 @@ export class DocumentBuilderService {
     return new Date(value).toISOString();
   }
 
+  private decimal(value: Prisma.Decimal | number | string): string {
+    return Number(value).toLocaleString('pt-BR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 3,
+    });
+  }
+
+  private money(value: Prisma.Decimal | number | string): string {
+    return Number(value).toLocaleString('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+    });
+  }
+
   private titleFor(type: DocumentTemplateType): string {
     const titles: Record<DocumentTemplateType, string> = {
+      BUDGET: 'Orçamento',
       QUOTE: 'Orçamento',
       WORK_ORDER: 'Ordem de Serviço',
       RECEIPT: 'Recibo',

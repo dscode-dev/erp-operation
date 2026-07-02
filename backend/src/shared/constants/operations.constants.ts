@@ -15,6 +15,7 @@ export const OPERATION_PHOTO_MIME_TYPES = ['image/png', 'image/jpeg'] as const;
 
 /** Document number prefixes per produced document type. */
 export const OPERATION_DOCUMENT_PREFIX: Record<string, string> = {
+  BUDGET: 'ORC',
   WORK_ORDER: 'OS',
   QUOTE: 'ORC',
   RECEIPT: 'REC',

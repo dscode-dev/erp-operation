@@ -11,6 +11,7 @@ import {
 import { ERROR_CODES } from '../../shared/constants/error-codes.constants';
 import { ApplicationException } from '../../shared/exceptions/application.exception';
 import type { AuthenticatedUser } from '../../shared/types/authenticated-user.type';
+import { buildPaginatedResponse, type PaginatedResponse } from '../../shared/types/pagination.types';
 import { LifecyclePublisher } from '../asset-lifecycle/lifecycle-publisher.service';
 import { PrismaService } from '../database/prisma.service';
 import type {
@@ -753,8 +754,8 @@ export class InventoryService {
     }
   }
 
-  private page<T>(items: T[], total: number, page: number, limit: number): { items: T[]; pagination: { page: number; limit: number; total: number; totalPages: number } } {
-    return { items, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } };
+  private page<T>(items: T[], total: number, page: number, limit: number): PaginatedResponse<T> {
+    return buildPaginatedResponse(items, total, page, limit);
   }
 
   private throwConflict(error: unknown, code: string, message: string): never {

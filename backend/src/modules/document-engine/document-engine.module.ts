@@ -30,6 +30,7 @@ import { DocumentRendererService } from './renderer/document-renderer.service';
     DocumentContextService,
   ],
   exports: [
+    DocumentEngineService,
     DocumentAssetResolver,
     LayoutEngine,
     DocumentMeasureService,

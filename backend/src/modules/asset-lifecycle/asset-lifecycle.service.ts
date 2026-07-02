@@ -17,6 +17,7 @@ import {
 import { ERROR_CODES } from '../../shared/constants/error-codes.constants';
 import { ApplicationException } from '../../shared/exceptions/application.exception';
 import type { AuthenticatedUser } from '../../shared/types/authenticated-user.type';
+import { buildPaginationMeta } from '../../shared/types/pagination.types';
 import { PrismaService } from '../database/prisma.service';
 import {
   ASSET_LIFECYCLE_EVENT_INCLUDE,
@@ -69,12 +70,7 @@ export class AssetLifecycleService {
     return {
       items: items.map((event) => this.withTimeline(event)),
       timelineGroups: this.timeline.assembleGroups(items),
-      pagination: {
-        page: query.page,
-        limit: query.limit,
-        total,
-        totalPages: Math.ceil(total / query.limit),
-      },
+      pagination: buildPaginationMeta(query.page, query.limit, total),
     };
   }
 

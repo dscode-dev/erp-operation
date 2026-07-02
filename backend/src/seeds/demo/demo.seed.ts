@@ -1074,6 +1074,7 @@ function permissionsFor(role: Role): Prisma.UserPermissionUncheckedCreateWithout
 
 function templateName(type: DocumentTemplateType): string {
   const names: Record<DocumentTemplateType, string> = {
+    BUDGET: 'Orçamento padrão',
     QUOTE: 'Orçamento padrão',
     WORK_ORDER: 'Ordem de serviço padrão',
     RECEIPT: 'Recibo padrão',

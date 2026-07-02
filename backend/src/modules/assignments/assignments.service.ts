@@ -10,6 +10,7 @@ import { ASSIGNMENT_AUDIT_ACTIONS, ASSIGNMENT_RESOURCE } from '../../shared/cons
 import { ERROR_CODES } from '../../shared/constants/error-codes.constants';
 import { ApplicationException } from '../../shared/exceptions/application.exception';
 import type { AuthenticatedUser } from '../../shared/types/authenticated-user.type';
+import { buildPaginatedResponse } from '../../shared/types/pagination.types';
 import { LifecyclePublisher } from '../asset-lifecycle/lifecycle-publisher.service';
 import { PrismaService } from '../database/prisma.service';
 import { MaintenancePlanningService } from '../maintenance-planning/maintenance-planning.service';
@@ -76,15 +77,7 @@ export class AssignmentsService {
       }),
       this.prisma.assignment.count({ where }),
     ]);
-    return {
-      items,
-      pagination: {
-        page: query.page,
-        limit: query.limit,
-        total,
-        totalPages: Math.ceil(total / query.limit),
-      },
-    };
+    return buildPaginatedResponse(items, total, query.page, query.limit);
   }
 
   async my(query: ListAssignmentsQueryDto, actor: AuthenticatedUser): Promise<unknown> {
@@ -99,15 +92,7 @@ export class AssignmentsService {
       }),
       this.prisma.assignment.count({ where }),
     ]);
-    return {
-      items,
-      pagination: {
-        page: query.page,
-        limit: query.limit,
-        total,
-        totalPages: Math.ceil(total / query.limit),
-      },
-    };
+    return buildPaginatedResponse(items, total, query.page, query.limit);
   }
 
   async get(id: string, actor: AuthenticatedUser): Promise<AssignmentPayload> {

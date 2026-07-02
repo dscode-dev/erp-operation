@@ -15,9 +15,9 @@ import { useAuth } from "@erp/ui/auth/auth-provider";
 import { Gate } from "@erp/ui/auth/gate";
 import {
   dashboardApi, usersApi, customersApi, financialApi, assetLifecycleApi, useQuery,
-  inventoryApi, pricingApi,
+  inventoryApi, pricingApi, budgetsApi,
   type AssetLifecycleEvent, type DashboardData, type DemoScheduleState, type FinancialData,
-  type InventoryStats, type PricingStats, type StockMovement,
+  type BudgetStats, type InventoryStats, type PricingStats, type StockMovement,
 } from "@erp/api";
 import { firstName, formatNumber, formatCurrencyBRL, formatDateTime } from "@erp/utils";
 
@@ -44,6 +44,7 @@ export default function PlatformHome() {
   const inventory = useQuery<InventoryStats>((signal) => inventoryApi.getInventoryStats({ signal }), []);
   const movements = useQuery((signal) => inventoryApi.listStockMovements({ limit: 5, signal }), []);
   const pricing = useQuery<PricingStats | null>((signal) => (hasRole("OWNER", "MANAGER") ? pricingApi.getPricingStats({ signal }) : Promise.resolve(null)), [session?.role]);
+  const budgets = useQuery<BudgetStats | null>((signal) => (hasRole("OWNER", "MANAGER") ? budgetsApi.getBudgetStats({ signal }) : Promise.resolve(null)), [session?.role]);
 
   const counters = dash.data?.demo?.["demo.dashboard.v1"].counters;
   const schedule = dash.data?.demo?.["demo.schedule.v1"].items ?? [];
@@ -86,6 +87,10 @@ export default function PlatformHome() {
         error={inventory.error || movements.error || pricing.error}
         onRetry={() => { inventory.refetch(); movements.refetch(); pricing.refetch(); }}
       />
+
+      <Gate roles={["OWNER", "MANAGER"]}>
+        <BudgetWidgets stats={budgets.data} loading={budgets.loading && !budgets.data} error={budgets.error} onRetry={budgets.refetch} />
+      </Gate>
 
       {/* Indicadores financeiros (gated) */}
       <Gate roles={["OWNER", "MANAGER"]} permission="canFinancial">
@@ -132,6 +137,35 @@ export default function PlatformHome() {
         )}
       </div>
     </div>
+  );
+}
+
+function BudgetWidgets({
+  stats,
+  loading,
+  error,
+  onRetry,
+}: {
+  stats: BudgetStats | null;
+  loading: boolean;
+  error: unknown;
+  onRetry: () => void;
+}) {
+  return (
+    <DashboardSection title="Orçamentos" action={<Link href="/budgets" className="text-xs font-medium text-[var(--color-primary)] hover:underline">ver orçamentos</Link>}>
+      {loading ? (
+        <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">{Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)}</div>
+      ) : error && !stats ? (
+        <ErrorState error={error} onRetry={onRetry} title="Orçamentos indisponíveis" />
+      ) : (
+        <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+          <MetricCard label="Pendentes" value={formatNumber(stats?.pending ?? 0)} trend={(stats?.pending ?? 0) > 0 ? "up" : "flat"} icon="Clock" />
+          <MetricCard label="Últimos aprovados" value={formatNumber(stats?.approved ?? 0)} icon="BadgeCheck" />
+          <MetricCard label="Valor potencial" value={formatCurrencyBRL(Number(stats?.potentialRevenue ?? 0))} icon="WalletCards" />
+          <MetricCard label="Ticket médio" value={formatCurrencyBRL(Number(stats?.averageTicket ?? 0))} icon="TrendingUp" />
+        </div>
+      )}
+    </DashboardSection>
   );
 }
 

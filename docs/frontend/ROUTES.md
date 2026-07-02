@@ -96,7 +96,22 @@ Dois apps no mesmo runtime Next, separados por pathname (`app/app-providers.tsx`
 ## Platform (gestão · desktop-first)
 
 `/login`, `/trocar-senha` (escopo platform) + shell autenticado em `app/(platform)/…`:
-`/`, `/agenda`, `/operacoes` (**Backlog #004** — domínio operacional real, lista `/operations` + drawer), `/servicos`, `/ordens`, `/clientes` (+`/[id]`), `/equipamentos` (+`/[id]`), `/produtos`, `/financial`, `/usuarios`, `/profile`, `/settings`, `/reports` (+`/visita`), `/documentos` (central documental real via Document Engine), `/demo-ready` (modo apresentação). Sprint 4: Ordens e Produtos passam a consumir o Demo Dataset (`demo.orders.v1`/`demo.products.v1`).
+`/`, `/agenda`, `/operacoes` (**Backlog #004** — domínio operacional real, lista `/operations` + drawer), `/servicos`, `/ordens`, `/clientes` (+`/[id]`), `/equipamentos` (+`/[id]`), `/produtos`, `/budgets`, `/financial`, `/usuarios`, `/profile`, `/settings`, `/reports` (+`/visita`), `/documentos` (central documental real via Document Engine), `/demo-ready` (modo apresentação). Sprint 4: Ordens e Produtos passam a consumir o Demo Dataset (`demo.orders.v1`/`demo.products.v1`).
+
+### Budget / Comercial
+
+- `/budgets`: Central Comercial real.
+  - Consome `/budgets`, `/budgets/stats`, `/budgets/history/:id`;
+  - cria orçamentos via `POST /budgets`;
+  - aprova/rejeita/cancela por endpoints oficiais;
+  - documento comercial usa `POST /budgets/:id/render` + `GET /budgets/:id/download`;
+  - visualização usa `DocumentViewer` com `documentId` oficial;
+  - visível no menu para `OWNER` e `MANAGER`.
+
+- `OperationDetailDrawer`:
+  - seção **Orçamentos** consome `/operations/:id/budgets`;
+  - cria orçamento vinculado à Operation;
+  - não cria fluxo comercial paralelo.
 
 ## Operator (campo · mobile-first)
 

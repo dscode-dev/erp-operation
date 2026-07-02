@@ -46,6 +46,41 @@ Use `error.code` para lógica de cliente. Mensagens podem mudar sem quebra de co
 | 403  | `PASSWORD_CHANGE_REQUIRED` | Conta ainda usa senha temporária       |
 | 429  | `RATE_LIMIT_EXCEEDED`      | Limite global excedido                 |
 
+## Standard pagination contract
+
+Sprint 14.5 consolidou a semântica de paginação para todas as listagens paginadas do backend.
+
+Query params padrão:
+
+| Param | Type | Default | Notes |
+| ----- | ---- | ------- | ----- |
+| `page` | number | `1` | inteiro positivo, mínimo `1` |
+| `limit` | number | `20` | inteiro positivo, máximo definido pelo DTO do módulo, normalmente `100` |
+
+Response padrão:
+
+```json
+{
+  "success": true,
+  "data": {
+    "items": [],
+    "pagination": {
+      "page": 1,
+      "limit": 20,
+      "total": 0,
+      "totalPages": 1
+    }
+  }
+}
+```
+
+Regras:
+
+- `totalPages` nunca deve ser menor que `1`;
+- filtros e ordenação específicos de cada domínio preservam nomes já documentados;
+- payloads enriquecidos podem adicionar campos irmãos de `items` e `pagination`, como
+  `timelineGroups`, sem alterar a semântica da paginação.
+
 ## Authentication model
 
 - Access token: JWT HS256, padrão de 900 segundos.
@@ -3274,3 +3309,489 @@ Erros:
 | 409  | `ASSIGNMENT_INVALID_TRANSITION` | Estado atual não permite transição |
 
 Migration: `20260701170000_assignment_domain`.
+
+## Budgets
+
+Domínio comercial oficial de orçamentos. Todas as rotas exigem JWT e usam envelope global.
+
+Roles:
+
+- `OWNER` e `MANAGER`: acesso completo ao domínio Budget;
+- `OPERATOR` e `VIEWER`: sem acesso aos endpoints de Budget.
+
+Statuses: `DRAFT`, `PENDING`, `APPROVED`, `REJECTED`, `EXPIRED`, `CANCELED`.
+
+### GET `/api/v1/budgets`
+
+Query: `page`, `limit`, `search`, `status`, `customerId`, `equipmentId`, `operationId`,
+`from`, `to`, `expired`.
+
+Response 200:
+
+```json
+{
+  "items": [
+    {
+      "id": "uuid",
+      "number": 1,
+      "status": "PENDING",
+      "title": "Orçamento de manutenção HVAC",
+      "subtotal": "301.00",
+      "discount": "0.00",
+      "additional": "0.00",
+      "total": "301.00",
+      "expirationDate": "2026-07-17T00:00:00.000Z",
+      "customer": { "id": "uuid", "name": "Hospital Santa Clara" },
+      "equipment": { "id": "uuid", "name": "Split 24.000 BTU" },
+      "operation": { "id": "uuid", "number": 42, "type": "CORRETIVA", "status": "DRAFT" },
+      "items": []
+    }
+  ],
+  "pagination": { "page": 1, "limit": 20, "total": 1, "totalPages": 1 }
+}
+```
+
+### GET `/api/v1/budgets/:id`
+
+Response 200: `Budget` completo com `items`, `approvals`, `customer`, `equipment`,
+`operation`, `creator` e snapshots comerciais.
+
+### GET `/api/v1/operations/:id/budgets`
+
+Lista paginada dos orçamentos vinculados à Operation.
+
+### POST `/api/v1/budgets`
+
+Cria orçamento com snapshots de preço usando `PricingService`.
+
+Payload:
+
+```json
+{
+  "operationId": "uuid-opcional",
+  "customerId": "uuid",
+  "customerAddressId": "uuid-opcional",
+  "equipmentId": "uuid-opcional",
+  "title": "Troca de componentes",
+  "description": "Proposta para manutenção corretiva",
+  "discount": 0,
+  "additional": 0,
+  "expirationDate": "2026-07-17T00:00:00.000Z",
+  "observations": "Condições comerciais",
+  "status": "PENDING",
+  "items": [
+    { "productId": "uuid", "description": "Filtro G4", "quantity": 2 }
+  ]
+}
+```
+
+Response 201: Budget criado. Cada item retorna:
+
+```json
+{
+  "productId": "uuid",
+  "description": "Filtro G4",
+  "quantity": "2.000",
+  "unit": "UN",
+  "snapshotCost": "42.50",
+  "snapshotSalePrice": "78.00",
+  "snapshotMargin": "43.85",
+  "total": "156.00"
+}
+```
+
+### PATCH `/api/v1/budgets/:id`
+
+Atualiza orçamento editável. Enviar `items` substitui a lista inteira e recalcula snapshots.
+Orçamentos `APPROVED`, `REJECTED`, `EXPIRED` ou `CANCELED` não são editáveis.
+
+Payload parcial:
+
+```json
+{
+  "title": "Troca de componentes revisada",
+  "discount": 25,
+  "items": [
+    { "productId": "uuid", "quantity": 3 }
+  ]
+}
+```
+
+### PATCH `/api/v1/budgets/:id/approve`
+
+Payload:
+
+```json
+{ "observation": "Aprovado pelo cliente" }
+```
+
+Regras:
+
+- apenas `DRAFT` ou `PENDING` podem ser aprovados;
+- orçamento vencido não pode ser aprovado;
+- somente um Budget por Operation pode ficar `APPROVED`;
+- publica `BUDGET_APPROVED` no Asset Lifecycle quando há equipamento.
+
+### PATCH `/api/v1/budgets/:id/reject`
+
+Payload:
+
+```json
+{ "observation": "Cliente solicitou revisão futura" }
+```
+
+Publica `BUDGET_REJECTED` no Asset Lifecycle quando há equipamento.
+
+### DELETE `/api/v1/budgets/:id`
+
+Cancela orçamento editável. Response 200:
+
+```json
+{ "deleted": true }
+```
+
+### GET `/api/v1/budgets/stats`
+
+Query igual à listagem.
+
+Response 200:
+
+```json
+{
+  "total": 12,
+  "approved": 4,
+  "rejected": 2,
+  "pending": 3,
+  "potentialRevenue": "4820.00",
+  "averageTicket": "1205.00"
+}
+```
+
+### GET `/api/v1/budgets/history/:id`
+
+Retorna histórico imutável paginado do orçamento.
+
+Erros:
+
+| HTTP | Code | Condition |
+| ---- | ---- | --------- |
+| 400 | `VALIDATION_ERROR` | Payload/query inválido ou total negativo |
+| 400 | `BUDGET_INVALID_RELATIONSHIP` | Customer/address/equipment/operation inconsistentes |
+| 400 | `BUDGET_ITEM_REQUIRED` | Orçamento sem itens |
+| 400 | `BUDGET_INVALID_STATUS` | Status inválido para criação/alteração/decisão |
+| 401 | `UNAUTHORIZED` | Token ausente/inválido |
+| 403 | `FORBIDDEN` | Papel sem permissão |
+| 404 | `BUDGET_NOT_FOUND` | Budget inexistente |
+| 404 | `CUSTOMER_NOT_FOUND` | Cliente inexistente/inativo |
+| 404 | `EQUIPMENT_NOT_FOUND` | Equipamento inexistente/inativo |
+| 404 | `OPERATION_NOT_FOUND` | Operation inexistente |
+| 404 | `PRODUCT_NOT_FOUND` | Produto inexistente/inativo |
+| 404 | `PRICING_NOT_FOUND` | Produto sem preço vigente |
+| 409 | `BUDGET_APPROVED_IMMUTABLE` | Tentativa de alterar orçamento aprovado |
+| 409 | `BUDGET_EXPIRED` | Tentativa de aprovar orçamento vencido |
+| 409 | `BUDGET_MULTIPLE_APPROVAL` | Já existe Budget aprovado para a Operation |
+
+Eventos de auditoria:
+
+- `BUDGET_CREATED`;
+- `BUDGET_UPDATED`;
+- `BUDGET_APPROVED`;
+- `BUDGET_REJECTED`;
+- `BUDGET_CANCELED`.
+
+Migration: `20260702100000_budget_domain`.
+
+## Backlog — Budget Document Emission
+
+O Budget agora emite documento oficial pelo Document Engine. O domínio Budget não chama
+`DocumentBuilder` diretamente; a emissão passa por `DocumentEngineService`, cria/atualiza um
+`OperationDocument` vinculado ao `budgetId` e usa os snapshots dos `BudgetItem`.
+
+### POST `/api/v1/budgets/:id/render`
+
+Emite ou reemite o PDF oficial do orçamento.
+
+Access: `OWNER`, `MANAGER`.
+
+Response 200:
+
+```json
+{
+  "documentId": "uuid",
+  "preview": {
+    "version": "1.0",
+    "metadata": {
+      "operationId": "uuid|null",
+      "budgetId": "uuid",
+      "documentId": "uuid",
+      "documentType": "BUDGET",
+      "documentNumber": "ORC-000123"
+    },
+    "sections": []
+  },
+  "download": "/api/v1/budgets/{id}/download",
+  "status": "READY",
+  "document": {
+    "id": "uuid",
+    "operationId": "uuid|null",
+    "budgetId": "uuid",
+    "type": "BUDGET",
+    "number": "ORC-000123",
+    "status": "READY",
+    "mimeType": "application/pdf",
+    "fileSize": 12345,
+    "renderedAt": "2026-07-02T12:00:00.000Z",
+    "downloadReady": true
+  }
+}
+```
+
+Efeitos colaterais:
+
+- cria/atualiza `OperationDocument`;
+- salva PDF via storage do Document Engine;
+- registra `BudgetHistory.DOCUMENT_RENDERED`;
+- registra auditoria `DOCUMENT_RENDERED`;
+- publica Asset Lifecycle `DOCUMENT_RENDERED` quando houver equipamento resolvido.
+
+### GET `/api/v1/budgets/:id/download`
+
+Baixa o PDF oficial já emitido.
+
+Access: `OWNER`, `MANAGER`.
+
+Response 200:
+
+```json
+{
+  "id": "uuid",
+  "operationId": "uuid|null",
+  "budgetId": "uuid",
+  "type": "BUDGET",
+  "number": "ORC-000123",
+  "status": "READY",
+  "mimeType": "application/pdf",
+  "fileSize": 12345,
+  "renderedAt": "2026-07-02T12:00:00.000Z",
+  "downloadReady": true,
+  "contentBase64": "JVBERi0x..."
+}
+```
+
+Erros adicionais:
+
+| HTTP | Code | Condition |
+| ---- | ---- | --------- |
+| 403 | `DOCUMENT_FORBIDDEN_TYPE` | Papel sem permissão para documento comercial |
+| 404 | `BUDGET_NOT_FOUND` | Budget inexistente |
+| 404 | `DOCUMENT_NOT_FOUND` | Download solicitado antes da emissão |
+| 409 | `BUDGET_INVALID_STATUS` | Budget cancelado ou rejeitado |
+| 409 | `DOCUMENT_DOWNLOAD_NOT_READY` | Documento existe, mas ainda não possui PDF pronto |
+| 500 | `DOCUMENT_RENDER_FAILED` | Falha segura no render/PDF |
+
+Migration: `20260702120000_budget_document_emission`.
+
+## Financial Core
+
+Financial é o único domínio autorizado a representar dinheiro operacional no Orbit V1.
+
+Todos os endpoints exigem `OWNER` ou `MANAGER`. `OPERATOR` e `VIEWER` recebem `403`.
+
+### Financial enums
+
+```ts
+type FinancialAccountType = 'CASH' | 'BANK' | 'CREDIT_CARD' | 'DIGITAL_WALLET' | 'OTHER';
+type FinancialCategoryType = 'INCOME' | 'EXPENSE' | 'TRANSFER';
+type FinancialEntryType = 'RECEIVABLE' | 'PAYABLE' | 'TRANSFER';
+type FinancialEntryStatus = 'PENDING' | 'PAID' | 'CANCELED' | 'OVERDUE';
+type FinancialEntryOrigin = 'MANUAL' | 'BUDGET' | 'PURCHASE' | 'OPERATION' | 'PMOC' | 'OTHER';
+```
+
+### GET `/api/v1/financial/accounts`
+
+Query: `page`, `limit`, `search`, `type`, `active`.
+
+Response 200: paginado com `FinancialAccount`.
+
+### POST `/api/v1/financial/accounts`
+
+```json
+{
+  "name": "Banco principal",
+  "type": "BANK",
+  "description": "Conta operacional",
+  "openingBalance": 8500,
+  "active": true
+}
+```
+
+### PATCH `/api/v1/financial/accounts/:id`
+
+Campos opcionais: `name`, `type`, `description`, `active`.
+
+### DELETE `/api/v1/financial/accounts/:id`
+
+Soft delete. Response:
+
+```json
+{ "deleted": true }
+```
+
+### GET `/api/v1/financial/categories`
+
+Query: `page`, `limit`, `search`, `type`, `active`.
+
+### POST `/api/v1/financial/categories`
+
+```json
+{
+  "name": "Serviços técnicos",
+  "type": "INCOME",
+  "color": "#16A34A",
+  "icon": "wrench",
+  "active": true
+}
+```
+
+### PATCH `/api/v1/financial/categories/:id`
+
+Campos opcionais: `name`, `type`, `color`, `icon`, `active`.
+
+### DELETE `/api/v1/financial/categories/:id`
+
+Soft delete. Response:
+
+```json
+{ "deleted": true }
+```
+
+### GET `/api/v1/financial/entries`
+
+Query:
+
+- `page`;
+- `limit`;
+- `search`;
+- `accountId`;
+- `categoryId`;
+- `type`;
+- `origin`;
+- `status`;
+- `from`;
+- `to`.
+
+### GET `/api/v1/financial/entries/:id`
+
+Retorna lançamento com conta, categoria, criador e allocations.
+
+### POST `/api/v1/financial/entries`
+
+```json
+{
+  "accountId": "uuid",
+  "categoryId": "uuid",
+  "type": "RECEIVABLE",
+  "origin": "BUDGET",
+  "originId": "uuid",
+  "amount": 1250,
+  "dueDate": "2026-07-10T00:00:00.000Z",
+  "description": "Recebimento previsto",
+  "notes": "Opcional",
+  "status": "PENDING"
+}
+```
+
+Regras:
+
+- `RECEIVABLE` exige categoria `INCOME`;
+- `PAYABLE` exige categoria `EXPENSE`;
+- `TRANSFER` exige categoria `TRANSFER`;
+- `CANCELED` e `OVERDUE` não podem ser status inicial;
+- `PAID` inicial atualiza saldo imediatamente.
+
+### PATCH `/api/v1/financial/entries/:id`
+
+Edita lançamentos não finais. Campos opcionais:
+
+- `accountId`;
+- `categoryId`;
+- `type`;
+- `origin`;
+- `originId`;
+- `amount`;
+- `dueDate`;
+- `description`;
+- `notes`.
+
+### PATCH `/api/v1/financial/entries/:id/pay`
+
+```json
+{
+  "paidAt": "2026-07-02T12:00:00.000Z",
+  "notes": "Pago em dinheiro"
+}
+```
+
+Regras:
+
+- pagamento duplicado retorna `FINANCIAL_ENTRY_INVALID_STATE`;
+- lançamento cancelado não pode ser pago;
+- saldo da conta é atualizado em transação.
+
+### PATCH `/api/v1/financial/entries/:id/cancel`
+
+```json
+{
+  "reason": "Lançamento criado incorretamente"
+}
+```
+
+Regras:
+
+- lançamento pago não pode ser cancelado na V1;
+- lançamento já cancelado retorna `FINANCIAL_ENTRY_INVALID_STATE`.
+
+### GET `/api/v1/financial/stats`
+
+Response 200:
+
+```json
+{
+  "receivableToday": "1250.00",
+  "payableToday": "320.00",
+  "overdue": {
+    "receivable": "0.00",
+    "payable": "0.00"
+  },
+  "currentBalance": "10000.00",
+  "projectedBalance": "10930.00",
+  "income": "0.00",
+  "expenses": "0.00",
+  "monthlyFlow": [
+    {
+      "month": "2026-07",
+      "income": "1250.00",
+      "expenses": "320.00",
+      "net": "930.00"
+    }
+  ]
+}
+```
+
+### GET `/api/v1/financial/history/:id`
+
+Histórico imutável paginado de um lançamento.
+
+Erros:
+
+| HTTP | Code | Condition |
+| ---- | ---- | --------- |
+| 400 | `FINANCIAL_INVALID_RELATIONSHIP` | Categoria não corresponde ao tipo do lançamento |
+| 400 | `VALIDATION_ERROR` | Payload/query inválido |
+| 403 | `FORBIDDEN` | Papel sem permissão financeira |
+| 404 | `FINANCIAL_ACCOUNT_NOT_FOUND` | Conta inexistente/inativa |
+| 404 | `FINANCIAL_CATEGORY_NOT_FOUND` | Categoria inexistente/inativa |
+| 404 | `FINANCIAL_ENTRY_NOT_FOUND` | Lançamento inexistente |
+| 409 | `FINANCIAL_ENTRY_INVALID_STATE` | Transição inválida |
+
+Migration: `20260702160000_financial_core`.

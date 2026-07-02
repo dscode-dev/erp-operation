@@ -235,3 +235,37 @@ Regras:
 - timeline da execução vem de `/assignments/history/:operationId`;
 - reatribuição usa `UserSelect` existente e `PATCH /assignments/:id/reassign`;
 - não há componente local de agenda/OS paralelo.
+
+## Frontend Sprint 10 — Budget Integration
+
+| Item | Local | Uso |
+|---|---|---|
+| `budgetsApi` | `packages/api/budgets.ts` | client tipado para `/budgets`, stats, history e `/operations/:id/budgets` |
+| Central Comercial | `app/(platform)/budgets/page.tsx` | listagem, filtros, paginação, métricas e drawers do domínio Budget |
+| `BudgetDetailDrawer` | `app/(platform)/budgets/page.tsx` | resumo, itens, histórico, aprovação, documento e timeline |
+| `BudgetCreationDrawer` | `app/(platform)/budgets/page.tsx` | criação via backend; usa Product/Pricing e não calcula totais localmente |
+| `OperationBudgetsSection` | `apps/platform/components/operation-detail-drawer.tsx` | orçamentos vinculados à Operation + criação rápida |
+| `DocumentViewer` | `packages/ui/documents/document-viewer.tsx` | visualização/download do documento oficial emitido pelo Budget |
+| `BudgetDocumentPanel` | `app/(platform)/budgets/page.tsx` | emissão, visualização e download oficial do PDF de Budget |
+
+Componentes reutilizados:
+
+- `DataTable`;
+- `Pagination`;
+- `MetricCard`;
+- `FilterBar`/`FilterChip`;
+- `Drawer`;
+- `StatusChip`;
+- `SkeletonList`/`SkeletonCard`;
+- `ErrorState`;
+- `EmptyState`;
+- `Gate`;
+- `AssetTimeline`;
+- `DocumentViewer`.
+
+Notas:
+
+- O frontend não calcula subtotal, total, custo ou margem de orçamento.
+- O resumo pré-salvamento mostra apenas os itens selecionados; snapshots aparecem após retorno do backend.
+- Render/download de PDF específico de Budget usam `POST /budgets/:id/render` e
+  `GET /budgets/:id/download`.
