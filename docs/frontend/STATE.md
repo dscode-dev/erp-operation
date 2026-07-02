@@ -337,3 +337,30 @@ Domínios reais (Agenda, Serviços, Ordem de Serviço, Documentos) substituindo 
 - **Fundação reutilizável** `@erp/ui/operations`: `operation-sections` (modelo de seções), `operation-view` (renderers), `operation-shared` (labels/tones + `operationsToTimeline`). Todos os documentos reutilizam essa base (OperationForm → Sections → Renderers).
 - **Histórico (Timeline)** automático em: drawer de Equipamento (aba Histórico), drawer de Cliente (aba Histórico) e detalhe de Equipamento no operator — derivado de `/operations` (sem duplicação).
 - **Documentos** (`/documentos`): agora mescla os documentos reais das Operations (incluindo a **OS em rascunho**) com o snapshot demo, mantendo filtros/preview.
+
+## Frontend Sprint 11 — Financial & Procurement Integration (Orbit V1)
+
+Financial e Procurement foram integrados na Platform usando apenas APIs oficiais do backend.
+
+Implementado:
+
+- `packages/api/financial.ts` agora consome o domínio real `/financial/*`; o antigo bridge financeiro por Demo Dataset foi removido.
+- `packages/api/procurement.ts` criado para `/purchase-orders`, itens, recebimentos, stats e histórico.
+- `/financial` virou módulo real com dashboard financeiro, filtros, paginação, contas, categorias, lançamentos, pay/cancel e drawers reutilizáveis.
+- `/purchase-orders` criado como central de Pedidos de Compra com métricas, filtros, paginação, detalhe, itens, envio, cancelamento e recebimento parcial/total.
+- Sidebar reorganizada nos grupos Visão Geral, Operação, Cadastros, Financeiro, Compras, Gestão e Sistema; “Modo Demo” removido do menu.
+- Dashboard principal passou a exibir widgets reais de Financial e Procurement.
+- `/demo-ready` não depende mais do antigo bridge financeiro.
+- Tipos compartilhados adicionados para `Financial*` e `Purchase*`.
+
+Validação:
+
+- `npm run lint` passou com warnings legados de `<img>` e `postcss.config.mjs`;
+- `npm run build` passou.
+
+Pendências para polish:
+
+- Evoluir fornecedores para rota própria caso o produto decida separar de `/produtos`;
+- aplicar tabelas responsivas/cards mobile em Financeiro e Compras;
+- melhorar máscaras monetárias/CPF-CNPJ nos formulários;
+- substituir warnings legados de `<img>` por `next/image`.

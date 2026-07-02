@@ -8,7 +8,7 @@
  */
 import Link from "next/link";
 import {
-  Building2, Users, Wrench, CalendarClock, ClipboardList, Package, Wallet,
+  Building2, Users, Wrench, CalendarClock, ClipboardList, Package, ShoppingCart,
   BarChart3, FileText, QrCode, Smartphone, ArrowRight, CheckCircle2,
 } from "lucide-react";
 import { PageHeader } from "@platform/components/page-header";
@@ -17,10 +17,10 @@ import { StatusChip } from "@erp/ui/status-chip";
 import { SkeletonCard } from "@erp/ui/skeletons";
 import { useAuth } from "@erp/ui/auth/auth-provider";
 import {
-  dashboardApi, financialApi, operationsApi, useQuery,
-  type DashboardData, type FinancialData, type OrdersData, type ProductsData, type ScheduleData,
+  dashboardApi, operationsApi, procurementApi, useQuery,
+  type DashboardData, type OrdersData, type ProductsData, type PurchaseOrderStats,
 } from "@erp/api";
-import { formatCurrencyBRL, formatNumber } from "@erp/utils";
+import { formatNumber } from "@erp/utils";
 
 const JOURNEY: { label: string; hint: string; href: string }[] = [
   { label: "1. Dashboard", hint: "Visão geral da operação", href: "/" },
@@ -36,10 +36,9 @@ const JOURNEY: { label: string; hint: string; href: string }[] = [
 export default function DemoReadyPage() {
   const { session, can } = useAuth();
   const dash = useQuery<DashboardData>((s) => dashboardApi.getDashboard({ signal: s }), []);
-  const sched = useQuery<ScheduleData>((s) => financialApi.getSchedule({ signal: s }), []);
-  const fin = useQuery<FinancialData>((s) => financialApi.getFinancial({ signal: s }), []);
   const orders = useQuery<OrdersData>((s) => operationsApi.getOrders({ signal: s }), []);
   const products = useQuery<ProductsData>((s) => operationsApi.getProducts({ signal: s }), []);
+  const purchases = useQuery<PurchaseOrderStats>((s) => procurementApi.getPurchaseOrderStats({ signal: s }), []);
 
   const org = session?.organization;
   const loading = dash.loading && !dash.data;
@@ -47,10 +46,10 @@ export default function DemoReadyPage() {
   const tiles: { label: string; value: string; href: string; icon: typeof Users; show?: boolean }[] = [
     { label: "Clientes", value: dash.data?.customers ? formatNumber(dash.data.customers.total) : "—", href: "/clientes", icon: Users },
     { label: "Equipamentos", value: dash.data?.equipments ? formatNumber(dash.data.equipments.total) : "—", href: "/equipamentos", icon: Wrench },
-    { label: "Agenda", value: String(sched.data?.items.length ?? "—"), href: "/agenda", icon: CalendarClock },
+    { label: "Agenda", value: String(dash.data?.demo?.["demo.schedule.v1"].items.length ?? "—"), href: "/agenda", icon: CalendarClock },
     { label: "Ordens de Serviço", value: String(orders.data?.items.length ?? "—"), href: "/ordens", icon: ClipboardList },
     { label: "Produtos", value: String(products.data?.items.length ?? "—"), href: "/produtos", icon: Package },
-    { label: "Financeiro", value: fin.data?.finance ? formatCurrencyBRL(fin.data.finance.summary.entradas) : "—", href: "/financial", icon: Wallet, show: can("canFinancial") },
+    { label: "Compras", value: String(purchases.data?.total ?? "—"), href: "/purchase-orders", icon: ShoppingCart, show: can("canFinancial") },
     { label: "Relatórios", value: "3 categorias", href: "/reports", icon: BarChart3, show: can("canReports") },
     { label: "Documentos", value: "6 modelos", href: "/documentos", icon: FileText },
   ];

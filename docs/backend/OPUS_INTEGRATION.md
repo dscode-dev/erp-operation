@@ -1402,3 +1402,34 @@ Mocks que podem ser removidos:
 - cards financeiros locais;
 - listas locais de contas/categorias;
 - cálculo local de saldo atual/projetado.
+
+## Procurement — Compras V1
+
+Endpoints:
+
+- `GET /purchase-orders`;
+- `GET /purchase-orders/:id`;
+- `POST /purchase-orders`;
+- `PATCH /purchase-orders/:id`;
+- `PATCH /purchase-orders/:id/send`;
+- `PATCH /purchase-orders/:id/cancel`;
+- `GET/POST /purchase-orders/:id/items`;
+- `PATCH/DELETE /purchase-order-items/:id`;
+- `GET/POST /purchase-orders/:id/receipts`;
+- `GET /purchase-orders/stats`;
+- `GET /purchase-orders/history/:id`.
+
+UX:
+
+- tela de pedidos com filtros por fornecedor/status/período;
+- drawer de pedido com abas: itens, recebimentos, histórico;
+- recebimento parcial deve permitir múltiplas linhas;
+- mostrar progresso por item: recebido/comprado;
+- bloquear edição quando status for `RECEIVED` ou `CANCELED`.
+
+Importante:
+
+- não criar estoque local;
+- não alterar saldo físico no frontend;
+- recebimento chama backend, backend cria `StockMovement(IN)` via Inventory;
+- não criar financeiro automático na V1.

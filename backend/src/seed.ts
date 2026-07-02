@@ -9,6 +9,8 @@ import {
   FinancialEntryStatus,
   FinancialEntryType,
   FinancialHistoryAction,
+  PurchaseHistoryAction,
+  PurchaseOrderStatus,
   PrismaClient,
   Role,
   StockMovementType,
@@ -43,6 +45,7 @@ async function main(): Promise<void> {
   await seedProductPricing();
   await seedBudgets();
   await seedFinancialCore();
+  await seedProcurement();
 }
 
 async function seedOwner(email: string): Promise<void> {
@@ -685,6 +688,100 @@ async function seedFinancialCore(): Promise<void> {
   }
 
   process.stdout.write(`${JSON.stringify({ event: 'financial_seed_completed', entries: entries.length })}\n`);
+}
+
+async function seedProcurement(): Promise<void> {
+  const [organization, actor, supplier] = await Promise.all([
+    prisma.organization.findFirst({ orderBy: { createdAt: 'asc' }, select: { id: true } }),
+    prisma.user.findFirst({ where: { role: Role.OWNER }, orderBy: { createdAt: 'asc' }, select: { id: true } }),
+    prisma.supplier.findFirst({ where: { isActive: true }, orderBy: { legalName: 'asc' }, select: { id: true } }),
+  ]);
+  if (!organization || !actor || !supplier) return;
+  const existing = await prisma.purchaseOrder.findFirst({
+    where: { supplierId: supplier.id, notes: { contains: 'Seed Procurement V1' } },
+    select: { id: true },
+  });
+  if (existing) return;
+  const products = await prisma.product.findMany({
+    where: { sku: { in: ['HVAC-FILTRO-G4-001', 'HVAC-CAP-45UF'] }, isActive: true },
+    take: 2,
+  });
+  if (!products.length) return;
+  const order = await prisma.purchaseOrder.create({
+    data: {
+      organizationId: organization.id,
+      supplierId: supplier.id,
+      status: PurchaseOrderStatus.PARTIALLY_RECEIVED,
+      notes: 'Seed Procurement V1 - pedido inicial de materiais.',
+      expectedDelivery: new Date(Date.now() + 7 * 86_400_000),
+      createdBy: actor.id,
+      items: {
+        create: products.map((product, index) => ({
+          productId: product.id,
+          quantity: index === 0 ? 10 : 5,
+          unit: product.unit,
+          snapshotCost: index === 0 ? 42.5 : 31,
+          snapshotDescription: product.name,
+          receivedQuantity: index === 0 ? 4 : 0,
+        })),
+      },
+      history: {
+        create: {
+          actorId: actor.id,
+          action: PurchaseHistoryAction.CREATED,
+          newStatus: PurchaseOrderStatus.PARTIALLY_RECEIVED,
+          metadata: { source: 'seed' },
+        },
+      },
+    },
+    include: { items: true },
+  });
+  const first = order.items[0];
+  if (first) {
+    await prisma.purchaseReceipt.create({
+      data: {
+        purchaseOrderId: order.id,
+        receivedBy: actor.id,
+        receivedAt: new Date(),
+        notes: 'Recebimento parcial inicial via seed.',
+        metadata: { items: [{ itemId: first.id, quantity: 4 }] },
+      },
+    });
+    const inventoryItem =
+      (await prisma.inventoryItem.findFirst({ where: { organizationId: organization.id, productId: first.productId }, select: { id: true } })) ??
+      (await prisma.inventoryItem.create({
+        data: {
+          organizationId: organization.id,
+          productId: first.productId,
+          currentQuantity: 0,
+          minimumQuantity: 0,
+          idealQuantity: 0,
+          reservedQuantity: 0,
+          availableQuantity: 0,
+          isActive: true,
+        },
+        select: { id: true },
+      }));
+    await prisma.stockMovement.create({
+      data: {
+        inventoryItemId: inventoryItem.id,
+        quantity: 4,
+        type: StockMovementType.IN,
+        reason: `Purchase seed receipt #${order.number}`,
+        userId: actor.id,
+        occurredAt: new Date(),
+      },
+    });
+    const inventory = await prisma.inventoryItem.findUnique({ where: { id: inventoryItem.id }, select: { currentQuantity: true, reservedQuantity: true } });
+    if (inventory) {
+      const current = Number(inventory.currentQuantity) + 4;
+      await prisma.inventoryItem.update({
+        where: { id: inventoryItem.id },
+        data: { currentQuantity: current, availableQuantity: current - Number(inventory.reservedQuantity) },
+      });
+    }
+  }
+  process.stdout.write(`${JSON.stringify({ event: 'procurement_seed_created', purchaseOrderId: order.id, number: order.number })}\n`);
 }
 
 main()

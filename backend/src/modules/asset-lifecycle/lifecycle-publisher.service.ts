@@ -596,6 +596,46 @@ export class LifecyclePublisher {
     });
   }
 
+  async publishPurchaseEventTx(
+    tx: Prisma.TransactionClient,
+    input: {
+      purchaseOrderId: string;
+      actorId: string;
+      type:
+        | typeof AssetLifecycleEventType.PURCHASE_CREATED
+        | typeof AssetLifecycleEventType.PURCHASE_RECEIVED
+        | typeof AssetLifecycleEventType.PURCHASE_CANCELED;
+      occurredAt?: Date;
+      description: string;
+      metadata?: Record<string, unknown>;
+    },
+    context?: Partial<AssetLifecycleAuditContext>,
+  ): Promise<void> {
+    const order = await tx.purchaseOrder.findUnique({
+      where: { id: input.purchaseOrderId },
+      select: { id: true, number: true, status: true, supplierId: true },
+    });
+    if (!order) return;
+    await tx.auditLog.create({
+      data: this.auditInput(
+        ASSET_LIFECYCLE_AUDIT_ACTIONS.EVENT_AUTO_CREATED,
+        ASSET_LIFECYCLE_RESOURCE,
+        input.actorId,
+        this.safeContext(context),
+        {
+          purchaseOrderId: order.id,
+          purchaseOrderNumber: order.number,
+          purchaseStatus: order.status,
+          supplierId: order.supplierId,
+          type: input.type,
+          lifecycleSkipped: true,
+          reason: 'Purchase order is not linked to an equipment in Orbit V1',
+          ...(input.metadata ?? {}),
+        },
+      ),
+    });
+  }
+
   private async validateReferences(dto: CreateAssetLifecycleEventDto): Promise<void> {
     const equipment = await this.prisma.equipment.findUnique({
       where: { id: dto.equipmentId },

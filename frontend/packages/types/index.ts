@@ -2,8 +2,8 @@
  * Shared API types — single source of truth for backend contracts.
  *
  * Mirrors docs/backend/API_CONTRACTS.md, FRONTEND_INTEGRATION.md and OPUS_INTEGRATION.md.
- * Sprint 1: real domains are Auth, Users/Team, Organization, Customers and Equipments.
- * Dashboard / Schedule / Finance are still served by the development demo bridge.
+ * Sprint 11 frontend: Financial and Procurement consume production APIs.
+ * Dashboard / Schedule still keep narrow development bridges where backend domains are pending.
  */
 
 /* ============ Envelope ============ */
@@ -942,6 +942,203 @@ export type PricingStats = {
   averageMarginPercentage: string | number;
   activePricings: number;
   evaluatedAt: string;
+};
+
+/* ============ Financial ============ */
+
+export type FinancialAccountType = "CASH" | "BANK" | "CREDIT_CARD" | "DIGITAL_WALLET" | "OTHER";
+export type FinancialCategoryType = "INCOME" | "EXPENSE" | "TRANSFER";
+export type FinancialEntryType = "RECEIVABLE" | "PAYABLE" | "TRANSFER";
+export type FinancialEntryStatus = "PENDING" | "PAID" | "CANCELED" | "OVERDUE";
+export type FinancialEntryOrigin = "MANUAL" | "BUDGET" | "PURCHASE" | "OPERATION" | "PMOC" | "OTHER";
+export type FinancialHistoryAction = "CREATED" | "UPDATED" | "PAID" | "CANCELED" | "RESTORED";
+
+export type FinancialAccount = {
+  id: string;
+  organizationId: string;
+  name: string;
+  type: FinancialAccountType;
+  description: string | null;
+  openingBalance: string | number;
+  currentBalance: string | number;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type FinancialCategory = {
+  id: string;
+  organizationId: string;
+  name: string;
+  type: FinancialCategoryType;
+  color: string | null;
+  icon: string | null;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type FinancialEntry = {
+  id: string;
+  organizationId: string;
+  accountId: string;
+  categoryId: string;
+  type: FinancialEntryType;
+  origin: FinancialEntryOrigin;
+  originId: string | null;
+  amount: string | number;
+  dueDate: string;
+  paidAt: string | null;
+  description: string;
+  notes: string | null;
+  status: FinancialEntryStatus;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  account?: Pick<FinancialAccount, "id" | "name" | "type" | "currentBalance">;
+  category?: Pick<FinancialCategory, "id" | "name" | "type" | "color" | "icon">;
+  creator?: Pick<TeamUser, "id" | "name" | "email" | "username">;
+};
+
+export type FinancialHistory = {
+  id: string;
+  financialEntryId: string;
+  actorId: string;
+  action: FinancialHistoryAction;
+  previousStatus: FinancialEntryStatus | null;
+  newStatus: FinancialEntryStatus;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  actor?: Pick<TeamUser, "id" | "name" | "email" | "username">;
+};
+
+export type FinancialStats = {
+  receivableToday: string | number;
+  payableToday: string | number;
+  overdue: { receivable: string | number; payable: string | number };
+  projectedBalance: string | number;
+  currentBalance: string | number;
+  income: string | number;
+  expenses: string | number;
+  monthlyFlow: Array<{ month: string; income: string | number; expenses: string | number; balance: string | number }>;
+};
+
+export type FinancialAccountPayload = Partial<{
+  name: string;
+  type: FinancialAccountType;
+  description: string | null;
+  openingBalance: number;
+  active: boolean;
+}>;
+
+export type FinancialCategoryPayload = Partial<{
+  name: string;
+  type: FinancialCategoryType;
+  color: string | null;
+  icon: string | null;
+  active: boolean;
+}>;
+
+export type FinancialEntryPayload = Partial<{
+  accountId: string;
+  categoryId: string;
+  type: FinancialEntryType;
+  origin: FinancialEntryOrigin;
+  originId: string | null;
+  amount: number;
+  dueDate: string;
+  paidAt: string;
+  description: string;
+  notes: string | null;
+  status: FinancialEntryStatus;
+}>;
+
+/* ============ Procurement / Purchasing ============ */
+
+export type PurchaseOrderStatus = "DRAFT" | "SENT" | "PARTIALLY_RECEIVED" | "RECEIVED" | "CANCELED";
+export type PurchaseHistoryAction = "CREATED" | "UPDATED" | "SENT" | "PARTIALLY_RECEIVED" | "RECEIVED" | "CANCELED";
+
+export type PurchaseOrderItem = {
+  id: string;
+  purchaseOrderId: string;
+  productId: string;
+  quantity: string | number;
+  unit: string;
+  snapshotCost: string | number;
+  snapshotDescription: string;
+  receivedQuantity: string | number;
+  createdAt: string;
+  updatedAt: string;
+  product?: Pick<Product, "id" | "name" | "sku" | "unit" | "brand" | "model">;
+};
+
+export type PurchaseReceipt = {
+  id: string;
+  purchaseOrderId: string;
+  receivedBy: string;
+  receivedAt: string;
+  notes: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  receiver?: Pick<TeamUser, "id" | "name" | "email" | "username">;
+};
+
+export type PurchaseOrder = {
+  id: string;
+  organizationId: string;
+  supplierId: string;
+  number: number;
+  status: PurchaseOrderStatus;
+  notes: string | null;
+  expectedDelivery: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  supplier?: Pick<Supplier, "id" | "legalName" | "tradeName" | "document">;
+  creator?: Pick<TeamUser, "id" | "name" | "email" | "username">;
+  items: PurchaseOrderItem[];
+  receipts: PurchaseReceipt[];
+};
+
+export type PurchaseHistory = {
+  id: string;
+  purchaseOrderId: string;
+  actorId: string;
+  action: PurchaseHistoryAction;
+  previousStatus: PurchaseOrderStatus | null;
+  newStatus: PurchaseOrderStatus;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  actor?: Pick<TeamUser, "id" | "name" | "email" | "username">;
+};
+
+export type PurchaseOrderStats = {
+  total: number;
+  draft: number;
+  sent: number;
+  partiallyReceived: number;
+  received: number;
+  canceled: number;
+};
+
+export type PurchaseOrderPayload = Partial<{
+  supplierId: string;
+  expectedDelivery: string | null;
+  notes: string | null;
+}>;
+
+export type PurchaseOrderItemPayload = Partial<{
+  productId: string;
+  quantity: number;
+  unit: string;
+  snapshotCost: number;
+  snapshotDescription: string;
+}>;
+
+export type PurchaseReceiptPayload = {
+  receivedAt?: string;
+  notes?: string | null;
+  items: Array<{ itemId: string; quantity: number }>;
 };
 
 /* ============ Budget ============ */

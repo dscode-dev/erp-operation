@@ -22,7 +22,7 @@ import {
   ChevronsRight,
   ChevronDown,
   FileText,
-  Presentation,
+  ShoppingCart,
 } from "lucide-react";
 import { cn } from "@erp/utils";
 import { BrandLogo } from "@erp/ui/brand";
@@ -64,6 +64,19 @@ const groups: NavGroup[] = [
       { label: "Clientes", href: "/clientes", icon: Users },
       { label: "Equipamentos", href: "/equipamentos", icon: Wrench },
       { label: "Produtos", href: "/produtos", icon: Package },
+      { label: "Fornecedores", href: "/produtos?tab=suppliers", icon: Briefcase, roles: ["OWNER", "MANAGER"] },
+    ],
+  },
+  {
+    label: "Financeiro",
+    items: [
+      { label: "Financeiro", href: "/financial", icon: Wallet, permission: "canFinancial" },
+    ],
+  },
+  {
+    label: "Compras",
+    items: [
+      { label: "Pedidos de Compra", href: "/purchase-orders", icon: ShoppingCart, roles: ["OWNER", "MANAGER"] },
     ],
   },
   {
@@ -71,7 +84,6 @@ const groups: NavGroup[] = [
     items: [
       { label: "Relatórios", href: "/reports", icon: BarChart3, permission: "canReports" },
       { label: "Orçamentos", href: "/budgets", icon: ReceiptText, roles: ["OWNER", "MANAGER"] },
-      { label: "Financeiro", href: "/financial", icon: Wallet, permission: "canFinancial" },
       { label: "Usuários", href: "/usuarios", icon: Shield, roles: ["OWNER", "MANAGER", "VIEWER"] },
     ],
   },
@@ -80,7 +92,6 @@ const groups: NavGroup[] = [
     items: [
       { label: "Configurações", href: "/settings", icon: Settings, roles: ["OWNER", "MANAGER"] },
       { label: "Perfil", href: "/profile", icon: User },
-      { label: "Modo demo", href: "/demo-ready", icon: Presentation, roles: ["OWNER", "MANAGER"] },
     ],
   },
 ];

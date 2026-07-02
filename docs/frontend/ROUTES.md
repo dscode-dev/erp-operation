@@ -96,7 +96,7 @@ Dois apps no mesmo runtime Next, separados por pathname (`app/app-providers.tsx`
 ## Platform (gestão · desktop-first)
 
 `/login`, `/trocar-senha` (escopo platform) + shell autenticado em `app/(platform)/…`:
-`/`, `/agenda`, `/operacoes` (**Backlog #004** — domínio operacional real, lista `/operations` + drawer), `/servicos`, `/ordens`, `/clientes` (+`/[id]`), `/equipamentos` (+`/[id]`), `/produtos`, `/budgets`, `/financial`, `/usuarios`, `/profile`, `/settings`, `/reports` (+`/visita`), `/documentos` (central documental real via Document Engine), `/demo-ready` (modo apresentação). Sprint 4: Ordens e Produtos passam a consumir o Demo Dataset (`demo.orders.v1`/`demo.products.v1`).
+`/`, `/agenda`, `/operacoes` (**Backlog #004** — domínio operacional real, lista `/operations` + drawer), `/servicos`, `/ordens`, `/clientes` (+`/[id]`), `/equipamentos` (+`/[id]`), `/produtos`, `/budgets`, `/financial`, `/purchase-orders`, `/usuarios`, `/profile`, `/settings`, `/reports` (+`/visita`), `/documentos` (central documental real via Document Engine), `/demo-ready` (modo apresentação, fora do menu). Sprint 4: Ordens e Produtos passam a consumir o Demo Dataset (`demo.orders.v1`/`demo.products.v1`).
 
 ### Budget / Comercial
 
@@ -112,6 +112,35 @@ Dois apps no mesmo runtime Next, separados por pathname (`app/app-providers.tsx`
   - seção **Orçamentos** consome `/operations/:id/budgets`;
   - cria orçamento vinculado à Operation;
   - não cria fluxo comercial paralelo.
+
+### Financial / Financeiro
+
+- `/financial`: módulo financeiro real.
+  - dashboard via `GET /financial/stats`;
+  - contas via `/financial/accounts`;
+  - categorias via `/financial/categories`;
+  - lançamentos via `/financial/entries`;
+  - histórico via `/financial/history/:id`;
+  - ações de pagamento/cancelamento por endpoints oficiais;
+  - visível para `OWNER`/`MANAGER` com `canFinancial`.
+
+### Procurement / Compras
+
+- `/purchase-orders`: pedidos de compra reais.
+  - lista e filtros via `GET /purchase-orders`;
+  - métricas via `GET /purchase-orders/stats`;
+  - detalhe via `GET /purchase-orders/:id`;
+  - criação/edição/envio/cancelamento via endpoints oficiais;
+  - itens via `/purchase-orders/:id/items` e `/purchase-order-items/:id`;
+  - recebimentos parciais/totais via `POST /purchase-orders/:id/receipts`;
+  - histórico via `GET /purchase-orders/history/:id`;
+  - visível para `OWNER` e `MANAGER`.
+
+Menu Platform:
+
+- “Financeiro” e “Compras” agora são grupos próprios;
+- “Modo Demo” foi removido da sidebar;
+- “Fornecedores” aparece em Cadastros apontando para a área existente de Produtos/Fornecedores.
 
 ## Operator (campo · mobile-first)
 

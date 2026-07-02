@@ -25,6 +25,7 @@ export * as customersApi from "./customers";
 export * as equipmentsApi from "./equipments";
 export * as dashboardApi from "./dashboard";
 export * as financialApi from "./financial";
+export * as procurementApi from "./procurement";
 export * as demoApi from "./demo";
 
 export * as operationsApi from "./operations";
@@ -39,7 +40,12 @@ export * as budgetsApi from "./budgets";
 
 export { isDemoDisabled, DemoUnavailableError } from "./demo";
 export type { DashboardData } from "./dashboard";
-export type { FinancialData, ScheduleData } from "./financial";
+export type {
+  ListFinancialAccountsParams,
+  ListFinancialCategoriesParams,
+  ListFinancialEntriesParams,
+} from "./financial";
+export type { ListPurchaseOrdersParams } from "./procurement";
 export type { OrdersData, ProductsData, ServicesData } from "./operations";
 export type { OperationPhotoContent } from "./operation";
 export type { ListSignaturesParams, SignaturePayload } from "./signatures";

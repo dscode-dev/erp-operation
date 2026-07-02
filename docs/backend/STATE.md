@@ -1339,6 +1339,95 @@ Verificação executada:
 - `npm run lint`;
 - `npm test`.
 
+## Backend Sprint 16 — Procurement & Purchasing Domain (Orbit V1)
+
+Status: concluída em 2 de julho de 2026.
+
+Último grande domínio de negócio da V1 implementado sem aprovação de compras, cotações, fiscal,
+NF-e, impostos ou financeiro automático.
+
+Módulo criado:
+
+- `src/modules/procurement`.
+
+Entidades:
+
+- `PurchaseOrder`;
+- `PurchaseOrderItem`;
+- `PurchaseReceipt`;
+- `PurchaseHistory`.
+
+Enums:
+
+- `PurchaseOrderStatus`: `DRAFT`, `SENT`, `PARTIALLY_RECEIVED`, `RECEIVED`, `CANCELED`;
+- `PurchaseHistoryAction`: `CREATED`, `UPDATED`, `SENT`, `PARTIALLY_RECEIVED`, `RECEIVED`, `CANCELED`.
+
+Migration criada:
+
+- `20260702180000_procurement_domain`.
+
+Endpoints adicionados:
+
+| Method | Path |
+| ------ | ---- |
+| GET | `/api/v1/purchase-orders` |
+| GET | `/api/v1/purchase-orders/:id` |
+| POST | `/api/v1/purchase-orders` |
+| PATCH | `/api/v1/purchase-orders/:id` |
+| PATCH | `/api/v1/purchase-orders/:id/send` |
+| PATCH | `/api/v1/purchase-orders/:id/cancel` |
+| GET | `/api/v1/purchase-orders/:id/items` |
+| POST | `/api/v1/purchase-orders/:id/items` |
+| PATCH | `/api/v1/purchase-order-items/:id` |
+| DELETE | `/api/v1/purchase-order-items/:id` |
+| GET | `/api/v1/purchase-orders/:id/receipts` |
+| POST | `/api/v1/purchase-orders/:id/receipts` |
+| GET | `/api/v1/purchase-orders/stats` |
+| GET | `/api/v1/purchase-orders/history/:id` |
+
+Integrações:
+
+- Inventory: recebimento chama `InventoryService.createMovementInTransaction` com
+  `StockMovementType.IN`; Procurement não recalcula estoque por conta própria;
+- Inventory: `InventoryService.ensureInventoryItemInTransaction` prepara o item físico padrão para
+  o produto recebido;
+- Financial: `FinancialEntryOrigin.PURCHASE` já existe e fica disponível para conversão futura, sem
+  lançamento automático nesta sprint;
+- Asset Lifecycle: eventos `PURCHASE_CREATED`, `PURCHASE_RECEIVED`, `PURCHASE_CANCELED` foram
+  adicionados ao enum. Como compras V1 não são vinculadas a equipamento, o publisher registra no-op
+  auditável e não cria evento órfão.
+
+Regras:
+
+- recebimento parcial suportado;
+- `receivedQuantity` é atualizado por item;
+- pedido vira `PARTIALLY_RECEIVED` ou `RECEIVED` conforme quantidades;
+- bloqueio contra recebimento acima da quantidade comprada;
+- bloqueio contra alteração/exclusão de item recebido;
+- pedido recebido ou cancelado não pode ser alterado;
+- histórico de compra é imutável.
+
+Seeds:
+
+- pedido de compra inicial;
+- itens;
+- recebimento parcial;
+- movimento de estoque de entrada coerente.
+
+Testes:
+
+- `procurement.service.spec.ts`;
+- cobertura de recebimento em status inválido;
+- cobertura de recebimento acima da quantidade comprada.
+
+Verificação executada:
+
+- `DATABASE_URL=postgresql://postgres:postgres@localhost:5432/orbit npx prisma validate`;
+- `npx prisma generate`;
+- `npm run build`;
+- `npm run lint`;
+- `npm test`.
+
 ## Backend Sprint 14 — Budget Domain
 
 Domínio criado:

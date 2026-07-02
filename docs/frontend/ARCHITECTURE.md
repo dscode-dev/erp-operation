@@ -380,3 +380,42 @@ Regras arquiteturais:
 - visualização usa `DocumentViewer` com `documentId` oficial;
 - não existe `DocumentPaper`, renderer local ou preview de template como substituto do documento emitido;
 - RBAC visual usa `<Gate>`, mas backend é a autoridade final.
+
+## Financial & Procurement Integration
+
+Sprint Frontend 11 integrou dois domínios reais sem alterar contratos do backend:
+
+```text
+Platform
+↓
+packages/api/financial.ts      packages/api/procurement.ts
+↓                               ↓
+Financial Core                  Procurement
+↓                               ↓
+saldo/histórico                 recebimento → Inventory
+```
+
+Regras arquiteturais:
+
+- componentes nunca chamam `fetch` diretamente;
+- todo acesso financeiro passa por `financialApi`;
+- todo fluxo de compra passa por `procurementApi`;
+- frontend não calcula saldo financeiro como fonte de verdade;
+- frontend não altera estoque, não gera `StockMovement` e não calcula saldo físico;
+- recebimento de compra envia apenas os itens/quantidades recebidos; Inventory é atualizado pelo backend;
+- snapshots de compra (`snapshotCost`, `snapshotDescription`) são enviados/exibidos como contrato do Procurement, mas a integridade fica no backend;
+- histórico financeiro e histórico de compra são consumidos dos endpoints oficiais;
+- dashboard principal consome `GET /financial/stats` e `GET /purchase-orders/stats`;
+- RBAC visual esconde ações para perfis sem acesso, mas backend continua sendo a autoridade.
+
+Namespaces adicionados:
+
+- `financialApi`: accounts, categories, entries, pay, cancel, stats, history;
+- `procurementApi`: purchase orders, items, receipts, send, cancel, stats, history.
+
+Componentização:
+
+- drawers financeiros ficam em `apps/platform/components/financial-drawers.tsx`;
+- drawer de compras fica em `apps/platform/components/purchase-order-drawer.tsx`;
+- badges de status ficam em `apps/platform/components/financial-procurement-badges.tsx`;
+- paginação continua centralizada em `apps/platform/components/pagination.tsx`.

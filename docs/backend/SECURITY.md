@@ -1155,3 +1155,37 @@ Eventos auditados:
 - `FINANCIAL_ENTRY_UPDATED`;
 - `FINANCIAL_ENTRY_PAID`;
 - `FINANCIAL_ENTRY_CANCELED`.
+
+## Procurement security
+
+RBAC:
+
+| Recurso | OWNER | MANAGER | OPERATOR | VIEWER |
+| ------- | ----- | ------- | -------- | ------ |
+| Pedidos de compra | Total | Total | Não | Não |
+| Itens de compra | Total | Total | Não | Não |
+| Recebimentos | Total | Total | Não | Não |
+
+Proteções:
+
+- DTOs validam UUID, datas, enums, valores monetários e quantidades;
+- pedido recebido/cancelado não pode ser editado;
+- item recebido não pode ser alterado ou removido;
+- recebimento acima da quantidade comprada retorna `PURCHASE_INVALID_RECEIPT`;
+- recebimento é transacional;
+- entrada de estoque usa `InventoryService.createMovementInTransaction`;
+- Procurement não recalcula saldo físico;
+- Inventory permanece a única fonte de saldo físico;
+- Financial automático não é executado na V1;
+- histórico de compras é imutável;
+- eventos de auditoria registram pedido, item, recebimento e ator.
+
+Fora do escopo V1:
+
+- aprovação de compras;
+- cotações;
+- múltiplos aprovadores;
+- impostos;
+- XML/NF-e;
+- pagamentos automáticos;
+- integrações fiscais.

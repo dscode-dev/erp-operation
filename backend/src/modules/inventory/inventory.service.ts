@@ -349,6 +349,48 @@ export class InventoryService {
     });
   }
 
+  createMovementInTransaction(
+    tx: Prisma.TransactionClient,
+    input: {
+      inventoryItemId: string;
+      quantity: number;
+      type: StockMovementType;
+      reason: string;
+      operationId: string | null;
+      userId: string;
+      occurredAt: Date;
+    },
+    actor: AuthenticatedUser,
+    context: InventoryAuditContext,
+  ): Promise<StockMovementWithRelations> {
+    return this.createMovementTx(tx, input, actor, context);
+  }
+
+  async ensureInventoryItemInTransaction(
+    tx: Prisma.TransactionClient,
+    input: { organizationId: string; productId: string; location?: string | null },
+  ): Promise<{ id: string }> {
+    const existing = await tx.inventoryItem.findFirst({
+      where: { organizationId: input.organizationId, productId: input.productId, location: input.location ?? null, isActive: true },
+      select: { id: true },
+    });
+    if (existing) return existing;
+    return tx.inventoryItem.create({
+      data: {
+        organizationId: input.organizationId,
+        productId: input.productId,
+        currentQuantity: 0,
+        minimumQuantity: 0,
+        idealQuantity: 0,
+        reservedQuantity: 0,
+        availableQuantity: 0,
+        location: input.location ?? null,
+        isActive: true,
+      },
+      select: { id: true },
+    });
+  }
+
   async listMovements(query: ListStockMovementsQueryDto): Promise<unknown> {
     const where: Prisma.StockMovementWhereInput = {
       ...(query.inventoryItemId ? { inventoryItemId: query.inventoryItemId } : {}),

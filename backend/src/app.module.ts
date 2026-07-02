@@ -27,6 +27,7 @@ import { InventoryModule } from './modules/inventory/inventory.module';
 import { PricingModule } from './modules/pricing/pricing.module';
 import { BudgetsModule } from './modules/budgets/budgets.module';
 import { FinancialModule } from './modules/financial/financial.module';
+import { ProcurementModule } from './modules/procurement/procurement.module';
 import { GlobalExceptionFilter } from './shared/filters/global-exception.filter';
 import { RequestLoggingInterceptor } from './shared/interceptors/request-logging.interceptor';
 import { ResponseEnvelopeInterceptor } from './shared/interceptors/response-envelope.interceptor';
@@ -63,6 +64,7 @@ import { ResponseEnvelopeInterceptor } from './shared/interceptors/response-enve
     PricingModule,
     BudgetsModule,
     FinancialModule,
+    ProcurementModule,
     HealthModule,
   ],
   providers: [

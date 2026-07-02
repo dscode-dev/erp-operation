@@ -15,9 +15,10 @@ import { useAuth } from "@erp/ui/auth/auth-provider";
 import { Gate } from "@erp/ui/auth/gate";
 import {
   dashboardApi, usersApi, customersApi, financialApi, assetLifecycleApi, useQuery,
-  inventoryApi, pricingApi, budgetsApi,
-  type AssetLifecycleEvent, type DashboardData, type DemoScheduleState, type FinancialData,
+  inventoryApi, pricingApi, budgetsApi, procurementApi,
+  type AssetLifecycleEvent, type DashboardData, type DemoScheduleState,
   type BudgetStats, type InventoryStats, type PricingStats, type StockMovement,
+  type FinancialStats, type PurchaseOrderStats,
 } from "@erp/api";
 import { firstName, formatNumber, formatCurrencyBRL, formatDateTime } from "@erp/utils";
 
@@ -95,6 +96,10 @@ export default function PlatformHome() {
       {/* Indicadores financeiros (gated) */}
       <Gate roles={["OWNER", "MANAGER"]} permission="canFinancial">
         <FinancialWidgets />
+      </Gate>
+
+      <Gate roles={["OWNER", "MANAGER"]}>
+        <ProcurementWidgets />
       </Gate>
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -289,25 +294,47 @@ function AssetLifecycleWidgets({
 }
 
 function FinancialWidgets() {
-  const fin = useQuery<FinancialData>((signal) => financialApi.getFinancial({ signal }), []);
-  const f = fin.data?.finance;
+  const fin = useQuery<FinancialStats>((signal) => financialApi.getStats({ signal }), []);
   if (fin.loading && !fin.data) {
     return <DashboardSection title="Indicadores financeiros"><div className="grid gap-3 grid-cols-2 lg:grid-cols-4">{Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)}</div></DashboardSection>;
   }
-  if (fin.data?.disabled || !f) {
+  if (fin.error && !fin.data) {
     return (
       <DashboardSection title="Indicadores financeiros">
-        <ComingSoonState title="Financeiro em breve" description="Ative o Demo Dataset para visualizar indicadores financeiros." />
+        <ErrorState error={fin.error} onRetry={fin.refetch} title="Financeiro indisponível" />
       </DashboardSection>
     );
   }
   return (
     <DashboardSection title="Indicadores financeiros" action={<Link href="/financial" className="text-xs font-medium text-[var(--color-primary)] hover:underline">ver financeiro</Link>}>
       <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
-        <MetricCard label="Entradas" value={formatCurrencyBRL(f.summary.entradas)} delta="período" trend="up" icon="TrendingUp" />
-        <MetricCard label="Saídas" value={formatCurrencyBRL(f.summary.saidas)} delta="período" trend="down" icon="TrendingDown" />
-        <MetricCard label="Despesas" value={formatCurrencyBRL(f.summary.despesas)} delta="período" trend="down" icon="Wallet" />
-        <MetricCard label="Projeção 30 dias" value={formatCurrencyBRL(f.summary.projecao30Dias)} delta="estimativa" trend="up" icon="LineChart" />
+        <MetricCard label="Contas a receber" value={formatCurrencyBRL(Number(fin.data?.receivableToday ?? 0))} delta="hoje" trend="up" icon="TrendingUp" />
+        <MetricCard label="Contas a pagar" value={formatCurrencyBRL(Number(fin.data?.payableToday ?? 0))} delta="hoje" trend="down" icon="TrendingDown" />
+        <MetricCard label="Saldo atual" value={formatCurrencyBRL(Number(fin.data?.currentBalance ?? 0))} delta="contas" trend="flat" icon="Wallet" />
+        <MetricCard label="Saldo previsto" value={formatCurrencyBRL(Number(fin.data?.projectedBalance ?? 0))} delta="pendências" trend="flat" icon="LineChart" />
+      </div>
+    </DashboardSection>
+  );
+}
+
+function ProcurementWidgets() {
+  const procurement = useQuery<PurchaseOrderStats>((signal) => procurementApi.getPurchaseOrderStats({ signal }), []);
+  if (procurement.loading && !procurement.data) {
+    return <DashboardSection title="Compras"><div className="grid gap-3 grid-cols-2 lg:grid-cols-3">{Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)}</div></DashboardSection>;
+  }
+  if (procurement.error && !procurement.data) {
+    return (
+      <DashboardSection title="Compras">
+        <ErrorState error={procurement.error} onRetry={procurement.refetch} title="Compras indisponíveis" />
+      </DashboardSection>
+    );
+  }
+  return (
+    <DashboardSection title="Compras" action={<Link href="/purchase-orders" className="text-xs font-medium text-[var(--color-primary)] hover:underline">ver compras</Link>}>
+      <div className="grid gap-3 grid-cols-2 lg:grid-cols-3">
+        <MetricCard label="Pedidos abertos" value={formatNumber((procurement.data?.draft ?? 0) + (procurement.data?.sent ?? 0) + (procurement.data?.partiallyReceived ?? 0))} icon="ShoppingCart" />
+        <MetricCard label="Aguardando recebimento" value={formatNumber((procurement.data?.sent ?? 0) + (procurement.data?.partiallyReceived ?? 0))} trend={(procurement.data?.sent ?? 0) > 0 ? "up" : "flat"} icon="Truck" />
+        <MetricCard label="Concluídos" value={formatNumber(procurement.data?.received ?? 0)} trend="up" icon="PackageCheck" />
       </div>
     </DashboardSection>
   );

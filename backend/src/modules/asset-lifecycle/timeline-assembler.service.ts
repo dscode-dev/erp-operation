@@ -172,6 +172,27 @@ const VISUALS: Record<AssetLifecycleEventType, TimelineVisual> = {
     subtitle: 'Movimento financeiro cancelado',
     category: 'financial',
   },
+  PURCHASE_CREATED: {
+    icon: 'shopping-cart',
+    color: '#0EA5E9',
+    title: 'Pedido de compra criado',
+    subtitle: 'Aquisição de materiais iniciada',
+    category: 'procurement',
+  },
+  PURCHASE_RECEIVED: {
+    icon: 'package-check',
+    color: '#16A34A',
+    title: 'Compra recebida',
+    subtitle: 'Materiais recebidos e movimentados no estoque',
+    category: 'procurement',
+  },
+  PURCHASE_CANCELED: {
+    icon: 'ban',
+    color: '#DC2626',
+    title: 'Pedido de compra cancelado',
+    subtitle: 'Aquisição cancelada',
+    category: 'procurement',
+  },
   NOTE: {
     icon: 'sticky-note',
     color: '#64748B',

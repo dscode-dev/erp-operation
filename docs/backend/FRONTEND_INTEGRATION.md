@@ -1695,3 +1695,35 @@ Não fazer no frontend:
 - cancelar lançamento pago;
 - gerar financeiro automaticamente ao aprovar Budget;
 - criar PIX, boleto, fiscal ou conciliação na V1.
+
+## Procurement integration
+
+Fluxo recomendado:
+
+1. Criar pedido com `POST /purchase-orders`.
+2. Adicionar itens com `POST /purchase-orders/:id/items`.
+3. Enviar pedido com `PATCH /purchase-orders/:id/send`.
+4. Registrar recebimentos com `POST /purchase-orders/:id/receipts`.
+5. Mostrar histórico com `GET /purchase-orders/history/:id`.
+
+Estados:
+
+- `DRAFT`: editável;
+- `SENT`: permite recebimento;
+- `PARTIALLY_RECEIVED`: permite novos recebimentos;
+- `RECEIVED`: final;
+- `CANCELED`: final.
+
+UX:
+
+- bloquear edição de itens já recebidos;
+- permitir recebimento parcial;
+- mostrar `receivedQuantity` versus `quantity`;
+- em `PURCHASE_INVALID_RECEIPT`, avisar que a quantidade excede o pedido;
+- não criar lançamento financeiro automaticamente;
+- se houver conversão financeira futura, usar `FinancialOrigin.PURCHASE`.
+
+Regra crítica:
+
+- Inventory continua sendo a única fonte de saldo físico.
+- Procurement nunca deve calcular saldo localmente.

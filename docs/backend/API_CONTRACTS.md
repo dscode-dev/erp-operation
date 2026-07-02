@@ -3795,3 +3795,118 @@ Erros:
 | 409 | `FINANCIAL_ENTRY_INVALID_STATE` | Transição inválida |
 
 Migration: `20260702160000_financial_core`.
+
+## Procurement & Purchasing
+
+Domínio oficial de compras da V1. Todos os endpoints exigem `OWNER` ou `MANAGER`.
+
+### Enums
+
+```ts
+type PurchaseOrderStatus = 'DRAFT' | 'SENT' | 'PARTIALLY_RECEIVED' | 'RECEIVED' | 'CANCELED';
+type PurchaseHistoryAction = 'CREATED' | 'UPDATED' | 'SENT' | 'PARTIALLY_RECEIVED' | 'RECEIVED' | 'CANCELED';
+```
+
+### GET `/api/v1/purchase-orders`
+
+Query: `page`, `limit`, `search`, `supplierId`, `status`, `from`, `to`.
+
+### GET `/api/v1/purchase-orders/:id`
+
+Retorna pedido com fornecedor, itens, últimos recebimentos e criador.
+
+### POST `/api/v1/purchase-orders`
+
+```json
+{
+  "supplierId": "uuid",
+  "expectedDelivery": "2026-07-15T00:00:00.000Z",
+  "notes": "Compra de reposição"
+}
+```
+
+### PATCH `/api/v1/purchase-orders/:id`
+
+Edita pedidos `DRAFT` ou `SENT`.
+
+### PATCH `/api/v1/purchase-orders/:id/send`
+
+Muda `DRAFT` para `SENT`. Exige pelo menos um item.
+
+### PATCH `/api/v1/purchase-orders/:id/cancel`
+
+Cancela pedido ainda não recebido.
+
+### GET `/api/v1/purchase-orders/:id/items`
+
+Lista itens ativos do pedido.
+
+### POST `/api/v1/purchase-orders/:id/items`
+
+```json
+{
+  "productId": "uuid",
+  "quantity": 10,
+  "unit": "UN",
+  "snapshotCost": 42.5,
+  "snapshotDescription": "Filtro G4"
+}
+```
+
+Snapshots são obrigatórios para custo/descrição. Renderizações futuras não dependem do Product.
+
+### PATCH `/api/v1/purchase-order-items/:id`
+
+Edita item ainda não recebido.
+
+### DELETE `/api/v1/purchase-order-items/:id`
+
+Soft delete de item ainda não recebido.
+
+### GET `/api/v1/purchase-orders/:id/receipts`
+
+Lista recebimentos do pedido.
+
+### POST `/api/v1/purchase-orders/:id/receipts`
+
+```json
+{
+  "receivedAt": "2026-07-02T12:00:00.000Z",
+  "notes": "Recebimento parcial",
+  "items": [
+    { "itemId": "uuid", "quantity": 4 }
+  ]
+}
+```
+
+Efeitos:
+
+- cria `PurchaseReceipt`;
+- atualiza `receivedQuantity`;
+- altera status para `PARTIALLY_RECEIVED` ou `RECEIVED`;
+- cria `StockMovement(IN)` via Inventory;
+- recalcula estoque pelo Inventory;
+- cria `PurchaseHistory`.
+
+### GET `/api/v1/purchase-orders/stats`
+
+Retorna totais por status.
+
+### GET `/api/v1/purchase-orders/history/:id`
+
+Histórico imutável paginado.
+
+Erros:
+
+| HTTP | Code | Condition |
+| ---- | ---- | --------- |
+| 400 | `VALIDATION_ERROR` | Payload/query inválido |
+| 403 | `FORBIDDEN` | Papel sem permissão |
+| 404 | `PURCHASE_ORDER_NOT_FOUND` | Pedido inexistente |
+| 404 | `PURCHASE_ITEM_NOT_FOUND` | Item inexistente |
+| 404 | `SUPPLIER_NOT_FOUND` | Fornecedor inexistente/inativo |
+| 404 | `PRODUCT_NOT_FOUND` | Produto inexistente/inativo |
+| 409 | `PURCHASE_INVALID_STATE` | Transição inválida |
+| 409 | `PURCHASE_INVALID_RECEIPT` | Quantidade recebida excede compra |
+
+Migration: `20260702180000_procurement_domain`.

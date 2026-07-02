@@ -269,3 +269,25 @@ Notas:
 - O resumo pré-salvamento mostra apenas os itens selecionados; snapshots aparecem após retorno do backend.
 - Render/download de PDF específico de Budget usam `POST /budgets/:id/render` e
   `GET /budgets/:id/download`.
+
+## Frontend Sprint 11 — Financial & Procurement
+
+| Item | Local | Uso |
+|---|---|---|
+| `financialApi` | `packages/api/financial.ts` | client real para contas, categorias, lançamentos, stats e histórico |
+| `procurementApi` | `packages/api/procurement.ts` | client real para pedidos de compra, itens, recebimentos, stats e histórico |
+| `FinancialEntryDrawer` | `apps/platform/components/financial-drawers.tsx` | criar/editar lançamento, pagar, cancelar e consultar histórico |
+| `FinancialAccountDrawer` | `apps/platform/components/financial-drawers.tsx` | criar/editar/desativar conta financeira |
+| `FinancialCategoryDrawer` | `apps/platform/components/financial-drawers.tsx` | criar/editar/desativar categoria financeira |
+| `PurchaseOrderDrawer` | `apps/platform/components/purchase-order-drawer.tsx` | criar/editar pedido, adicionar itens, enviar, cancelar e registrar recebimentos |
+| `FinancialStatusBadge` / `FinancialTypeBadge` | `apps/platform/components/financial-procurement-badges.tsx` | badges reutilizáveis de lançamentos financeiros |
+| `PurchaseStatusBadge` | `apps/platform/components/financial-procurement-badges.tsx` | badge reutilizável de status de compra |
+| `Pagination` | `apps/platform/components/pagination.tsx` | paginação oficial reutilizada em Financeiro e Compras |
+
+Notas:
+
+- os drawers chamam exclusivamente endpoints reais;
+- recebimento de compra não calcula estoque localmente, apenas envia quantidades para o backend;
+- lançamentos financeiros não manipulam saldo no frontend;
+- botões são escondidos via `<Gate>`/RBAC visual, mantendo o backend como autoridade final;
+- utilitários `.input`, `.btn-primary` e `.btn-secondary` foram adicionados ao Design System global para formulários administrativos.
