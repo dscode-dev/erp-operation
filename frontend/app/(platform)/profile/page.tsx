@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { Camera, Loader2, Trash2, KeyRound, Check, ShieldCheck, Building2 } from "lucide-react";
@@ -127,7 +128,7 @@ function AvatarCard({ name, avatarAssetId, onChanged }: { name: string; avatarAs
     <SectionCard title="Avatar">
       <div className="flex flex-col items-center gap-3">
         <div className="relative h-24 w-24 rounded-full bg-[var(--color-accent)] grid place-items-center text-white text-2xl font-semibold overflow-hidden">
-          {src ? <img src={src} alt={name} className="h-full w-full object-cover" /> : initials(name)}
+          {src ? <Image src={src} alt={name} fill sizes="96px" unoptimized className="object-cover" /> : initials(name)}
           {busy && <div className="absolute inset-0 grid place-items-center bg-black/40"><Loader2 className="h-5 w-5 animate-spin text-white" /></div>}
         </div>
         {error && <p className="text-[11px] text-[var(--color-danger)]">{error}</p>}

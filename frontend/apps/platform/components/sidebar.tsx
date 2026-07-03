@@ -8,7 +8,6 @@ import {
   Calendar,
   Briefcase,
   ClipboardCheck,
-  ClipboardList,
   Users,
   Wrench,
   Package,
@@ -53,8 +52,6 @@ const groups: NavGroup[] = [
     label: "Operação",
     items: [
       { label: "Operações", href: "/operacoes", icon: ClipboardCheck },
-      { label: "Serviços", href: "/servicos", icon: Briefcase },
-      { label: "Ordens de Serviço", href: "/ordens", icon: ClipboardList },
       { label: "Documentos", href: "/documentos", icon: FileText },
     ],
   },

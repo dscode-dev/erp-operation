@@ -131,15 +131,15 @@ export default function PlatformHome() {
       <DashboardSection title="Resumo executivo">
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
           <MetricLink href="/agenda"><MetricCard label="Operações hoje" value={formatNumber(todayAssignments.length)} delta="agenda operacional" icon="CalendarClock" /></MetricLink>
-          <MetricLink href="/operacoes"><MetricCard label="Em execução" value={formatNumber(inProgress)} delta="assignments" trend={inProgress > 0 ? "up" : "flat"} icon="Activity" /></MetricLink>
+          <MetricLink href="/operacoes?status=IN_PROGRESS"><MetricCard label="Em execução" value={formatNumber(inProgress)} delta="assignments" trend={inProgress > 0 ? "up" : "flat"} icon="Activity" /></MetricLink>
           <MetricLink href="/operacoes"><MetricCard label="Aguardando aceite" value={formatNumber(awaitingAcceptance)} delta="ação do operador" trend={awaitingAcceptance > 0 ? "down" : "flat"} icon="Clock" /></MetricLink>
           {canSeeFinancial ? (
             <MetricLink href="/financial"><MetricCard label="Saldo atual" value={formatCurrencyBRL(Number(financial.data?.currentBalance ?? 0))} delta="financial core" icon="Wallet" /></MetricLink>
           ) : (
             <MetricCard label="Saldo atual" value="restrito" delta="RBAC" icon="Lock" />
           )}
-          <MetricLink href="/produtos"><MetricCard label="Estoque crítico" value={formatNumber(inventory.data?.minimumStockAlerts ?? 0)} delta="abaixo do mínimo" trend={(inventory.data?.minimumStockAlerts ?? 0) > 0 ? "down" : "flat"} icon="PackageX" /></MetricLink>
-          <MetricLink href="/purchase-orders"><MetricCard label="Compras pendentes" value={formatNumber((procurement.data?.sent ?? 0) + (procurement.data?.partiallyReceived ?? 0))} delta="recebimento" icon="ShoppingCart" /></MetricLink>
+          <MetricLink href="/produtos?tab=inventory"><MetricCard label="Estoque crítico" value={formatNumber(inventory.data?.minimumStockAlerts ?? 0)} delta="abaixo do mínimo" trend={(inventory.data?.minimumStockAlerts ?? 0) > 0 ? "down" : "flat"} icon="PackageX" /></MetricLink>
+          <MetricLink href="/purchase-orders?status=SENT"><MetricCard label="Compras pendentes" value={formatNumber((procurement.data?.sent ?? 0) + (procurement.data?.partiallyReceived ?? 0))} delta="recebimento" icon="ShoppingCart" /></MetricLink>
         </div>
       </DashboardSection>
 
@@ -290,8 +290,8 @@ function FinancialSnapshot({ loading, error, onRetry, stats }: { loading: boolea
     <div className="grid gap-3 sm:grid-cols-2">
       <MetricLink href="/financial"><MetricCard label="Saldo atual" value={formatCurrencyBRL(Number(stats.currentBalance))} icon="Wallet" /></MetricLink>
       <MetricLink href="/financial"><MetricCard label="Saldo previsto" value={formatCurrencyBRL(Number(stats.projectedBalance))} icon="LineChart" /></MetricLink>
-      <MetricLink href="/financial"><MetricCard label="Receber hoje" value={formatCurrencyBRL(Number(stats.receivableToday))} trend="up" icon="ArrowUpCircle" /></MetricLink>
-      <MetricLink href="/financial"><MetricCard label="Atrasados" value={formatCurrencyBRL(overdue)} trend={overdue > 0 ? "down" : "flat"} icon="AlertTriangle" /></MetricLink>
+      <MetricLink href="/financial?type=RECEIVABLE&status=PENDING"><MetricCard label="Receber hoje" value={formatCurrencyBRL(Number(stats.receivableToday))} trend="up" icon="ArrowUpCircle" /></MetricLink>
+      <MetricLink href="/financial?status=OVERDUE"><MetricCard label="Atrasados" value={formatCurrencyBRL(overdue)} trend={overdue > 0 ? "down" : "flat"} icon="AlertTriangle" /></MetricLink>
     </div>
   );
 }
@@ -353,9 +353,9 @@ function InventoryProcurement({
   return (
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-4">
-        <MetricLink href="/produtos"><MetricCard label="Abaixo do mínimo" value={formatNumber(inventory?.minimumStockAlerts ?? 0)} trend={(inventory?.minimumStockAlerts ?? 0) > 0 ? "down" : "flat"} icon="PackageX" /></MetricLink>
-        <MetricLink href="/produtos"><MetricCard label="Sem estoque" value={formatNumber(inventory?.productsWithoutStock ?? 0)} trend={(inventory?.productsWithoutStock ?? 0) > 0 ? "down" : "flat"} icon="PackageMinus" /></MetricLink>
-        <MetricLink href="/purchase-orders"><MetricCard label="Aguardando entrega" value={formatNumber((procurement?.sent ?? 0) + (procurement?.partiallyReceived ?? 0))} icon="Truck" /></MetricLink>
+        <MetricLink href="/produtos?tab=inventory"><MetricCard label="Abaixo do mínimo" value={formatNumber(inventory?.minimumStockAlerts ?? 0)} trend={(inventory?.minimumStockAlerts ?? 0) > 0 ? "down" : "flat"} icon="PackageX" /></MetricLink>
+        <MetricLink href="/produtos?tab=inventory"><MetricCard label="Sem estoque" value={formatNumber(inventory?.productsWithoutStock ?? 0)} trend={(inventory?.productsWithoutStock ?? 0) > 0 ? "down" : "flat"} icon="PackageMinus" /></MetricLink>
+        <MetricLink href="/purchase-orders?status=SENT"><MetricCard label="Aguardando entrega" value={formatNumber((procurement?.sent ?? 0) + (procurement?.partiallyReceived ?? 0))} icon="Truck" /></MetricLink>
         <MetricLink href="/purchase-orders"><MetricCard label="Recebidos" value={formatNumber(procurement?.received ?? 0)} trend="up" icon="PackageCheck" /></MetricLink>
       </div>
       <div className="grid gap-3 lg:grid-cols-2">

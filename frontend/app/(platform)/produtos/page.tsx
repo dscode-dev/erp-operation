@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Boxes, DollarSign, History, Package, Plus, Truck } from "lucide-react";
 import { PageHeader } from "@platform/components/page-header";
 import { DataTable, type Column } from "@platform/components/data-table";
@@ -43,12 +44,13 @@ const MOVEMENT_LABEL: Record<StockMovementType, string> = {
 };
 
 export default function ProdutosPage() {
+  const params = useSearchParams();
   const { hasRole } = useAuth();
   const canManageProducts = hasRole("OWNER", "MANAGER");
   const canSeePricing = hasRole("OWNER", "MANAGER");
   const canEditPricing = hasRole("OWNER");
 
-  const [tab, setTab] = useState<Tab>("products");
+  const [tab, setTab] = useState<Tab>(() => parseTab(params.get("tab")));
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
@@ -520,6 +522,10 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
 function switchTab(tab: Tab, setTab: (tab: Tab) => void, setPage: (page: number) => void) {
   setTab(tab);
   setPage(1);
+}
+
+function parseTab(value: string | null): Tab {
+  return value === "inventory" || value === "suppliers" || value === "pricing" || value === "movements" ? value : "products";
 }
 
 function n(value: string | number | null | undefined): number {

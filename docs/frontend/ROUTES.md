@@ -113,6 +113,41 @@ Dois apps no mesmo runtime Next, separados por pathname (`app/app-providers.tsx`
   - cria orçamento vinculado à Operation;
   - não cria fluxo comercial paralelo.
 
+### Product UX Polish — Sprint 18
+
+Rotas operacionais legadas:
+
+- `/servicos` → redireciona para `/operacoes`;
+- `/ordens` → redireciona para `/operacoes`;
+- `/ordens/[id]` → redireciona para `/ordens`;
+- `/produtos/[id]` → redireciona para `/produtos`;
+- `/demo-ready` → redireciona para `/`.
+
+Motivo: evitar dead UI, Demo Dataset e placeholders. A fonte operacional V1 é `Operation` + `Assignment` + `Document Engine`.
+
+Sidebar final:
+
+- Visão Geral: Dashboard, Agenda.
+- Operação: Operações, Documentos.
+- Cadastros: Clientes, Equipamentos, Produtos, Fornecedores.
+- Financeiro: Financeiro.
+- Compras: Pedidos de Compra.
+- Gestão: Relatórios, Orçamentos, Usuários.
+- Sistema: Configurações, Perfil.
+
+Deep-links suportados:
+
+- `/operacoes?status=IN_PROGRESS`;
+- `/financial?status=OVERDUE`;
+- `/financial?type=RECEIVABLE&status=PENDING`;
+- `/purchase-orders?status=SENT`;
+- `/produtos?tab=inventory`;
+- `/produtos?tab=suppliers`;
+- `/produtos?tab=pricing`;
+- `/produtos?tab=movements`.
+
+Parâmetros inválidos são ignorados e a tela volta ao estado padrão seguro.
+
 ### Financial / Financeiro
 
 - `/financial`: módulo financeiro real.

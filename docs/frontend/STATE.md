@@ -424,3 +424,53 @@ Pendências para polish/hardening:
 - adicionar filtros deep-link nas telas destino (`/financial`, `/produtos`, `/purchase-orders`, `/operacoes`);
 - substituir os warnings legados de `<img>`;
 - considerar testes frontend quando houver runner dedicado no pacote.
+
+## Sprint 18 — Product UX Inspection, Frontend Consolidation & Polish
+
+Inspeção sistemática executada em 38 rotas `page.tsx`:
+
+- Platform: Dashboard, Agenda, Operações, Serviços, Ordens, Documentos, Budgets, Clientes, Equipamentos, Produtos/Estoque/Fornecedores/Pricing, Financeiro, Compras, Relatórios/Templates, Usuários, Settings, Profile e rotas legadas.
+- Operator PWA: Home, Agenda, Minhas Ordens, Detalhe da Assignment, Clientes, Equipamentos, Documentos, QR, Sync, Profile, Login, Troca de Senha e Wizard de Atendimento.
+
+Classificação:
+
+- P0: 0 encontrados.
+- P1: 4 encontrados / 4 corrigidos.
+  - rotas legadas de Serviços e Ordens ainda serviam Demo Dataset;
+  - rota Demo Ready ainda acessível com dados demo;
+  - rotas detalhe placeholder de Produto/OS;
+  - navegação duplicada para fluxos que hoje pertencem a Operações.
+- P2: 7 encontrados / 7 corrigidos.
+  - warnings legados de `next/image`;
+  - warning de PostCSS anonymous export;
+  - deep-links do dashboard sem filtros suportados;
+  - Produtos não inicializava `tab` por querystring;
+  - Financeiro não inicializava filtros por querystring;
+  - Compras não inicializava status por querystring;
+  - Operações não inicializava status por querystring.
+- P3: 4 encontrados / 2 corrigidos / 2 deferidos.
+  - labels/navegação refinados na sidebar;
+  - rotas stale redirecionam com segurança;
+  - bundle report da home será analisado em Sprint 21;
+  - brand/document images mantidos com `<img>` por razão técnica.
+
+Correções:
+
+- `/servicos`, `/ordens`, `/ordens/[id]`, `/produtos/[id]` e `/demo-ready` agora redirecionam para fluxos reais, sem dead UI.
+- Sidebar removeu destinos duplicados de Serviços/Ordens; Operações é a fonte operacional V1.
+- Dashboard usa deep-links para `?status=`, `?type=` e `?tab=`.
+- `/financial`, `/purchase-orders`, `/produtos` e `/operacoes` inicializam filtros suportados via URL.
+- Warnings de imagem corrigidos com `next/image` em Profile, User Detail, Settings, Visita Técnica e PhotoInput.
+- `postcss.config.mjs` corrigido para export nomeado.
+
+Validação:
+
+- `npm run lint` passou sem warnings;
+- `npm run build` passou;
+- `git diff --check` passou.
+
+Decisões:
+
+- Suppliers continua dentro de `/produtos?tab=suppliers`; a aba já possui fluxo completo e rota própria geraria duplicação neste momento.
+- `<img>` permanece em BrandLogo e renderizadores documentais/base64 onde o optimizer do Next não é adequado.
+- Frontend ainda não possui test runner configurado; item movido para certificação.

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { ArrowLeft, Camera, X, Info } from "lucide-react";
 import { PageHeader } from "@platform/components/page-header";
 import { SectionCard } from "@erp/ui/section-card";
@@ -75,7 +76,7 @@ export default function VisitaTecnicaPage() {
             <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
               {photos.map((p, i) => (
                 <div key={p.url} className="relative group aspect-square rounded-[var(--radius-md)] overflow-hidden border border-[var(--color-border)]">
-                  <img src={p.url} alt={p.name} className="h-full w-full object-cover" />
+                  <Image src={p.url} alt={p.name} fill sizes="120px" unoptimized className="object-cover" />
                   <button type="button" onClick={() => removePhoto(i)} aria-label="Remover foto" className="absolute top-1 right-1 h-6 w-6 grid place-items-center rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity">
                     <X className="h-3.5 w-3.5" />
                   </button>

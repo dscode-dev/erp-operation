@@ -36,9 +36,10 @@ function OperacoesInner() {
   const params = useSearchParams();
   const customerId = params.get("customerId") ?? undefined;
   const equipmentId = params.get("equipmentId") ?? undefined;
+  const initialStatus = parseStatus(params.get("status"));
 
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState<"all" | OperationStatus>("all");
+  const [status, setStatus] = useState<"all" | OperationStatus>(initialStatus);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -139,4 +140,8 @@ export default function OperacoesPage() {
       <OperacoesInner />
     </Suspense>
   );
+}
+
+function parseStatus(value: string | null): "all" | OperationStatus {
+  return value === "DRAFT" || value === "IN_PROGRESS" || value === "COMPLETED" || value === "CANCELED" ? value : "all";
 }

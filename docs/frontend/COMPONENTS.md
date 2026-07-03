@@ -319,3 +319,22 @@ Regras:
 - cada seção tem sua própria consulta e falha isolada;
 - cards importantes são links para workflows reais;
 - não há renderização de metadata bruta nem HTML inseguro.
+
+## Sprint 18 — Product UX Polish
+
+Padrões consolidados:
+
+- `next/image` usado em previews compatíveis:
+  - Profile avatar;
+  - UserDetail avatar;
+  - Settings asset preview;
+  - Visita Técnica photo preview;
+  - `PhotoInput`.
+- `unoptimized` é obrigatório nesses casos porque as fontes são `blob:`/`data:`/conteúdo autenticado, não assets públicos otimizáveis.
+- `BrandLogo` mantém `<img>` porque usa asset local pequeno e evita configuração remota desnecessária.
+- Renderizadores documentais/assinaturas mantêm `<img>` por lidarem com conteúdo base64/blob controlado pelo Document Engine.
+- `ErrorState`, `EmptyState`, `Skeleton*`, `Pagination`, `Drawer`, `Gate`, `MetricCard` e badges existentes continuam como padrões; nenhum novo sistema de toast/notification foi introduzido.
+
+Rotas stale:
+
+- páginas legadas que não representam mais fonte oficial usam `redirect()` em vez de `ComingSoonState`.

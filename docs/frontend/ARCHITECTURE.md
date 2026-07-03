@@ -461,3 +461,38 @@ Performance:
 - usa stats por domínio como fonte principal;
 - usa listas pequenas apenas para contexto acionável;
 - caso o volume real exija, a próxima etapa recomendada é um endpoint read-only agregado de dashboard, sem criar plataforma de analytics.
+
+## Sprint 18 — Product UX Consolidation
+
+Polish arquitetural aplicado sem novo domínio:
+
+- rotas legadas passaram a redirecionar para fluxos oficiais;
+- sidebar remove destinos duplicados que apontavam para telas demo;
+- dashboard e páginas destino compartilham deep-links por querystring;
+- parsing de querystring é whitelist-based:
+  - status de Operation;
+  - status/type/origin de Financial;
+  - status de Purchase Orders;
+  - tabs de Products.
+
+Estratégia de forms/feedback:
+
+- nenhum novo sistema global de notificações foi criado;
+- os fluxos continuam usando feedback local existente (`ErrorState`, mensagens inline, loading state em botões/drawers);
+- máscara/formatting existente de CPF/CNPJ foi preservada;
+- entradas monetárias/quantidade continuam formatando exibição sem recalcular regras oficiais.
+
+Segurança frontend:
+
+- links contextuais não passam dados sensíveis;
+- query params inválidos são ignorados;
+- rotas demo/stale não carregam mais dados demo;
+- imagens blob/base64 usam `next/image unoptimized` quando seguro;
+- `<img>` restante é intencional para BrandLogo local e renderizadores documentais/base64.
+
+Performance:
+
+- eliminadas telas legadas que carregavam Demo Dataset;
+- removida duplicação de navegação para Serviços/Ordens;
+- lint sem warnings reduz ruído de certificação;
+- bundle da home aparece maior no relatório do Next e deve ser investigado com bundle analyzer na Sprint 21 antes de qualquer refator especulativo.

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { PackageCheck, Plus, RefreshCw, Search, ShoppingCart } from "lucide-react";
 import { PageHeader } from "@platform/components/page-header";
 import { DashboardSection } from "@platform/components/dashboard-section";
@@ -28,10 +29,11 @@ import { PurchaseStatusBadge } from "@platform/components/financial-procurement-
 const statuses: Array<PurchaseOrderStatus | ""> = ["", "DRAFT", "SENT", "PARTIALLY_RECEIVED", "RECEIVED", "CANCELED"];
 
 export default function PurchaseOrdersPage() {
+  const params = useSearchParams();
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState<PurchaseOrderStatus | "">("");
+  const [status, setStatus] = useState<PurchaseOrderStatus | "">(() => parseStatus(params.get("status")));
   const [supplierId, setSupplierId] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -157,4 +159,8 @@ export default function PurchaseOrdersPage() {
       </div>
     </Gate>
   );
+}
+
+function parseStatus(value: string | null): PurchaseOrderStatus | "" {
+  return value && statuses.includes(value as PurchaseOrderStatus) ? (value as PurchaseOrderStatus) : "";
 }

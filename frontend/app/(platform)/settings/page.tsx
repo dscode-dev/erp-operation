@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import { Loader2, Check, Upload, FileText, Image as ImageIcon, Palette, Building2, SlidersHorizontal, PenLine, Trash2, Download } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { PageHeader } from "@platform/components/page-header";
@@ -124,9 +125,9 @@ function AssetUploader({ type, label, icon: Icon, canEdit }: { type: BrandAssetT
         <Icon className="h-4 w-4 text-[var(--color-muted-foreground)]" />
         <span className="text-sm font-medium">{label}</span>
       </div>
-      <div className="h-24 rounded-[var(--radius-sm)] border border-dashed border-[var(--color-border)] grid place-items-center bg-[var(--color-muted)]/30 overflow-hidden">
+      <div className="relative h-24 rounded-[var(--radius-sm)] border border-dashed border-[var(--color-border)] grid place-items-center bg-[var(--color-muted)]/30 overflow-hidden">
         {busy ? <Loader2 className="h-5 w-5 animate-spin text-[var(--color-muted-foreground)]" />
-          : preview ? <img src={preview} alt={label} className="h-full w-full object-contain" />
+          : preview ? <Image src={preview} alt={label} fill sizes="180px" unoptimized className="object-contain" />
           : fileName ? <span className="text-caption px-2 text-center">{fileName}</span>
           : <span className="text-caption">Nenhum arquivo</span>}
       </div>

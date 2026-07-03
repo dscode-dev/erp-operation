@@ -8,6 +8,7 @@
  * does not upload — generation/storage stays with the backend.
  */
 import { useRef } from "react";
+import Image from "next/image";
 import { Camera, X, ArrowLeft, ArrowRight, ImagePlus } from "lucide-react";
 
 export type CapturedPhoto = {
@@ -60,7 +61,7 @@ export function PhotoInput({
       <div className="grid grid-cols-3 gap-2">
         {photos.map((p, i) => (
           <div key={p.id} className="relative group aspect-square rounded-[var(--radius-md)] overflow-hidden border border-[var(--color-border)] bg-[var(--color-muted)]">
-            <img src={p.url} alt={p.name} className="h-full w-full object-cover" />
+            <Image src={p.url} alt={p.name} fill sizes="120px" unoptimized className="object-cover" />
             <button
               type="button"
               onClick={() => remove(p.id)}

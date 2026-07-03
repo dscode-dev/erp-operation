@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
+import { useSearchParams } from "next/navigation";
 import { Plus, RefreshCw, Search, Wallet } from "lucide-react";
 import { PageHeader } from "@platform/components/page-header";
 import { DashboardSection } from "@platform/components/dashboard-section";
@@ -35,12 +36,13 @@ const statuses: Array<FinancialEntryStatus | ""> = ["", "PENDING", "PAID", "OVER
 const origins: Array<FinancialEntryOrigin | ""> = ["", "MANUAL", "BUDGET", "PURCHASE", "OPERATION", "PMOC", "OTHER"];
 
 export default function FinancialPage() {
+  const params = useSearchParams();
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
   const [search, setSearch] = useState("");
-  const [type, setType] = useState<FinancialEntryType | "">("");
-  const [status, setStatus] = useState<FinancialEntryStatus | "">("");
-  const [origin, setOrigin] = useState<FinancialEntryOrigin | "">("");
+  const [type, setType] = useState<FinancialEntryType | "">(() => parseEnum(params.get("type"), entryTypes));
+  const [status, setStatus] = useState<FinancialEntryStatus | "">(() => parseEnum(params.get("status"), statuses));
+  const [origin, setOrigin] = useState<FinancialEntryOrigin | "">(() => parseEnum(params.get("origin"), origins));
   const [accountId, setAccountId] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [from, setFrom] = useState("");
@@ -240,4 +242,8 @@ function MiniList<T>({
   if (error) return <ErrorState error={error} onRetry={onRetry} />;
   if (items.length === 0) return <p className="text-caption">{empty}</p>;
   return <div className="overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border)] divide-y divide-[var(--color-border)]">{items.slice(0, 6).map(render)}</div>;
+}
+
+function parseEnum<T extends string>(value: string | null, allowed: readonly (T | "")[]): T | "" {
+  return value && allowed.includes(value as T) ? (value as T) : "";
 }

@@ -5,6 +5,7 @@
  * (edit, enable/disable, delete, reset password). Avatar is fetched on demand.
  */
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { Copy, Check, KeyRound, Pencil, Power, Trash2 } from "lucide-react";
 import { Drawer } from "@erp/ui/drawer";
 import { DrawerTabs } from "@erp/ui/drawer-tabs";
@@ -89,8 +90,8 @@ export function UserDetailDrawer({
         <div className="space-y-4">
           {/* Header */}
           <div className="flex items-center gap-3">
-            <span className="h-14 w-14 rounded-full bg-[var(--color-accent)] grid place-items-center text-white font-semibold text-lg overflow-hidden">
-              {avatar ? <img src={avatar} alt={user.name} className="h-full w-full object-cover" /> : initials(user.name)}
+            <span className="relative h-14 w-14 rounded-full bg-[var(--color-accent)] grid place-items-center text-white font-semibold text-lg overflow-hidden">
+              {avatar ? <Image src={avatar} alt={user.name} fill sizes="56px" unoptimized className="object-cover" /> : initials(user.name)}
             </span>
             <div className="min-w-0">
               <div className="font-medium truncate">{user.name}</div>
