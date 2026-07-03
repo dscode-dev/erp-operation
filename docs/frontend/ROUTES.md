@@ -142,6 +142,17 @@ Menu Platform:
 - “Modo Demo” foi removido da sidebar;
 - “Fornecedores” aparece em Cadastros apontando para a área existente de Produtos/Fornecedores.
 
+### Executive Dashboard
+
+- `/`: dashboard executivo/operacional oficial da V1.
+  - não consome Demo Dataset;
+  - não usa `dashboardApi`;
+  - consolida dados reais de Assignments, Operations, Financial, Maintenance, PMOC, Inventory, Procurement e Asset Lifecycle;
+  - usa seletor controlado de período para atividade recente: Hoje, 7 dias, 30 dias e Mês atual;
+  - links levam para `/agenda`, `/operacoes`, `/financial`, `/produtos`, `/purchase-orders` e `/equipamentos`;
+  - Financial é visível/requisitado apenas para roles autorizadas;
+  - Procurement é visível/requisitado apenas para `OWNER`/`MANAGER`.
+
 ## Operator (campo · mobile-first)
 
 Sessão escopo `operator`. Três zonas sob `app/operator/`:

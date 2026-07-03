@@ -419,3 +419,45 @@ Componentização:
 - drawer de compras fica em `apps/platform/components/purchase-order-drawer.tsx`;
 - badges de status ficam em `apps/platform/components/financial-procurement-badges.tsx`;
 - paginação continua centralizada em `apps/platform/components/pagination.tsx`.
+
+## Executive Dashboard & Operational Intelligence
+
+O dashboard da Platform é uma composição de domínios reais, não um domínio analítico novo:
+
+```text
+Assignments / Operations
+Financial
+Maintenance / PMOC
+Inventory / Procurement
+Asset Lifecycle
+        ↓
+app/(platform)/page.tsx
+        ↓
+Executive Dashboard
+```
+
+Decisões:
+
+- nenhum endpoint novo foi criado nesta sprint;
+- foram adicionados apenas clients frontend para endpoints já existentes (`maintenanceApi`, `pmocApi`);
+- a home removeu `dashboardApi` e dependências do Demo Dataset;
+- agregações de negócio continuam no backend (`/financial/stats`, `/inventory/stats`, `/purchase-orders/stats`, `/maintenance-plans/stats`, `/pmoc/stats`, `/operations/stats`);
+- listas usadas para contexto visual são bounded (`limit` pequeno);
+- não há leitura de `AuditLog`;
+- atividade recente vem de `AssetLifecycle`, já montado pelo `TimelineAssembler`;
+- cada seção usa `useQuery` próprio para preservar falha parcial.
+
+RBAC/AppSec:
+
+- Financial só é requisitado quando a sessão tem `OWNER`/`MANAGER` e `canFinancial`;
+- Procurement só é requisitado para `OWNER`/`MANAGER`;
+- dados financeiros não são pré-carregados para perfis sem permissão;
+- erros são exibidos por `ErrorState`, sem renderizar payload bruto;
+- metadata de timeline é exibida apenas por campos seguros (`timeline.title`, `subtitle`, `description`, `date`).
+
+Performance:
+
+- o dashboard evita baixar páginas completas para contagens quando existem endpoints de stats;
+- usa stats por domínio como fonte principal;
+- usa listas pequenas apenas para contexto acionável;
+- caso o volume real exija, a próxima etapa recomendada é um endpoint read-only agregado de dashboard, sem criar plataforma de analytics.

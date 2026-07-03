@@ -291,3 +291,31 @@ Notas:
 - lançamentos financeiros não manipulam saldo no frontend;
 - botões são escondidos via `<Gate>`/RBAC visual, mantendo o backend como autoridade final;
 - utilitários `.input`, `.btn-primary` e `.btn-secondary` foram adicionados ao Design System global para formulários administrativos.
+
+## Sprint 17 — Executive Dashboard
+
+| Item | Local | Uso |
+|---|---|---|
+| Executive Dashboard | `app/(platform)/page.tsx` | centro executivo/operacional da Platform |
+| `maintenanceApi` | `packages/api/maintenance.ts` | stats e planos ativos de Maintenance Planning |
+| `pmocApi` | `packages/api/pmoc.ts` | stats e PMOCs ativos/compliance |
+| `MetricCard` | `packages/ui/metric-card.tsx` | cards acionáveis do resumo executivo e snapshots |
+| `DashboardSection` | `apps/platform/components/dashboard-section.tsx` | blocos de hierarquia do dashboard |
+| `ErrorState` / `EmptyState` / `SkeletonCard` | `packages/ui/*` | loading, falha parcial e estados vazios por seção |
+| `PurchaseStatusBadge` | `apps/platform/components/financial-procurement-badges.tsx` | status de pedidos no bloco Estoque e Compras |
+
+Componentes internos da home:
+
+- `AttentionCenter`: prioriza situações críticas e de warning com navegação direta;
+- `OperationsToday`: visão operacional diária e carga por operador;
+- `FinancialSnapshot`: visão financeira restrita por RBAC;
+- `MaintenanceCompliance`: visão de Maintenance + PMOC;
+- `InventoryProcurement`: riscos de estoque e compras;
+- `RecentActivity`: feed bounded e seguro via Asset Lifecycle.
+
+Regras:
+
+- a home não usa `dashboardApi` nem Demo Dataset;
+- cada seção tem sua própria consulta e falha isolada;
+- cards importantes são links para workflows reais;
+- não há renderização de metadata bruta nem HTML inseguro.

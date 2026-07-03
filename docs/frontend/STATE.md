@@ -364,3 +364,63 @@ Pendências para polish:
 - aplicar tabelas responsivas/cards mobile em Financeiro e Compras;
 - melhorar máscaras monetárias/CPF-CNPJ nos formulários;
 - substituir warnings legados de `<img>` por `next/image`.
+
+## Sprint 17 — Executive Dashboard & Operational Intelligence (Orbit V1)
+
+O dashboard principal (`/`) foi transformado em centro executivo/operacional usando apenas contratos reais existentes.
+
+Arquitetura da informação implementada:
+
+1. Resumo executivo.
+2. Centro de atenção.
+3. Operação hoje.
+4. Snapshot financeiro.
+5. Ativos, manutenção e PMOC.
+6. Estoque e compras.
+7. Atividade relevante recente.
+
+Fontes reais consumidas:
+
+- Assignments: `/assignments`;
+- Operations: `/operations/stats`;
+- Financial: `/financial/stats`;
+- Inventory: `/inventory/stats` e `/inventory/movements`;
+- Procurement: `/purchase-orders/stats` e `/purchase-orders`;
+- Maintenance Planning: `/maintenance-plans/stats` e `/maintenance-plans`;
+- PMOC: `/pmoc/stats` e `/pmoc`;
+- Asset Lifecycle: `/asset-lifecycle`.
+
+Removido da home:
+
+- `dashboardApi`;
+- Demo Dataset;
+- cards decorativos;
+- métricas fake;
+- valores hardcoded de negócio;
+- feed local de agenda/financeiro.
+
+Resiliência:
+
+- cada seção possui loading/error/empty independente;
+- falha em Financial não derruba Operações;
+- falha em Procurement não derruba Maintenance/PMOC;
+- consultas de atenção e atividade são bounded (`limit` pequeno) e sem leitura de listas completas.
+
+RBAC:
+
+- indicadores financeiros só são requisitados para `OWNER`/`MANAGER` com `canFinancial`;
+- indicadores de compras são requisitados apenas para `OWNER`/`MANAGER`;
+- o backend permanece autoridade final.
+
+Validação:
+
+- `npm run lint` passou com warnings legados;
+- `npm run build` passou;
+- não houve alteração backend nesta sprint.
+
+Pendências para polish/hardening:
+
+- criar endpoint agregado futuro se o volume real tornar o fan-out atual indesejado;
+- adicionar filtros deep-link nas telas destino (`/financial`, `/produtos`, `/purchase-orders`, `/operacoes`);
+- substituir os warnings legados de `<img>`;
+- considerar testes frontend quando houver runner dedicado no pacote.

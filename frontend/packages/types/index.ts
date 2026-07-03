@@ -733,6 +733,92 @@ export type CreateAssignmentPayload = {
   notes?: string | null;
 };
 
+/* ============ Maintenance Planning / PMOC ============ */
+
+export type MaintenancePlanType = "PREVENTIVE" | "INSPECTION" | "WARRANTY" | "CUSTOM";
+export type MaintenancePriority = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+export type MaintenanceExecutionStatus = "PLANNED" | "LINKED" | "COMPLETED" | "CANCELED";
+export type PmocComplianceStatus = "COMPLIANT" | "WARNING" | "OVERDUE" | "NON_COMPLIANT" | "IN_PROGRESS";
+
+export type MaintenancePlan = {
+  id: string;
+  equipmentId: string;
+  name: string;
+  description: string | null;
+  type: MaintenancePlanType;
+  active: boolean;
+  priority: MaintenancePriority;
+  recurrenceRule: Record<string, unknown>;
+  firstExecution: string;
+  nextExecution: string | null;
+  lastExecution: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  equipment?: Pick<EquipmentSummary, "id" | "name" | "tag" | "type" | "status"> & {
+    customer?: Pick<Customer, "id" | "name" | "tradeName"> | null;
+  };
+};
+
+export type MaintenanceExecution = {
+  id: string;
+  maintenancePlanId: string;
+  operationId: string | null;
+  scheduledAt: string;
+  executedAt: string | null;
+  status: MaintenanceExecutionStatus;
+  notes: string | null;
+  createdAt: string;
+  plan?: MaintenancePlan;
+  operation?: Pick<OperationSummary, "id" | "number" | "type" | "status"> | null;
+};
+
+export type MaintenanceStats = {
+  activePlans: number;
+  overduePlans: number;
+  upcomingExecutions: number;
+  completedExecutions: number;
+  pendingExecutions: number;
+  meanDaysBetweenExecutions: number | null;
+};
+
+export type PmocPlan = {
+  id: string;
+  organizationId: string;
+  customerId: string;
+  equipmentId: string;
+  maintenancePlanId: string;
+  responsibleTechnician: string;
+  artNumber: string | null;
+  contractNumber: string | null;
+  startDate: string;
+  endDate: string;
+  active: boolean;
+  observations: string | null;
+  createdAt: string;
+  updatedAt: string;
+  customer?: Pick<Customer, "id" | "name" | "tradeName">;
+  equipment?: Pick<EquipmentSummary, "id" | "name" | "tag" | "type" | "status">;
+  maintenancePlan?: MaintenancePlan & { executions?: MaintenanceExecution[] };
+  compliance: {
+    status: PmocComplianceStatus;
+    evaluatedAt: string;
+    reasons: string[];
+    pendingExecutions: number;
+    overdueExecutions: number;
+  };
+};
+
+export type PmocStats = {
+  activePmocs: number;
+  expiredPmocs: number;
+  compliantPmocs: number;
+  pendingPmocs: number;
+  environments: number;
+  monitoredEquipments: number;
+  upcomingExecutions: number;
+};
+
 export type ReassignAssignmentPayload = {
   assignedTo: string;
   notes?: string | null;

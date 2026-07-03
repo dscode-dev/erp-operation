@@ -26,6 +26,8 @@ export * as equipmentsApi from "./equipments";
 export * as dashboardApi from "./dashboard";
 export * as financialApi from "./financial";
 export * as procurementApi from "./procurement";
+export * as maintenanceApi from "./maintenance";
+export * as pmocApi from "./pmoc";
 export * as demoApi from "./demo";
 
 export * as operationsApi from "./operations";
@@ -46,6 +48,8 @@ export type {
   ListFinancialEntriesParams,
 } from "./financial";
 export type { ListPurchaseOrdersParams } from "./procurement";
+export type { ListMaintenancePlansParams, ListMaintenanceExecutionsParams } from "./maintenance";
+export type { ListPmocParams } from "./pmoc";
 export type { OrdersData, ProductsData, ServicesData } from "./operations";
 export type { OperationPhotoContent } from "./operation";
 export type { ListSignaturesParams, SignaturePayload } from "./signatures";
