@@ -529,6 +529,13 @@ export class OrganizationService {
       );
     }
     this.extensionFor(file);
+    if (!this.hasValidBinarySignature(file.buffer, file.mimetype)) {
+      throw new ApplicationException(
+        ERROR_CODES.UPLOAD_INVALID_MIME_TYPE,
+        'Uploaded file binary signature is invalid',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
   }
 
   private extensionFor(file: UploadedAssetFile): string {
@@ -542,6 +549,47 @@ export class OrganizationService {
       );
     }
     return extension;
+  }
+
+  private hasValidBinarySignature(buffer: Buffer, mimeType: string): boolean {
+    if (mimeType === 'application/pdf') {
+      return buffer.subarray(0, 5).toString('latin1') === '%PDF-';
+    }
+    if (mimeType === 'image/png') {
+      return (
+        buffer.length >= 8 &&
+        buffer.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+      );
+    }
+    if (mimeType === 'image/jpeg') {
+      return (
+        buffer.length >= 3 &&
+        buffer[0] === 0xff &&
+        buffer[1] === 0xd8 &&
+        buffer[2] === 0xff
+      );
+    }
+    if (mimeType === 'image/svg+xml') {
+      return this.hasSafeSvgPayload(buffer);
+    }
+    return false;
+  }
+
+  private hasSafeSvgPayload(buffer: Buffer): boolean {
+    const text = buffer.toString('utf8', 0, Math.min(buffer.length, 200_000)).trim();
+    const lower = text.toLowerCase();
+    if (!lower.startsWith('<svg') && !lower.startsWith('<?xml')) {
+      return false;
+    }
+    if (
+      lower.includes('<script') ||
+      /\son[a-z]+\s*=/.test(lower) ||
+      lower.includes('javascript:') ||
+      lower.includes('<foreignobject')
+    ) {
+      return false;
+    }
+    return lower.includes('<svg');
   }
 
   private sanitizeOriginalName(originalName: string): string {

@@ -92,10 +92,8 @@ export class CreateFinancialEntryDto {
   @IsOptional() @IsUUID('4') originId?: string;
   @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0.01) amount!: number;
   @IsDateString() dueDate!: string;
-  @IsOptional() @IsDateString() paidAt?: string;
   @Transform(({ value }) => trim(value)) @IsString() @MinLength(2) @MaxLength(180) description!: string;
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(5000) notes?: string;
-  @IsOptional() @Transform(({ value }) => upper(value)) @IsEnum(FinancialEntryStatus) status?: FinancialEntryStatus;
 }
 
 export class UpdateFinancialEntryDto {

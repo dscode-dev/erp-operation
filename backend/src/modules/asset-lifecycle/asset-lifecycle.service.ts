@@ -94,10 +94,11 @@ export class AssetLifecycleService {
 
   async listAttachments(eventId: string): Promise<unknown> {
     await this.eventOrThrow(eventId);
-    return this.prisma.assetLifecycleAttachment.findMany({
+    const attachments = await this.prisma.assetLifecycleAttachment.findMany({
       where: { eventId, deletedAt: null },
       orderBy: { createdAt: 'desc' },
     });
+    return attachments.map((attachment) => this.publicAttachment(attachment));
   }
 
   async uploadAttachment(
@@ -139,7 +140,7 @@ export class AssetLifecycleService {
             },
           ),
         });
-        return attachment;
+        return this.publicAttachment(attachment);
       });
     } catch (error) {
       await this.storage.delete(storageKey).catch(() => undefined);
@@ -319,10 +320,66 @@ export class AssetLifecycleService {
     return (name.replace(/[^\w.\- ]+/g, '_').replace(/\s+/g, ' ').trim() || 'attachment').slice(0, 255);
   }
 
+  private publicAttachment(attachment: {
+    id: string;
+    originalFileName: string;
+    mimeType: string;
+    fileSize: number;
+    category: string;
+    createdAt: Date;
+  }): Record<string, unknown> {
+    return {
+      id: attachment.id,
+      originalFileName: this.sanitizeOriginalName(attachment.originalFileName),
+      mimeType: attachment.mimeType,
+      fileSize: attachment.fileSize,
+      category: attachment.category,
+      createdAt: attachment.createdAt,
+    };
+  }
+
   private withTimeline(event: AssetLifecycleEventPayload): AssetLifecycleEventPayload & {
     timeline: Record<string, unknown>;
   } {
-    return { ...event, timeline: this.timeline.assemble(event) };
+    const timeline = this.timeline.assemble(event);
+    return {
+      id: event.id,
+      equipmentId: event.equipmentId,
+      operationId: event.operationId,
+      documentId: event.documentId,
+      type: event.type,
+      occurredAt: event.occurredAt,
+      performedBy: event.performedBy,
+      description: event.description,
+      createdAt: event.createdAt,
+      equipment: event.equipment
+        ? {
+            id: event.equipment.id,
+            name: event.equipment.name,
+            tag: event.equipment.tag,
+            type: event.equipment.type,
+            status: event.equipment.status,
+            customer: event.equipment.customer
+              ? {
+                  id: event.equipment.customer.id,
+                  name: event.equipment.customer.name,
+                  tradeName: event.equipment.customer.tradeName,
+                }
+              : null,
+          }
+        : null,
+      operation: event.operation,
+      document: event.document,
+      performer: event.performer
+        ? {
+            id: event.performer.id,
+            name: event.performer.name,
+            username: event.performer.username,
+          }
+        : null,
+      attachments: event.attachments.map((attachment) => this.publicAttachment(attachment)),
+      timeline,
+    } as AssetLifecycleEventPayload & { timeline: Record<string, unknown> };
   }
 
   private auditInput(

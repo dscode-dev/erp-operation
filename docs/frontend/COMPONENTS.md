@@ -338,3 +338,10 @@ Padrões consolidados:
 Rotas stale:
 
 - páginas legadas que não representam mais fonte oficial usam `redirect()` em vez de `ComingSoonState`.
+
+
+## Sprint 20.5 — Component Security Notes
+
+- Componentes de timeline não devem exibir `metadata`, `storageKey`, `eventId`, `deletedAt` ou e-mail do performer.
+- Componentes de upload/preview local devem revogar object URLs no cleanup.
+- `AssetTimeline` e consumidores derivados devem preferir `timeline.title`, `timeline.subtitle`, `timeline.description`, `timeline.icon`, `timeline.color`, `timeline.badges` e `timeline.references`.

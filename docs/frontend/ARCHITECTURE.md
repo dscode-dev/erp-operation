@@ -496,3 +496,10 @@ Performance:
 - removida duplicação de navegação para Serviços/Ordens;
 - lint sem warnings reduz ruído de certificação;
 - bundle da home aparece maior no relatório do Next e deve ser investigado com bundle analyzer na Sprint 21 antes de qualquer refator especulativo.
+
+
+## Sprint 20.5 — AppSec Closure Architecture
+
+Asset Lifecycle é tratado como API pública sanitizada. Componentes devem renderizar a timeline usando `event.timeline` e `event.timeline.references`, sem interpretar metadata bruto nem usar chaves de storage.
+
+Fluxos com `URL.createObjectURL` devem manter ciclo de vida explícito: revogar URL ao remover o item, substituir preview ou desmontar o componente. O fluxo de Visita Técnica já segue essa regra.

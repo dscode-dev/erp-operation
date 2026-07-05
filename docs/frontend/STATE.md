@@ -474,3 +474,19 @@ Decisões:
 - Suppliers continua dentro de `/produtos?tab=suppliers`; a aba já possui fluxo completo e rota própria geraria duplicação neste momento.
 - `<img>` permanece em BrandLogo e renderizadores documentais/base64 onde o optimizer do Next não é adequado.
 - Frontend ainda não possui test runner configurado; item movido para certificação.
+
+
+## Sprint 20.5 — Frontend AppSec Closure
+
+Status: concluída em 5 de julho de 2026.
+
+Correções frontend:
+
+- `frontend/app/(platform)/reports/visita/page.tsx` passou a revogar object URLs criados para previews locais de fotos ao remover cada item e no unmount da página.
+- `frontend/packages/types/index.ts` alinhou `AssetLifecycleEvent` ao contrato público sanitizado do backend: performer não expõe e-mail e anexos não expõem campos internos.
+
+Decisões:
+
+- timelines continuam consumindo `AssetLifecycle.timeline` como fonte oficial;
+- frontend não deve depender de `metadata` bruto, `storageKey`, `eventId` ou `deletedAt`;
+- downloads e ações em anexos continuam exclusivamente por endpoints autorizados.

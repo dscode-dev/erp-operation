@@ -1308,3 +1308,153 @@ Verificação real:
 - concurrency suite executada 5 vezes consecutivas sem flake.
 
 Veredito: `ORBIT_BACKEND_INTEGRITY_READY`.
+
+## Sprint 20 — AppSec & Security Verification
+
+Modelo de fronteira verificado:
+
+`Actor → JwtAuthGuard → RoleGuard → Controller → DTO Validation → Service authorization /
+relationship checks → Transaction boundary → Prisma/PostgreSQL → Audit/History/Lifecycle`.
+
+Autenticação:
+
+- access tokens usam HS256, issuer e audience configurados;
+- cada request protegido revalida a sessão em `RefreshToken`;
+- usuário inativo/desativado perde acesso mesmo com access token já emitido;
+- role claim do JWT não é autoridade: o guard retorna o usuário real carregado pela sessão.
+
+RBAC verificado por teste HTTP:
+
+| Domínio | OWNER | MANAGER | OPERATOR | VIEWER |
+| ------- | ----- | ------- | -------- | ------ |
+| Financial | Sim | Sim | Não | Não |
+| Pricing | Sim | Sim leitura | Não | Não |
+| Budgets | Sim | Sim | Não | Não |
+| Procurement | Sim | Sim | Não | Não |
+| Organization assets upload | Sim | Não | Não | Não |
+
+Confidencialidade comercial:
+
+- OPERATOR/VIEWER não acessam endpoints diretos/nested de Pricing;
+- Product responses não incluem `costPrice`, `replacementCost`, `averageCost`,
+  `minimumSalePrice` ou `marginPercentage`;
+- Budget continua restrito a OWNER/MANAGER.
+
+Mass assignment:
+
+- `POST /financial/entries` não aceita mais `status` nem `paidAt`;
+- novos lançamentos nascem sempre `PENDING`;
+- pagamento só ocorre pelo endpoint oficial de pagamento, com histórico/auditoria/transação.
+
+Upload security:
+
+- Organization BrandAsset agora valida MIME, extensão e assinatura binária;
+- PDF exige `%PDF-`;
+- PNG exige magic bytes PNG;
+- JPEG exige magic bytes JPEG;
+- SVG precisa ser SVG real e bloqueia `<script`, inline event handlers, `javascript:` e
+  `foreignObject`;
+- storage keys continuam server-generated com UUID;
+- nomes originais são sanitizados e não controlam path.
+
+Storage model:
+
+- nenhum endpoint aceita storage key bruta do usuário para download;
+- downloads passam pelo contexto de domínio autorizado;
+- `LocalStorageProvider` normaliza paths e bloqueia traversal fora do root.
+
+Error policy:
+
+- exception filter mantém resposta pública padronizada;
+- testes verificam que validação e auth failures não expõem SQL, Prisma internals,
+  `DATABASE_URL` ou paths absolutos no payload público.
+
+Rate limit:
+
+- rate limit global permanece ativo via `ThrottlerGuard`;
+- suíte de segurança força limite alto para não mascarar testes de autorização;
+- validação operacional de limites por proxy/IP real permanece item de produção/observabilidade.
+
+Security tests:
+
+```bash
+TEST_DATABASE_URL='postgresql://user:pass@127.0.0.1:5432/orbit_security_test?schema=public' npm run test:security
+```
+
+O banco precisa terminar com `_test`; migrations são aplicadas antes da execução.
+
+Findings corrigidos:
+
+- `S1-FIN-001`: FinancialEntry create aceitava estado terminal/pago.
+- `S1-UPL-001`: BrandAsset aceitava conteúdo spoofado por MIME/extensão.
+
+Riscos residuais documentados:
+
+- SVG é validado por denylist conservadora, não por sanitizer/normalizador XML completo;
+- proteção contra image decompression bomb não é garantida pela camada atual;
+- teste automatizado de rate limit em topologia real de proxy fica para Production Readiness;
+- frontend armazena tokens em `localStorage` com namespace por app; recomendação pós-V1 é avaliar
+  cookies `HttpOnly`/BFF;
+- inspeção frontend não encontrou `dangerouslySetInnerHTML`; object URLs são revogados nos fluxos
+  principais.
+
+## Sprint 20.5 — AppSec Verification Closure
+
+Sprint de fechamento, sem novos domínios de negócio. A campanha reutiliza a infraestrutura da
+Sprint 20 (`backend/test/jest-security.json`, bootstrap HTTP real, guards reais, Prisma e
+PostgreSQL real) e amplia a cobertura para as superfícies que ainda não possuíam evidência
+automatizada suficiente.
+
+Suites adicionadas:
+
+- `document-engine-closure.security.spec.ts`;
+- `signatures-closure.security.spec.ts`;
+- `maintenance-pmoc-closure.security.spec.ts`;
+- `inventory-procurement-closure.security.spec.ts`;
+- `asset-lifecycle-closure.security.spec.ts`;
+- `audit-rate-closure.security.spec.ts`.
+
+Cobertura AppSec fechada:
+
+- Document Engine: RBAC por tipo, render/preview/download, template preview sem Operation,
+  orçamento render/download, documentos inexistentes e ausência de auditoria falsa quando download
+  falha por binário ausente.
+- Signature Domain: RBAC, upload spoofado, path safety, storage UUID, auditoria sem binário e
+  invariantes de template (`NONE`, `FIXED`, `HYBRID`, assinatura inativa).
+- Maintenance Planning / PMOC: validação de recorrência, mutações inválidas, relação
+  equipment/customer, ambiente PMOC fora de escopo e ausência de efeitos colaterais em falhas.
+- Asset Lifecycle: filtros, anexos, autorização parent-child, upload spoofado e confidencialidade do
+  payload público.
+- Inventory / Procurement: mass assignment, quantidades abusivas, estoque negativo, consumo com
+  produto/estoque incompatível, delete com parent errado, recebimento duplicado e over receipt.
+- Audit metadata: credenciais, binários, base64, storage keys e payload bruto de upload inválido não
+  entram em auditoria de sucesso.
+- Rate limit/proxy trust: teste HTTP confirma que spoof de `X-Forwarded-For` não contorna o
+  throttle da rota de login no app direto.
+- Frontend: `frontend/app/(platform)/reports/visita/page.tsx` agora revoga object URLs ao remover
+  foto e no unmount.
+
+Finding descoberto e corrigido:
+
+- `S1-LIFE-001`: endpoints públicos de Asset Lifecycle retornavam `metadata` bruto,
+  `performer.email` e `storageKey`/campos internos de anexos por spread do evento Prisma. Correção:
+  `AssetLifecycleService.withTimeline` e endpoints de anexos agora usam payload público sanitizado.
+  Regressão: `asset-lifecycle-closure.security.spec.ts`.
+
+Política pública do Asset Lifecycle após Sprint 20.5:
+
+- não retornar `metadata` bruto;
+- não retornar `storageKey`;
+- não retornar `eventId`/`deletedAt` em anexos;
+- não retornar e-mail do performer;
+- frontend deve usar `timeline`, `timeline.references` e endpoints autorizados para downloads.
+
+Verificação:
+
+- `npm run test:security -- --silent`: 12 suites / 38 testes;
+- cinco execuções consecutivas passaram contra PostgreSQL real (`orbit_closure_test`).
+
+Risco residual movido para Production Readiness:
+
+- em produção, o app Nest não deve ficar exposto diretamente à internet; deve operar atrás de proxy
+  controlado e com acesso direto à porta da aplicação bloqueado por rede/firewall.

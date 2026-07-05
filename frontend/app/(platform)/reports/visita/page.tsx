@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { ArrowLeft, Camera, X, Info } from "lucide-react";
@@ -20,6 +20,7 @@ export default function VisitaTecnicaPage() {
   const [operatorId, setOperatorId] = useState("");
   const [notes, setNotes] = useState("");
   const [photos, setPhotos] = useState<{ name: string; url: string }[]>([]);
+  const photosRef = useRef(photos);
   const [signed, setSigned] = useState(false);
 
   const customers = useQuery((signal) => customersApi.listCustomers({ limit: 100, signal }), []);
@@ -32,6 +33,9 @@ export default function VisitaTecnicaPage() {
   // Reset equipment when customer changes.
   useEffect(() => { setEquipmentId(""); }, [customerId]);
 
+  useEffect(() => { photosRef.current = photos; }, [photos]);
+  useEffect(() => () => { photosRef.current.forEach((photo) => URL.revokeObjectURL(photo.url)); }, []);
+
   const customer = customers.data?.items.find((c) => c.id === customerId);
   const equipment = equipments.data?.items.find((e) => e.id === equipmentId);
   const operator = operators.data?.items.find((u) => u.id === operatorId);
@@ -42,7 +46,11 @@ export default function VisitaTecnicaPage() {
     e.target.value = "";
   }
   function removePhoto(i: number) {
-    setPhotos((prev) => prev.filter((_, idx) => idx !== i));
+    setPhotos((prev) => {
+      const target = prev[i];
+      if (target) URL.revokeObjectURL(target.url);
+      return prev.filter((_, idx) => idx !== i);
+    });
   }
 
   return (

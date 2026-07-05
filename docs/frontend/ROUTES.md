@@ -222,3 +222,8 @@ Navegação inferior: Início · Agenda · Atendimentos · Clientes · Perfil.
 ## Produção (deploy futuro)
 
 `erp.empresa.com.br` → Platform · `operator.empresa.com.br` → Operator · ambos consomem `api.empresa.com.br`.
+
+
+## Sprint 20.5 — Route Security Notes
+
+Nenhuma rota frontend nova foi criada. Rotas que exibem Asset Lifecycle devem consumir apenas payload público sanitizado e não devem montar URLs a partir de storage keys. A rota de visita técnica corrigiu cleanup de object URLs para previews locais.

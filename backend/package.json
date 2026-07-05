@@ -17,6 +17,7 @@
     "test": "jest --runInBand",
     "test:integration": "jest --config test/jest-integration.json --runInBand test/integration",
     "test:concurrency": "jest --config test/jest-integration.json --runInBand test/concurrency",
+    "test:security": "jest --config test/jest-security.json --runInBand test/security",
     "test:e2e": "jest --config test/jest-e2e.json --runInBand",
     "prisma:generate": "prisma generate",
     "prisma:migrate:dev": "prisma migrate dev",
@@ -77,7 +78,8 @@
     "testPathIgnorePatterns": [
       "/node_modules/",
       "/test/integration/",
-      "/test/concurrency/"
+      "/test/concurrency/",
+      "/test/security/"
     ],
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"

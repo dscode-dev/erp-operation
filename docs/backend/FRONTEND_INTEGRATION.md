@@ -1038,8 +1038,9 @@ do equipamento.
 
 Payload pronto para UI:
 
-Cada item preserva os campos originais e inclui `timeline`. Use `timeline` para renderizar cards,
-badges, cor, ícone, navegação e agrupamento. Não interprete enum no frontend.
+Cada item inclui campos públicos sanitizados e `timeline`. Use `timeline` para renderizar cards,
+badges, cor, ícone, navegação e agrupamento. Não interprete enum no frontend e não dependa de
+`metadata` bruto: ele não faz parte do contrato público.
 
 ```ts
 type AssetLifecycleTimelineItem = {
@@ -1082,6 +1083,16 @@ type AssetLifecycleTimelineItem = {
   badges: string[];
 };
 ```
+
+Campos internos removidos do contrato público na Sprint 20.5:
+
+- `metadata`;
+- `storageKey`;
+- `eventId`/`deletedAt` em anexos;
+- e-mail do performer.
+
+Downloads e ações sobre anexos devem usar exclusivamente os endpoints autorizados; nunca persista ou
+reutilize chaves de storage no frontend.
 
 Listagens incluem `timelineGroups`, preparado para infinite scroll/agrupamento por dia. O frontend
 pode usar `items` para lista plana ou `timelineGroups` para seções por data.
@@ -1807,3 +1818,43 @@ Orientações finais:
   metadata verdadeira e faz cleanup best-effort de binário perdedor.
 - Download com binário ausente deve exibir mensagem de documento indisponível/emitir novamente.
 - Assignment/Budget/Inventory/Procurement seguem com tratamento de `409` + refresh.
+
+## Sprint 20 — impactos AppSec para frontend
+
+Financial:
+
+- Ao criar lançamento financeiro, não enviar `status` nem `paidAt`.
+- Todo lançamento nasce `PENDING`.
+- Para marcar como pago, usar exclusivamente `PATCH /api/v1/financial/entries/:id/pay`.
+- Se o backend retornar `400 VALIDATION_ERROR` por campos extras, corrigir o payload; não tentar
+  fallback local.
+
+Uploads de assets da organização:
+
+- O backend valida MIME, extensão e assinatura binária.
+- Arquivos com extensão correta mas conteúdo incompatível retornam `UPLOAD_INVALID_MIME_TYPE`.
+- SVG com script, inline handlers, `javascript:` ou `foreignObject` é rejeitado.
+- O frontend deve mostrar erro de arquivo inválido e solicitar novo arquivo.
+- Nunca persistir nem reutilizar `storageKey`; downloads continuam por endpoints autorizados.
+
+## Sprint 20.5 — AppSec closure para frontend
+
+Impactos confirmados:
+
+- Asset Lifecycle não expõe mais `metadata` bruto, `storageKey`, `eventId`, `deletedAt` nem e-mail
+  do performer.
+- A timeline deve ser renderizada por `event.timeline` e `event.timeline.references`.
+- Anexos devem ser tratados como recursos opacos; qualquer ação deve usar endpoints autorizados.
+- Object URLs locais usados no fluxo de visita técnica agora são revogados ao remover fotos e no
+  unmount do componente.
+- Nenhum contrato de endpoint foi adicionado ou removido.
+
+Autorização:
+
+- OPERATOR/VIEWER continuam sem acesso a Financial, Pricing, Budget e Procurement.
+- O frontend pode ocultar botões por UX, mas o backend permanece autoridade.
+
+Testes disponíveis:
+
+- `npm run test:security` cobre autenticação, RBAC, mass assignment, upload spoofing, workflow de
+  Assignment, paginação/filtros e vazamento de erros.

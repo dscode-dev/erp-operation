@@ -258,9 +258,7 @@ export class FinancialService {
     context: FinancialAuditContext,
   ): Promise<EntryWithRelations> {
     const organizationId = await this.organizationId();
-    const status = dto.status ?? FinancialEntryStatus.PENDING;
-    this.assertCreateStatus(status);
-    const paidAt = status === FinancialEntryStatus.PAID ? new Date(dto.paidAt ?? new Date()) : null;
+    const status = FinancialEntryStatus.PENDING;
     const amount = this.money(dto.amount);
     await this.assertAccountCategory(organizationId, dto.accountId, dto.categoryId, dto.type);
     return this.prisma.$transaction(async (tx) => {
@@ -274,7 +272,7 @@ export class FinancialService {
           originId: dto.originId ?? null,
           amount,
           dueDate: new Date(dto.dueDate),
-          paidAt,
+          paidAt: null,
           description: this.clean(dto.description),
           notes: this.optionalClean(dto.notes),
           status,
@@ -282,9 +280,6 @@ export class FinancialService {
         },
         include: ENTRY_INCLUDE,
       });
-      if (status === FinancialEntryStatus.PAID) {
-        await this.applyBalanceTx(tx, entry.accountId, entry.type, entry.amount, 'apply');
-      }
       await this.createHistoryTx(tx, entry.id, actor.id, FinancialHistoryAction.CREATED, null, entry.status, {
         amount: entry.amount.toString(),
         accountId: entry.accountId,
@@ -571,12 +566,6 @@ export class FinancialService {
       (entryType === FinancialEntryType.TRANSFER && category.type !== FinancialCategoryType.TRANSFER)
     ) {
       throw new ApplicationException(ERROR_CODES.FINANCIAL_INVALID_RELATIONSHIP, 'Financial category type does not match entry type', HttpStatus.BAD_REQUEST);
-    }
-  }
-
-  private assertCreateStatus(status: FinancialEntryStatus): void {
-    if (status === FinancialEntryStatus.CANCELED || status === FinancialEntryStatus.OVERDUE) {
-      throw new ApplicationException(ERROR_CODES.FINANCIAL_ENTRY_INVALID_STATE, 'Financial entry cannot be created with this status', HttpStatus.BAD_REQUEST);
     }
   }
 

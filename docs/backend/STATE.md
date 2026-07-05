@@ -1133,6 +1133,62 @@ Verificação executada:
 - `npm run lint`.
 - `npm test`.
 
+## Sprint 20 — AppSec & Security Verification
+
+Campanha AppSec inicial executada sobre a aplicação NestJS real via HTTP/Supertest, com guards
+globais, `ValidationPipe`, RBAC, exception filter, rate limit e PostgreSQL real.
+
+Infraestrutura criada:
+
+- `backend/test/jest-security.json`;
+- `backend/test/security/security-app.ts`;
+- `backend/test/security/auth.security.spec.ts`;
+- `backend/test/security/rbac-commercial.security.spec.ts`;
+- `backend/test/security/financial-mass-assignment.security.spec.ts`;
+- `backend/test/security/upload-storage.security.spec.ts`;
+- `backend/test/security/assignment-workflow.security.spec.ts`;
+- `backend/test/security/query-error-leakage.security.spec.ts`;
+- script `npm run test:security`.
+
+Findings corrigidos:
+
+- `S1-FIN-001`: criação de `FinancialEntry` aceitava `status=PAID` e `paidAt`, permitindo bypass
+  do fluxo oficial de pagamento. Correção: criação sempre nasce `PENDING`; `status` e `paidAt`
+  foram removidos do DTO de criação e agora são rejeitados por `forbidNonWhitelisted`.
+- `S1-UPL-001`: BrandAsset/Organization validava MIME/extensão, mas não assinatura binária.
+  Correção: PDF, PNG e JPEG exigem magic bytes; SVG precisa ser SVG real e bloqueia `script`,
+  event handlers, `javascript:` e `foreignObject`.
+
+Evidências automatizadas:
+
+- autenticação: token ausente, token malformado, usuário desativado com token já emitido e role
+  claim adulterado;
+- RBAC: Financial, Pricing, Budget e Procurement;
+- confidencialidade comercial: Pricing bloqueado para OPERATOR/VIEWER e Product não vaza custo,
+  preço mínimo ou margem;
+- mass assignment financeiro: `status`/`paidAt` rejeitados e saldo não alterado;
+- Assignment abuse: operador não executa Assignment de outro operador; transições repetidas ou
+  fora de ordem não criam histórico falso;
+- upload/storage: MIME spoofing, SVG ativo, storage key gerada pelo servidor e upload restrito a
+  OWNER;
+- paginação/filtros: page/limit abusivos, UUID e enum inválidos;
+- error leakage: respostas públicas não expõem Prisma, SQL, `DATABASE_URL` ou paths de projeto.
+
+Migrations:
+
+- nenhuma migration criada nesta sprint.
+
+Verificação executada nesta etapa:
+
+- `TEST_DATABASE_URL='postgresql://orbit_test:orbit_test@127.0.0.1:5432/orbit_closure_test?schema=public' npm run test:security`
+  - 6 suites / 19 tests.
+
+Status:
+
+- sem S0/S1 conhecidos abertos nos escopos exercitados por teste automatizado;
+- Sprint 20 retornou `ORBIT_APPSEC_NOT_VERIFIED` por lacunas de cobertura, não por S0/S1 aberto;
+- a matriz completa de fechamento foi executada posteriormente na Sprint 20.5.
+
 ## Sprint 19 — Backend Hardening, Concurrency & Data Integrity
 
 Status: hardening crítico implementado parcialmente com foco nos invariantes C0/C1 identificados em
@@ -1921,3 +1977,56 @@ Verificação executada:
 - `npm run build`;
 - `npm run lint`.
 - `npm test`.
+
+## Sprint 20.5 — AppSec Verification Closure
+
+Status: concluída em 5 de julho de 2026 como sprint de fechamento AppSec, sem novos domínios de
+negócio e sem migrations.
+
+Objetivo:
+
+- fechar lacunas de verificação remanescentes da Sprint 20;
+- confirmar, por testes HTTP reais, autorização, validação, confidencialidade, auditoria e efeitos
+  colaterais em superfícies críticas;
+- corrigir apenas defeitos comprovados por evidência.
+
+Infraestrutura reutilizada:
+
+- `backend/test/jest-security.json`;
+- `backend/test/security/security-app.ts`;
+- helpers reais de autenticação/fixtures/cleanup;
+- NestJS real via HTTP/Supertest;
+- Prisma e PostgreSQL real.
+
+Suites criadas:
+
+- `backend/test/security/document-engine-closure.security.spec.ts`;
+- `backend/test/security/signatures-closure.security.spec.ts`;
+- `backend/test/security/maintenance-pmoc-closure.security.spec.ts`;
+- `backend/test/security/inventory-procurement-closure.security.spec.ts`;
+- `backend/test/security/asset-lifecycle-closure.security.spec.ts`;
+- `backend/test/security/audit-rate-closure.security.spec.ts`.
+
+Correção aplicada:
+
+- `AssetLifecycleService` deixou de espalhar o evento Prisma bruto no payload público;
+- listagem/detalhe de Asset Lifecycle agora retornam payload sanitizado;
+- anexos retornados por upload/listagem não expõem `storageKey`, `eventId` nem `deletedAt`;
+- nomes originais de anexos são sanitizados antes do retorno público;
+- `frontend/packages/types/index.ts` removeu e-mail do performer em Asset Lifecycle;
+- `frontend/app/(platform)/reports/visita/page.tsx` passou a revogar object URLs ao remover foto e
+  no unmount.
+
+Finding:
+
+- `S1-LIFE-001` — Asset Lifecycle public API leaked raw metadata/storage keys/performer email.
+  Status: corrigido e coberto por regressão.
+
+Verificação executada:
+
+- `TEST_DATABASE_URL=postgresql://orbit_test:orbit_test@127.0.0.1:5432/orbit_closure_test?schema=public npm run test:security -- --silent`
+  passou com 12 suites / 38 testes.
+
+Resultado:
+
+- `ORBIT_APPSEC_VERIFIED`, condicionado à manutenção das políticas documentadas em `SECURITY.md`.

@@ -1932,12 +1932,18 @@ type AssetLifecycleEvent = {
   occurredAt: string;
   performedBy: string | null;
   description: string;
-  metadata: Record<string, unknown>;
   createdAt: string;
-  equipment?: { id: string; name: string; tag: string; type: string; status: string };
+  equipment?: {
+    id: string;
+    name: string;
+    tag: string | null;
+    type: string;
+    status: string;
+    customer?: { id: string; name: string; tradeName: string | null } | null;
+  };
   operation?: { id: string; number: number; type: string; status: string } | null;
   document?: { id: string; number: string; type: string; status: string } | null;
-  performer?: { id: string; name: string; email: string; username: string } | null;
+  performer?: { id: string; name: string; username: string } | null;
   attachments?: AssetLifecycleAttachment[];
   timeline?: AssetLifecycleTimelineItem;
 };
@@ -1984,16 +1990,17 @@ type AssetLifecycleTimelineItem = {
 
 type AssetLifecycleAttachment = {
   id: string;
-  eventId: string;
-  storageKey: string;
   originalFileName: string;
   mimeType: 'application/pdf' | 'image/png' | 'image/jpeg';
   fileSize: number;
   category: string;
-  deletedAt: string | null;
   createdAt: string;
 };
 ```
+
+Sprint 20.5 removeu campos internos do payload público. O frontend não deve esperar `metadata`,
+`storageKey`, `eventId`, `deletedAt` nem e-mail do performer em respostas de Asset Lifecycle. Dados
+auxiliares continuam disponíveis pelo objeto seguro `timeline` e pelas referências navegáveis.
 
 ### GET `/api/v1/asset-lifecycle`
 
@@ -2021,7 +2028,6 @@ Response 200:
         "occurredAt": "2026-06-30T12:00:00.000Z",
         "performedBy": "9ca64187-aecf-4717-8805-16c942133e3d",
         "description": "Preventiva concluída",
-        "metadata": { "operationNumber": 12 },
         "createdAt": "2026-06-30T12:00:02.000Z",
         "equipment": {
           "id": "7e4333fa-7f52-4d61-a9d3-caa3697d3301",
@@ -2040,7 +2046,6 @@ Response 200:
         "performer": {
           "id": "9ca64187-aecf-4717-8805-16c942133e3d",
           "name": "João Técnico",
-          "email": "joao@climatize.example",
           "username": "joao"
         },
         "attachments": [],
@@ -4119,3 +4124,48 @@ Tested commands:
 - `GET /documents/:documentId/download`;
 - `POST /products/:id/pricing`;
 - `PATCH /pricing/:id`.
+
+## Sprint 20 — AppSec contract hardening
+
+No new business endpoint was added in this sprint.
+
+Security-relevant contract clarifications:
+
+- `POST /api/v1/financial/entries`
+  - `status` is not accepted in the create payload.
+  - `paidAt` is not accepted in the create payload.
+  - New entries are always created as `PENDING`.
+  - Payment must use `PATCH /api/v1/financial/entries/:id/pay`.
+  - Attempts to send `status` or `paidAt` return `400 VALIDATION_ERROR` through the global
+    `forbidNonWhitelisted` validation policy.
+- `POST /api/v1/organization/assets`
+  - MIME type and extension are not sufficient.
+  - PDF must start with `%PDF-`.
+  - PNG must contain the PNG magic signature.
+  - JPEG must contain the JPEG magic signature.
+  - SVG must be a real SVG payload and must not contain `<script`, inline event handlers,
+    `javascript:` or `foreignObject`.
+  - Invalid binary/signature returns `400 UPLOAD_INVALID_MIME_TYPE`.
+
+Security test command:
+
+```bash
+TEST_DATABASE_URL='postgresql://user:pass@127.0.0.1:5432/orbit_security_test?schema=public' npm run test:security
+```
+
+The database name must end with `_test`.
+
+## Sprint 20.5 — AppSec closure contract notes
+
+No new business endpoint was added and no migration was created.
+
+Asset Lifecycle public payload is now explicitly sanitized:
+
+- `AssetLifecycleEvent.metadata` is not returned in public API responses;
+- `performer.email` is not returned;
+- `AssetLifecycleAttachment.storageKey`, `eventId` and `deletedAt` are not returned;
+- attachments are handled only by authorized attachment endpoints.
+
+Security closure suites validate Document Engine, Signatures, Maintenance Planning, PMOC,
+Asset Lifecycle, Inventory, Procurement, audit metadata, rate limit/proxy trust and IDOR/BOLA
+boundaries through the real NestJS HTTP application.

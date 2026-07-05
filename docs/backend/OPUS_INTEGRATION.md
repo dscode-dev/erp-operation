@@ -658,7 +658,17 @@ Campos importantes:
 - `operation`: link para atendimento;
 - `document`: link para documento;
 - `attachments`: anexos ativos do evento;
-- `metadata`: dados auxiliares, não usar como fonte única de regra visual.
+- `metadata`: não faz parte do payload público após a Sprint 20.5; use `timeline.references` e os
+  campos explícitos do evento.
+
+Campos que o frontend não deve esperar em Asset Lifecycle:
+
+- `storageKey`;
+- `eventId` e `deletedAt` em anexos;
+- e-mail do performer;
+- valores financeiros, credenciais, tokens ou binários em metadata.
+
+Downloads e exclusões de anexos devem sempre passar pelos endpoints oficiais autorizados.
 
 Sprint 9.5:
 
@@ -1488,3 +1498,46 @@ Para Opus:
 - Nenhuma nova rota foi criada para o frontend.
 
 Veredito backend de integridade: `ORBIT_BACKEND_INTEGRITY_READY`.
+
+## Sprint 20 — AppSec notes for Opus
+
+No new routes were added.
+
+Payload changes to respect:
+
+- `POST /financial/entries`: never send `status` or `paidAt`.
+- Entries are created as `PENDING`; use `/financial/entries/:id/pay` for payment.
+
+Upload UX:
+
+- Organization assets now reject MIME spoofing and active SVG payloads.
+- Treat `UPLOAD_INVALID_MIME_TYPE` as a user-facing invalid-file error.
+- Do not expose storage keys or use local file paths.
+
+Commercial confidentiality:
+
+- OPERATOR and VIEWER must not see Pricing/Financial/Budget/Procurement navigation or actions.
+- Product endpoints remain safe for OPERATOR/VIEWER and do not include Pricing cost/margin fields.
+
+Security regression command available to backend developers:
+
+```bash
+TEST_DATABASE_URL='postgresql://user:pass@127.0.0.1:5432/orbit_security_test?schema=public' npm run test:security
+```
+
+## Sprint 20.5 — AppSec closure notes for Opus
+
+No new routes were added.
+
+Asset Lifecycle is now a sanitized public timeline API:
+
+- do not read or expect raw `metadata`;
+- do not read or expect `storageKey`;
+- do not read or expect attachment `eventId`/`deletedAt`;
+- do not display performer e-mail from timeline payloads;
+- render cards from `timeline.title`, `timeline.subtitle`, `timeline.description`, `timeline.icon`,
+  `timeline.color`, `timeline.badges` and `timeline.references`;
+- object URLs in local photo preview flows must be revoked after use.
+
+The closure suite verifies Document Engine, Signatures, Maintenance, PMOC, Asset Lifecycle,
+Inventory, Procurement, audit metadata, rate limit and IDOR/BOLA boundaries against the real backend.

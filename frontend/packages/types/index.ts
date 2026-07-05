@@ -475,13 +475,10 @@ export type AssetLifecycleEventType =
 
 export type AssetLifecycleAttachment = {
   id: string;
-  eventId?: string;
-  storageKey?: string;
   originalFileName: string;
   mimeType: string;
   fileSize: number;
   category: string;
-  deletedAt?: string | null;
   createdAt: string;
 };
 
@@ -534,9 +531,15 @@ export type AssetLifecycleEvent = {
   occurredAt: string;
   performedBy: string | null;
   description: string;
-  metadata: Record<string, unknown>;
   createdAt: string;
-  equipment?: { id: string; name: string; tag: string | null; type: string; status: string } | null;
+  equipment?: {
+    id: string;
+    name: string;
+    tag: string | null;
+    type: string;
+    status: string;
+    customer?: { id: string; name: string; tradeName: string | null } | null;
+  } | null;
   operation?: { id: string; number: number; type: string; status: string } | null;
   document?: {
     id: string;
@@ -546,7 +549,7 @@ export type AssetLifecycleEvent = {
     renderedAt?: string | null;
     fileSize?: number | null;
   } | null;
-  performer?: { id: string; name: string; email?: string; username: string } | null;
+  performer?: { id: string; name: string; username: string } | null;
   attachments?: AssetLifecycleAttachment[];
   timeline: AssetLifecycleTimelineItem;
 };
