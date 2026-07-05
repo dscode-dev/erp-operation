@@ -1,5 +1,5 @@
 import { HttpStatus } from '@nestjs/common';
-import { PurchaseOrderStatus, Role } from '@prisma/client';
+import { Prisma, PurchaseOrderStatus, Role } from '@prisma/client';
 import { ProcurementService } from '../src/modules/procurement/procurement.service';
 import { ERROR_CODES } from '../src/shared/constants/error-codes.constants';
 import { ApplicationException } from '../src/shared/exceptions/application.exception';
@@ -37,8 +37,8 @@ function order(status: PurchaseOrderStatus): Record<string, unknown> {
         id: '00000000-0000-4000-8000-000000000401',
         purchaseOrderId: '00000000-0000-4000-8000-000000000101',
         productId: '00000000-0000-4000-8000-000000000501',
-        quantity: { toString: () => '10' },
-        receivedQuantity: { toString: () => '9' },
+        quantity: new Prisma.Decimal(10),
+        receivedQuantity: new Prisma.Decimal(9),
         product: {},
       },
     ],
@@ -47,11 +47,16 @@ function order(status: PurchaseOrderStatus): Record<string, unknown> {
 
 describe('ProcurementService state guards', () => {
   function serviceWithOrder(value: Record<string, unknown>): ProcurementService {
+    const tx = {
+      purchaseOrder: {
+        findUnique: jest.fn().mockResolvedValue(value),
+      },
+    };
     const prisma = {
       purchaseOrder: {
         findUnique: jest.fn().mockResolvedValue(value),
       },
-      $transaction: jest.fn(),
+      $transaction: jest.fn((callback: (tx: unknown) => Promise<unknown>) => callback(tx)),
     };
     return new ProcurementService(prisma as never, {} as never, {} as never);
   }
@@ -66,10 +71,10 @@ describe('ProcurementService state guards', () => {
 
   it('rejects receiving above purchased quantity', async () => {
     const tx = {
+      purchaseOrder: { findUnique: jest.fn().mockResolvedValue(order(PurchaseOrderStatus.SENT)) },
       purchaseReceipt: { create: jest.fn().mockResolvedValue({ id: 'receipt' }) },
     };
     const prisma = {
-      purchaseOrder: { findUnique: jest.fn().mockResolvedValue(order(PurchaseOrderStatus.SENT)) },
       $transaction: jest.fn((callback: (tx: unknown) => Promise<unknown>) => callback(tx)),
     };
     const service = new ProcurementService(prisma as never, {} as never, {} as never);

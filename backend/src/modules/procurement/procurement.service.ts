@@ -211,17 +211,18 @@ export class ProcurementService {
   }
 
   async receive(orderId: string, dto: CreatePurchaseReceiptDto, actor: AuthenticatedUser, context: ProcurementAuditContext): Promise<unknown> {
-    const order = await this.orderOrThrow(orderId);
-    const receivableStatuses: PurchaseOrderStatus[] = [PurchaseOrderStatus.SENT, PurchaseOrderStatus.PARTIALLY_RECEIVED];
-    if (!receivableStatuses.includes(order.status)) {
-      throw this.invalidState('Only sent or partially received purchase orders can be received');
-    }
-    const lineMap = new Map(dto.items.map((line) => [line.itemId, line.quantity]));
-    const items = order.items.filter((item) => lineMap.has(item.id));
-    if (items.length !== dto.items.length) throw new ApplicationException(ERROR_CODES.PURCHASE_ITEM_NOT_FOUND, 'One or more purchase items were not found', HttpStatus.NOT_FOUND);
     const receivedAt = dto.receivedAt ? new Date(dto.receivedAt) : new Date();
 
     return this.prisma.$transaction(async (tx) => {
+      const order = await tx.purchaseOrder.findUnique({ where: { id: orderId }, include: ORDER_INCLUDE });
+      if (!order) throw new ApplicationException(ERROR_CODES.PURCHASE_ORDER_NOT_FOUND, 'Purchase order was not found', HttpStatus.NOT_FOUND);
+      const receivableStatuses: PurchaseOrderStatus[] = [PurchaseOrderStatus.SENT, PurchaseOrderStatus.PARTIALLY_RECEIVED];
+      if (!receivableStatuses.includes(order.status)) {
+        throw this.invalidState('Only sent or partially received purchase orders can be received');
+      }
+      const lineMap = new Map(dto.items.map((line) => [line.itemId, line.quantity]));
+      const items = order.items.filter((item) => lineMap.has(item.id));
+      if (items.length !== dto.items.length) throw new ApplicationException(ERROR_CODES.PURCHASE_ITEM_NOT_FOUND, 'One or more purchase items were not found', HttpStatus.NOT_FOUND);
       const receipt = await tx.purchaseReceipt.create({
         data: {
           purchaseOrderId: orderId,
@@ -233,11 +234,22 @@ export class ProcurementService {
       });
       for (const item of items) {
         const quantity = lineMap.get(item.id)!;
-        const nextReceived = Number(item.receivedQuantity) + quantity;
-        if (nextReceived > Number(item.quantity)) {
+        const nextReceived = new Prisma.Decimal(item.receivedQuantity).plus(quantity);
+        if (nextReceived.gt(item.quantity)) {
           throw new ApplicationException(ERROR_CODES.PURCHASE_INVALID_RECEIPT, 'Received quantity exceeds purchased quantity', HttpStatus.CONFLICT);
         }
-        await tx.purchaseOrderItem.update({ where: { id: item.id }, data: { receivedQuantity: nextReceived } });
+        const itemUpdate = await tx.purchaseOrderItem.updateMany({
+          where: {
+            id: item.id,
+            purchaseOrderId: orderId,
+            deletedAt: null,
+            receivedQuantity: item.receivedQuantity,
+          },
+          data: { receivedQuantity: { increment: quantity } },
+        });
+        if (itemUpdate.count !== 1) {
+          throw new ApplicationException(ERROR_CODES.PURCHASE_INVALID_RECEIPT, 'Purchase receipt conflicted with another receipt attempt', HttpStatus.CONFLICT);
+        }
         const inventoryItem = await this.inventory.ensureInventoryItemInTransaction(tx, { organizationId: order.organizationId, productId: item.productId, location: null });
         await this.inventory.createMovementInTransaction(
           tx,
@@ -255,14 +267,21 @@ export class ProcurementService {
         );
       }
       const freshItems = await tx.purchaseOrderItem.findMany({ where: { purchaseOrderId: orderId, deletedAt: null }, select: { quantity: true, receivedQuantity: true } });
-      const allReceived = freshItems.every((item) => Number(item.receivedQuantity) >= Number(item.quantity));
+      const allReceived = freshItems.every((item) => new Prisma.Decimal(item.receivedQuantity).gte(item.quantity));
       const nextStatus = allReceived ? PurchaseOrderStatus.RECEIVED : PurchaseOrderStatus.PARTIALLY_RECEIVED;
-      const updated = await tx.purchaseOrder.update({ where: { id: orderId }, data: { status: nextStatus }, include: ORDER_INCLUDE });
+      const orderTransition = await tx.purchaseOrder.updateMany({
+        where: { id: orderId, status: order.status },
+        data: { status: nextStatus },
+      });
+      if (orderTransition.count !== 1) {
+        throw this.invalidState('Purchase order changed while receipt was being processed');
+      }
+      const updated = await tx.purchaseOrder.findUniqueOrThrow({ where: { id: orderId }, include: ORDER_INCLUDE });
       await this.historyTx(tx, orderId, actor.id, allReceived ? PurchaseHistoryAction.RECEIVED : PurchaseHistoryAction.PARTIALLY_RECEIVED, order.status, nextStatus, { receiptId: receipt.id, items: this.receiptLinesMetadata(dto.items) });
       await this.auditTx(tx, PROCUREMENT_AUDIT_ACTIONS.RECEIPT_CREATED, PURCHASE_RECEIPT_RESOURCE, actor, context, { purchaseOrderId: orderId, receiptId: receipt.id, status: nextStatus });
       await this.lifecycle.publishPurchaseEventTx?.(tx, { purchaseOrderId: orderId, actorId: actor.id, type: AssetLifecycleEventType.PURCHASE_RECEIVED, description: `Purchase order #${updated.number} received`, metadata: { receiptId: receipt.id, status: nextStatus } }, context);
       return { receipt, purchaseOrder: updated };
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
   async stats(): Promise<Record<string, unknown>> {

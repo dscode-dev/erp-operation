@@ -346,7 +346,7 @@ export class InventoryService {
         context,
       );
       return movement;
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
   createMovementInTransaction(
@@ -572,7 +572,7 @@ export class InventoryService {
         quantity: dto.quantity,
       });
       return part;
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
   async deleteOperationMaterial(
@@ -593,7 +593,17 @@ export class InventoryService {
           HttpStatus.NOT_FOUND,
         );
       }
-      await tx.operationPart.update({ where: { id: part.id }, data: { deletedAt: new Date() } });
+      const removed = await tx.operationPart.updateMany({
+        where: { id: part.id, operationId, deletedAt: null },
+        data: { deletedAt: new Date() },
+      });
+      if (removed.count !== 1) {
+        throw new ApplicationException(
+          ERROR_CODES.NOT_FOUND,
+          'Operation material was already removed',
+          HttpStatus.CONFLICT,
+        );
+      }
       await this.createMovementTx(
         tx,
         {
@@ -614,7 +624,7 @@ export class InventoryService {
         productId: part.productId,
       });
       return { deleted: true };
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
   private async createMovementTx(
@@ -631,18 +641,10 @@ export class InventoryService {
     actor: AuthenticatedUser,
     context: InventoryAuditContext,
   ): Promise<StockMovementWithRelations> {
-    const item = await this.inventoryItemOrThrowTx(tx, input.inventoryItemId);
+    await this.inventoryItemOrThrowTx(tx, input.inventoryItemId);
     if (input.operationId) await this.operationOrThrowTx(tx, input.operationId);
     const delta = this.deltaFor(input.type, input.quantity);
-    const current = new Prisma.Decimal(item.currentQuantity);
-    const next = current.plus(delta);
-    if (next.lt(0)) {
-      throw new ApplicationException(
-        ERROR_CODES.INVENTORY_NEGATIVE_STOCK,
-        'Stock movement would result in negative inventory',
-        HttpStatus.CONFLICT,
-      );
-    }
+    await this.applyInventoryDeltaTx(tx, input.inventoryItemId, delta);
     const movement = await tx.stockMovement.create({
       data: {
         inventoryItemId: input.inventoryItemId,
@@ -655,7 +657,6 @@ export class InventoryService {
       },
       include: MOVEMENT_INCLUDE,
     });
-    await this.recalculateInventoryTx(tx, input.inventoryItemId);
     await this.auditTx(tx, INVENTORY_AUDIT_ACTIONS.STOCK_MOVEMENT_CREATED, STOCK_MOVEMENT_RESOURCE, actor, context, {
       movementId: movement.id,
       inventoryItemId: input.inventoryItemId,
@@ -664,6 +665,36 @@ export class InventoryService {
       operationId: input.operationId,
     });
     return movement;
+  }
+
+  private async applyInventoryDeltaTx(
+    tx: Prisma.TransactionClient,
+    inventoryItemId: string,
+    delta: Prisma.Decimal,
+  ): Promise<void> {
+    if (delta.isZero()) return;
+    const where: Prisma.InventoryItemWhereInput = { id: inventoryItemId, isActive: true };
+    const data: Prisma.InventoryItemUpdateManyMutationInput = {
+      currentQuantity: { increment: delta },
+      availableQuantity: { increment: delta },
+    };
+    const result = delta.gt(0)
+      ? await tx.inventoryItem.updateMany({ where, data })
+      : await tx.inventoryItem.updateMany({
+          where: {
+            ...where,
+            currentQuantity: { gte: delta.abs() },
+            availableQuantity: { gte: delta.abs() },
+          },
+          data,
+        });
+    if (result.count !== 1) {
+      throw new ApplicationException(
+        ERROR_CODES.INVENTORY_NEGATIVE_STOCK,
+        'Stock movement would result in negative inventory',
+        HttpStatus.CONFLICT,
+      );
+    }
   }
 
   private async recalculateInventoryTx(tx: Prisma.TransactionClient, inventoryItemId: string): Promise<void> {

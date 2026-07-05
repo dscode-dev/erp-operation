@@ -214,13 +214,15 @@ export class BudgetsService {
   }
 
   async approve(id: string, dto: BudgetDecisionDto, actor: AuthenticatedUser, context: BudgetAuditContext): Promise<BudgetWithRelations> {
-    const current = await this.budgetOrThrow(id);
-    this.assertApprovalCandidate(current);
-    if (current.expirationDate < new Date()) {
-      throw new ApplicationException(ERROR_CODES.BUDGET_EXPIRED, 'Expired budgets cannot be approved', HttpStatus.CONFLICT);
-    }
-
     return this.prisma.$transaction(async (tx) => {
+      const current = await tx.budget.findUnique({ where: { id }, include: BUDGET_INCLUDE });
+      if (!current) {
+        throw new ApplicationException(ERROR_CODES.BUDGET_NOT_FOUND, 'Budget was not found', HttpStatus.NOT_FOUND);
+      }
+      this.assertApprovalCandidate(current);
+      if (current.expirationDate < new Date()) {
+        throw new ApplicationException(ERROR_CODES.BUDGET_EXPIRED, 'Expired budgets cannot be approved', HttpStatus.CONFLICT);
+      }
       if (current.operationId) {
         const approved = await tx.budget.findFirst({
           where: { operationId: current.operationId, status: BudgetStatus.APPROVED, id: { not: id } },
@@ -238,11 +240,14 @@ export class BudgetsService {
       await tx.budgetApproval.create({
         data: { budgetId: id, actorId: actor.id, status: BudgetStatus.APPROVED, observation: this.optionalClean(dto.observation) },
       });
-      const budget = await tx.budget.update({
-        where: { id },
+      const transition = await tx.budget.updateMany({
+        where: { id, status: current.status },
         data: { status: BudgetStatus.APPROVED, approvedAt: new Date(), rejectedAt: null, canceledAt: null },
-        include: BUDGET_INCLUDE,
       });
+      if (transition.count !== 1) {
+        throw new ApplicationException(ERROR_CODES.BUDGET_INVALID_STATUS, 'Budget decision conflicted with another transition', HttpStatus.CONFLICT);
+      }
+      const budget = await tx.budget.findUniqueOrThrow({ where: { id }, include: BUDGET_INCLUDE });
       await this.createHistoryTx(tx, id, actor.id, BudgetHistoryAction.APPROVED, current.status, BudgetStatus.APPROVED, {
         observation: this.optionalClean(dto.observation),
       });
@@ -263,22 +268,27 @@ export class BudgetsService {
         context,
       );
       return budget;
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
   async reject(id: string, dto: BudgetDecisionDto, actor: AuthenticatedUser, context: BudgetAuditContext): Promise<BudgetWithRelations> {
-    const current = await this.budgetOrThrow(id);
-    this.assertApprovalCandidate(current);
-
     return this.prisma.$transaction(async (tx) => {
+      const current = await tx.budget.findUnique({ where: { id }, include: BUDGET_INCLUDE });
+      if (!current) {
+        throw new ApplicationException(ERROR_CODES.BUDGET_NOT_FOUND, 'Budget was not found', HttpStatus.NOT_FOUND);
+      }
+      this.assertApprovalCandidate(current);
       await tx.budgetApproval.create({
         data: { budgetId: id, actorId: actor.id, status: BudgetStatus.REJECTED, observation: this.optionalClean(dto.observation) },
       });
-      const budget = await tx.budget.update({
-        where: { id },
+      const transition = await tx.budget.updateMany({
+        where: { id, status: current.status },
         data: { status: BudgetStatus.REJECTED, rejectedAt: new Date() },
-        include: BUDGET_INCLUDE,
       });
+      if (transition.count !== 1) {
+        throw new ApplicationException(ERROR_CODES.BUDGET_INVALID_STATUS, 'Budget decision conflicted with another transition', HttpStatus.CONFLICT);
+      }
+      const budget = await tx.budget.findUniqueOrThrow({ where: { id }, include: BUDGET_INCLUDE });
       await this.createHistoryTx(tx, id, actor.id, BudgetHistoryAction.REJECTED, current.status, BudgetStatus.REJECTED, {
         observation: this.optionalClean(dto.observation),
       });
@@ -298,20 +308,29 @@ export class BudgetsService {
         context,
       );
       return budget;
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
   async cancel(id: string, actor: AuthenticatedUser, context: BudgetAuditContext): Promise<{ deleted: true }> {
-    const current = await this.budgetOrThrow(id);
-    this.assertWritable(current);
     await this.prisma.$transaction(async (tx) => {
-      await tx.budget.update({ where: { id }, data: { status: BudgetStatus.CANCELED, canceledAt: new Date() } });
+      const current = await tx.budget.findUnique({ where: { id }, include: BUDGET_INCLUDE });
+      if (!current) {
+        throw new ApplicationException(ERROR_CODES.BUDGET_NOT_FOUND, 'Budget was not found', HttpStatus.NOT_FOUND);
+      }
+      this.assertWritable(current);
+      const transition = await tx.budget.updateMany({
+        where: { id, status: current.status },
+        data: { status: BudgetStatus.CANCELED, canceledAt: new Date() },
+      });
+      if (transition.count !== 1) {
+        throw new ApplicationException(ERROR_CODES.BUDGET_INVALID_STATUS, 'Budget cancellation conflicted with another transition', HttpStatus.CONFLICT);
+      }
       await this.createHistoryTx(tx, id, actor.id, BudgetHistoryAction.CANCELED, current.status, BudgetStatus.CANCELED, {});
       await this.auditTx(tx, BUDGET_AUDIT_ACTIONS.BUDGET_CANCELED, actor, context, {
         budgetId: id,
         number: current.number,
       });
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     return { deleted: true };
   }
 

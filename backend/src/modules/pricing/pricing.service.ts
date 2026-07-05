@@ -113,28 +113,32 @@ export class PricingService {
     const prices = this.normalizePrices(dto);
     this.validateCommercialRules(prices, period);
 
-    return this.prisma.$transaction(async (tx) => {
-      await this.assertNoOverlapTx(tx, organization.id, productId, period.validFrom, period.validUntil);
-      const pricing = await tx.productPricing.create({
-        data: {
-          organizationId: organization.id,
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        await this.assertNoOverlapTx(tx, organization.id, productId, period.validFrom, period.validUntil);
+        const pricing = await tx.productPricing.create({
+          data: {
+            organizationId: organization.id,
+            productId,
+            ...prices,
+            validFrom: period.validFrom,
+            validUntil: period.validUntil,
+            active: dto.active ?? true,
+          },
+          include: PRICING_INCLUDE,
+        });
+        await this.auditTx(tx, PRICING_AUDIT_ACTIONS.PRICING_CREATED, actor, context, {
+          pricingId: pricing.id,
           productId,
-          ...prices,
+          sku: product.sku,
           validFrom: period.validFrom,
           validUntil: period.validUntil,
-          active: dto.active ?? true,
-        },
-        include: PRICING_INCLUDE,
-      });
-      await this.auditTx(tx, PRICING_AUDIT_ACTIONS.PRICING_CREATED, actor, context, {
-        pricingId: pricing.id,
-        productId,
-        sku: product.sku,
-        validFrom: period.validFrom,
-        validUntil: period.validUntil,
-      });
-      return pricing;
-    });
+        });
+        return pricing;
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    } catch (error) {
+      this.throwPricingConflict(error);
+    }
   }
 
   async createPricingRevision(
@@ -158,39 +162,46 @@ export class PricingService {
     });
     this.validateCommercialRules(prices, period);
 
-    return this.prisma.$transaction(async (tx) => {
-      await this.assertNoOverlapTx(tx, current.organizationId, current.productId, period.validFrom, period.validUntil, current.id);
-      await tx.productPricing.update({
-        where: { id: current.id },
-        data: {
-          active: false,
-          validUntil: current.validUntil && current.validUntil < period.validFrom ? current.validUntil : period.validFrom,
-        },
-      });
-      const revision = await tx.productPricing.create({
-        data: {
-          organizationId: current.organizationId,
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        await this.assertNoOverlapTx(tx, current.organizationId, current.productId, period.validFrom, period.validUntil, current.id);
+        const deactivated = await tx.productPricing.updateMany({
+          where: { id: current.id, active: current.active },
+          data: {
+            active: false,
+            validUntil: current.validUntil && current.validUntil < period.validFrom ? current.validUntil : period.validFrom,
+          },
+        });
+        if (deactivated.count !== 1) {
+          throw new ApplicationException(ERROR_CODES.PRICING_OVERLAP, 'Pricing revision conflicted with another revision', HttpStatus.CONFLICT);
+        }
+        const revision = await tx.productPricing.create({
+          data: {
+            organizationId: current.organizationId,
+            productId: current.productId,
+            ...prices,
+            validFrom: period.validFrom,
+            validUntil: period.validUntil,
+            active: dto.active ?? true,
+          },
+          include: PRICING_INCLUDE,
+        });
+        await this.auditTx(tx, PRICING_AUDIT_ACTIONS.PRICING_UPDATED, actor, context, {
+          previousPricingId: current.id,
+          pricingId: revision.id,
           productId: current.productId,
-          ...prices,
-          validFrom: period.validFrom,
-          validUntil: period.validUntil,
-          active: dto.active ?? true,
-        },
-        include: PRICING_INCLUDE,
-      });
-      await this.auditTx(tx, PRICING_AUDIT_ACTIONS.PRICING_UPDATED, actor, context, {
-        previousPricingId: current.id,
-        pricingId: revision.id,
-        productId: current.productId,
-        changedFields: Object.keys(dto),
-      });
-      await this.auditTx(tx, PRICING_AUDIT_ACTIONS.PRICING_DEACTIVATED, actor, context, {
-        pricingId: current.id,
-        replacedByPricingId: revision.id,
-        productId: current.productId,
-      });
-      return revision;
-    });
+          changedFields: Object.keys(dto),
+        });
+        await this.auditTx(tx, PRICING_AUDIT_ACTIONS.PRICING_DEACTIVATED, actor, context, {
+          pricingId: current.id,
+          replacedByPricingId: revision.id,
+          productId: current.productId,
+        });
+        return revision;
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    } catch (error) {
+      this.throwPricingConflict(error);
+    }
   }
 
   async pricingHistory(productId: string, query: ListPricingQueryDto): Promise<unknown> {
@@ -303,8 +314,8 @@ export class PricingService {
         productId,
         active: true,
         ...(ignoreId ? { id: { not: ignoreId } } : {}),
-        ...(validUntil ? { validFrom: { lte: validUntil } } : {}),
-        OR: [{ validUntil: null }, { validUntil: { gte: validFrom } }],
+        ...(validUntil ? { validFrom: { lt: validUntil } } : {}),
+        OR: [{ validUntil: null }, { validUntil: { gt: validFrom } }],
       },
       select: { id: true },
     });
@@ -445,5 +456,29 @@ export class PricingService {
         },
       },
     });
+  }
+
+  private throwPricingConflict(error: unknown): never {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      (error.code === 'P2034' || error.code === 'P2002')
+    ) {
+      throw new ApplicationException(
+        ERROR_CODES.PRICING_OVERLAP,
+        'Pricing period overlaps an active pricing record',
+        HttpStatus.CONFLICT,
+      );
+    }
+    if (
+      error instanceof Prisma.PrismaClientUnknownRequestError &&
+      error.message.includes('product_pricings_no_active_overlap')
+    ) {
+      throw new ApplicationException(
+        ERROR_CODES.PRICING_OVERLAP,
+        'Pricing period overlaps an active pricing record',
+        HttpStatus.CONFLICT,
+      );
+    }
+    throw error;
   }
 }

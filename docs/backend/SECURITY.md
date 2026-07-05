@@ -1189,3 +1189,122 @@ Fora do escopo V1:
 - XML/NF-e;
 - pagamentos automáticos;
 - integrações fiscais.
+
+## Sprint 19 — Integrity and concurrency hardening
+
+Esta sprint não altera RBAC nem cria módulos. Ela reforça integridade contra abuso por duplo clique,
+retry de rede, requisições concorrentes e stale writes.
+
+Estratégias aplicadas:
+
+- transações `Serializable` em workflows financeiros, recebimento de compras, pricing, budgets e
+  assignments;
+- compare-and-set com `updateMany` condicionado por status/assignee/snapshot;
+- updates condicionais de saldo físico antes de criar `StockMovement`;
+- constraint parcial para impedir múltiplos Budgets aprovados por Operation;
+- exclusion constraint PostgreSQL para impedir overlap de vigência de preços ativos;
+- índice único lógico para impedir múltiplos `InventoryItem` ativos para o mesmo
+  organização/produto/local;
+- stale-write guard no Document Engine usando `updatedAt` antes de persistir metadados renderizados.
+
+Invariantes protegidos:
+
+- Financial: pagamento não pode aplicar saldo duas vezes.
+- Inventory: estoque disponível/current não pode ficar negativo por consumo concorrente.
+- Procurement: recebimento não pode exceder quantidade comprada.
+- Assignment: operador antigo não pode executar atividade após reatribuição.
+- Budget: somente um orçamento aprovado por Operation.
+- Pricing: preço ativo do mesmo produto/organização não pode ter vigência sobreposta.
+- Document Engine: render concorrente não sobrescreve metadata de documento já alterado.
+
+Comportamento de falha:
+
+- conflitos de estado retornam `409` com códigos de domínio estáveis;
+- conflitos devem ser tratados pelo cliente com refresh do recurso;
+- não há locks em memória/processo;
+- não há dependência de instância única do backend.
+
+Risco residual documentado:
+
+- banco e storage não formam uma transação distribuída. O Document Engine grava o binário antes de
+  confirmar metadata; se metadata perder corrida, o binário recém-criado é removido como
+  compensação best-effort. Auditoria e testes de falhas profundas de storage ficam para Sprint 20/22.
+
+Pendências planejadas:
+
+- Sprint 20: AppSec & Security Verification profunda, incluindo IDOR, abuso de estados e erros
+  persistentes.
+- Sprint 21: Performance, Load & Observability, incluindo concorrência em carga e N+1.
+- Sprint 22: Production Readiness & Release Candidate, incluindo execução completa de migrations
+  e testes contra ambiente limpo controlado.
+
+## Sprint 19.5 — PostgreSQL proof and retry policy
+
+Infraestrutura de teste real:
+
+- `TEST_DATABASE_URL` obrigatório;
+- banco precisa terminar com `_test`;
+- migrations reais aplicadas antes da suíte;
+- cleanup por truncate transacional controlado;
+- unit tests ignoram `test/integration` e `test/concurrency`.
+
+Retry policy:
+
+- `FinancialService` possui retry bounded para `PrismaClientKnownRequestError P2034`.
+- Motivo: pagamentos independentes concorrentes na mesma conta podem sofrer conflito serializável
+  mesmo sendo semanticamente seguros para replay.
+- Máximo atual: 3 tentativas.
+- Não há retry para erros de domínio, validação, RBAC, storage ou comandos com side effects externos.
+
+Provas realizadas:
+
+- double payment financeiro;
+- payment/cancel race;
+- pagamentos independentes na mesma conta;
+- overspend de estoque;
+- duplicate return;
+- over-receipt de compras;
+- stale Assignment operator;
+- duplicate Budget approval;
+- partial unique Budget por Operation;
+- exclusion constraint de Pricing;
+- rollback PostgreSQL básico.
+
+Bloqueio remanescente identificado na Sprint 19.5:
+
+- O veredito `ORBIT_BACKEND_INTEGRITY_READY` requer também provas de Document Engine com falha de
+  storage/banco e rollback específico de todos os fluxos cross-domain críticos.
+
+## Sprint 19.6 — Integrity certification closure
+
+O bloqueio remanescente de integridade foi fechado.
+
+Document Engine:
+
+- PostgreSQL continua sendo autoridade da metadata;
+- storage continua sendo fronteira externa não transacional;
+- falha de storage write não persiste renderização falsa;
+- falha de metadata após storage write aciona cleanup best-effort;
+- se cleanup falhar no futuro, o risco residual é órfão de storage, não metadata falsa;
+- download com binário ausente retorna erro controlado.
+
+Pricing:
+
+- vigência oficial é half-open `[validFrom, validUntil)`;
+- a constraint PostgreSQL `product_pricings_no_active_overlap` foi recriada com `[)`;
+- revision flow fecha o preço anterior no instante de início do novo preço.
+
+Retry:
+
+- Financial mantém retry bounded somente para `P2034`;
+- Procurement, Budget e Pricing não fazem retry cego;
+- Pricing mapeia conflitos de serialização/constraint para `PRICING_OVERLAP`;
+- Document Engine não reexecuta storage side effects automaticamente.
+
+Verificação real:
+
+- integration suite: 2 suites / 7 tests;
+- concurrency suite: 2 suites / 24 tests;
+- concurrency suite executada 5 vezes consecutivas sem flake.
+
+Veredito: `ORBIT_BACKEND_INTEGRITY_READY`.

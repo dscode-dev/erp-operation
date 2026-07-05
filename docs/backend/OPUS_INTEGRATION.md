@@ -1433,3 +1433,58 @@ Importante:
 - não alterar saldo físico no frontend;
 - recebimento chama backend, backend cria `StockMovement(IN)` via Inventory;
 - não criar financeiro automático na V1.
+
+## Sprint 19 — comportamento de concorrência para o frontend
+
+O backend agora rejeita com `409` operações que perderem corrida de estado. Isso é intencional e
+protege dinheiro, estoque, documentos e histórico.
+
+Implementação esperada no Opus:
+
+- Para ações destrutivas ou finalizadoras, não usar retry automático silencioso.
+- Em `409`, fechar loading, exibir toast informativo e refazer `GET` do recurso.
+- Se o usuário ainda puder agir após refresh, deixar a ação disponível novamente.
+
+Áreas com refresh obrigatório após conflito:
+
+- Financeiro: Entry detail/list.
+- Compras: PurchaseOrder detail, itens e receipts.
+- Estoque: Inventory item e Operation materials.
+- Assignments: Assignment detail/my list.
+- Budgets: Budget detail/history/document.
+- Pricing: Product pricing/history.
+- DocumentViewer: document metadata antes de novo render/download.
+
+Não há mocks ou contratos novos nesta etapa.
+
+## Sprint 19.5 — provas disponíveis para o frontend
+
+O backend agora possui scripts oficiais para comprovar concorrência real:
+
+- `npm run test:integration`;
+- `npm run test:concurrency`.
+
+Esses testes usam PostgreSQL real e `TEST_DATABASE_URL` obrigatório com banco `_test`.
+
+Impacto para Opus:
+
+- manter tratamento de `409` com refresh;
+- não adicionar locks locais;
+- não implementar retry automático em comandos de compra/estoque/budget/assignment;
+- Financial já trata internamente retry seguro de conflito serializável em pagamento/cancelamento.
+
+Na Sprint 19.5, Document Engine failure boundary ainda bloqueava o veredito final; a Sprint 19.6
+fecha esse bloqueio.
+
+## Sprint 19.6 — integração após certificação
+
+O bloqueio de Document Engine foi fechado.
+
+Para Opus:
+
+- Remover qualquer fallback local para falha de render; usar retry oficial após refresh.
+- Tratar download indisponível como documento não recuperável no momento, sem exibir storage key.
+- Pricing adjacency agora é válida quando `validUntil` de um preço é igual ao `validFrom` do próximo.
+- Nenhuma nova rota foi criada para o frontend.
+
+Veredito backend de integridade: `ORBIT_BACKEND_INTEGRITY_READY`.

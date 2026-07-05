@@ -1727,3 +1727,83 @@ Regra crítica:
 
 - Inventory continua sendo a única fonte de saldo físico.
 - Procurement nunca deve calcular saldo localmente.
+
+## Sprint 19 — integração após hardening de integridade
+
+Não houve mudança de rotas nem de payloads. Houve endurecimento de conflitos `409` em comandos
+sensíveis. O frontend deve tratar `409` nesses fluxos como “estado mudou no servidor”; a UX correta
+é recarregar o recurso e pedir nova ação do usuário quando necessário.
+
+Fluxos afetados:
+
+- Financeiro: pagar/cancelar lançamento.
+- Estoque: criar movimento, consumir material e remover material de Operation.
+- Compras: registrar recebimento.
+- Assignments: aceitar, rejeitar, iniciar, concluir e reatribuir.
+- Budgets: aprovar, rejeitar, cancelar e emitir documento.
+- Pricing: criar/revisar preço.
+
+Tratamento recomendado:
+
+1. Mostrar feedback curto: “Este registro foi atualizado por outra ação. Atualizamos os dados.”
+2. Recarregar o detalhe/lista usando o endpoint oficial.
+3. Não repetir automaticamente ações financeiras, de estoque, recebimento, aprovação ou render.
+4. Para render de documento, permitir botão “Tentar novamente” depois de recarregar o documento.
+
+Mensagens úteis por código:
+
+- `FINANCIAL_ENTRY_INVALID_STATE`: lançamento já pago/cancelado ou alterado.
+- `INVENTORY_NEGATIVE_STOCK`: saldo insuficiente ou reservado.
+- `PURCHASE_INVALID_RECEIPT`: quantidade recebida excede o restante ou houve recebimento
+  concorrente.
+- `ASSIGNMENT_INVALID_TRANSITION`: atividade foi reatribuída ou mudou de status.
+- `BUDGET_INVALID_STATUS`: orçamento já recebeu decisão ou virou final.
+- `BUDGET_MULTIPLE_APPROVAL`: já existe orçamento aprovado para a Operation.
+- `PRICING_OVERLAP`: vigência conflita com outro preço ativo.
+- `DOCUMENT_RENDER_FAILED`: documento mudou durante a renderização; recarregar e tentar novamente.
+
+Importante:
+
+- Não implementar locks locais no frontend.
+- Não confiar em saldo/quantidade cacheada para decidir; o backend continua sendo a autoridade.
+- Evitar retries automáticos em comandos não idempotentes.
+
+## Sprint 19.5 — semântica verificada para UX
+
+Os conflitos críticos agora possuem prova em PostgreSQL real para os principais fluxos de V1:
+
+- pagamento duplicado;
+- pagamento versus cancelamento;
+- consumo acima do estoque;
+- retorno duplicado de material;
+- recebimento acima do pedido;
+- reatribuição versus aceite de Assignment;
+- aprovação duplicada de Budget;
+- overlap de Pricing.
+
+Comportamento de UX recomendado permanece:
+
+- em `409`, recarregar o recurso e mostrar estado atual;
+- não repetir automaticamente ações de estoque, compras, orçamento ou Assignment;
+- pagamento financeiro possui retry interno bounded apenas para conflito serializável seguro, então
+  o frontend não precisa implementar retry próprio.
+
+Para desenvolvimento local:
+
+```bash
+TEST_DATABASE_URL='postgresql://user:pass@127.0.0.1:5432/orbit_integrity_test?schema=public' npm run test:concurrency
+```
+
+## Sprint 19.6 — efeitos para UX
+
+O backend foi certificado para integridade de concorrência V1.
+
+Orientações finais:
+
+- Pricing usa vigência half-open `[início, fim)`: um preço que termina em `2026-06-01T00:00Z`
+  pode ser seguido por outro que começa exatamente nesse instante.
+- Em `PRICING_OVERLAP`, manter o fluxo atual de refresh e edição da vigência.
+- Em `DOCUMENT_RENDER_FAILED`, o usuário pode tentar novamente após refresh; o backend mantém
+  metadata verdadeira e faz cleanup best-effort de binário perdedor.
+- Download com binário ausente deve exibir mensagem de documento indisponível/emitir novamente.
+- Assignment/Budget/Inventory/Procurement seguem com tratamento de `409` + refresh.

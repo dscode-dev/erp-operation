@@ -1133,6 +1133,220 @@ Verificação executada:
 - `npm run lint`.
 - `npm test`.
 
+## Sprint 19 — Backend Hardening, Concurrency & Data Integrity
+
+Status: hardening crítico implementado parcialmente com foco nos invariantes C0/C1 identificados em
+Financial, Inventory, Procurement, Assignments, Budgets, Pricing e Document Engine.
+
+Domínios inspecionados:
+
+- Operations e integração com Assignment/Maintenance;
+- Assignments e histórico;
+- Inventory e Operation Materials;
+- Procurement e recebimentos;
+- Financial e liquidação/cancelamento;
+- Budgets e aprovação/rejeição/cancelamento;
+- Pricing e vigência temporal;
+- Document Engine e emissão oficial;
+- Maintenance Planning e PMOC em nível de fronteira;
+- Asset Lifecycle via `LifecyclePublisher`.
+
+Correções implementadas:
+
+- Financial: `payEntry` e `cancelEntry` agora usam transação `Serializable` e transição condicional
+  por status antes de aplicar saldo/histórico/lifecycle.
+- Inventory: criação de movimento aplica delta diretamente em `InventoryItem` com guarda
+  condicional contra saldo negativo antes de criar `StockMovement`.
+- Inventory: remoção de material de Operation passou a ser compare-and-set por `deletedAt`,
+  impedindo duplicidade de `RETURN`.
+- Procurement: recebimento revalida pedido/itens dentro da transação `Serializable`, incrementa
+  `receivedQuantity` por compare-and-set e só então gera `StockMovement(IN)`.
+- Assignments: accept/start/complete/reject/reassign usam compare-and-set por `status` e
+  `assignedTo`, protegendo operador antigo contra corrida após reatribuição.
+- Budgets: approve/reject/cancel usam transação `Serializable` e transição condicional por status.
+- Pricing: criação/revisão de preço usam transação `Serializable` para o par validação de overlap
+  + gravação.
+- Document Engine: renderização oficial usa proteção contra stale metadata write via
+  `updatedAt`; se outro render vencer a corrida, o PDF recém-criado é removido e o cliente recebe
+  conflito controlado para retry.
+
+Migration criada:
+
+- `20260705190000_sprint19_integrity_constraints`
+  - índice parcial `budgets_one_approved_per_operation`;
+  - índice único lógico `inventory_items_one_active_per_location`;
+  - constraint exclusion `product_pricings_no_active_overlap` com `btree_gist`.
+
+Matriz resumida de invariantes:
+
+- Financial: saldo só muda após transição de lançamento pendente/vencido para pago; pagamento
+  duplicado e corrida pagamento/cancelamento retornam conflito.
+- Inventory: `availableQuantity = currentQuantity - reservedQuantity`; movimentos negativos só
+  persistem se `currentQuantity` e `availableQuantity` suportarem o delta.
+- Procurement: `receivedQuantity <= quantity`; recebimento, estoque, histórico e auditoria ocorrem
+  na mesma transação.
+- Assignment: operador autorizado precisa continuar sendo `assignedTo` no momento da transição.
+- Budget: budgets finais são imutáveis; apenas um budget aprovado por Operation é permitido.
+- Pricing: períodos ativos do mesmo produto/organização não podem se sobrepor.
+- Document Engine: um documento lógico por Budget; render concorrente não sobrescreve metadata
+  já alterada.
+
+Validação executada nesta sprint:
+
+- `DATABASE_URL=postgresql://postgres:postgres@localhost:5432/orbit_validation npx prisma validate`;
+- `DATABASE_URL=postgresql://postgres:postgres@localhost:5432/orbit_validation npx prisma generate`;
+- `npm run build`;
+- `npm run lint`;
+- `npm test`.
+- `DATABASE_URL=<postgres-local-limpo> npx prisma migrate deploy` fora do sandbox.
+
+Validação pendente/bloqueada:
+
+- testes reais de concorrência com PostgreSQL;
+- testes de rollback com falha de storage/banco.
+
+Observação: o Docker daemon não estava disponível inicialmente (`Cannot connect to the Docker
+daemon`). Após acionar o Docker Desktop, as migrations foram aplicadas com sucesso em banco limpo.
+Os testes unitários existentes passaram, mas ainda não há suíte real de concorrência PostgreSQL
+suficiente para emitir o veredito final `ORBIT_BACKEND_INTEGRITY_READY`.
+
+## Sprint 19.5 — PostgreSQL Concurrency, Transaction & Failure Verification
+
+Infraestrutura oficial criada:
+
+- `npm run test:integration`;
+- `npm run test:concurrency`;
+- `test/jest-integration.json`;
+- `test/integration/setup.ts` com safety guard obrigatório em `TEST_DATABASE_URL`;
+- o banco precisa terminar com `_test`;
+- a suíte nunca usa `DATABASE_URL` automaticamente;
+- migrations reais são aplicadas antes da suíte via `prisma migrate deploy`;
+- cleanup determinístico com `TRUNCATE ... RESTART IDENTITY CASCADE`.
+
+Testes reais PostgreSQL adicionados:
+
+- `test/integration/database-integrity.integration.spec.ts`;
+- `test/concurrency/critical-workflows.concurrency.spec.ts`.
+
+Cenários comprovados:
+
+- Financial double payment concorrente: somente um pagamento vence; saldo/histórico/auditoria
+  persistem uma vez.
+- Financial pagamento versus cancelamento: somente uma transição terminal vence.
+- Financial pagamentos independentes na mesma conta: saldo final usa aritmética decimal exata.
+- Inventory overspend: consumo 7 + 6 contra estoque 10 não deixa saldo negativo.
+- Inventory duplicate return: remoção concorrente de material gera um único `RETURN`.
+- Procurement over-receipt: recebimento 7 + 6 contra compra 10 não ultrapassa quantidade comprada.
+- Assignment reassign versus accept: operador antigo não fica autorizado após reatribuição vencedora.
+- Budget approve/approve: uma decisão efetiva.
+- Budget um aprovado por Operation: índice parcial impede violação.
+- Pricing overlap: exclusion constraint impede vigência ativa sobreposta.
+- Maintenance recurrence: limites atuais de `DAILY`, `WEEKLY`, `MONTHLY`, `YEARLY`,
+  `INTERVAL_DAYS` e `INTERVAL_MONTHS` documentados conforme semântica JS UTC existente.
+- Constraint de InventoryItem ativo por organização/produto/local, incluindo `location = null`.
+- Rollback PostgreSQL básico: writes dentro de transação são revertidos ao lançar erro.
+
+Finding descoberto e corrigido:
+
+- C0 Financial: pagamentos independentes concorrentes na mesma conta podiam falhar com `P2034`
+  sob `Serializable`. Foi adicionado retry bounded no `FinancialService` somente para
+  `PrismaClientKnownRequestError P2034`; erros de domínio e validação não são reexecutados.
+
+Validação executada:
+
+- `DATABASE_URL=<test-db> npx prisma validate`;
+- `DATABASE_URL=<test-db> npx prisma generate`;
+- `npm run build`;
+- `npm run lint`;
+- `npm test` — 10 suites, 27 tests;
+- `npm run test:integration` — 1 suite, 4 tests;
+- `npm run test:concurrency` — 1 suite, 11 tests, executado múltiplas vezes durante a sprint;
+- `prisma migrate deploy` executado pelo setup real contra banco `_test`.
+
+Veredito:
+
+- `ORBIT_BACKEND_INTEGRITY_READY` ainda não foi emitido.
+- Status: `ORBIT_BACKEND_INTEGRITY_NOT_READY`.
+
+Bloqueios restantes para o veredito:
+
+- Document Engine concurrent render/failure injection ainda não coberto;
+- falha storage write e falha database-after-storage ainda não cobertas;
+- download com binário ausente ainda não coberto;
+- rollback específico de Procurement/Inventory/Budget via service boundary ainda não coberto;
+- valid partial receipts 4/3/3 ainda não coberto;
+- duplicate Assignment start/complete e cardinalidade completa de Operation/Maintenance ainda não
+  cobertas;
+- approve/reject e approve/cancel ainda não cobertos;
+- concurrent Pricing revision e boundary adjacency/open-ended ainda não totalmente cobertos;
+- duplicate Maintenance completion ainda não coberto.
+
+## Sprint 19.6 — Integrity Certification Closure
+
+Status: bloqueios de integridade remanescentes fechados com PostgreSQL real.
+
+Infraestrutura reutilizada:
+
+- `test/jest-integration.json`;
+- `test/integration/setup.ts`;
+- `test/integration/helpers.ts`;
+- `test/integration/database-integrity.integration.spec.ts`;
+- `test/concurrency/critical-workflows.concurrency.spec.ts`.
+
+Extensões criadas:
+
+- `test/concurrency/document-engine.concurrency.spec.ts`;
+- `test/integration/transaction-rollback.integration.spec.ts`;
+- `ControlledStorage` para falhas controladas exclusivamente na fronteira externa de storage.
+
+Correção aplicada:
+
+- Pricing passou a usar vigência half-open `[validFrom, validUntil)`.
+- Migration corretiva: `20260705193000_pricing_half_open_validity`.
+- `PricingService.assertNoOverlapTx` foi alinhado para permitir adjacência (`validUntil == next.validFrom`).
+- Conflitos reais de banco/serialização em Pricing são mapeados para `PRICING_OVERLAP`.
+- `DocumentEngineService.downloadDocument` passou a mapear falha inesperada de storage para erro
+  controlado, sem vazar detalhes do provider.
+
+Cenários fechados:
+
+- Document concurrent render;
+- Document storage write failure;
+- Document DB failure after storage write;
+- missing binary download;
+- Procurement receipt rollback;
+- Inventory material consumption rollback;
+- Budget approval rollback;
+- Assignment reassign/start;
+- Assignment duplicate start;
+- Assignment duplicate complete with Maintenance sync;
+- Budget approve/reject;
+- Budget approve/cancel;
+- Budget snapshot stability through official builder/blueprint;
+- Pricing adjacency;
+- Pricing open-ended overlap;
+- Pricing official revision;
+- Pricing concurrent revision;
+- duplicate Maintenance completion through Assignment completion;
+- lifecycle/audit/history cardinality for covered race paths.
+
+Validação final executada:
+
+- `DATABASE_URL=<closure-test-db> npx prisma migrate deploy` em banco limpo `_test`: 23 migrations aplicadas;
+- `DATABASE_URL=<closure-test-db> npx prisma validate`;
+- `DATABASE_URL=<closure-test-db> npx prisma generate`;
+- `npm run build`;
+- `npm run lint`;
+- `npm test`: 10 suites / 27 tests;
+- `TEST_DATABASE_URL=<closure-test-db> npm run test:integration`: 2 suites / 7 tests;
+- `TEST_DATABASE_URL=<closure-test-db> npm run test:concurrency`: 2 suites / 24 tests;
+- `npm run test:concurrency` executado 5 vezes consecutivas sem falhas;
+- `git diff --check`.
+
+Veredito:
+
+- `ORBIT_BACKEND_INTEGRITY_READY`.
+
 ## Backlog — Budget Document Emission
 
 Fluxo oficial implementado:

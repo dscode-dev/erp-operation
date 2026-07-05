@@ -355,23 +355,28 @@ export class FinancialService {
     actor: AuthenticatedUser,
     context: FinancialAuditContext,
   ): Promise<EntryWithRelations> {
-    const current = await this.entryOrThrow(id);
-    if (current.status === FinancialEntryStatus.PAID) {
-      throw new ApplicationException(ERROR_CODES.FINANCIAL_ENTRY_INVALID_STATE, 'Financial entry is already paid', HttpStatus.CONFLICT);
-    }
-    if (current.status === FinancialEntryStatus.CANCELED) {
-      throw new ApplicationException(ERROR_CODES.FINANCIAL_ENTRY_INVALID_STATE, 'Canceled financial entries cannot be paid', HttpStatus.CONFLICT);
-    }
-    return this.prisma.$transaction(async (tx) => {
-      const entry = await tx.financialEntry.update({
-        where: { id },
+    return this.runSerializable(async () => this.prisma.$transaction(async (tx) => {
+      const current = await tx.financialEntry.findFirst({ where: { id, deletedAt: null }, include: ENTRY_INCLUDE });
+      if (!current) {
+        throw new ApplicationException(ERROR_CODES.FINANCIAL_ENTRY_NOT_FOUND, 'Financial entry was not found', HttpStatus.NOT_FOUND);
+      }
+      this.assertPayable(current.status);
+      const transition = await tx.financialEntry.updateMany({
+        where: {
+          id,
+          deletedAt: null,
+          status: current.status,
+        },
         data: {
           status: FinancialEntryStatus.PAID,
           paidAt: new Date(dto.paidAt ?? new Date()),
           ...(dto.notes !== undefined ? { notes: this.optionalClean(dto.notes) } : {}),
         },
-        include: ENTRY_INCLUDE,
       });
+      if (transition.count !== 1) {
+        throw this.staleFinancialTransition('Financial entry payment was already processed or changed');
+      }
+      const entry = await tx.financialEntry.findFirstOrThrow({ where: { id, deletedAt: null }, include: ENTRY_INCLUDE });
       await this.applyBalanceTx(tx, entry.accountId, entry.type, entry.amount, 'apply');
       await this.createHistoryTx(tx, id, actor.id, FinancialHistoryAction.PAID, current.status, entry.status, {
         paidAt: entry.paidAt?.toISOString() ?? null,
@@ -391,7 +396,7 @@ export class FinancialService {
         context,
       );
       return entry;
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
   }
 
   async cancelEntry(
@@ -400,22 +405,27 @@ export class FinancialService {
     actor: AuthenticatedUser,
     context: FinancialAuditContext,
   ): Promise<EntryWithRelations> {
-    const current = await this.entryOrThrow(id);
-    if (current.status === FinancialEntryStatus.CANCELED) {
-      throw new ApplicationException(ERROR_CODES.FINANCIAL_ENTRY_INVALID_STATE, 'Financial entry is already canceled', HttpStatus.CONFLICT);
-    }
-    if (current.status === FinancialEntryStatus.PAID) {
-      throw new ApplicationException(ERROR_CODES.FINANCIAL_ENTRY_INVALID_STATE, 'Paid financial entries cannot be canceled in V1', HttpStatus.CONFLICT);
-    }
-    return this.prisma.$transaction(async (tx) => {
-      const entry = await tx.financialEntry.update({
-        where: { id },
+    return this.runSerializable(async () => this.prisma.$transaction(async (tx) => {
+      const current = await tx.financialEntry.findFirst({ where: { id, deletedAt: null }, include: ENTRY_INCLUDE });
+      if (!current) {
+        throw new ApplicationException(ERROR_CODES.FINANCIAL_ENTRY_NOT_FOUND, 'Financial entry was not found', HttpStatus.NOT_FOUND);
+      }
+      this.assertCancelable(current.status);
+      const transition = await tx.financialEntry.updateMany({
+        where: {
+          id,
+          deletedAt: null,
+          status: current.status,
+        },
         data: {
           status: FinancialEntryStatus.CANCELED,
           canceledAt: new Date(),
         },
-        include: ENTRY_INCLUDE,
       });
+      if (transition.count !== 1) {
+        throw this.staleFinancialTransition('Financial entry cancellation was already processed or changed');
+      }
+      const entry = await tx.financialEntry.findFirstOrThrow({ where: { id, deletedAt: null }, include: ENTRY_INCLUDE });
       await this.createHistoryTx(tx, id, actor.id, FinancialHistoryAction.CANCELED, current.status, entry.status, {
         reason: this.optionalClean(dto.reason),
       });
@@ -434,7 +444,7 @@ export class FinancialService {
         context,
       );
       return entry;
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
   }
 
   async stats(): Promise<Record<string, unknown>> {
@@ -574,6 +584,47 @@ export class FinancialService {
     if (entry.status === FinancialEntryStatus.PAID || entry.status === FinancialEntryStatus.CANCELED) {
       throw new ApplicationException(ERROR_CODES.FINANCIAL_ENTRY_INVALID_STATE, 'Final financial entries cannot be edited', HttpStatus.CONFLICT);
     }
+  }
+
+  private assertPayable(status: FinancialEntryStatus): void {
+    if (status === FinancialEntryStatus.PAID) {
+      throw new ApplicationException(ERROR_CODES.FINANCIAL_ENTRY_INVALID_STATE, 'Financial entry is already paid', HttpStatus.CONFLICT);
+    }
+    if (status === FinancialEntryStatus.CANCELED) {
+      throw new ApplicationException(ERROR_CODES.FINANCIAL_ENTRY_INVALID_STATE, 'Canceled financial entries cannot be paid', HttpStatus.CONFLICT);
+    }
+  }
+
+  private assertCancelable(status: FinancialEntryStatus): void {
+    if (status === FinancialEntryStatus.CANCELED) {
+      throw new ApplicationException(ERROR_CODES.FINANCIAL_ENTRY_INVALID_STATE, 'Financial entry is already canceled', HttpStatus.CONFLICT);
+    }
+    if (status === FinancialEntryStatus.PAID) {
+      throw new ApplicationException(ERROR_CODES.FINANCIAL_ENTRY_INVALID_STATE, 'Paid financial entries cannot be canceled in V1', HttpStatus.CONFLICT);
+    }
+  }
+
+  private staleFinancialTransition(message: string): ApplicationException {
+    return new ApplicationException(ERROR_CODES.FINANCIAL_ENTRY_INVALID_STATE, message, HttpStatus.CONFLICT);
+  }
+
+  private async runSerializable<T>(operation: () => Promise<T>, attempts = 3): Promise<T> {
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      try {
+        return await operation();
+      } catch (error) {
+        if (!this.isRetryablePersistenceConflict(error) || attempt === attempts) {
+          throw error;
+        }
+        lastError = error;
+      }
+    }
+    throw lastError;
+  }
+
+  private isRetryablePersistenceConflict(error: unknown): boolean {
+    return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034';
   }
 
   private async applyBalanceTx(

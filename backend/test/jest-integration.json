@@ -1,0 +1,12 @@
+{
+  "moduleFileExtensions": ["js", "json", "ts"],
+  "rootDir": "..",
+  "testRegex": "test/(integration|concurrency)/.*\\.spec\\.ts$",
+  "transform": {
+    "^.+\\.(t|j)s$": "ts-jest"
+  },
+  "testEnvironment": "node",
+  "watchman": false,
+  "setupFilesAfterEnv": ["<rootDir>/test/integration/setup.ts"],
+  "testTimeout": 30000
+}

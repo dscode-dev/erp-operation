@@ -3910,3 +3910,212 @@ Erros:
 | 409 | `PURCHASE_INVALID_RECEIPT` | Quantidade recebida excede compra |
 
 Migration: `20260702180000_procurement_domain`.
+
+## Sprint 19 — Integrity semantics and conflict behavior
+
+No endpoint path or payload shape changed in Sprint 19. The backend now enforces stricter
+concurrency semantics for existing commands. Clients must treat the following conflicts as stable
+business responses and refresh the resource before retrying.
+
+### Financial
+
+Affected endpoints:
+
+- `PATCH /api/v1/financial/entries/:id/pay`;
+- `PATCH /api/v1/financial/entries/:id/cancel`.
+
+Behavior:
+
+- payment is accepted only if the entry is still payable at commit time;
+- cancellation is accepted only if the entry is still cancelable at commit time;
+- account balance is updated in the same transaction as status/history/audit/lifecycle.
+
+Conflict:
+
+| HTTP | Code | Condition |
+| ---- | ---- | --------- |
+| 409 | `FINANCIAL_ENTRY_INVALID_STATE` | Duplicate payment, stale payment, paid entry cancellation, or payment/cancel race |
+
+### Inventory and Operation Materials
+
+Affected endpoints:
+
+- `POST /api/v1/inventory/movements`;
+- `POST /api/v1/operations/:id/materials`;
+- `DELETE /api/v1/operations/:id/materials/:id`.
+
+Behavior:
+
+- negative stock movements are guarded by conditional balance updates;
+- `StockMovement` is created only after the inventory delta is accepted;
+- duplicate material removal cannot create duplicate `RETURN` movements.
+
+Conflict:
+
+| HTTP | Code | Condition |
+| ---- | ---- | --------- |
+| 409 | `INVENTORY_NEGATIVE_STOCK` | Movement would make current/available stock negative |
+| 409 | `NOT_FOUND` | Operation material was already removed |
+
+### Procurement
+
+Affected endpoint:
+
+- `POST /api/v1/purchase-orders/:id/receipts`.
+
+Behavior:
+
+- receipt processing revalidates order status and item quantities inside the transaction;
+- `receivedQuantity`, `PurchaseReceipt`, `StockMovement(IN)`, status, history and audit are atomic;
+- concurrent over-receipt attempts fail safely.
+
+Conflict:
+
+| HTTP | Code | Condition |
+| ---- | ---- | --------- |
+| 409 | `PURCHASE_INVALID_RECEIPT` | Quantity exceeds remaining purchase quantity or concurrent receipt conflict |
+| 409 | `PURCHASE_INVALID_STATE` | Order state changed while receiving |
+
+### Assignments
+
+Affected endpoints:
+
+- `PATCH /api/v1/assignments/:id/reassign`;
+- `PATCH /api/v1/assignments/:id/accept`;
+- `PATCH /api/v1/assignments/:id/reject`;
+- `PATCH /api/v1/assignments/:id/start`;
+- `PATCH /api/v1/assignments/:id/complete`.
+
+Behavior:
+
+- transition requires the same `status` and `assignedTo` at commit time;
+- stale operator actions after reassignment fail with conflict;
+- Assignment history remains append-only.
+
+Conflict:
+
+| HTTP | Code | Condition |
+| ---- | ---- | --------- |
+| 409 | `ASSIGNMENT_INVALID_TRANSITION` | Duplicate, stale, or invalid Assignment transition |
+
+### Budgets
+
+Affected endpoints:
+
+- `PATCH /api/v1/budgets/:id/approve`;
+- `PATCH /api/v1/budgets/:id/reject`;
+- `DELETE /api/v1/budgets/:id`.
+
+Behavior:
+
+- decisions require the same status at commit time;
+- only one approved Budget per Operation is enforced by PostgreSQL partial unique index;
+- final budgets remain immutable.
+
+Conflict:
+
+| HTTP | Code | Condition |
+| ---- | ---- | --------- |
+| 409 | `BUDGET_INVALID_STATUS` | Duplicate/stale approval, rejection or cancellation |
+| 409 | `BUDGET_MULTIPLE_APPROVAL` | Another Budget is already approved for the Operation |
+
+### Pricing
+
+Affected endpoints:
+
+- `POST /api/v1/products/:id/pricing`;
+- `PATCH /api/v1/pricing/:id`.
+
+Behavior:
+
+- active pricing validity ranges for the same product/organization cannot overlap;
+- enforcement exists both in service transaction and database exclusion constraint.
+
+Conflict:
+
+| HTTP | Code | Condition |
+| ---- | ---- | --------- |
+| 409 | `PRICING_OVERLAP` | Active pricing range overlaps another active range or revision race |
+
+### Document Engine
+
+Affected endpoints:
+
+- `POST /api/v1/documents/:documentId/render`;
+- `POST /api/v1/budgets/:id/render`.
+
+Behavior:
+
+- Budget still has a single official `OperationDocument` via `budgetId`;
+- render metadata write is conditional on the document not changing during render;
+- if a competing render wins, the newly-created binary is deleted and the request fails safely.
+
+Conflict:
+
+| HTTP | Code | Condition |
+| ---- | ---- | --------- |
+| 409 | `DOCUMENT_RENDER_FAILED` | Document changed while rendering; refresh and retry |
+
+## Sprint 19.5 — verified PostgreSQL behavior
+
+No contract shape changed. The following runtime behaviors are now backed by real PostgreSQL
+integration/concurrency tests:
+
+- `PATCH /financial/entries/:id/pay`
+  - duplicate payment commits once;
+  - independent concurrent payments to the same account are retried safely on PostgreSQL `P2034`;
+  - final balance uses exact Decimal persistence.
+- `PATCH /financial/entries/:id/cancel`
+  - payment/cancel race ends in one coherent terminal state.
+- `POST /operations/:id/materials`
+  - overspend attempts cannot commit both when stock is insufficient.
+- `DELETE /operations/:id/materials/:id`
+  - duplicate return applies once.
+- `POST /purchase-orders/:id/receipts`
+  - concurrent over-receipt cannot exceed purchased quantity.
+- Assignment transition endpoints
+  - stale assignee transition loses against committed reassignment.
+- Budget approval endpoints
+  - duplicate approval commits once;
+  - database prevents more than one approved Budget per Operation.
+- Pricing endpoints
+  - PostgreSQL exclusion constraint rejects active overlapping validity ranges.
+
+Developer verification commands:
+
+```bash
+TEST_DATABASE_URL='postgresql://user:pass@127.0.0.1:5432/orbit_integrity_test?schema=public' npm run test:integration
+TEST_DATABASE_URL='postgresql://user:pass@127.0.0.1:5432/orbit_integrity_test?schema=public' npm run test:concurrency
+```
+
+Safety rule: `TEST_DATABASE_URL` database name must end with `_test`.
+
+## Sprint 19.6 — integrity closure semantics
+
+Pricing validity:
+
+- períodos ativos são half-open: `[validFrom, validUntil)`;
+- `validUntil == next.validFrom` é adjacência válida;
+- preço open-ended (`validUntil = null`) bloqueia preços futuros sobrepostos;
+- revisão oficial fecha o preço anterior exatamente em `validFrom` da nova vigência;
+- conflitos retornam `409 PRICING_OVERLAP`.
+
+Document Engine:
+
+- render concorrente do mesmo documento permite apenas um metadata winner;
+- render concorrente perdedor recebe erro controlado `DOCUMENT_RENDER_FAILED`;
+- falha de storage write não marca documento como renderizado;
+- falha de banco após storage write tenta cleanup best-effort do binário recém-criado;
+- download de metadata cujo binário não existe retorna erro controlado sem storage key.
+
+Tested commands:
+
+- `PATCH /assignments/:id/start`;
+- `PATCH /assignments/:id/complete`;
+- `PATCH /budgets/:id/approve`;
+- `PATCH /budgets/:id/reject`;
+- `DELETE /budgets/:id`;
+- `POST /budgets/:id/render`;
+- `GET /documents/:documentId/download`;
+- `POST /products/:id/pricing`;
+- `PATCH /pricing/:id`.

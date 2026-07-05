@@ -53,10 +53,13 @@ function paidEntry(): Record<string, unknown> {
 
 describe('FinancialService state guards', () => {
   function serviceWithEntry(entry: ReturnType<typeof paidEntry>): FinancialService {
-    const prisma = {
+    const tx = {
       financialEntry: {
         findFirst: jest.fn().mockResolvedValue(entry),
       },
+    };
+    const prisma = {
+      $transaction: jest.fn((callback: (tx: unknown) => Promise<unknown>) => callback(tx)),
     };
     const lifecycle = {};
     return new FinancialService(prisma as never, lifecycle as never);

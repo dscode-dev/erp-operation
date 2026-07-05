@@ -239,8 +239,8 @@ export class DocumentEngineService {
         await this.assets.delete(document.storageKey).catch(() => undefined);
 
       const updated = await this.prisma.$transaction(async (tx) => {
-        const saved = await tx.operationDocument.update({
-          where: { id: document.id },
+        const persisted = await tx.operationDocument.updateMany({
+          where: { id: document.id, updatedAt: document.updatedAt },
           data: {
             storageKey: stored.storageKey,
             mimeType: DOCUMENT_MIME_TYPE,
@@ -255,6 +255,15 @@ export class DocumentEngineService {
             },
           },
         });
+        if (persisted.count !== 1) {
+          await this.assets.delete(stored.storageKey).catch(() => undefined);
+          throw new ApplicationException(
+            ERROR_CODES.DOCUMENT_RENDER_FAILED,
+            'Document changed while rendering; retry the render request',
+            HttpStatus.CONFLICT,
+          );
+        }
+        const saved = await tx.operationDocument.findUniqueOrThrow({ where: { id: document.id } });
         await tx.auditLog.create({
           data: this.auditInput(
             DOCUMENT_ENGINE_AUDIT_ACTIONS.DOCUMENT_RENDERED,
@@ -315,7 +324,17 @@ export class DocumentEngineService {
         HttpStatus.CONFLICT,
       );
     }
-    const stored = await this.assets.getDocumentPdf(document.storageKey);
+    let stored: { content: Buffer };
+    try {
+      stored = await this.assets.getDocumentPdf(document.storageKey);
+    } catch (error) {
+      if (error instanceof ApplicationException) throw error;
+      throw new ApplicationException(
+        ERROR_CODES.DOCUMENT_DOWNLOAD_NOT_READY,
+        'Document binary is not available',
+        HttpStatus.CONFLICT,
+      );
+    }
     await this.audit(
       DOCUMENT_ENGINE_AUDIT_ACTIONS.DOCUMENT_DOWNLOADED,
       DOCUMENT_RENDER_RESOURCE,

@@ -167,8 +167,8 @@ export class AssignmentsService {
       this.assertNotFinal(current.status);
       const previousStatus = current.status;
       const now = new Date();
-      const assignment = await tx.assignment.update({
-        where: { id },
+      const transition = await tx.assignment.updateMany({
+        where: { id, status: current.status, assignedTo: current.assignedTo },
         data: {
           assignedBy: actor.id,
           assignedTo: dto.assignedTo,
@@ -183,6 +183,14 @@ export class AssignmentsService {
           notes: dto.notes ?? current.notes,
         },
       });
+      if (transition.count !== 1) {
+        throw new ApplicationException(
+          ERROR_CODES.ASSIGNMENT_INVALID_TRANSITION,
+          'Assignment changed while reassignment was being processed',
+          HttpStatus.CONFLICT,
+        );
+      }
+      const assignment = await tx.assignment.findUniqueOrThrow({ where: { id } });
       await tx.operation.update({ where: { id: assignment.operationId }, data: { operatorId: dto.assignedTo } });
       await this.historyTx(tx, assignment, AssignmentEventType.REASSIGNED, actor.id, previousStatus, dto.notes);
       await this.auditTx(tx, ASSIGNMENT_AUDIT_ACTIONS.ASSIGNMENT_REASSIGNED, actor.id, context, {
@@ -205,7 +213,7 @@ export class AssignmentsService {
         context,
       );
       return tx.assignment.findUniqueOrThrow({ where: { id }, include: ASSIGNMENT_INCLUDE });
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
   async accept(id: string, actor: AuthenticatedUser, context: AssignmentAuditContext): Promise<AssignmentPayload> {
@@ -264,14 +272,22 @@ export class AssignmentsService {
       this.assertAssignee(current, actor);
       this.assertAllowed(current.status, [AssignmentStatus.ASSIGNED, AssignmentStatus.ACCEPTED]);
       const now = new Date();
-      const assignment = await tx.assignment.update({
-        where: { id },
+      const transition = await tx.assignment.updateMany({
+        where: { id, assignedTo: actor.id, status: current.status },
         data: {
           status: AssignmentStatus.REJECTED,
           rejectedAt: now,
           rejectionReason: dto.rejectionReason,
         },
       });
+      if (transition.count !== 1) {
+        throw new ApplicationException(
+          ERROR_CODES.ASSIGNMENT_INVALID_TRANSITION,
+          'Assignment transition conflicted with another update',
+          HttpStatus.CONFLICT,
+        );
+      }
+      const assignment = await tx.assignment.findUniqueOrThrow({ where: { id } });
       await this.historyTx(
         tx,
         assignment,
@@ -286,7 +302,7 @@ export class AssignmentsService {
         reason: dto.rejectionReason,
       });
       return tx.assignment.findUniqueOrThrow({ where: { id }, include: ASSIGNMENT_INCLUDE });
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
   async createForOperationTx(
@@ -354,25 +370,39 @@ export class AssignmentsService {
       this.assertAssignee(current, actor);
       this.assertAllowed(current.status, config.allowedFrom);
       const now = new Date();
-      const assignment = await tx.assignment.update({
-        where: { id },
+      const transition = await tx.assignment.updateMany({
+        where: { id, assignedTo: actor.id, status: current.status },
         data: {
           status: config.status,
           [config.field]: now,
           ...(config.notes !== undefined ? { notes: config.notes } : {}),
-          ...(config.operationStatus
-            ? {
-                operation: {
-                  update: {
-                    status: config.operationStatus,
-                    ...(config.operationStatus === 'COMPLETED' ? { completedAt: now } : {}),
-                    ...(config.operationStatus === 'IN_PROGRESS' ? { startedAt: now } : {}),
-                  },
-                },
-              }
-            : {}),
         },
       });
+      if (transition.count !== 1) {
+        throw new ApplicationException(
+          ERROR_CODES.ASSIGNMENT_INVALID_TRANSITION,
+          'Assignment transition conflicted with another update',
+          HttpStatus.CONFLICT,
+        );
+      }
+      const assignment = await tx.assignment.findUniqueOrThrow({ where: { id } });
+      if (config.operationStatus) {
+        const operationTransition = await tx.operation.updateMany({
+          where: { id: assignment.operationId },
+          data: {
+            status: config.operationStatus,
+            ...(config.operationStatus === 'COMPLETED' ? { completedAt: now } : {}),
+            ...(config.operationStatus === 'IN_PROGRESS' ? { startedAt: now } : {}),
+          },
+        });
+        if (operationTransition.count !== 1) {
+          throw new ApplicationException(
+            ERROR_CODES.OPERATION_NOT_FOUND,
+            'Operation could not be synchronized with assignment',
+            HttpStatus.CONFLICT,
+          );
+        }
+      }
       await this.historyTx(tx, assignment, config.event, actor.id, current.status, config.notes);
       await this.auditTx(tx, config.action, actor.id, context, {
         assignmentId: assignment.id,
@@ -397,7 +427,7 @@ export class AssignmentsService {
         await this.maintenance.syncOperationCompletedTx(tx, assignment.operationId, actor.id, context);
       }
       return tx.assignment.findUniqueOrThrow({ where: { id }, include: ASSIGNMENT_INCLUDE });
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
   private listWhere(query: ListAssignmentsQueryDto, forcedAssignee?: string): Prisma.AssignmentWhereInput {
