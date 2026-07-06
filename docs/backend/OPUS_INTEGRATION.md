@@ -1,5 +1,36 @@
 # OPUS Frontend Integration
 
+## Sprint 21 — Performance notes for Opus
+
+Nenhum endpoint de negócio foi alterado. O Opus deve continuar usando os contratos oficiais já
+integrados.
+
+Novos endpoints técnicos:
+
+| Endpoint | Uso |
+|---|---|
+| `GET /health/live` | liveness de processo |
+| `GET /health/ready` | readiness com DB/storage |
+| `GET /metrics` | Prometheus text/plain para infraestrutura, não para UI |
+
+Baseline medido localmente com fixture de performance:
+
+- dashboard fan-out: p95 181.06 ms, 0% erro;
+- inventory consumption: p95 58.39 ms, 0% erro;
+- procurement receipt: p95 117.54 ms, 0% erro;
+- financial settlement: p95 45.32 ms, 0% erro;
+- document preview/render/download: p95 104.04 ms, 0% erro;
+- operator read path: p95 28.31 ms, 0% erro.
+
+Regras para manter esses números:
+
+- usar paginação em todas as listas;
+- não buscar páginas grandes por padrão;
+- cancelar requisições obsoletas em busca/filtros;
+- não montar documentos no frontend;
+- manter `DocumentViewer` como componente único para preview/render/download;
+- não criar polling agressivo sem debounce/backoff.
+
 ## Connection
 
 Default development base URL:
@@ -1541,3 +1572,27 @@ Asset Lifecycle is now a sanitized public timeline API:
 
 The closure suite verifies Document Engine, Signatures, Maintenance, PMOC, Asset Lifecycle,
 Inventory, Procurement, audit metadata, rate limit and IDOR/BOLA boundaries against the real backend.
+## Sprint 22 — production readiness notes for Opus
+
+No business endpoint was added or removed.
+
+For production-like frontend integration, use:
+
+- API base URL: `/api/v1` when served behind the same reverse proxy;
+- demo flag: `NEXT_PUBLIC_ENABLE_DEMO=false`;
+- metrics endpoint: `GET /api/v1/metrics`;
+- health endpoints: `GET /api/v1/health` and `GET /api/v1/health/ready`.
+
+Release validation commands available to the backend package:
+
+```bash
+npm run release:smoke:frontend
+npm run release:workflows
+```
+
+The critical workflow runner validates real API flows for auth, users, customers, equipment/QR,
+inventory, pricing, delegated operations, Assignment workflow, Asset Lifecycle, budgets/document
+rendering, financial entries and procurement receipts.
+
+Opus/frontend should not depend on Demo Dataset being enabled in production. Demo bridge is now
+disabled by default and must be enabled explicitly only in demo/dev environments.

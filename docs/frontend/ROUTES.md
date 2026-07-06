@@ -1,5 +1,31 @@
 # ROUTES — Frontend
 
+## Sprint 21 — Bundle and runtime notes
+
+Nenhuma rota nova foi criada.
+
+Build de produção em 6 de julho de 2026:
+
+| Rota | First Load JS |
+|---|---:|
+| `/` | 325 kB |
+| `/budgets` | 336 kB |
+| `/produtos` | 330 kB |
+| `/equipamentos` | 449 kB |
+| `/financial` | 325 kB |
+| `/purchase-orders` | 324 kB |
+| `/operator` | 144 kB |
+| `/operator/services/[id]` | 144 kB |
+| `/operator/atendimento` | 153 kB |
+
+Regras de rota:
+
+- manter `/operator/*` enxuto e mobile-first;
+- não reintroduzir `/servicos` e `/ordens` como telas operacionais paralelas;
+- dashboards devem continuar consumindo endpoints paginados/agregados existentes;
+- caso staging mostre lentidão no dashboard, priorizar endpoint agregado no backend antes de
+  duplicar cálculo no frontend.
+
 ## Frontend Sprint 9 — Navigation UX & Creation Flows
 
 Menu lateral:
@@ -227,3 +253,27 @@ Navegação inferior: Início · Agenda · Atendimentos · Clientes · Perfil.
 ## Sprint 20.5 — Route Security Notes
 
 Nenhuma rota frontend nova foi criada. Rotas que exibem Asset Lifecycle devem consumir apenas payload público sanitizado e não devem montar URLs a partir de storage keys. A rota de visita técnica corrigiu cleanup de object URLs para previews locais.
+## Sprint 22 — release smoke routes
+
+The official frontend smoke runner validates these routes against a production build:
+
+- `/login`
+- `/`
+- `/clientes`
+- `/equipamentos`
+- `/operacoes`
+- `/documentos`
+- `/budgets`
+- `/financial`
+- `/purchase-orders`
+- `/operator/login`
+
+Command:
+
+```bash
+ORBIT_RELEASE_API_URL=<api-base-url> \
+ORBIT_RELEASE_FRONTEND_URL=<frontend-base-url> \
+ORBIT_RELEASE_OWNER_EMAIL=<owner-email> \
+ORBIT_RELEASE_OWNER_PASSWORD=<owner-password> \
+npm run release:smoke:frontend
+```

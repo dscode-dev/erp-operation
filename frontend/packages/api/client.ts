@@ -14,12 +14,14 @@
 import type { ApiErrorBody } from "@erp/types";
 import { clearTokens, getAccessToken, getRefreshToken, setTokens } from "./tokens";
 
-export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "http://localhost:3000/api/v1";
+export const API_BASE_URL = (
+  process.env.NEXT_PUBLIC_API_BASE_URL ??
+  (process.env.NODE_ENV === "production" ? "/api/v1" : "http://localhost:3000/api/v1")
+).replace(/\/$/, "");
 
 /** Whether the development demo bridge (dashboard/schedule/finance) is enabled. */
 export const DEMO_BRIDGE_ENABLED =
-  (process.env.NEXT_PUBLIC_ENABLE_DEMO ?? "true").toLowerCase() === "true";
+  (process.env.NEXT_PUBLIC_ENABLE_DEMO ?? "false").toLowerCase() === "true";
 
 export class ApiClientError extends Error {
   readonly code: string;
@@ -137,7 +139,12 @@ export type RequestOptions = {
 };
 
 function buildUrl(path: string, query?: RequestOptions["query"]): string {
-  const url = new URL(`${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`);
+  const requestPath = `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
+  const baseUrl =
+    typeof window !== "undefined"
+      ? window.location.origin
+      : process.env.NEXT_PUBLIC_ORIGIN ?? "http://localhost";
+  const url = new URL(requestPath, baseUrl);
   if (query) {
     for (const [key, value] of Object.entries(query)) {
       if (value === undefined || value === null || value === "") continue;

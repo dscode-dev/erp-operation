@@ -330,23 +330,25 @@ export class InventoryService {
     actor: AuthenticatedUser,
     context: InventoryAuditContext,
   ): Promise<unknown> {
-    return this.prisma.$transaction(async (tx) => {
-      const movement = await this.createMovementTx(
-        tx,
-        {
-          inventoryItemId: dto.inventoryItemId,
-          quantity: dto.quantity,
-          type: dto.type,
-          reason: dto.reason,
-          operationId: dto.operationId ?? null,
-          userId: actor.id,
-          occurredAt: dto.occurredAt ? new Date(dto.occurredAt) : new Date(),
-        },
-        actor,
-        context,
-      );
-      return movement;
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    return this.runSerializable(() =>
+      this.prisma.$transaction(async (tx) => {
+        const movement = await this.createMovementTx(
+          tx,
+          {
+            inventoryItemId: dto.inventoryItemId,
+            quantity: dto.quantity,
+            type: dto.type,
+            reason: dto.reason,
+            operationId: dto.operationId ?? null,
+            userId: actor.id,
+            occurredAt: dto.occurredAt ? new Date(dto.occurredAt) : new Date(),
+          },
+          actor,
+          context,
+        );
+        return movement;
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }),
+    );
   }
 
   createMovementInTransaction(
@@ -513,66 +515,68 @@ export class InventoryService {
     actor: AuthenticatedUser,
     context: InventoryAuditContext,
   ): Promise<unknown> {
-    return this.prisma.$transaction(async (tx) => {
-      const operation = await this.operationOrThrowTx(tx, operationId);
-      const item = await this.inventoryItemOrThrowTx(tx, dto.inventoryItemId);
-      if (item.productId !== dto.productId) {
-        throw new ApplicationException(
-          ERROR_CODES.INVENTORY_PRODUCT_MISMATCH,
-          'Inventory item does not belong to the selected product',
-          HttpStatus.BAD_REQUEST,
-        );
-      }
-      await this.assertProductActiveTx(tx, dto.productId);
-      const part = await tx.operationPart.create({
-        data: {
-          operationId,
-          productId: dto.productId,
-          inventoryItemId: dto.inventoryItemId,
-          quantity: dto.quantity,
-          notes: dto.notes ?? null,
-        },
-        include: OPERATION_PART_INCLUDE,
-      });
-      await this.createMovementTx(
-        tx,
-        {
-          inventoryItemId: dto.inventoryItemId,
-          quantity: dto.quantity,
-          type: StockMovementType.CONSUMPTION,
-          reason: `Consumed in operation #${operation.number}`,
-          operationId,
-          userId: actor.id,
-          occurredAt: new Date(),
-        },
-        actor,
-        context,
-      );
-      if (operation.equipmentId) {
-        await this.lifecycle.publishPartReplacementTx(
-          tx,
-          {
-            equipmentId: operation.equipmentId,
+    return this.runSerializable(() =>
+      this.prisma.$transaction(async (tx) => {
+        const operation = await this.operationOrThrowTx(tx, operationId);
+        const item = await this.inventoryItemOrThrowTx(tx, dto.inventoryItemId);
+        if (item.productId !== dto.productId) {
+          throw new ApplicationException(
+            ERROR_CODES.INVENTORY_PRODUCT_MISMATCH,
+            'Inventory item does not belong to the selected product',
+            HttpStatus.BAD_REQUEST,
+          );
+        }
+        await this.assertProductActiveTx(tx, dto.productId);
+        const part = await tx.operationPart.create({
+          data: {
             operationId,
-            actorId: actor.id,
             productId: dto.productId,
             inventoryItemId: dto.inventoryItemId,
-            operationPartId: part.id,
             quantity: dto.quantity,
-            productName: part.product.name,
-            occurredAt: operation.completedAt ?? new Date(),
+            notes: dto.notes ?? null,
           },
+          include: OPERATION_PART_INCLUDE,
+        });
+        await this.createMovementTx(
+          tx,
+          {
+            inventoryItemId: dto.inventoryItemId,
+            quantity: dto.quantity,
+            type: StockMovementType.CONSUMPTION,
+            reason: `Consumed in operation #${operation.number}`,
+            operationId,
+            userId: actor.id,
+            occurredAt: new Date(),
+          },
+          actor,
           context,
         );
-      }
-      await this.auditTx(tx, INVENTORY_AUDIT_ACTIONS.MATERIAL_CONSUMED, OPERATION_PART_RESOURCE, actor, context, {
-        operationId,
-        operationPartId: part.id,
-        productId: dto.productId,
-        quantity: dto.quantity,
-      });
-      return part;
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+        if (operation.equipmentId) {
+          await this.lifecycle.publishPartReplacementTx(
+            tx,
+            {
+              equipmentId: operation.equipmentId,
+              operationId,
+              actorId: actor.id,
+              productId: dto.productId,
+              inventoryItemId: dto.inventoryItemId,
+              operationPartId: part.id,
+              quantity: dto.quantity,
+              productName: part.product.name,
+              occurredAt: operation.completedAt ?? new Date(),
+            },
+            context,
+          );
+        }
+        await this.auditTx(tx, INVENTORY_AUDIT_ACTIONS.MATERIAL_CONSUMED, OPERATION_PART_RESOURCE, actor, context, {
+          operationId,
+          operationPartId: part.id,
+          productId: dto.productId,
+          quantity: dto.quantity,
+        });
+        return part;
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }),
+    );
   }
 
   async deleteOperationMaterial(
@@ -581,50 +585,52 @@ export class InventoryService {
     actor: AuthenticatedUser,
     context: InventoryAuditContext,
   ): Promise<{ deleted: true }> {
-    return this.prisma.$transaction(async (tx) => {
-      const part = await tx.operationPart.findFirst({
-        where: { id: partId, operationId, deletedAt: null },
-        include: OPERATION_PART_INCLUDE,
-      });
-      if (!part) {
-        throw new ApplicationException(
-          ERROR_CODES.NOT_FOUND,
-          'Operation material was not found',
-          HttpStatus.NOT_FOUND,
+    return this.runSerializable(() =>
+      this.prisma.$transaction(async (tx) => {
+        const part = await tx.operationPart.findFirst({
+          where: { id: partId, operationId, deletedAt: null },
+          include: OPERATION_PART_INCLUDE,
+        });
+        if (!part) {
+          throw new ApplicationException(
+            ERROR_CODES.NOT_FOUND,
+            'Operation material was not found',
+            HttpStatus.NOT_FOUND,
+          );
+        }
+        const removed = await tx.operationPart.updateMany({
+          where: { id: part.id, operationId, deletedAt: null },
+          data: { deletedAt: new Date() },
+        });
+        if (removed.count !== 1) {
+          throw new ApplicationException(
+            ERROR_CODES.NOT_FOUND,
+            'Operation material was already removed',
+            HttpStatus.CONFLICT,
+          );
+        }
+        await this.createMovementTx(
+          tx,
+          {
+            inventoryItemId: part.inventoryItemId,
+            quantity: Number(part.quantity),
+            type: StockMovementType.RETURN,
+            reason: `Material removed from operation`,
+            operationId,
+            userId: actor.id,
+            occurredAt: new Date(),
+          },
+          actor,
+          context,
         );
-      }
-      const removed = await tx.operationPart.updateMany({
-        where: { id: part.id, operationId, deletedAt: null },
-        data: { deletedAt: new Date() },
-      });
-      if (removed.count !== 1) {
-        throw new ApplicationException(
-          ERROR_CODES.NOT_FOUND,
-          'Operation material was already removed',
-          HttpStatus.CONFLICT,
-        );
-      }
-      await this.createMovementTx(
-        tx,
-        {
-          inventoryItemId: part.inventoryItemId,
-          quantity: Number(part.quantity),
-          type: StockMovementType.RETURN,
-          reason: `Material removed from operation`,
+        await this.auditTx(tx, INVENTORY_AUDIT_ACTIONS.MATERIAL_RETURNED, OPERATION_PART_RESOURCE, actor, context, {
           operationId,
-          userId: actor.id,
-          occurredAt: new Date(),
-        },
-        actor,
-        context,
-      );
-      await this.auditTx(tx, INVENTORY_AUDIT_ACTIONS.MATERIAL_RETURNED, OPERATION_PART_RESOURCE, actor, context, {
-        operationId,
-        operationPartId: part.id,
-        productId: part.productId,
-      });
-      return { deleted: true };
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+          operationPartId: part.id,
+          productId: part.productId,
+        });
+        return { deleted: true };
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }),
+    );
   }
 
   private async createMovementTx(
@@ -836,6 +842,25 @@ export class InventoryService {
       throw new ApplicationException(code, message, HttpStatus.CONFLICT);
     }
     throw error;
+  }
+
+  private async runSerializable<T>(operation: () => Promise<T>, attempts = 3): Promise<T> {
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      try {
+        return await operation();
+      } catch (error) {
+        if (!this.isRetryablePersistenceConflict(error) || attempt === attempts) {
+          throw error;
+        }
+        lastError = error;
+      }
+    }
+    throw lastError;
+  }
+
+  private isRetryablePersistenceConflict(error: unknown): boolean {
+    return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034';
   }
 
   private async auditTx(

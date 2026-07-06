@@ -1,5 +1,38 @@
 # Frontend Integration
 
+## Sprint 21 — Performance and observability integration
+
+Novos endpoints operacionais disponíveis para health/observabilidade:
+
+- `GET /health/live`: liveness leve; use em checks de processo.
+- `GET /health/ready`: readiness com PostgreSQL e storage; use em deploy/health de infraestrutura.
+- `GET /metrics`: formato Prometheus text/plain, sem envelope JSON. Não deve ser consumido pela UI
+  comum.
+
+O frontend continua consumindo apenas contratos de negócio existentes. Nenhum contrato funcional foi
+alterado na Sprint 21.
+
+### Performance budgets relevantes para UI
+
+| Fluxo | Budget V1 |
+|---|---:|
+| Listagens paginadas | p95 backend ≤ 300 ms |
+| Mutations críticas | p95 backend ≤ 500 ms |
+| Preview simples do Document Engine | p95 backend ≤ 800 ms |
+| Dashboard atual em fan-out | p95 local ≤ 1.200 ms |
+
+### Orientações de integração
+
+- Não remover paginação: toda listagem deve manter `page`/`limit`.
+- Preservar filtros ao paginar; isso evita refetches amplos e mantém o backend em queries indexáveis.
+- Evitar chamadas duplicadas no dashboard. A Sprint 21 mediu o dashboard atual com 17 chamadas por
+  iteração e manteve p95 local em 181.06 ms; endpoint agregado só será necessário se staging indicar
+  gargalo real.
+- Usar abort/cancelamento em filtros digitáveis e drawers para evitar requisições concorrentes
+  obsoletas.
+- `DocumentViewer` deve continuar usando preview/render/download oficiais. Não reintroduzir preview
+  local.
+
 ## Base URL
 
 Desenvolvimento padrão:
@@ -1858,3 +1891,33 @@ Testes disponíveis:
 
 - `npm run test:security` cobre autenticação, RBAC, mass assignment, upload spoofing, workflow de
   Assignment, paginação/filtros e vazamento de erros.
+
+## Sprint 22 — production readiness para integração frontend
+
+Builds de produção do frontend devem usar:
+
+```bash
+NEXT_PUBLIC_API_BASE_URL=/api/v1
+NEXT_PUBLIC_ENABLE_DEMO=false
+```
+
+Quando frontend e backend estiverem atrás do mesmo proxy, `/api/v1` é a base browser-facing
+preferencial. O cliente HTTP do frontend suporta base relativa e resolve contra `window.location`.
+
+Endpoints operacionais:
+
+- `GET /api/v1/health`
+- `GET /api/v1/health/ready`
+- `GET /api/v1/metrics`
+
+Smoke oficial:
+
+```bash
+ORBIT_RELEASE_API_URL=http://127.0.0.1:3001/api/v1 \
+ORBIT_RELEASE_FRONTEND_URL=http://127.0.0.1:4000 \
+ORBIT_RELEASE_OWNER_EMAIL=<owner-email> \
+ORBIT_RELEASE_OWNER_PASSWORD=<owner-password> \
+npm run release:smoke:frontend
+```
+
+O smoke valida autenticação real, readiness, métricas e as principais rotas Platform/Operator.

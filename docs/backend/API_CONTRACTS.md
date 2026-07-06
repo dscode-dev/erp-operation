@@ -207,6 +207,80 @@ Response 503:
 }
 ```
 
+### GET `/api/v1/health/live`
+
+Public. Liveness leve para orquestradores. Não consulta banco nem storage.
+
+Response 200:
+
+```json
+{
+  "success": true,
+  "data": {
+    "status": "ok",
+    "uptime": 124.199,
+    "timestamp": "2026-07-06T12:41:18.702Z",
+    "version": "0.1.0"
+  }
+}
+```
+
+### GET `/api/v1/health/ready`
+
+Public. Readiness de produção local/staging. Verifica conexão com PostgreSQL e disponibilidade do
+storage configurado.
+
+Response 200:
+
+```json
+{
+  "success": true,
+  "data": {
+    "status": "ok",
+    "uptime": 124.199,
+    "timestamp": "2026-07-06T12:41:18.702Z",
+    "database_connection": "connected",
+    "storage_connection": "available",
+    "version": "0.1.0"
+  }
+}
+```
+
+Response 503:
+
+```json
+{
+  "success": true,
+  "data": {
+    "status": "degraded",
+    "uptime": 130.412,
+    "timestamp": "2026-07-06T12:45:00.000Z",
+    "database_connection": "disconnected",
+    "storage_connection": "unavailable",
+    "version": "0.1.0"
+  }
+}
+```
+
+### GET `/api/v1/metrics`
+
+Public para ambiente interno/orquestrador. Retorna `text/plain; version=0.0.4` no formato
+Prometheus e não usa o envelope JSON global.
+
+Exemplo parcial:
+
+```text
+# HELP orbit_process_uptime_seconds Process uptime in seconds.
+# TYPE orbit_process_uptime_seconds gauge
+orbit_process_uptime_seconds 124.199
+# HELP orbit_http_requests_total Total HTTP requests.
+# TYPE orbit_http_requests_total counter
+orbit_http_requests_total{method="GET",route="/api/v1/health/ready",status="200"} 1
+```
+
+Métricas expostas não incluem payloads, tokens, e-mails, nomes de clientes ou identificadores
+fornecidos via query string.
+
 ## Organization
 
 Permissions:
@@ -4169,3 +4243,33 @@ Asset Lifecycle public payload is now explicitly sanitized:
 Security closure suites validate Document Engine, Signatures, Maintenance Planning, PMOC,
 Asset Lifecycle, Inventory, Procurement, audit metadata, rate limit/proxy trust and IDOR/BOLA
 boundaries through the real NestJS HTTP application.
+
+## Sprint 22 — production readiness contract notes
+
+No business API contract was changed.
+
+Operational endpoints verified:
+
+- `GET /api/v1/health`
+- `GET /api/v1/health/ready`
+- `GET /api/v1/metrics`
+
+`GET /api/v1/metrics` returns Prometheus text format (`text/plain; version=0.0.4`) and is the
+official metrics route. It is not nested under `/health`.
+
+Release verification scripts added:
+
+```bash
+npm run release:smoke:frontend
+npm run release:workflows
+```
+
+Required environment for smoke/workflow scripts:
+
+- `ORBIT_RELEASE_API_URL`
+- `ORBIT_RELEASE_FRONTEND_URL` for frontend smoke
+- `ORBIT_RELEASE_OWNER_EMAIL`
+- `ORBIT_RELEASE_OWNER_PASSWORD`
+
+The workflow runner uses only official API endpoints and fails on unexpected HTTP status, envelope
+errors or missing identifiers.

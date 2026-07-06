@@ -1,4 +1,39 @@
-# STATE — Frontend Sprint 9 (Architecture Inspection, Navigation UX & Creation Flows)
+# STATE — Frontend
+
+## Sprint 21 — Performance, Load & Observability
+
+Status: concluída em 6 de julho de 2026.
+
+Sprint de verificação e documentação. Não criou telas nem fluxos novos.
+
+Resultados do build Next.js 15/Turbopack:
+
+- build passou;
+- shared First Load JS: 139 kB;
+- rotas Operator principais ficaram entre 142 kB e 153 kB de First Load JS;
+- rotas administrativas mais pesadas identificadas:
+  - `/equipamentos`: 449 kB;
+  - `/budgets`: 336 kB;
+  - `/produtos`: 330 kB;
+  - `/financial`: 325 kB;
+  - `/purchase-orders`: 324 kB.
+
+Decisões:
+
+- nenhum chunk foi extraído nesta sprint porque os cenários backend/API ficaram dentro do budget e a
+  sprint não autorizava refatoração funcional ampla;
+- `/equipamentos`, `/budgets` e `/produtos` ficam marcadas como candidatas a code splitting fino em
+  Sprint 22/Post-V1 Optimization;
+- manter paginação global e cancelamento de requisições em filtros/drawers para preservar os
+  budgets backend medidos.
+
+Baseline backend relevante para frontend:
+
+- dashboard fan-out: p95 181.06 ms, error rate 0;
+- Document Engine preview/render/download: p95 104.04 ms, error rate 0;
+- Operator read path: p95 28.31 ms, error rate 0.
+
+## Frontend Sprint 9 (Architecture Inspection, Navigation UX & Creation Flows)
 
 Status: Concluída ✅ — 1 de julho de 2026. Next.js 15 · App Router · TypeScript. Navegação reorganizada e fluxos de criação consolidados sobre Operation real.
 
@@ -490,3 +525,27 @@ Decisões:
 - timelines continuam consumindo `AssetLifecycle.timeline` como fonte oficial;
 - frontend não deve depender de `metadata` bruto, `storageKey`, `eventId` ou `deletedAt`;
 - downloads e ações em anexos continuam exclusivamente por endpoints autorizados.
+
+## Sprint 22 — Production Readiness frontend notes
+
+Status: validado em 6 de julho de 2026 dentro do gate RC local.
+
+Alterações frontend:
+
+- `packages/api/client.ts` passou a tratar `NEXT_PUBLIC_API_BASE_URL` relativo, permitindo `/api/v1`
+  atrás de reverse proxy same-origin;
+- `NEXT_PUBLIC_ENABLE_DEMO` passou a defaultar para `false`;
+- `.env.example` do frontend passou a documentar demo bridge como opt-in;
+- smoke de release valida rotas principais Platform e Operator contra build real.
+
+Validações:
+
+- `npm run build` passou;
+- `npm run lint` passou;
+- `npm run release:smoke:frontend` passou contra frontend em `127.0.0.1:4000` e API em
+  `127.0.0.1:3001`.
+
+Observação operacional:
+
+- o pacote Next alerta que `next start` não é o modo ideal para `output: standalone`; o Dockerfile de
+  produção usa o servidor standalone gerado pelo build.

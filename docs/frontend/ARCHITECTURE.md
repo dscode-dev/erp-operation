@@ -1,5 +1,34 @@
 # ARCHITECTURE — Frontend
 
+## Sprint 21 — Performance architecture review
+
+Sprint 21 confirmou a arquitetura de consumo real:
+
+```text
+UI paginada / drawers / dashboard
+↓
+packages/api
+↓
+Backend paginado + Document Engine + Asset Lifecycle
+```
+
+Decisões:
+
+- o frontend não deve criar caches globais persistentes de domínio para "ganhar performance";
+- performance deve vir de paginação, filtros cumulativos, abort de requests obsoletas e componentes
+  únicos reutilizáveis;
+- o dashboard executivo atual permanece fan-out porque o backend medido ficou dentro do budget;
+- se staging ou usuários reais apontarem gargalo, a próxima ação correta é endpoint agregado no
+  backend, não cálculo local duplicado;
+- rotas administrativas grandes devem ser otimizadas por code splitting de componentes pesados,
+  preservando contratos e RBAC.
+
+Riscos classificados:
+
+- Sprint 22: avaliar lazy-load interno em `/equipamentos`, principalmente drawers/document viewer;
+- Sprint 23: revisar `/budgets` e `/produtos` se métricas reais indicarem impacto;
+- Post-V1 Optimization: introduzir bundle analyzer dedicado e budgets automatizados no CI.
+
 ## Frontend Sprint 9 — Architecture Inspection & Creation Flow Consolidation
 
 Criações operacionais foram consolidadas sobre um único fluxo:
@@ -503,3 +532,18 @@ Performance:
 Asset Lifecycle é tratado como API pública sanitizada. Componentes devem renderizar a timeline usando `event.timeline` e `event.timeline.references`, sem interpretar metadata bruto nem usar chaves de storage.
 
 Fluxos com `URL.createObjectURL` devem manter ciclo de vida explícito: revogar URL ao remover o item, substituir preview ou desmontar o componente. O fluxo de Visita Técnica já segue essa regra.
+## Sprint 22 — production readiness architecture
+
+Frontend production configuration:
+
+- `NEXT_PUBLIC_API_BASE_URL` may be `/api/v1` when the deployment has a same-origin reverse proxy.
+- `NEXT_PUBLIC_ENABLE_DEMO` defaults to `false` and must be enabled explicitly only for demo/dev.
+- The shared API client resolves relative API bases against `window.location.origin` in the browser.
+
+Release topology:
+
+- `docker-compose.rc.yml` provides a representative local topology with `frontend`, `api`,
+  `postgres` and `proxy`.
+- The proxy routes `/api/v1/*` to the API and all other paths to the Next frontend.
+- Real TLS/certificate/HSTS verification remains an environment responsibility and was not proven in
+  this repository workspace.

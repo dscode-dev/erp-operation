@@ -15,4 +15,17 @@ export class HealthController {
     response.status(health.status === 'ok' ? HttpStatus.OK : HttpStatus.SERVICE_UNAVAILABLE);
     return health;
   }
+
+  @Get('live')
+  getLiveness(): HealthResponseDto {
+    return this.healthService.getLiveness();
+  }
+
+  @Get('ready')
+  async getReadiness(@Res({ passthrough: true }) response: Response): Promise<HealthResponseDto> {
+    const health = await this.healthService.getReadiness();
+    response.status(health.status === 'ok' ? HttpStatus.OK : HttpStatus.SERVICE_UNAVAILABLE);
+    return health;
+  }
+
 }

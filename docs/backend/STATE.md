@@ -1,5 +1,95 @@
 # Backend State
 
+## Sprint 21 — Performance, Load & Observability
+
+Status: concluída em 6 de julho de 2026.
+
+Sprint 21 não adicionou domínio de negócio. O foco foi medir, corrigir e documentar performance,
+carga e observabilidade para a reta final da V1.
+
+### Performance budgets V1
+
+Budgets oficiais para baseline local/staging:
+
+| Área | Budget V1 |
+|---|---:|
+| Health/readiness | p95 ≤ 100 ms |
+| Listagens paginadas críticas | p95 ≤ 300 ms |
+| Mutations transacionais críticas | p95 ≤ 500 ms |
+| Document preview/render simples | p95 ≤ 800 ms |
+| Dashboard executivo atual | p95 ≤ 1.200 ms por fan-out completo local |
+| Error rate em carga controlada | 0% para cenários felizes |
+| Deadlocks PostgreSQL | 0 |
+
+### Tooling criado
+
+- `backend/test/performance/scripts/seed-performance-data.mjs`: fixture realista opcional para
+  performance, idempotente e protegido por banco `_test`/`_perf`.
+- `backend/test/performance/scripts/run-performance-scenarios.mjs`: runner HTTP com cenários
+  representativos e proteção contra execução acidental em produção.
+- `backend/test/performance/scripts/profile-critical-queries.mjs`: profiling PostgreSQL com
+  `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)`.
+- `backend/test/performance/README.md`: procedimento de uso.
+
+### Cenários medidos
+
+Baseline local em `orbit_perf_test`, fixture `tiny`, API local, 2 VUs, 8 segundos por cenário:
+
+| Cenário | Requests | p95 | Error rate |
+|---|---:|---:|---:|
+| Dashboard executivo | 1.564 | 181.06 ms | 0 |
+| Operations/Assignments dispatch | 332 | 36.62 ms | 0 |
+| Inventory consumption | 396 | 58.39 ms | 0 |
+| Procurement receipt | 360 | 117.54 ms | 0 |
+| Financial settlement | 450 | 45.32 ms | 0 |
+| Budget lifecycle | 402 | 31.30 ms | 0 |
+| Document Engine preview/render/download | 300 | 104.04 ms | 0 |
+| Operator read path | 420 | 28.31 ms | 0 |
+
+### Correções aplicadas por medição
+
+- `InventoryService` agora aplica retry limitado para conflitos serializáveis PostgreSQL (`P2034`)
+  em movimentos de estoque e consumo/retorno de material.
+- `ProcurementService` agora aplica retry limitado para conflitos serializáveis (`P2034`) no
+  recebimento de compras e transições críticas.
+- O runner de carga deixou de reutilizar lançamentos/pedidos já finalizados e passou a criar
+  recursos próprios para medir fluxos felizes reais.
+- O cenário Operator reutiliza token do operador e não gera falsos positivos de rate limit por
+  login repetido.
+
+### PostgreSQL profiling
+
+`EXPLAIN ANALYZE` das queries críticas ficou sub-millisecond no fixture local. Maiores tempos
+observados:
+
+- Financial stats core: 0.239 ms;
+- Executive dashboard assignments: 0.208 ms;
+- Financial entries list: 0.200 ms;
+- Stock movements list: 0.151 ms;
+- Equipment lifecycle: 0.150 ms.
+
+Inspeção pós-carga:
+
+- conexões: 2 active, 13 idle;
+- locks pendentes: nenhum bloqueio não concedido;
+- deadlocks: 0.
+
+### Observability
+
+- `GET /api/v1/health/live`: liveness sem dependência de banco.
+- `GET /api/v1/health/ready`: readiness com banco e storage.
+- `GET /api/v1/metrics`: métricas Prometheus text/plain, sem envelope JSON.
+- Métricas registradas: contadores HTTP, erros HTTP, buckets de duração HTTP, renderização de
+  documentos, upload/download e mutações críticas de Inventory/Financial/Procurement.
+
+### Decisões
+
+- O dashboard executivo atual permanece fan-out client/API-layer e não recebeu endpoint agregado
+  nesta sprint. Com 17 chamadas por iteração, o p95 local ficou em 181.06 ms. A criação de um
+  endpoint agregado fica para Sprint 22 somente se staging ou UX real indicar necessidade.
+- Nenhuma migration foi criada.
+- Nenhum endpoint de negócio foi alterado.
+
 ## Current milestone
 
 **Sprint — Assignment Domain + Operator Workflow**
@@ -2030,3 +2120,93 @@ Verificação executada:
 Resultado:
 
 - `ORBIT_APPSEC_VERIFIED`, condicionado à manutenção das políticas documentadas em `SECURITY.md`.
+
+## Sprint 22 — Production Readiness, Release Candidate Certification & Operational Hardening
+
+Status: executada em 6 de julho de 2026 como gate de Release Candidate V1.
+
+Escopo:
+
+- sem novos domínios de negócio;
+- sem migrations novas;
+- hardening de configuração, runtime, CI, runbooks, smoke tests e workflows críticos;
+- validação local representativa com PostgreSQL real, API real e frontend buildado.
+
+Arquivos/artefatos criados:
+
+- `.github/workflows/release-candidate.yml`;
+- `docker-compose.rc.yml`;
+- `deploy/nginx/orbit.conf`;
+- `docs/release/PRODUCTION_READINESS_RUNBOOK.md`;
+- `docs/release/SPRINT_22_RELEASE_CANDIDATE_CERTIFICATION.md`;
+- `backend/test/release/release-api-client.mjs`;
+- `backend/test/release/frontend-smoke.mjs`;
+- `backend/test/release/critical-workflows.mjs`.
+
+Hardening aplicado:
+
+- `NODE_ENV` agora faz parte do contrato obrigatório de ambiente;
+- produção rejeita JWT secrets placeholder/example;
+- produção rejeita `DATABASE_URL` com placeholders/local/example;
+- frontend deixou de habilitar demo bridge por padrão;
+- `NEXT_PUBLIC_API_BASE_URL` pode ser relativo (`/api/v1`) quando houver reverse proxy same-origin;
+- adicionada topologia RC com proxy reverso e Postgres/API não expostos diretamente ao host;
+- removido `.DS_Store` de `backend/prisma/migrations`.
+
+Validações executadas:
+
+- `npx prisma validate` com `DATABASE_URL` explícita;
+- `npm run build` backend;
+- `npm run lint` backend;
+- `npm run build` frontend;
+- `npm run lint` frontend;
+- migrations limpas em banco `orbit_rc_test` com 23 migrations aplicadas;
+- `npm test`: 10 suites / 27 testes;
+- `npm run test:security`: 12 suites / 38 testes;
+- `npm run test:concurrency`: 2 suites / 24 testes;
+- `npm run test:integration`: 2 suites / 7 testes;
+- `npm run perf:seed`;
+- `npm run perf:profile`;
+- `npm run perf:run`: dashboard, 2 VUs, 10s, 2380 requests, p95 108.3ms, errorRate 0;
+- `npm run release:smoke:frontend`;
+- `npm run release:workflows`;
+- `docker build -t orbit-api:rc-sprint22 ./backend`;
+- `docker build -t orbit-frontend:rc-sprint22 --build-arg NEXT_PUBLIC_API_BASE_URL=/api/v1 --build-arg NEXT_PUBLIC_ENABLE_DEMO=false ./frontend`;
+- backup/restore via `pg_dump -Fc`/`pg_restore` no container PostgreSQL;
+- fresh install com migrations + seed inicial sem Demo Dataset.
+
+Workflow crítico certificado:
+
+- login OWNER;
+- criação de operador e troca obrigatória de senha;
+- criação de cliente, endereço, equipamento e lookup por QR;
+- product catalog, pricing e entrada de estoque;
+- operação delegada, assignment accept/start/complete;
+- consumo de material e Asset Lifecycle;
+- orçamento, aprovação, render e download documental oficial;
+- financeiro: conta, categoria, lançamento e pagamento;
+- compras: fornecedor, pedido, item, envio e recebimento parcial/total;
+- superfícies de stats para dashboard.
+
+Findings:
+
+- `RC1-CI-001`: CI ausente — corrigido com workflow RC;
+- `RC1-CONFIG-001`: demo bridge frontend defaultava ligado — corrigido;
+- `RC1-CONFIG-002`: produção aceitava secrets placeholder — corrigido;
+- `RC2-NET-001`: faltava topologia proxy representativa — corrigido localmente com compose RC;
+- `RC2-RUNBOOK-001`: runbook release/rollback/backup ausente — corrigido;
+- `RC2-MIGRATION-001`: `.DS_Store` contaminava migrations — removido;
+- `RC3-DOC-001`: scripts assumiam `/health/metrics`; rota real é `/metrics` — corrigido;
+- `RC3-FRONTEND-001`: `next start` alerta sobre standalone; Dockerfile usa server standalone.
+- `RC2-SUPPLY-001`: build Docker frontend reportou 2 vulnerabilidades moderadas via `npm audit`;
+  não corrigido nesta sprint para evitar upgrade de dependências fora do escopo.
+
+Veredito:
+
+- `ORBIT_RELEASE_CANDIDATE_NOT_READY`.
+
+Motivo:
+
+- a base local passou nos gates técnicos executados, mas não houve evidência real de staging,
+  domínio/TLS público, execução de CI externo, cloud IAM/storage ou operação em ambiente produtivo.
+  Esses itens não podem ser simulados no repositório.

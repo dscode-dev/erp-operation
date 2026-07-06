@@ -1,5 +1,21 @@
 # COMPONENTS — Frontend
 
+## Sprint 21 — Performance and observability
+
+Nenhum componente novo foi criado.
+
+Componentes cujo uso continua obrigatório para manter a performance V1:
+
+| Item | Local | Regra |
+|---|---|---|
+| `Pagination` | `apps/platform/components/pagination.tsx` | Todas as listagens devem preservar `page`, `limit`, filtros e ordenação |
+| `DocumentViewer` | `packages/ui/documents/document-viewer.tsx` | Preview/render/download sempre via backend; sem preview local |
+| `AssetTimeline` | `packages/ui/assets/asset-timeline.tsx` | Timeline sempre via Asset Lifecycle; sem montagem local |
+| Drawers de detalhe | `apps/platform/components/*drawer*.tsx` | Devem cancelar/refazer requests obsoletas ao trocar entidade/filtro |
+
+Build Sprint 21 identificou `/equipamentos`, `/budgets` e `/produtos` como rotas candidatas a
+lazy-load interno de drawers/grids pesados em Sprint 22/Post-V1 Optimization.
+
 ## Frontend Sprint 9 — Navigation UX & Creation Flows
 
 | Item | Local | Uso |
@@ -345,3 +361,14 @@ Rotas stale:
 - Componentes de timeline não devem exibir `metadata`, `storageKey`, `eventId`, `deletedAt` ou e-mail do performer.
 - Componentes de upload/preview local devem revogar object URLs no cleanup.
 - `AssetTimeline` e consumidores derivados devem preferir `timeline.title`, `timeline.subtitle`, `timeline.description`, `timeline.icon`, `timeline.color`, `timeline.badges` e `timeline.references`.
+## Sprint 22 — production readiness component impact
+
+No UI component was added in this sprint.
+
+Runtime integration impact:
+
+- shared API client now supports relative `/api/v1` base URLs for same-origin proxy deployments;
+- demo bridge is disabled by default;
+- existing Platform and Operator route shells were validated through the release smoke runner.
+
+Components continue to consume domain clients instead of calling `fetch` directly.

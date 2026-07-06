@@ -1,5 +1,41 @@
 # Security
 
+## Sprint 21 — Performance and observability AppSec review
+
+Sprint 21 adicionou observabilidade sem expor dados sensíveis.
+
+Endpoints:
+
+- `GET /health/live`: público, sem DB/storage, não retorna informações de negócio.
+- `GET /health/ready`: público, retorna apenas status agregado de DB/storage.
+- `GET /metrics`: público para rede interna/orquestrador, formato Prometheus, sem envelope JSON.
+
+Dados proibidos em métricas:
+
+- tokens;
+- e-mails;
+- nomes de clientes;
+- nomes de usuários;
+- payloads;
+- query strings completas;
+- metadata operacional.
+
+Labels permitidos:
+
+- método HTTP;
+- rota normalizada;
+- status HTTP;
+- contadores agregados de operações técnicas.
+
+Revisão de concorrência aplicada por medição:
+
+- `InventoryService` e `ProcurementService` passaram a tratar conflitos serializáveis PostgreSQL
+  (`P2034`) com retry limitado em transações críticas.
+- A regra de integridade continua no banco/transação; retry não relaxa validação de estoque negativo,
+  recebimento duplicado ou estados finais.
+- Teste de carga local da Sprint 21 finalizou com 0% de erro nos cenários felizes e 0 deadlocks no
+  PostgreSQL.
+
 ## Security posture
 
 Cada cliente opera instalação, banco, storage e configuração isolados. Não existe multi-tenancy
@@ -1458,3 +1494,33 @@ Risco residual movido para Production Readiness:
 
 - em produção, o app Nest não deve ficar exposto diretamente à internet; deve operar atrás de proxy
   controlado e com acesso direto à porta da aplicação bloqueado por rede/firewall.
+
+## Sprint 22 — production readiness security notes
+
+Hardening applied:
+
+- `NODE_ENV` is mandatory.
+- In `NODE_ENV=production`, demo data and demo endpoints remain forbidden.
+- In `NODE_ENV=production`, placeholder/example JWT secrets are rejected.
+- In `NODE_ENV=production`, placeholder/example/local database URLs are rejected.
+- Wildcard CORS remains rejected.
+- Frontend demo bridge is opt-in (`NEXT_PUBLIC_ENABLE_DEMO=false` by default).
+- A representative reverse proxy topology was added in `docker-compose.rc.yml` and
+  `deploy/nginx/orbit.conf`.
+
+Operational security evidence:
+
+- AppSec suite passed: 12 suites / 38 tests.
+- Rate limiting is covered by the security suite, including login throttling and forwarded-for spoof
+  resistance in direct app mode.
+- Critical workflow runner verified RBAC-sensitive flows through the real API.
+- Secrets audit confirmed local `.env` files are ignored by Git; values must still be injected by
+  the production runtime and never committed.
+
+Residual security risks before production promotion:
+
+- TLS/HSTS/certificate chain were not verified because no real public staging/production endpoint
+  was provided.
+- CI workflow was added but not executed by GitHub Actions in this workspace.
+- Local storage was verified with persistent local/Docker volume semantics only; managed object
+  storage/IAM evidence remains external.

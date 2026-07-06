@@ -28,6 +28,7 @@ export interface EnvironmentVariables {
 }
 
 const REQUIRED_VARIABLES = [
+  'NODE_ENV',
   'DATABASE_URL',
   'JWT_SECRET',
   'JWT_REFRESH_SECRET',
@@ -114,6 +115,22 @@ function parseCorsOrigins(rawOrigins: string): string[] {
   return [...new Set(origins)];
 }
 
+function assertProductionSecret(value: string, key: string): void {
+  const normalized = value.toLowerCase();
+  const unsafeFragments = ['replace_with', 'change_me', 'example', 'secret_of_at_least'];
+  if (unsafeFragments.some((fragment) => normalized.includes(fragment))) {
+    throw new Error(`${key} must not use placeholder/example values in production`);
+  }
+}
+
+function assertProductionDatabaseUrl(value: string): void {
+  const normalized = value.toLowerCase();
+  const unsafeFragments = ['change_me', 'example', 'localhost'];
+  if (unsafeFragments.some((fragment) => normalized.includes(fragment))) {
+    throw new Error('DATABASE_URL must not use placeholder/example/local values in production');
+  }
+}
+
 export function validateEnvironment(config: Record<string, unknown>): EnvironmentVariables {
   for (const key of REQUIRED_VARIABLES) {
     requireString(config, key);
@@ -159,6 +176,11 @@ export function validateEnvironment(config: Record<string, unknown>): Environmen
   );
   if (nodeEnv === 'production' && (enableDemoData || enableDemoEndpoints)) {
     throw new Error('Demo data and demo endpoints must be disabled in production');
+  }
+  if (nodeEnv === 'production') {
+    assertProductionSecret(jwtSecret, 'JWT_SECRET');
+    assertProductionSecret(jwtRefreshSecret, 'JWT_REFRESH_SECRET');
+    assertProductionDatabaseUrl(requireString(config, 'DATABASE_URL'));
   }
 
   return {
