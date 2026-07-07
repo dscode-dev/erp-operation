@@ -20,7 +20,7 @@ export function OperatorBottomNav() {
       aria-label="Navegação principal"
       className="fixed bottom-0 inset-x-0 mx-auto max-w-[640px] border-t border-[var(--color-border)] bg-[var(--color-card)]/95 backdrop-blur px-2 pt-1.5 pb-[max(env(safe-area-inset-bottom),0.5rem)] shadow-[var(--shadow-floating)]"
     >
-      <ul className="grid grid-cols-5 gap-1">
+      <ul className="grid grid-cols-4 gap-1">
         {items.map(({ href, icon: Icon, label }) => {
           const active = href === "/operator" ? pathname === href : pathname.startsWith(href);
           return (
