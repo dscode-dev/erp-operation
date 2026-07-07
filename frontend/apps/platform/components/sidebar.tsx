@@ -61,7 +61,7 @@ const groups: NavGroup[] = [
       { label: "Clientes", href: "/clientes", icon: Users },
       { label: "Equipamentos", href: "/equipamentos", icon: Wrench },
       { label: "Produtos", href: "/produtos", icon: Package },
-      { label: "Fornecedores", href: "/produtos?tab=suppliers", icon: Briefcase, roles: ["OWNER", "MANAGER"] },
+      //{ label: "Fornecedores", href: "/produtos?tab=suppliers", icon: Briefcase, roles: ["OWNER", "MANAGER"] },
     ],
   },
   {

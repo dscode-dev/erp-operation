@@ -7,7 +7,7 @@ import { cn } from "@erp/utils";
 
 const items = [
   { href: "/operator", icon: Home, label: "Início" },
-  { href: "/operator/agenda", icon: Calendar, label: "Agenda" },
+  //{ href: "/operator/agenda", icon: Calendar, label: "Agenda" },
   { href: "/operator/services", icon: ClipboardList, label: "Atend." },
   { href: "/operator/clientes", icon: Users, label: "Clientes" },
   { href: "/operator/profile", icon: User, label: "Perfil" },
