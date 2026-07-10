@@ -1,5 +1,48 @@
 # STATE — Frontend
 
+## Sprint 23 — V1 Product Completion & End-to-End Workflow Closure
+
+Status: parcial/concluída em 10 de julho de 2026.
+
+Sprint 23 não criou novos domínios nem contratos. O foco foi inspecionar os workflows V1 reais e
+fechar continuidade crítica no Operator PWA.
+
+Correções aplicadas:
+
+- `/operator/services/[id]` deixou de exibir apenas cards estáticos de fluxo e passou a expor
+  contexto operacional completo da Assignment/Operation:
+  - cliente;
+  - endereço;
+  - equipamento;
+  - tipo/status da Operation;
+  - checklist oficial da Operation;
+  - timeline/histórico da Assignment.
+- O operador agora visualiza materiais consumidos pela Operation usando
+  `GET /operations/:id/materials`.
+- Quando a Assignment está `STARTED`, o operador pode registrar material via
+  `POST /operations/:id/materials`, reutilizando Inventory oficial; saldo continua autoridade do
+  backend.
+- Documentos vinculados à Operation agora abrem o `DocumentViewer` oficial no Operator detail.
+- O `DocumentViewer` deixou de exibir “placeholder” como versão e passa a usar o `version` do
+  Blueprint.
+
+Achados deferidos:
+
+- Fotos e assinatura de campo continuam preservadas na Operation, mas coleta guiada completa no PWA
+  fica para Sprint 24 como polish de experiência de campo.
+- Offline sync continua fora da V1 e permanece como V1.1/Post-V1.
+
+Validação:
+
+- `frontend npm run lint`: passou com 2 warnings pré-existentes.
+- `frontend npm run build`: passou.
+- `backend npx prisma validate` com `DATABASE_URL` seguro: passou.
+- `backend npm run lint`: passou.
+- `backend npm run build`: passou.
+- `backend npm test -- --silent`: 10 suites / 27 testes passaram.
+- Suítes backend com PostgreSQL real não executaram porque não havia Postgres local em
+  `127.0.0.1:5432`; não foram apontadas como regressão funcional.
+
 ## Sprint 21 — Performance, Load & Observability
 
 Status: concluída em 6 de julho de 2026.
@@ -549,3 +592,51 @@ Observação operacional:
 
 - o pacote Next alerta que `next start` não é o modo ideal para `output: standalone`; o Dockerfile de
   produção usa o servidor standalone gerado pelo build.
+
+## Sprint 22.5 — External RC Closure frontend notes
+
+Status: executado em 10 de julho de 2026.
+
+Correções:
+
+- adicionado override `postcss@8.5.16` para fechar advisory transitivo reportado via `next`;
+- lockfile atualizado por `npm install`.
+
+Validação:
+
+- `npm audit --json`: 0 vulnerabilidades;
+- `npm run lint`: passou com 2 warnings existentes;
+- `npm run build`: passou.
+
+Decisão operacional:
+
+- frontend V1 continua assumindo um backend isolado por instalação/cliente;
+- deployments same-origin devem usar `/api/v1`;
+- Demo Dataset/bridge permanece opt-in e desabilitado por padrão.
+
+RC externo:
+
+- smoke HTTPS externo ainda não foi executado por ausência de ambiente externo.
+
+## Product Backlog Closure 01 — Product Registration, Pricing Entry Point, Customer Address and Reports Preview
+
+Status: concluído em 10 de julho de 2026.
+
+Correções aplicadas:
+
+- cadastro de produto reorganizado em seções profissionais: identificação, classificação técnica, fornecedor contextual e descrição;
+- categoria passou a usar sugestões reais derivadas do catálogo carregado, mantendo `category` como string do backend;
+- SKU e código interno passaram a ter UX de sugestão/entrada controlada, preservando unicidade no backend;
+- fornecedor não foi vinculado diretamente ao produto, pois o domínio real associa fornecedores via Procurement/Purchase Orders;
+- CTA superior “Novo preço” foi removido; criação/revisão de preço fica na aba Preços e continua usando Pricing Domain;
+- criação de cliente passou a permitir endereço inicial via endpoint oficial `/customers/:id/addresses`;
+- falha ao salvar endereço não duplica cliente em retry;
+- consulta de CEP foi adicionada como adaptador isolado ViaCEP, sem impedir edição manual;
+- criação de equipamento agora deixa explícito quando o cliente selecionado não possui endereços;
+- drawer de preview de Modelos de Documentos passou para layout vertical com preview legível e metadados menos duplicados.
+
+Validação:
+
+- `npm run lint` passou com 2 warnings preexistentes;
+- `npm run build` passou;
+- `git diff --check` passou antes da documentação.

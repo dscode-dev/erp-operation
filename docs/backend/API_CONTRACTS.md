@@ -4273,3 +4273,14 @@ Required environment for smoke/workflow scripts:
 
 The workflow runner uses only official API endpoints and fails on unexpected HTTP status, envelope
 errors or missing identifiers.
+
+## Sprint 22.5 — external closure contract notes
+
+No API endpoint contract changed.
+
+Operational decision:
+
+- Orbit V1 remains single-company per installation.
+- Production storage contract is local/block persistent storage via `STORAGE_PROVIDER=local`,
+  `STORAGE_DRIVER=local` and absolute mounted `STORAGE_PATH`.
+- Object storage is not an API/runtime contract certified for V1.

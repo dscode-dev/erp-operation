@@ -1921,3 +1921,15 @@ npm run release:smoke:frontend
 ```
 
 O smoke valida autenticação real, readiness, métricas e as principais rotas Platform/Operator.
+
+## Sprint 22.5 — external closure notes
+
+Frontend dependency audit was closed with `postcss@8.5.16` override. No API contract changed.
+
+Production integration assumptions:
+
+- frontend should continue to use `/api/v1` behind same-origin proxy deployments;
+- demo bridge must remain disabled in production;
+- each white-label customer deployment must point to its own isolated API/database/storage scope.
+
+External HTTPS smoke remains required before RC promotion.

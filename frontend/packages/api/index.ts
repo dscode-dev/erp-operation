@@ -39,6 +39,7 @@ export * as assignmentsApi from "./assignments";
 export * as inventoryApi from "./inventory";
 export * as pricingApi from "./pricing";
 export * as budgetsApi from "./budgets";
+export * as cepApi from "./cep";
 
 export { isDemoDisabled, DemoUnavailableError } from "./demo";
 export type { DashboardData } from "./dashboard";

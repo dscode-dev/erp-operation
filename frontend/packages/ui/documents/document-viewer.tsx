@@ -221,7 +221,7 @@ export function DocumentViewer({
             <Meta label="Páginas" value={pages.length ? String(pages.length) : "—"} />
             <Meta label="Tamanho" value={formatBytes(rendered?.fileSize ?? 0)} />
             <Meta label="Renderizado em" value={rendered?.renderedAt ? new Date(rendered.renderedAt).toLocaleString("pt-BR") : "—"} />
-            <Meta label="Versão" value="v1 · placeholder" />
+            <Meta label="Versão" value={blueprint?.version ? `v${blueprint.version}` : "v1"} />
           </dl>
         </div>
 

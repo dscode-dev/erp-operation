@@ -326,38 +326,36 @@ function TemplatePreviewDrawer({
   return (
     <Drawer open={Boolean(card)} onClose={onClose} eyebrow="Preview oficial" title={card ? `Modelo · ${card.label}` : "Modelo"} width="max-w-[1280px]">
       {card && (
-        <div className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
-          <aside className="space-y-4">
-            <div className="rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 shadow-[var(--shadow-card)]">
-              <div className="flex items-center gap-3">
-                <span className="grid h-11 w-11 place-items-center rounded-2xl bg-[var(--color-primary)]/10 text-[var(--color-primary)]">
+        <div className="space-y-5">
+          <section className="rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 shadow-[var(--shadow-card)]">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="flex min-w-0 items-start gap-3">
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[var(--color-primary)]/10 text-[var(--color-primary)]">
                   <FileText className="h-5 w-5" />
                 </span>
-                <div>
+                <div className="min-w-0">
                   <p className="text-caption uppercase tracking-wider">{DOCUMENT_KIND_LABEL[card.type]}</p>
-                  <h3 className="font-semibold">{template?.name ?? card.label}</h3>
+                  <h3 className="truncate text-lg font-semibold">{template?.name ?? card.label}</h3>
+                  <p className="mt-1 max-w-3xl text-sm text-[var(--color-muted-foreground)]">{card.description}</p>
                 </div>
               </div>
-              <p className="mt-3 text-sm text-[var(--color-muted-foreground)]">{card.description}</p>
+
+              <div className="flex shrink-0 flex-wrap gap-2">
+                <Badge tone={template?.isActive ? "success" : "muted"}>{template?.isActive ? "Ativo" : "Inativo"}</Badge>
+                <Badge tone={template?.isDefault ? "primary" : "muted"}>{template?.isDefault ? "Padrão" : "Não padrão"}</Badge>
+                <Badge tone={template?.requiresSignature ? "info" : "muted"}>{template?.requiresSignature ? "Assinatura obrigatória" : "Assinatura opcional"}</Badge>
+                <Badge tone={signature ? "primary" : "muted"}>{signature ? `Fixa: ${signature.name}` : SIGNATURE_MODE_LABEL[template?.signatureMode ?? "NONE"]}</Badge>
+              </div>
             </div>
 
-            <div className="rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
-              <dl className="space-y-3 text-sm">
-                <Meta label="Nome" value={template?.name ?? "Não configurado"} />
-                <Meta label="Tipo" value={DOCUMENT_KIND_LABEL[card.type]} />
-                <Meta label="Cabeçalho" value={template?.headerContent || "—"} block />
-                <Meta label="Rodapé" value={template?.footerContent || "—"} block />
-                <Meta label="Observações" value={template?.observations || "—"} block />
-                <Meta label="Template padrão" value={template?.isDefault ? "Sim" : "Não"} />
-                <Meta label="Assinatura obrigatória" value={template?.requiresSignature ? "Sim" : "Não"} />
-                <Meta label="Modo da assinatura" value={SIGNATURE_MODE_LABEL[template?.signatureMode ?? "NONE"]} />
-                <Meta label="Assinatura fixa" value={signature ? `${signature.name} · ${signature.title}` : "—"} block />
-                <Meta label="Última atualização" value={template?.updatedAt ? formatDate(template.updatedAt) : "—"} />
-                <Meta label="Status" value={template?.isActive ? "Ativo" : "Inativo"} />
-              </dl>
-            </div>
+            <dl className="mt-4 grid gap-3 text-sm md:grid-cols-2 xl:grid-cols-4">
+              <Meta label="Cabeçalho" value={template?.headerContent || "—"} block />
+              <Meta label="Rodapé" value={template?.footerContent || "—"} block />
+              <Meta label="Observações" value={template?.observations || "—"} block />
+              <Meta label="Atualizado em" value={template?.updatedAt ? formatDate(template.updatedAt) : "—"} />
+            </dl>
 
-            <div className="flex flex-wrap gap-2">
+            <div className="mt-4 flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={onConfigure}
@@ -378,9 +376,9 @@ function TemplatePreviewDrawer({
                 </button>
               )}
             </div>
-          </aside>
+          </section>
 
-          <section className="min-w-0">
+          <section className="min-w-0 rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-card)] p-3">
             {template ? (
               <DocumentViewer source={{ templateId: template.id }} title={`Preview · ${card.label}`} canRender={false} canDownload={false} />
             ) : (

@@ -1,5 +1,30 @@
 # ARCHITECTURE — Frontend
 
+## Sprint 23 — V1 product workflow closure
+
+Sprint 23 preserva a arquitetura oficial:
+
+```text
+Operator PWA
+↓
+Assignments API
+↓
+Operation context
+├─ Inventory API para materiais
+├─ DocumentViewer / Document Engine para documentos
+└─ Assignment history para timeline de execução
+```
+
+Decisões:
+
+- O Operator PWA não monta workflows paralelos; ele atua sobre Assignment e Operation.
+- Consumo de material continua passando por Inventory e `OperationPart`; o frontend não calcula
+  saldo autoritativo.
+- Documentos continuam passando por `DocumentViewer`; não existe geração local de PDF.
+- Cards de capacidades ainda não finalizadas foram rebaixados para informação clara, evitando CTAs
+  mortos.
+- Nenhum state manager, cache global, domínio novo ou infraestrutura offline foi introduzido.
+
 ## Sprint 21 — Performance architecture review
 
 Sprint 21 confirmou a arquitetura de consumo real:
@@ -547,3 +572,40 @@ Release topology:
 - The proxy routes `/api/v1/*` to the API and all other paths to the Next frontend.
 - Real TLS/certificate/HSTS verification remains an environment responsibility and was not proven in
   this repository workspace.
+
+## Sprint 22.5 — V1 deployment boundaries
+
+Orbit V1 frontend is certified for isolated single-company installations only:
+
+- one customer-facing frontend per deployment;
+- one API/database/storage scope per deployment;
+- no shared application-level tenant switching;
+- no frontend behavior should rely on a tenant selector.
+
+Supply-chain closure:
+
+- frontend uses `overrides.postcss=8.5.16` to remediate the transitive PostCSS advisory bundled
+  through Next 15.5.x.
+
+## Product Backlog Closure 01 — architecture notes
+
+Arquitetura preservada:
+
+- Product continua sendo catálogo técnico, sem preço e sem fornecedor fixo.
+- Pricing continua sendo a única fonte comercial para custo/preço/margem/vigência.
+- Supplier continua pertencendo ao Inventory/Procurement como base para compras.
+- CustomerAddress continua sendo recurso separado de Customer; criação com endereço usa duas mutações reais e estado de retry seguro.
+- Equipment continua validando endereço pelo cliente selecionado; o frontend não permite seleção fora da lista carregada daquele cliente.
+- Reports/Modelos continua renderizando via Document Engine e `DocumentViewer`; não há preview local nem `DocumentPaper`.
+
+CEP:
+
+- `cepApi.lookupCep` é um boundary externo isolado para preenchimento assistido.
+- O resultado não é confiado cegamente: todos os campos permanecem editáveis antes da persistência.
+- Falhas de CEP não bloqueiam cadastro manual.
+
+Mutation/state safety:
+
+- se `createCustomer` passa e `createAddress` falha, o drawer preserva o `createdCustomerId` para retry apenas do endereço;
+- o fluxo evita duplicação de cliente em retry;
+- erros do backend continuam exibidos como mensagens inline, sem renderizar payload bruto.

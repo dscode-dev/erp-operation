@@ -4,6 +4,7 @@ import {
   type StorageDriver,
   type StorageProvider,
 } from '../../infra/storage/storage-provider.type';
+import { isAbsolute } from 'node:path';
 
 export interface EnvironmentVariables {
   NODE_ENV: 'development' | 'test' | 'production';
@@ -131,6 +132,15 @@ function assertProductionDatabaseUrl(value: string): void {
   }
 }
 
+function assertProductionStoragePath(value: string): void {
+  if (!isAbsolute(value)) {
+    throw new Error('STORAGE_PATH must be an absolute mounted path in production');
+  }
+  if (value === '/tmp' || value.startsWith('/tmp/') || value === '/var/tmp' || value.startsWith('/var/tmp/')) {
+    throw new Error('STORAGE_PATH must not point to a temporary directory in production');
+  }
+}
+
 export function validateEnvironment(config: Record<string, unknown>): EnvironmentVariables {
   for (const key of REQUIRED_VARIABLES) {
     requireString(config, key);
@@ -181,6 +191,7 @@ export function validateEnvironment(config: Record<string, unknown>): Environmen
     assertProductionSecret(jwtSecret, 'JWT_SECRET');
     assertProductionSecret(jwtRefreshSecret, 'JWT_REFRESH_SECRET');
     assertProductionDatabaseUrl(requireString(config, 'DATABASE_URL'));
+    assertProductionStoragePath(requireString(config, 'STORAGE_PATH'));
   }
 
   return {

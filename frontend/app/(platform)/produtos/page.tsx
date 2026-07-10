@@ -65,6 +65,7 @@ export default function ProdutosPage() {
   const [supplierOpen, setSupplierOpen] = useState(false);
   const [pricingProduct, setPricingProduct] = useState<Product | null>(null);
   const [pricingRevision, setPricingRevision] = useState<ProductPricing | null>(null);
+  const [pricingOpen, setPricingOpen] = useState(false);
 
   const productList = useQuery(
     (signal) => inventoryApi.listProducts({ page, limit, search, active: active === "all" ? undefined : active === "true", signal }),
@@ -89,9 +90,12 @@ export default function ProdutosPage() {
   const inventoryStats = useQuery((signal) => inventoryApi.getInventoryStats({ signal }), []);
   const pricingStats = useQuery((signal) => (canSeePricing ? pricingApi.getPricingStats({ signal }) : Promise.resolve(null)), [canSeePricing]);
 
-  const products = productList.data?.items ?? [];
+  const products = useMemo(() => productList.data?.items ?? [], [productList.data?.items]);
   const stats = inventoryStats.data;
   const pStats = pricingStats.data;
+  const categoryOptions = useMemo(() => uniqueStrings(products.map((product) => product.category)), [products]);
+  const skuOptions = useMemo(() => uniqueStrings(products.map((product) => product.sku)), [products]);
+  const internalCodeOptions = useMemo(() => uniqueStrings(products.map((product) => product.internalCode)), [products]);
 
   const productColumns: Column<Product>[] = [
     { key: "sku", header: "SKU", className: "w-[140px]", sortAccessor: (p) => p.sku, cell: (p) => <span className="font-mono text-xs">{p.sku}</span> },
@@ -177,11 +181,6 @@ export default function ProdutosPage() {
                 <Plus className="h-4 w-4" /> Novo produto
               </button>
             </Gate>
-            <Gate roles={["OWNER"]}>
-              <button onClick={() => setPricingProduct(products[0] ?? null)} disabled={products.length === 0} className={secondaryBtn}>
-                <DollarSign className="h-4 w-4" /> Novo preço
-              </button>
-            </Gate>
           </div>
         }
       />
@@ -245,6 +244,21 @@ export default function ProdutosPage() {
       ) : tab === "pricing" ? (
         !canSeePricing ? <ErrorState error={new ApiClientError({ code: "AUTH_FORBIDDEN", status: 403, message: "Sem permissão", details: {} })} /> : (
           <div className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
+              <div>
+                <h2 className="text-sm font-semibold">Preços vigentes e histórico</h2>
+                <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">A criação e revisão de preços acontece somente aqui, usando o Pricing Domain oficial.</p>
+              </div>
+              <Gate roles={["OWNER"]}>
+                <button
+                  onClick={() => { setPricingProduct(null); setPricingRevision(null); setPricingOpen(true); }}
+                  disabled={products.length === 0}
+                  className={primaryBtn}
+                >
+                  <DollarSign className="h-4 w-4" /> Novo preço
+                </button>
+              </Gate>
+            </div>
             {(pricing.data?.items ?? []).length === 0 ? <EmptyState icon={DollarSign} title="Nenhum preço" description="Crie o primeiro preço vigente para um produto." /> : <DataTable columns={pricingColumns} rows={pricing.data?.items ?? []} onRowClick={(row) => { setPricingRevision(row); setPricingProduct(row.product ?? null); }} />}
             {pricing.data && <Pagination pagination={pricing.data.pagination} onPageChange={setPage} onPageSizeChange={(next) => { setLimit(next); setPage(1); }} />}
           </div>
@@ -256,16 +270,24 @@ export default function ProdutosPage() {
         </div>
       )}
 
-      <ProductFormDrawer open={productFormOpen} product={formProduct} onClose={() => setProductFormOpen(false)} onSaved={() => refreshAll("Produto salvo.")} />
-      <ProductDetailDrawer product={detailProduct} canManage={canManageProducts} canSeePricing={canSeePricing} onClose={() => setDetailProduct(null)} onEdit={(product) => { setFormProduct(product); setProductFormOpen(true); }} onDisable={disableProduct} onPrice={(product) => { setPricingProduct(product); setPricingRevision(null); }} />
+      <ProductFormDrawer
+        open={productFormOpen}
+        product={formProduct}
+        categoryOptions={categoryOptions}
+        skuOptions={skuOptions}
+        internalCodeOptions={internalCodeOptions}
+        onClose={() => setProductFormOpen(false)}
+        onSaved={() => refreshAll("Produto salvo.")}
+      />
+      <ProductDetailDrawer product={detailProduct} canManage={canManageProducts} canSeePricing={canSeePricing} onClose={() => setDetailProduct(null)} onEdit={(product) => { setFormProduct(product); setProductFormOpen(true); }} onDisable={disableProduct} />
       <InventoryDrawer item={stockItem} onClose={() => setStockItem(null)} onSaved={() => refreshAll("Estoque atualizado.")} />
       <SupplierDrawer open={supplierOpen} supplier={supplier} onClose={() => setSupplierOpen(false)} onSaved={() => refreshAll("Fornecedor salvo.")} />
-      <PricingDrawer product={pricingProduct} revision={pricingRevision} canEdit={canEditPricing} onClose={() => { setPricingProduct(null); setPricingRevision(null); }} onSaved={() => refreshAll("Preço salvo.")} />
+      <PricingDrawer open={pricingOpen || pricingProduct !== null || pricingRevision !== null} product={pricingProduct} revision={pricingRevision} canEdit={canEditPricing} onClose={() => { setPricingOpen(false); setPricingProduct(null); setPricingRevision(null); }} onSaved={() => refreshAll("Preço salvo.")} />
     </div>
   );
 }
 
-function ProductDetailDrawer({ product, canManage, canSeePricing, onClose, onEdit, onDisable, onPrice }: { product: Product | null; canManage: boolean; canSeePricing: boolean; onClose: () => void; onEdit: (p: Product) => void; onDisable: (p: Product) => void; onPrice: (p: Product) => void }) {
+function ProductDetailDrawer({ product, canManage, canSeePricing, onClose, onEdit, onDisable }: { product: Product | null; canManage: boolean; canSeePricing: boolean; onClose: () => void; onEdit: (p: Product) => void; onDisable: (p: Product) => void }) {
   const price = useQuery<ResolvedProductPricing | null>((signal) => (product && canSeePricing ? pricingApi.getProductPricing(product.id, { signal }).catch((err) => {
     if (err instanceof ApiClientError && err.status === 404) return null;
     throw err;
@@ -313,7 +335,6 @@ function ProductDetailDrawer({ product, canManage, canSeePricing, onClose, onEdi
           <div className="flex flex-wrap gap-2">
             {canManage && <button onClick={() => onEdit(product)} className={secondaryBtn}>Editar</button>}
             {canManage && product.isActive && <button onClick={() => onDisable(product)} className={dangerBtn}>Desativar</button>}
-            {canSeePricing && <button onClick={() => onPrice(product)} className={secondaryBtn}>Criar preço</button>}
           </div>
         </div>
       )}
@@ -436,9 +457,9 @@ function SupplierDrawer({ open, supplier, onClose, onSaved }: { open: boolean; s
   );
 }
 
-function PricingDrawer({ product, revision, canEdit, onClose, onSaved }: { product: Product | null; revision: ProductPricing | null; canEdit: boolean; onClose: () => void; onSaved: () => void }) {
+function PricingDrawer({ open, product, revision, canEdit, onClose, onSaved }: { open: boolean; product: Product | null; revision: ProductPricing | null; canEdit: boolean; onClose: () => void; onSaved: () => void }) {
   const products = useQuery((signal) => inventoryApi.listProducts({ limit: 100, active: true, signal }), []);
-  const targetProduct = product ?? products.data?.items[0] ?? null;
+  const targetProduct = product ?? products.data?.items.find((item) => item.id === revision?.productId) ?? products.data?.items[0] ?? null;
   const [productId, setProductId] = useState("");
   const [form, setForm] = useState({ costPrice: "", replacementCost: "", averageCost: "", salePrice: "", minimumSalePrice: "", suggestedSalePrice: "", validFrom: new Date().toISOString().slice(0, 10) });
   const history = useQuery((signal) => (targetProduct ? pricingApi.getPricingHistory(targetProduct.id, { limit: 10, signal }) : Promise.resolve(null)), [targetProduct?.id]);
@@ -464,7 +485,7 @@ function PricingDrawer({ product, revision, canEdit, onClose, onSaved }: { produ
     onClose();
   }
   return (
-    <Drawer open={product !== null || revision !== null} onClose={onClose} eyebrow="Pricing" title={revision ? "Revisar preço" : "Novo preço"} width="max-w-2xl" footer={<>{canEdit && <button onClick={submit} className={primaryBtn} disabled={!productId || !form.salePrice}>Salvar preço</button>}<button onClick={onClose} className={secondaryBtn}>Fechar</button></>}>
+    <Drawer open={open} onClose={onClose} eyebrow="Pricing" title={revision ? "Revisar preço" : "Novo preço"} width="max-w-2xl" footer={<>{canEdit && <button onClick={submit} className={primaryBtn} disabled={!productId || !form.salePrice}>Salvar preço</button>}<button onClick={onClose} className={secondaryBtn}>Fechar</button></>}>
       {!canEdit && <ErrorState error={new ApiClientError({ code: "AUTH_FORBIDDEN", status: 403, message: "Sem permissão para editar pricing", details: {} })} />}
       <div className="space-y-4">
         {!revision && <Field label="Produto"><select value={productId} onChange={(e) => setProductId(e.target.value)} className={inputCls}>{products.data?.items.map((p) => <option key={p.id} value={p.id}>{p.sku} · {p.name}</option>)}</select></Field>}
@@ -564,6 +585,10 @@ function summarizeAddress(address: Record<string, unknown>): string {
 function phoneFrom(contacts?: unknown[]): string {
   const first = contacts?.[0];
   return first && typeof first === "object" ? String((first as Record<string, unknown>).phone ?? "") : "";
+}
+
+function uniqueStrings(values: Array<string | null | undefined>): string[] {
+  return Array.from(new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value)))).sort((a, b) => a.localeCompare(b, "pt-BR"));
 }
 
 const primaryBtn = "inline-flex items-center gap-2 rounded-[var(--radius-md)] bg-[var(--color-primary)] text-[var(--color-primary-foreground)] px-3 h-9 text-sm font-medium shadow-[var(--shadow-card)] disabled:opacity-50";

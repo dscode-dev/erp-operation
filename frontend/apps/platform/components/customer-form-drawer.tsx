@@ -7,7 +7,7 @@
 import { useEffect, useState } from "react";
 import { Building2, Loader2, User } from "lucide-react";
 import { Drawer } from "@erp/ui/drawer";
-import { customersApi, ApiClientError } from "@erp/api";
+import { customersApi, cepApi, ApiClientError } from "@erp/api";
 import type { Customer, CustomerType, CreateCustomerPayload } from "@erp/api";
 import { maskCpf, maskCnpj } from "@erp/utils";
 
@@ -21,6 +21,32 @@ type FormState = {
   phone: string;
   secondaryPhone: string;
   notes: string;
+};
+
+type AddressState = {
+  enabled: boolean;
+  name: string;
+  zipCode: string;
+  street: string;
+  number: string;
+  complement: string;
+  district: string;
+  city: string;
+  state: string;
+  isPrimary: boolean;
+};
+
+const blankAddress: AddressState = {
+  enabled: false,
+  name: "Principal",
+  zipCode: "",
+  street: "",
+  number: "",
+  complement: "",
+  district: "",
+  city: "",
+  state: "",
+  isPrimary: true,
 };
 
 function fromCustomer(c: Customer | null): FormState {
@@ -53,17 +79,48 @@ export function CustomerFormDrawer({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldError, setFieldError] = useState<string | null>(null);
+  const [address, setAddress] = useState<AddressState>(blankAddress);
+  const [createdCustomerId, setCreatedCustomerId] = useState<string | null>(null);
+  const [cepLoading, setCepLoading] = useState(false);
 
   useEffect(() => {
     if (open) {
       setForm(fromCustomer(customer));
       setError(null);
       setFieldError(null);
+      setAddress(blankAddress);
+      setCreatedCustomerId(null);
+      setCepLoading(false);
     }
   }, [open, customer]);
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }));
+  }
+
+  function setAddressField<K extends keyof AddressState>(key: K, value: AddressState[K]) {
+    setAddress((current) => ({ ...current, [key]: value }));
+  }
+
+  async function lookupCep() {
+    setCepLoading(true);
+    setError(null);
+    try {
+      const result = await cepApi.lookupCep(address.zipCode);
+      setAddress((current) => ({
+        ...current,
+        enabled: true,
+        zipCode: result.zipCode,
+        street: result.street || current.street,
+        district: result.district || current.district,
+        city: result.city || current.city,
+        state: result.state || current.state,
+      }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Não foi possível consultar o CEP.");
+    } finally {
+      setCepLoading(false);
+    }
   }
 
   async function handleSave() {
@@ -91,7 +148,35 @@ export function CustomerFormDrawer({
       if (isEdit && customer) {
         await customersApi.updateCustomer(customer.id, payload);
       } else {
-        await customersApi.createCustomer(payload);
+        const savedCustomer = createdCustomerId ? null : await customersApi.createCustomer(payload);
+        const customerId = createdCustomerId ?? savedCustomer?.id;
+        if (address.enabled && customerId) {
+          const validation = validateAddress(address);
+          if (validation) {
+            setError(validation);
+            setCreatedCustomerId(customerId);
+            setSaving(false);
+            return;
+          }
+          try {
+            await customersApi.createAddress(customerId, {
+              name: address.name.trim() || "Principal",
+              zipCode: address.zipCode.trim(),
+              street: address.street.trim(),
+              number: address.number.trim(),
+              complement: address.complement.trim() || null,
+              district: address.district.trim(),
+              city: address.city.trim(),
+              state: address.state.trim().toUpperCase(),
+              isPrimary: address.isPrimary,
+            });
+          } catch (addressErr) {
+            setCreatedCustomerId(customerId);
+            setError(addressErr instanceof ApiClientError ? `Cliente criado, mas o endereço não foi salvo: ${addressErr.message}. Corrija os dados e clique em salvar novamente.` : "Cliente criado, mas o endereço não foi salvo. Corrija os dados e clique em salvar novamente.");
+            setSaving(false);
+            return;
+          }
+        }
       }
       onSaved();
       onClose();
@@ -124,7 +209,7 @@ export function CustomerFormDrawer({
             className="inline-flex items-center gap-2 rounded-[var(--radius-md)] bg-[var(--color-primary)] text-[var(--color-primary-foreground)] px-3 h-9 text-sm font-medium disabled:opacity-50"
           >
             {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-            {isEdit ? "Salvar alterações" : "Criar cliente"}
+            {createdCustomerId ? "Salvar endereço" : isEdit ? "Salvar alterações" : "Criar cliente"}
           </button>
         </>
       }
@@ -192,9 +277,97 @@ export function CustomerFormDrawer({
         <Field label="Observações">
           <textarea value={form.notes} onChange={(e) => set("notes", e.target.value)} rows={3} className={`${inputCls} h-auto py-2 resize-none`} />
         </Field>
+
+        {!isEdit && (
+          <section className="space-y-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold">Endereço inicial</h3>
+                <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
+                  O cliente é criado primeiro e o endereço é salvo pelo endpoint oficial de endereços. Se o endereço falhar, o cliente não será duplicado no retry.
+                </p>
+              </div>
+              <label className="inline-flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={address.enabled} onChange={(event) => setAddressField("enabled", event.target.checked)} className="accent-[var(--color-primary)]" />
+                Incluir
+              </label>
+            </div>
+
+            {address.enabled && (
+              <div className="space-y-3">
+                <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+                  <Field label="CEP">
+                    <input value={address.zipCode} onChange={(e) => setAddressField("zipCode", e.target.value)} className={inputCls} placeholder="00000-000" inputMode="numeric" />
+                  </Field>
+                  <button
+                    type="button"
+                    onClick={lookupCep}
+                    disabled={cepLoading || address.zipCode.replace(/\D/g, "").length !== 8}
+                    className="mt-6 inline-flex h-9 items-center justify-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 text-sm hover:bg-[var(--color-muted)] disabled:opacity-50"
+                  >
+                    {cepLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+                    Buscar CEP
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Nome do endereço">
+                    <input value={address.name} onChange={(e) => setAddressField("name", e.target.value)} className={inputCls} placeholder="Principal, Filial, Obra…" />
+                  </Field>
+                  <Field label="Número">
+                    <input value={address.number} onChange={(e) => setAddressField("number", e.target.value)} className={inputCls} />
+                  </Field>
+                </div>
+
+                <Field label="Logradouro">
+                  <input value={address.street} onChange={(e) => setAddressField("street", e.target.value)} className={inputCls} />
+                </Field>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Bairro">
+                    <input value={address.district} onChange={(e) => setAddressField("district", e.target.value)} className={inputCls} />
+                  </Field>
+                  <Field label="Complemento">
+                    <input value={address.complement} onChange={(e) => setAddressField("complement", e.target.value)} className={inputCls} />
+                  </Field>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Cidade">
+                    <input value={address.city} onChange={(e) => setAddressField("city", e.target.value)} className={inputCls} />
+                  </Field>
+                  <Field label="UF">
+                    <input value={address.state} onChange={(e) => setAddressField("state", e.target.value.toUpperCase())} className={inputCls} maxLength={2} />
+                  </Field>
+                </div>
+
+                <label className="inline-flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={address.isPrimary} onChange={(event) => setAddressField("isPrimary", event.target.checked)} className="accent-[var(--color-primary)]" />
+                  Definir como endereço principal
+                </label>
+              </div>
+            )}
+          </section>
+        )}
       </div>
     </Drawer>
   );
+}
+
+function validateAddress(address: AddressState): string | null {
+  const missing = [
+    ["CEP", address.zipCode],
+    ["logradouro", address.street],
+    ["número", address.number],
+    ["bairro", address.district],
+    ["cidade", address.city],
+    ["UF", address.state],
+  ].filter(([, value]) => !String(value).trim()).map(([label]) => label);
+
+  if (missing.length > 0) return `Complete o endereço: ${missing.join(", ")}.`;
+  if (!/^\d{5}-?\d{3}$/.test(address.zipCode.trim())) return "Informe um CEP válido.";
+  if (!/^[A-Z]{2}$/.test(address.state.trim().toUpperCase())) return "Informe a UF com 2 letras.";
+  return null;
 }
 
 const inputCls =

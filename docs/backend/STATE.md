@@ -2210,3 +2210,46 @@ Motivo:
 - a base local passou nos gates técnicos executados, mas não houve evidência real de staging,
   domínio/TLS público, execução de CI externo, cloud IAM/storage ou operação em ambiente produtivo.
   Esses itens não podem ser simulados no repositório.
+
+## Sprint 22.5 — External Release Candidate Closure
+
+Status: executada em 10 de julho de 2026 como closure sprint dos bloqueadores externos da Sprint
+22.
+
+Decisões oficiais V1:
+
+- Orbit V1 é single-company por instalação.
+- V1 suporta instalação dedicada por cliente ou infraestrutura compartilhada apenas com instâncias
+  isoladas por cliente.
+- V1 não suporta multi-tenancy compartilhado em uma única aplicação/banco.
+- Storage oficial V1: local/block persistente, montado fora da camada efêmera do container.
+- Object storage não está certificado na V1.
+
+Correções aplicadas:
+
+- frontend recebeu override `postcss@8.5.16`;
+- `npm audit --json` do frontend passou a reportar 0 vulnerabilidades;
+- produção agora rejeita `STORAGE_PATH` relativo ou temporário;
+- runbook e documentação de release registram modelo oficial de deployment/storage.
+
+Validações executadas:
+
+- `npm install` no frontend;
+- `npm audit --json` no frontend: 0 vulnerabilidades;
+- `npm run lint` no frontend: passou com 2 warnings existentes;
+- `npm run build` no frontend: passou.
+
+Bloqueadores externos ainda abertos:
+
+- ambiente externo/staging não fornecido;
+- TLS/proxy externo não validado;
+- GitHub Actions não executado externamente;
+- traceabilidade CI → imagem → deploy não estabelecida;
+- rollback externo não executado;
+- backup/restore externo de PostgreSQL + storage não executado;
+- bootstrap OWNER externo não executado;
+- smoke/workflows externos via HTTPS não executados.
+
+Veredito:
+
+- `ORBIT_RELEASE_CANDIDATE_NOT_READY`.

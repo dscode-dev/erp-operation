@@ -1,5 +1,18 @@
 # COMPONENTS — Frontend
 
+## Sprint 23 — Product workflow closure
+
+| Item | Local | Uso |
+|---|---|---|
+| Operator Assignment Detail enriquecido | `app/operator/(shell)/services/[id]/page.tsx` | Detalhe de campo com contexto, checklist, materiais oficiais, documentos oficiais e timeline da Assignment |
+| `OperatorMaterialPanel` | `app/operator/(shell)/services/[id]/page.tsx` | Registro de material no Operator usando `POST /operations/:id/materials` |
+| `DocumentViewer` no Operator detail | `app/operator/(shell)/services/[id]/page.tsx` | Visualização/render/download por Document Engine oficial |
+| Versão do Blueprint no `DocumentViewer` | `packages/ui/documents/document-viewer.tsx` | Remove label placeholder e exibe a versão real do Blueprint |
+
+Regra Sprint 23: nenhum card de workflow do Operator deve prometer uma ação crítica sem levar a uma
+ação real ou a um estado claramente documentado. Materiais e documentos já usam backend oficial;
+fotos/assinatura avançada ficam para Sprint 24/V1.1 conforme escopo.
+
 ## Sprint 21 — Performance and observability
 
 Nenhum componente novo foi criado.
@@ -372,3 +385,30 @@ Runtime integration impact:
 - existing Platform and Operator route shells were validated through the release smoke runner.
 
 Components continue to consume domain clients instead of calling `fetch` directly.
+
+## Sprint 22.5 — component impact
+
+No component was added or changed.
+
+Dependency impact:
+
+- `postcss@8.5.16` override closes the frontend audit finding without changing component APIs.
+- Existing Design System/component contracts remain unchanged.
+
+## Product Backlog Closure 01 — component impact
+
+Componentes evoluídos:
+
+- `ProductFormDrawer`: seções de identificação, classificação, fornecedor contextual e descrição; sugestões via `datalist` para categoria, SKU, código interno e unidade.
+- `CustomerFormDrawer`: seção opcional de endereço inicial, retry seguro quando apenas o endereço falhar, e lookup CEP com campos sempre editáveis.
+- `EquipmentFormDrawer`: helper explícito quando o cliente selecionado não possui endereço cadastrado.
+- `ReportsPage` / `TemplatePreviewDrawer`: preview vertical, header compacto, badges e metadados consolidados antes do `DocumentViewer`.
+- `PricingDrawer`: abertura controlada pela aba Preços, mantendo criação/revisão de preço dentro do domínio Pricing.
+
+Novo adapter:
+
+- `cepApi.lookupCep`: cliente isolado para ViaCEP, usado apenas para preenchimento assistido; não é fonte de verdade e não remove edição manual.
+
+Decisão de domínio:
+
+- nenhum componente cria relação direta Produto↔Fornecedor, porque fornecedores pertencem aos fluxos de Procurement/Purchase Orders.

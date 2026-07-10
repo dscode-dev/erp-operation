@@ -1524,3 +1524,23 @@ Residual security risks before production promotion:
 - CI workflow was added but not executed by GitHub Actions in this workspace.
 - Local storage was verified with persistent local/Docker volume semantics only; managed object
   storage/IAM evidence remains external.
+
+## Sprint 22.5 — external closure security notes
+
+Supply-chain:
+
+- Frontend `postcss` advisory `GHSA-qx2v-qp2m-jg93` was remediated with a targeted
+  `postcss@8.5.16` override.
+- `npm audit --json` now reports 0 vulnerabilities for the frontend lockfile.
+
+Deployment/storage:
+
+- V1 supports isolated single-company deployments only.
+- Persistent local/block storage is the official V1 strategy.
+- `STORAGE_PATH` must be absolute in production and must not point to `/tmp` or `/var/tmp`.
+- Object storage/IAM is not certified for V1.
+
+Open RC blockers:
+
+- TLS/proxy behavior, external CI, external rollback, external DB+storage restore and external
+  bootstrap flow still require real environment evidence before RC promotion.

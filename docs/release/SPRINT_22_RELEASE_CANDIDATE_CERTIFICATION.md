@@ -64,3 +64,41 @@ external operational evidence.
 - Frontend container dependency install reported two moderate `npm audit` findings. They were not
   remediated in this sprint to avoid out-of-scope dependency upgrades and require owner acceptance
   before promotion.
+
+## Sprint 22.5 addendum
+
+Sprint 22.5 closed the supply-chain finding through a targeted `postcss@8.5.16` override and
+documented the official V1 deployment/storage model.
+
+The final Release Candidate verdict remains:
+
+`ORBIT_RELEASE_CANDIDATE_NOT_READY`
+
+Reason: mandatory external evidence is still absent: external environment, TLS/proxy validation,
+external CI run, image traceability, external rollback, external backup/restore, external storage
+restore and external HTTPS smoke/workflows.
+
+## Sprint 22.6–22.8 external closure addendum
+
+The external production-like installation at `erp.allblue-labs.com` was inspected and partially
+corrected on 2026-07-10. Evidence is recorded in
+`docs/release/SPRINT_22_6_22_8_EXTERNAL_PRODUCTION_CLOSURE.md`.
+
+External closure improved the runtime posture:
+
+- production mode enabled;
+- demo data/endpoints disabled;
+- PostgreSQL/API/frontend Docker ports restricted to `127.0.0.1`;
+- PostgreSQL backup created and restore-tested in an isolated database;
+- storage backup created and restore-tested in an isolated path;
+- restart persistence validated;
+- HTTPS health and login smoke validated.
+
+The final Release Candidate verdict remains:
+
+`ORBIT_RELEASE_CANDIDATE_NOT_READY`
+
+Remaining blockers: no CI evidence for the deployed commit, no immutable registry artifact
+traceability, public `/api/v1/metrics` exposure, no production-safe authenticated workflow
+certification user, no certified rollback drill and an uncommitted remote infrastructure hotfix
+that must be brought back into versioned IaC.

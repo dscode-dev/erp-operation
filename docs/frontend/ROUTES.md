@@ -1,5 +1,21 @@
 # ROUTES — Frontend
 
+## Sprint 23 — V1 product workflow closure
+
+- `/operator/services/[id]`: rota de detalhe de campo refinada.
+  - Consome `GET /assignments/:id`;
+  - consome `GET /assignments/history/:operationId`;
+  - consome `GET /operations/:id/materials`;
+  - registra consumo com `POST /operations/:id/materials` quando a Assignment está `STARTED`;
+  - abre documentos da Operation com o `DocumentViewer` oficial;
+  - não cria preview local, PDF local ou domínio paralelo.
+
+Rotas sem mudança:
+
+- `/operator/services`: continua sendo a fila real de Assignments do operador.
+- `/operator/agenda`: continua sendo visão cronológica de Assignments reais.
+- `/operacoes` e `/agenda`: continuam usando Operation + Assignment como modelo oficial.
+
 ## Sprint 21 — Bundle and runtime notes
 
 Nenhuma rota nova foi criada.
@@ -277,3 +293,30 @@ ORBIT_RELEASE_OWNER_EMAIL=<owner-email> \
 ORBIT_RELEASE_OWNER_PASSWORD=<owner-password> \
 npm run release:smoke:frontend
 ```
+
+## Sprint 22.5 — external route validation status
+
+No route contract changed.
+
+The Sprint 22 local smoke route list remains valid, but external HTTPS route validation was not
+executed because no external environment/hostname was available in the workspace.
+
+## Product Backlog Closure 01 — route behavior
+
+Nenhuma rota nova foi criada.
+
+Rotas impactadas:
+
+- `/produtos`
+  - botão superior permanece focado em “Novo produto”;
+  - preço é criado/revisado pela aba Preços;
+  - fornecedor permanece na aba Fornecedores/Compras, sem vínculo direto no cadastro do produto.
+- `/clientes`
+  - drawer de criação permite endereço inicial usando o contrato existente de endereços do cliente;
+  - retries de endereço não recriam o cliente.
+- `/equipamentos`
+  - seleção de endereço continua restrita ao cliente selecionado;
+  - a ausência de endereço do cliente é informada no formulário.
+- `/reports`
+  - preview de modelo continua usando `DocumentViewer` e endpoint oficial de template preview;
+  - drawer foi reorganizado verticalmente para priorizar leitura do preview.

@@ -215,6 +215,11 @@ export function EquipmentFormDrawer({
               <option key={a.id} value={a.id}>{a.name || [a.street, a.number, a.city].filter(Boolean).join(", ") || "Endereço"}</option>
             ))}
           </select>
+          {form.customerId && addresses.length === 0 && (
+            <span className="block text-[11px] text-[var(--color-muted-foreground)]">
+              Este cliente ainda não possui endereço cadastrado. Cadastre o endereço no cliente para selecionar uma instalação específica.
+            </span>
+          )}
         </Field>
 
         <div className="grid grid-cols-2 gap-3">

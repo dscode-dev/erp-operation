@@ -43,6 +43,44 @@ Production must set:
 The frontend can use `NEXT_PUBLIC_API_BASE_URL=/api/v1` when a reverse proxy serves both
 the frontend and API from the same origin.
 
+## Official V1 deployment model
+
+Orbit V1 is a single-company product. Each installation must represent exactly one customer company
+and one Organization.
+
+Supported models:
+
+- dedicated single-company installation: one customer, one Orbit deployment, one PostgreSQL
+  database, one persistent storage scope;
+- shared infrastructure with isolated application instances: multiple customers may share a
+  server/VPS only when each customer has dedicated containers, dedicated database, dedicated
+  persistent storage path/scope and dedicated hostname/subdomain.
+
+Unsupported in V1:
+
+- shared application-level multi-tenancy;
+- tenant/company discriminator across all business tables;
+- multiple customer companies in one application/database instance;
+- shared storage namespace between customers.
+
+## Official V1 storage strategy
+
+Orbit V1 certifies persistent local/block storage as the official storage strategy.
+
+Requirements:
+
+- `STORAGE_PROVIDER=local`;
+- `STORAGE_DRIVER=local`;
+- `STORAGE_PATH` absolute in production;
+- `STORAGE_PATH` mounted as persistent host/block volume, not container writable layer;
+- one isolated storage path/scope per installation/customer;
+- storage ownership restricted to the API runtime user and operators;
+- storage backup/restore paired with PostgreSQL backup/restore.
+
+Object storage is not certified for V1. Do not configure S3-compatible storage until an actual
+provider, credentials, IAM policy, read/write/delete behavior, missing-object behavior and
+backup/retention policy have been tested.
+
 ## Deployment checklist
 
 1. Freeze deploy window and announce rollback owner.
@@ -74,8 +112,16 @@ the frontend and API from the same origin.
 
 - Logs must be structured JSON.
 - Every request must include or receive an `X-Request-Id`.
-- `/api/v1/health/metrics` must expose operational metrics without sensitive data.
+- `/api/v1/metrics` must expose operational metrics without sensitive data and must be restricted
+  to an approved internal/private observability path before production release.
 - No secrets may be emitted in logs.
+
+## External closure note — 2026-07-10
+
+The external closure in `docs/release/SPRINT_22_6_22_8_EXTERNAL_PRODUCTION_CLOSURE.md` verified
+backup/restore, restart persistence and HTTPS health on `erp.allblue-labs.com`, but did not certify
+the V1 release candidate. Remaining blockers are CI evidence, immutable artifact traceability,
+protected metrics, authenticated critical workflow smoke and rollback drill.
 
 ## RC classification
 

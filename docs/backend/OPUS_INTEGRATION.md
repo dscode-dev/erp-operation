@@ -1596,3 +1596,20 @@ rendering, financial entries and procurement receipts.
 
 Opus/frontend should not depend on Demo Dataset being enabled in production. Demo bridge is now
 disabled by default and must be enabled explicitly only in demo/dev environments.
+
+## Sprint 22.5 — Opus external closure notes
+
+No frontend-facing API contract changed.
+
+Operational assumptions for V1:
+
+- one frontend/API deployment per customer installation;
+- one database per customer installation;
+- one persistent storage scope/path per customer installation;
+- no shared application-level multi-tenancy;
+- object storage is not certified for V1.
+
+Frontend lockfile supply-chain status:
+
+- `postcss` advisory remediated through targeted override;
+- `npm audit --json` reports 0 vulnerabilities after the Sprint 22.5 change.
