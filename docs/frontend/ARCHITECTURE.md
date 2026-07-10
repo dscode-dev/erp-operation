@@ -609,3 +609,31 @@ Mutation/state safety:
 - se `createCustomer` passa e `createAddress` falha, o drawer preserva o `createdCustomerId` para retry apenas do endereço;
 - o fluxo evita duplicação de cliente em retry;
 - erros do backend continuam exibidos como mensagens inline, sem renderizar payload bruto.
+
+## Product Backlog Closure 02 — document workflow architecture
+
+Fluxo oficial no frontend:
+
+```text
+/reports
+→ escolher tipo documental
+→ escolher Operation real
+→ DocumentViewer
+→ preview oficial
+→ render oficial
+→ download autorizado
+→ /documentos lista o OperationDocument emitido
+```
+
+Regras preservadas:
+
+- nenhum PDF é gerado no frontend;
+- nenhum preview autoritativo é montado por componente local;
+- `DocumentViewer` é a superfície única de visualização/render/download;
+- `/documentos` não compete com `/reports`: ele representa histórico/repositório.
+
+Performance:
+
+- preview não renderiza PDF automaticamente ao abrir drawer;
+- render é ação explícita do usuário;
+- download ocorre apenas depois de `documentId` existente/renderizado.

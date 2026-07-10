@@ -47,6 +47,22 @@ export type DocumentComponent =
       signedAt: string | null;
       keepTogether?: boolean;
     }
+  | {
+      id: string;
+      kind: "signature";
+      mode: "NONE" | "FIXED" | "COLLECTED" | "HYBRID";
+      signatures: Array<{
+        id: string;
+        role: "fixed" | "collected";
+        label: string;
+        name: string | null;
+        title: string | null;
+        signedAt: string | null;
+        caption: string | null;
+        image?: { mimeType: string; fileSize: number; contentBase64: string } | null;
+      }>;
+      keepTogether?: boolean;
+    }
   | { id: string; kind: "observation"; text: string; keepTogether?: boolean };
 
 export type DocumentBlueprint = {

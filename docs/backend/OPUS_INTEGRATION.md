@@ -1613,3 +1613,17 @@ Frontend lockfile supply-chain status:
 
 - `postcss` advisory remediated through targeted override;
 - `npm audit --json` reports 0 vulnerabilities after the Sprint 22.5 change.
+## Product Backlog Closure 02 — Opus integration notes
+
+Para implementar UX de relatórios:
+
+- use `DocumentViewer` com `source={{ operationId, type }}`;
+- use apenas tipos existentes: `WORK_ORDER`, `TECHNICAL_REPORT`, `REPORT`, `PMOC`, `QUOTE`, `RECEIPT`, `BUDGET`;
+- para Budget, preserve o fluxo próprio de `/budgets/:id/render` quando estiver na Central Comercial;
+- para documentos de Operation, use `/documents/operations/:operationId/:type/*`;
+- após render, o documento aparece no histórico oficial de documentos quando o backend criar/atualizar `OperationDocument`.
+
+Limitação V1:
+
+- “Relatório Técnico” e “Laudo” do frontend ainda compartilham `DocumentTemplateType.REPORT`.
+- Não criar tipo local novo; se o produto precisar diferenciar ambos, abrir backlog para novo enum/contrato backend.

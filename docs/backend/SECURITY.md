@@ -1544,3 +1544,21 @@ Open RC blockers:
 
 - TLS/proxy behavior, external CI, external rollback, external DB+storage restore and external
   bootstrap flow still require real environment evidence before RC promotion.
+## Product Backlog Closure 02 — Document AppSec review
+
+Garantias preservadas:
+
+- RBAC dos endpoints de documentos não foi alterado.
+- Tipos financeiros (`QUOTE`, `RECEIPT`) continuam restritos conforme política existente do Document Engine.
+- Download continua passando pelo backend e `DocumentAssetResolver`; nenhum `storageKey` é exposto.
+- `contentBase64` só é retornado no endpoint autorizado de download.
+- AuditLog não recebe binário nem base64.
+- Render falho não cria evento de sucesso, pois persistência/auditoria/lifecycle continuam após geração e storage bem-sucedidos.
+- Preview e PDF usam o mesmo `DocumentBuilderService` e o mesmo `DocumentBlueprint`.
+
+Cuidados frontend:
+
+- não gerar PDF local;
+- não construir URL de storage;
+- revogar object URLs temporários ao baixar binários;
+- tratar erros de documento não renderizado como estado controlado.

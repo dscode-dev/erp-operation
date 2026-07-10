@@ -412,3 +412,21 @@ Novo adapter:
 Decisão de domínio:
 
 - nenhum componente cria relação direta Produto↔Fornecedor, porque fornecedores pertencem aos fluxos de Procurement/Purchase Orders.
+
+## Product Backlog Closure 02 — document component impact
+
+Componentes evoluídos:
+
+- `TemplatePreviewDrawer` em `/reports`:
+  - usa selector de Operation real;
+  - chama `DocumentViewer` com `source={{ operationId, type }}`;
+  - permite render/download quando há template/tipo suportado.
+- `DocumentViewer`:
+  - continua sendo a única superfície oficial de preview/render/download;
+  - renderiza assinaturas vindas do blueprint oficial;
+  - mantém download por `contentBase64` autorizado e object URL temporário.
+
+Responsabilidade:
+
+- Reports descobre/aciona emissão por tipo documental;
+- Documents lista/historiza documentos emitidos.

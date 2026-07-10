@@ -318,5 +318,16 @@ Rotas impactadas:
   - seleção de endereço continua restrita ao cliente selecionado;
   - a ausência de endereço do cliente é informada no formulário.
 - `/reports`
-  - preview de modelo continua usando `DocumentViewer` e endpoint oficial de template preview;
   - drawer foi reorganizado verticalmente para priorizar leitura do preview.
+
+## Product Backlog Closure 02 — route behavior
+
+- `/reports`
+  - passa a funcionar como entry point de workflow documental por Operation real;
+  - o drawer seleciona uma Operation e usa `GET/POST /documents/operations/:operationId/:type/*`;
+  - render/download deixam de ficar desabilitados quando há Operation real e template suportado.
+- `/documentos`
+  - permanece como repositório/histórico oficial de documentos emitidos;
+  - documentos emitidos via Reports aparecem pela relação `OperationDocument` existente.
+
+Nenhuma rota nova foi criada.

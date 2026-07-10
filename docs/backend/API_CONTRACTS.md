@@ -4284,3 +4284,22 @@ Operational decision:
 - Production storage contract is local/block persistent storage via `STORAGE_PROVIDER=local`,
   `STORAGE_DRIVER=local` and absolute mounted `STORAGE_PATH`.
 - Object storage is not an API/runtime contract certified for V1.
+## Product Backlog Closure 02 — Document Engine contracts
+
+Nenhum contrato HTTP novo foi criado.
+
+Contratos oficiais reutilizados:
+
+- `GET /api/v1/documents/operations/:operationId/:type/preview`
+- `POST /api/v1/documents/operations/:operationId/:type/render`
+- `GET /api/v1/documents/:documentId/preview`
+- `POST /api/v1/documents/:documentId/render`
+- `GET /api/v1/documents/:documentId/download`
+- `GET /api/v1/documents/templates/:templateId/preview`
+
+Mudança compatível:
+
+- o payload `DocumentBlueprint.sections` passou a variar semanticamente por `DocumentTemplateType`
+  para documentos operacionais, mantendo o mesmo formato de componentes já contratado.
+- `download` continua retornando `contentBase64` apenas pelo endpoint autorizado de download;
+  `storageKey` não é exposto.

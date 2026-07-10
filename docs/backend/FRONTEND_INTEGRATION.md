@@ -1933,3 +1933,24 @@ Production integration assumptions:
 - each white-label customer deployment must point to its own isolated API/database/storage scope.
 
 External HTTPS smoke remains required before RC promotion.
+## Product Backlog Closure 02 — Reports and Documents
+
+Responsabilidade de produto:
+
+- Reports é ponto de entrada para escolher um tipo documental e pré-visualizar/emitir a partir de uma `Operation` real.
+- Documents é o repositório/histórico oficial de `OperationDocument` já criados/renderizados.
+
+Fluxo oficial para documentos operacionais:
+
+1. Frontend seleciona `operationId` e `DocumentTemplateType`.
+2. Preview: `GET /documents/operations/:operationId/:type/preview`.
+3. Emissão: `POST /documents/operations/:operationId/:type/render`.
+4. Download: `GET /documents/:documentId/download`.
+
+O frontend não deve:
+
+- montar conteúdo documental localmente;
+- gerar PDF no browser;
+- acessar `storageKey`;
+- recalcular materiais, valores ou histórico;
+- criar registros paralelos de documento.

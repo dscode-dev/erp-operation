@@ -373,6 +373,29 @@ function ComponentPreview({ component }: { component: DocumentComponent }) {
   if (component.kind === "signaturePlaceholder") {
     return <div className="mt-10 border-t border-slate-400 pt-2 text-center text-sm">{component.label} · {component.strategy}</div>;
   }
+  if (component.kind === "signature") {
+    return (
+      <div className="grid gap-4 rounded-md border border-slate-200 p-4 sm:grid-cols-2">
+        {component.signatures.map((signature) => (
+          <div key={signature.id} className="text-center">
+            {signature.image ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={`data:${signature.image.mimeType};base64,${signature.image.contentBase64}`}
+                alt={signature.label}
+                className="mx-auto h-16 max-w-[220px] object-contain"
+              />
+            ) : (
+              <div className="mt-12 border-t border-slate-400 pt-2" />
+            )}
+            <div className="mt-2 text-sm font-medium">{signature.name ?? signature.label}</div>
+            <div className="text-xs text-slate-500">{signature.title ?? signature.caption ?? signature.role}</div>
+            {signature.signedAt && <div className="text-[10px] text-slate-400">{new Date(signature.signedAt).toLocaleString("pt-BR")}</div>}
+          </div>
+        ))}
+      </div>
+    );
+  }
   if (component.kind === "image") {
     return <div className="rounded-md border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">Imagem protegida · {component.mimeType} · {formatBytes(component.fileSize)}</div>;
   }

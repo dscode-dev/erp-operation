@@ -2205,6 +2205,39 @@ Veredito:
 
 - `ORBIT_RELEASE_CANDIDATE_NOT_READY`.
 
+## Product Backlog Closure 02 — Report Specialization & Production PDF Workflow
+
+Status: concluído em 10 de julho de 2026.
+
+Alterações backend:
+
+- `DocumentContextService` passou a carregar dados reais adicionais para documentos operacionais:
+  Assignment/histórico, materiais consumidos, MaintenanceExecution/Plan e PMOC vinculado ao MaintenancePlan.
+- `DocumentBuilderService` passou a compor seções especializadas por `DocumentTemplateType`:
+  - `WORK_ORDER`: programação, responsável e escopo/checklist;
+  - `TECHNICAL_REPORT`: visita técnica, tempos, atividades, materiais e evidências;
+  - `REPORT`: execução operacional, assignment, histórico e resultado;
+  - `PMOC`: contexto PMOC real, manutenção e ambientes monitorados;
+  - `RECEIPT`: confirmação de atendimento;
+  - `QUOTE`: origem operacional, mantendo Budget como fonte comercial oficial;
+  - `BUDGET`: preservado pelo fluxo especializado existente.
+
+Decisões:
+
+- Nenhum endpoint novo foi criado.
+- Nenhuma migration foi criada.
+- Nenhum renderer/PDF engine paralelo foi criado.
+- Preview e render continuam usando o mesmo Builder/Blueprint/Renderer/PDF Engine.
+- Cards frontend “Relatório Técnico” e “Laudo” continuam compartilhando `DocumentTemplateType.REPORT`; nova diferenciação exigiria novo enum/contrato e ficou fora desta closure.
+
+Validação:
+
+- `DATABASE_URL=... npx prisma validate`: passou;
+- `DATABASE_URL=... npx prisma generate`: passou;
+- `npm run lint`: passou;
+- `npm run build`: passou;
+- `npm test -- --silent`: 10 suites / 27 testes passaram.
+
 Motivo:
 
 - a base local passou nos gates técnicos executados, mas não houve evidência real de staging,

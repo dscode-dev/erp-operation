@@ -640,3 +640,23 @@ Validação:
 - `npm run lint` passou com 2 warnings preexistentes;
 - `npm run build` passou;
 - `git diff --check` passou antes da documentação.
+
+## Product Backlog Closure 02 — Reports real preview/render/download
+
+Status: concluído em 10 de julho de 2026.
+
+Alterações frontend:
+
+- `/reports` passou a selecionar uma Operation real para preview/emissão/download por tipo documental.
+- `TemplatePreviewDrawer` preserva layout vertical, mas agora prioriza:
+  - identidade do relatório;
+  - resumo compacto;
+  - fonte real do preview;
+  - `DocumentViewer` oficial em área ampla.
+- `DocumentViewer` passou a renderizar componentes `signature` do blueprint oficial.
+- `/documentos` permanece como central/histórico dos documentos emitidos.
+
+Validação:
+
+- `npm run lint` passou com 2 warnings preexistentes;
+- `npm run build` passou.

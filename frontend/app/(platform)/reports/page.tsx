@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   CheckCircle2,
@@ -20,7 +20,7 @@ import {
 import { PageHeader } from "@platform/components/page-header";
 import { Pagination } from "@platform/components/pagination";
 import { TemplateFormDrawer } from "@platform/components/template-form-drawer";
-import { organizationApi, signaturesApi, useQuery, type DocumentTemplate, type DocumentTemplateType, type Signature } from "@erp/api";
+import { operationApi, organizationApi, signaturesApi, useQuery, type DocumentTemplate, type DocumentTemplateType, type OperationSummary, type Signature } from "@erp/api";
 import { useAuth } from "@erp/ui/auth/auth-provider";
 import { Gate } from "@erp/ui/auth/gate";
 import { ConfirmDialog } from "@erp/ui/confirm-dialog";
@@ -73,6 +73,7 @@ export default function ReportsPage() {
 
   const templates = useQuery<DocumentTemplate[]>((signal) => organizationApi.listTemplates({ signal }), []);
   const signatures = useQuery((signal) => signaturesApi.listSignatures({ page: 1, limit: 100, signal }), []);
+  const operations = useQuery((signal) => operationApi.listOperations({ page: 1, limit: 25, signal }), []);
 
   const cards = useMemo(() => {
     const all = templates.data ?? [];
@@ -196,6 +197,12 @@ export default function ReportsPage() {
         card={previewing}
         canEdit={canEdit}
         signature={findSignature(signatureList, previewing?.template?.signatureId)}
+        operations={operations.data?.items ?? []}
+        operationsLoading={operations.loading}
+        onRendered={() => {
+          operations.refetch();
+          saved("Documento emitido pelo Document Engine.");
+        }}
         onClose={() => setPreviewing(null)}
         onConfigure={() => {
           if (!previewing) return;
@@ -310,6 +317,9 @@ function TemplatePreviewDrawer({
   card,
   canEdit,
   signature,
+  operations,
+  operationsLoading,
+  onRendered,
   onClose,
   onConfigure,
   onDelete,
@@ -317,11 +327,21 @@ function TemplatePreviewDrawer({
   card: TemplateCard | null;
   canEdit: boolean;
   signature: Signature | null;
+  operations: OperationSummary[];
+  operationsLoading: boolean;
+  onRendered: () => void;
   onClose: () => void;
   onConfigure: () => void;
   onDelete: (template: DocumentTemplate) => void;
 }) {
   const template = card?.template ?? null;
+  const [operationId, setOperationId] = useState("");
+  const selectedOperation = operations.find((operation) => operation.id === operationId) ?? operations[0] ?? null;
+
+  useEffect(() => {
+    if (!card) return;
+    setOperationId((current) => current || operations[0]?.id || "");
+  }, [card, operations]);
 
   return (
     <Drawer open={Boolean(card)} onClose={onClose} eyebrow="Preview oficial" title={card ? `Modelo · ${card.label}` : "Modelo"} width="max-w-[1280px]">
@@ -378,14 +398,56 @@ function TemplatePreviewDrawer({
             </div>
           </section>
 
+          <section className="space-y-3 rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <h3 className="text-sm font-semibold">Fonte real do preview</h3>
+                <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
+                  Selecione uma Operation real. Preview, renderização e download usam `/documents/operations/:operationId/:type`.
+                </p>
+              </div>
+              <select
+                value={selectedOperation?.id ?? ""}
+                onChange={(event) => setOperationId(event.target.value)}
+                disabled={operationsLoading || operations.length === 0}
+                className="h-9 min-w-[280px] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm outline-none focus:border-[var(--color-primary)] disabled:opacity-60"
+                aria-label="Operation para preview oficial"
+              >
+                {operations.length === 0 ? (
+                  <option value="">Nenhuma Operation disponível</option>
+                ) : (
+                  operations.map((operation) => (
+                    <option key={operation.id} value={operation.id}>
+                      OP-{String(operation.number).padStart(6, "0")} · {operation.customer?.name ?? "Cliente"} · {operation.equipment?.name ?? "sem equipamento"}
+                    </option>
+                  ))
+                )}
+              </select>
+            </div>
+            {selectedOperation && (
+              <div className="grid gap-2 text-sm sm:grid-cols-4">
+                <Meta label="Cliente" value={selectedOperation.customer?.name ?? "—"} />
+                <Meta label="Equipamento" value={selectedOperation.equipment?.name ?? "—"} />
+                <Meta label="Operador" value={selectedOperation.operator?.name ?? "—"} />
+                <Meta label="Status" value={selectedOperation.status} />
+              </div>
+            )}
+          </section>
+
           <section className="min-w-0 rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-card)] p-3">
-            {template ? (
-              <DocumentViewer source={{ templateId: template.id }} title={`Preview · ${card.label}`} canRender={false} canDownload={false} />
+            {selectedOperation ? (
+              <DocumentViewer
+                source={{ operationId: selectedOperation.id, type: card.type }}
+                title={`${card.label} · OP-${String(selectedOperation.number).padStart(6, "0")}`}
+                canRender={Boolean(template)}
+                canDownload={Boolean(template)}
+                onRendered={onRendered}
+              />
             ) : (
               <EmptyState
                 icon={FileText}
-                title="Template indisponível"
-                description="Crie ou configure um modelo antes de solicitar o preview oficial do backend."
+                title="Nenhuma Operation disponível"
+                description="Crie uma Operation real para pré-visualizar, emitir e baixar este tipo documental pelo Document Engine."
               />
             )}
           </section>

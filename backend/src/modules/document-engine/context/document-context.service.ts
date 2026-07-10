@@ -38,6 +38,53 @@ const DOCUMENT_CONTEXT_OPERATION_INCLUDE = {
     },
   },
   operator: { select: { id: true, name: true, email: true, username: true, jobTitle: true } },
+  assignment: {
+    include: {
+      assigner: { select: { id: true, name: true, username: true, jobTitle: true } },
+      assignee: { select: { id: true, name: true, username: true, jobTitle: true } },
+      history: {
+        orderBy: { createdAt: 'asc' as const },
+        take: 20,
+        include: { actor: { select: { id: true, name: true, username: true, jobTitle: true } } },
+      },
+    },
+  },
+  maintenanceExecution: {
+    include: {
+      plan: {
+        include: {
+          pmocPlan: {
+            include: {
+              environments: {
+                orderBy: { name: 'asc' as const },
+                take: 20,
+                include: {
+                  equipments: {
+                    include: {
+                      equipment: { select: { id: true, name: true, tag: true, type: true, status: true } },
+                    },
+                  },
+                },
+              },
+              equipments: {
+                include: {
+                  equipment: { select: { id: true, name: true, tag: true, type: true, status: true } },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+  parts: {
+    where: { deletedAt: null },
+    orderBy: { createdAt: 'asc' as const },
+    include: {
+      product: { select: { id: true, sku: true, name: true, unit: true, brand: true, model: true, category: true } },
+      inventoryItem: { select: { id: true, location: true } },
+    },
+  },
   photos: { orderBy: { createdAt: 'asc' as const } },
   documents: { orderBy: { createdAt: 'asc' as const } },
 } satisfies Prisma.OperationInclude;
