@@ -1,150 +1,294 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
-import { ArrowLeft, Camera, X, Info } from "lucide-react";
+import { ArrowLeft, Camera, CheckCircle2, FileText, Save, X } from "lucide-react";
 import { PageHeader } from "@platform/components/page-header";
 import { SectionCard } from "@erp/ui/section-card";
 import { SignaturePad } from "@erp/ui/documents/signature-pad";
-import { customersApi, equipmentsApi, usersApi, useQuery } from "@erp/api";
+import { DocumentViewer } from "@erp/ui/documents/document-viewer";
+import { ErrorState } from "@erp/ui/states";
+import { SkeletonList } from "@erp/ui/skeletons";
+import { operationApi, useQuery, type OperationChecklistItem, type OperationDetail, type OperationSummary } from "@erp/api";
+import { DOCUMENT_KIND_LABEL } from "@erp/types";
 
-/**
- * Relatório de Visita Técnica — fluxo VISUAL (Sprint 2).
- * Coleta cliente, equipamento, operador, observações, fotos e assinatura.
- * NÃO gera PDF: a montagem do documento é responsabilidade do backend (Sprint 3).
- */
+type PendingPhoto = { dataUrl: string; name: string; caption: string };
+
 export default function VisitaTecnicaPage() {
-  const [customerId, setCustomerId] = useState("");
-  const [equipmentId, setEquipmentId] = useState("");
-  const [operatorId, setOperatorId] = useState("");
-  const [notes, setNotes] = useState("");
-  const [photos, setPhotos] = useState<{ name: string; url: string }[]>([]);
-  const photosRef = useRef(photos);
-  const [signed, setSigned] = useState(false);
-
-  const customers = useQuery((signal) => customersApi.listCustomers({ limit: 100, signal }), []);
-  const operators = useQuery((signal) => usersApi.listUsers({ limit: 100, signal }), []);
-  const equipments = useQuery(
-    (signal) => (customerId ? equipmentsApi.listEquipments({ customerId, limit: 100, signal }) : Promise.resolve(null)),
-    [customerId],
+  const operations = useQuery((signal) => operationApi.listOperations({ page: 1, limit: 50, signal }), []);
+  const [operationId, setOperationId] = useState("");
+  const detail = useQuery<OperationDetail | null>(
+    (signal) => (operationId ? operationApi.getOperation(operationId, { signal }) : Promise.resolve(null)),
+    [operationId],
   );
 
-  // Reset equipment when customer changes.
-  useEffect(() => { setEquipmentId(""); }, [customerId]);
+  const op = detail.data;
+  const [observations, setObservations] = useState("");
+  const [checklist, setChecklist] = useState<OperationChecklistItem[]>([]);
+  const [photos, setPhotos] = useState<PendingPhoto[]>([]);
+  const [signature, setSignature] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
-  useEffect(() => { photosRef.current = photos; }, [photos]);
-  useEffect(() => () => { photosRef.current.forEach((photo) => URL.revokeObjectURL(photo.url)); }, []);
+  useEffect(() => {
+    if (!operations.data?.items.length || operationId) return;
+    setOperationId(operations.data.items[0].id);
+  }, [operationId, operations.data?.items]);
 
-  const customer = customers.data?.items.find((c) => c.id === customerId);
-  const equipment = equipments.data?.items.find((e) => e.id === equipmentId);
-  const operator = operators.data?.items.find((u) => u.id === operatorId);
+  useEffect(() => {
+    if (!op) return;
+    setObservations(op.observations ?? "");
+    setChecklist(op.checklist ?? []);
+    setPhotos([]);
+    setSignature(null);
+    setError(null);
+    setNotice(null);
+  }, [op]);
 
-  function addPhotos(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files ?? []);
-    setPhotos((prev) => [...prev, ...files.map((f) => ({ name: f.name, url: URL.createObjectURL(f) }))]);
-    e.target.value = "";
+  async function addPhotos(event: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
+    event.target.value = "";
+    const accepted = files.filter((file) => ["image/png", "image/jpeg"].includes(file.type));
+    const mapped = await Promise.all(
+      accepted.map(async (file) => ({
+        dataUrl: await fileToDataUrl(file),
+        name: file.name,
+        caption: file.name,
+      })),
+    );
+    setPhotos((current) => [...current, ...mapped]);
   }
-  function removePhoto(i: number) {
-    setPhotos((prev) => {
-      const target = prev[i];
-      if (target) URL.revokeObjectURL(target.url);
-      return prev.filter((_, idx) => idx !== i);
-    });
+
+  function updateChecklist(index: number, patch: Partial<OperationChecklistItem>) {
+    setChecklist((items) => items.map((item, itemIndex) => (itemIndex === index ? { ...item, ...patch } : item)));
+  }
+
+  async function persistEvidence(status?: OperationDetail["status"]) {
+    if (!op) return;
+    setSaving(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await operationApi.updateOperation(op.id, {
+        ...(status ? { status } : {}),
+        observations: observations || null,
+        checklist,
+        photos: photos.map((photo) => ({ dataUrl: photo.dataUrl, caption: photo.caption || photo.name })),
+        ...(signature ? { signatureData: signature, signedAt: new Date().toISOString() } : {}),
+      });
+      setPhotos([]);
+      setSignature(null);
+      setNotice(status === "COMPLETED" ? "Evidências salvas e Operation concluída." : "Evidências salvas na Operation.");
+      detail.refetch();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Não foi possível salvar as evidências.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
-    <div className="space-y-6 max-w-[1200px]">
+    <div className="max-w-[1280px] space-y-6">
       <Link href="/reports" className="inline-flex items-center gap-1.5 text-sm text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]">
         <ArrowLeft className="h-4 w-4" /> Relatórios
       </Link>
-      <PageHeader eyebrow="Visita Técnica" title="Relatório de Visita Técnica" description="Fluxo visual de preenchimento. A geração do PDF é feita pelo backend (Sprint 3)." />
 
-      <div className="rounded-[var(--radius-md)] border border-[var(--color-info)]/30 bg-[var(--color-info)]/10 px-3 py-2 text-sm text-[var(--color-info)] flex items-start gap-2">
-        <Info className="h-4 w-4 mt-0.5 shrink-0" />
-        Esta é a etapa de coleta. Fotos e assinatura são visuais nesta sprint e não são enviadas ainda.
-      </div>
+      <PageHeader
+        eyebrow="Relatório de Visita"
+        title="Evidências da Operation"
+        description="Fluxo consolidado: selecione uma Operation real, salve observações, checklist, fotos e assinatura; depois visualize ou emita o relatório pelo Document Engine."
+      />
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
-        {/* Form */}
-        <div className="space-y-4">
-          <SectionCard title="Identificação">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Select label="Cliente" value={customerId} onChange={setCustomerId} options={(customers.data?.items ?? []).map((c) => ({ value: c.id, label: c.name }))} placeholder="Selecione o cliente" />
-              <Select label="Equipamento" value={equipmentId} onChange={setEquipmentId} options={(equipments.data?.items ?? []).map((e) => ({ value: e.id, label: e.name }))} placeholder={customerId ? "Selecione o equipamento" : "Selecione o cliente primeiro"} disabled={!customerId} />
-              <Select label="Operador" value={operatorId} onChange={setOperatorId} options={(operators.data?.items ?? []).map((u) => ({ value: u.id, label: u.name }))} placeholder="Selecione o operador" />
-            </div>
-          </SectionCard>
-
-          <SectionCard title="Observações técnicas">
-            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={4} placeholder="Descreva o serviço executado, condições do equipamento, recomendações…" className="w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--color-primary)] resize-none" />
-          </SectionCard>
-
-          <SectionCard title={`Fotos (${photos.length})`}>
-            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-              {photos.map((p, i) => (
-                <div key={p.url} className="relative group aspect-square rounded-[var(--radius-md)] overflow-hidden border border-[var(--color-border)]">
-                  <Image src={p.url} alt={p.name} fill sizes="120px" unoptimized className="object-cover" />
-                  <button type="button" onClick={() => removePhoto(i)} aria-label="Remover foto" className="absolute top-1 right-1 h-6 w-6 grid place-items-center rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity">
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                </div>
+      <section className="rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+          <label className="space-y-1.5">
+            <span className="text-sm font-medium">Operation real</span>
+            <select
+              value={operationId}
+              onChange={(event) => setOperationId(event.target.value)}
+              className="h-10 w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm outline-none focus:border-[var(--color-primary)]"
+            >
+              {(operations.data?.items ?? []).map((operation) => (
+                <option key={operation.id} value={operation.id}>
+                  {operationLabel(operation)}
+                </option>
               ))}
-              <label className="aspect-square rounded-[var(--radius-md)] border border-dashed border-[var(--color-border)] grid place-items-center cursor-pointer hover:bg-[var(--color-muted)] text-[var(--color-muted-foreground)]">
-                <Camera className="h-5 w-5" />
-                <input type="file" accept="image/*" multiple onChange={addPhotos} className="hidden" aria-label="Adicionar fotos" />
-              </label>
+            </select>
+          </label>
+          <div className="flex flex-wrap gap-2 text-xs text-[var(--color-muted-foreground)]">
+            <span className="rounded-full border border-[var(--color-border)] px-2.5 py-1">
+              Fonte: Operation
+            </span>
+            <span className="rounded-full border border-[var(--color-border)] px-2.5 py-1">
+              Documento: {DOCUMENT_KIND_LABEL.TECHNICAL_REPORT}
+            </span>
+          </div>
+        </div>
+      </section>
+
+      {detail.loading && !op ? (
+        <SkeletonList rows={8} />
+      ) : detail.error && !op ? (
+        <ErrorState error={detail.error} onRetry={detail.refetch} />
+      ) : op ? (
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+          <div className="space-y-4">
+            <SectionCard title="1. Identidade da Operation">
+              <div className="grid gap-3 text-sm sm:grid-cols-2">
+                <Info label="Cliente" value={op.customer?.name ?? "—"} />
+                <Info label="Equipamento" value={op.equipment?.name ?? "—"} />
+                <Info label="Operador" value={op.operator?.name ?? "—"} />
+                <Info label="Status" value={op.status} />
+                <Info label="Início" value={op.startedAt ? new Date(op.startedAt).toLocaleString("pt-BR") : "—"} />
+                <Info label="Conclusão" value={op.completedAt ? new Date(op.completedAt).toLocaleString("pt-BR") : "—"} />
+              </div>
+            </SectionCard>
+
+            <SectionCard title="2. Atividades / checklist">
+              {checklist.length === 0 ? (
+                <p className="text-sm text-[var(--color-muted-foreground)]">Nenhum item de checklist registrado nesta Operation.</p>
+              ) : (
+                <div className="space-y-2">
+                  {checklist.map((item, index) => (
+                    <div key={`${item.label}-${index}`} className="rounded-[var(--radius-md)] border border-[var(--color-border)] p-3">
+                      <label className="flex items-start gap-2 text-sm font-medium">
+                        <input
+                          type="checkbox"
+                          checked={item.done}
+                          onChange={(event) => updateChecklist(index, { done: event.target.checked })}
+                          className="mt-1"
+                        />
+                        <span>{item.label}</span>
+                      </label>
+                      <input
+                        value={item.note ?? ""}
+                        onChange={(event) => updateChecklist(index, { note: event.target.value })}
+                        placeholder="Observação do item"
+                        className="mt-2 h-9 w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-3 text-sm outline-none focus:border-[var(--color-primary)]"
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </SectionCard>
+
+            <SectionCard title="3. Observações técnicas">
+              <textarea
+                value={observations}
+                onChange={(event) => setObservations(event.target.value)}
+                rows={5}
+                placeholder="Descreva serviço executado, condições do equipamento, recomendações e pendências."
+                className="w-full resize-none rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--color-primary)]"
+              />
+            </SectionCard>
+
+            <SectionCard title="4. Fotos / evidências">
+              <div className="space-y-3">
+                <label className="flex min-h-24 cursor-pointer flex-col items-center justify-center rounded-[var(--radius-md)] border border-dashed border-[var(--color-border)] text-sm text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)]">
+                  <Camera className="mb-1 h-5 w-5" />
+                  Adicionar evidências PNG/JPEG
+                  <input type="file" accept="image/png,image/jpeg" multiple onChange={addPhotos} className="hidden" />
+                </label>
+                <div className="grid gap-2">
+                  {op.photos.map((photo) => (
+                    <div key={photo.id} className="flex items-center justify-between rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 py-2 text-sm">
+                      <span>{photo.caption ?? "Evidência persistida"}</span>
+                      <span className="text-[var(--color-muted-foreground)]">{photo.mimeType}</span>
+                    </div>
+                  ))}
+                  {photos.map((photo, index) => (
+                    <div key={`${photo.name}-${index}`} className="grid gap-2 rounded-[var(--radius-md)] border border-[var(--color-primary)]/30 bg-[var(--color-primary)]/5 p-3 text-sm">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="font-medium">{photo.name}</span>
+                        <button type="button" onClick={() => setPhotos((items) => items.filter((_, i) => i !== index))} aria-label="Remover evidência pendente">
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                      <input
+                        value={photo.caption}
+                        onChange={(event) => setPhotos((items) => items.map((item, i) => (i === index ? { ...item, caption: event.target.value } : item)))}
+                        className="h-9 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 outline-none focus:border-[var(--color-primary)]"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </SectionCard>
+
+            <SectionCard title="5. Assinatura coletada">
+              {op.signedAt ? (
+                <div className="mb-3 flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-success)]/30 bg-[var(--color-success)]/10 px-3 py-2 text-sm text-[var(--color-success)]">
+                  <CheckCircle2 className="h-4 w-4" />
+                  Assinatura já persistida em {new Date(op.signedAt).toLocaleString("pt-BR")}
+                </div>
+              ) : null}
+              <SignaturePad onChange={setSignature} onConfirm={setSignature} />
+            </SectionCard>
+
+            {error && <p className="rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 px-3 py-2 text-sm text-[var(--color-danger)]">{error}</p>}
+            {notice && <p className="rounded-[var(--radius-md)] border border-[var(--color-success)]/30 bg-[var(--color-success)]/10 px-3 py-2 text-sm text-[var(--color-success)]">{notice}</p>}
+
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => persistEvidence()} disabled={saving} className="inline-flex h-10 items-center gap-2 rounded-[var(--radius-md)] bg-[var(--color-primary)] px-4 text-sm font-medium text-[var(--color-primary-foreground)] disabled:opacity-50">
+                <Save className="h-4 w-4" />
+                {saving ? "Salvando…" : "Salvar evidências"}
+              </button>
+              <button type="button" onClick={() => persistEvidence("COMPLETED")} disabled={saving} className="inline-flex h-10 items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] px-4 text-sm font-medium hover:bg-[var(--color-muted)] disabled:opacity-50">
+                <CheckCircle2 className="h-4 w-4" />
+                Salvar e concluir
+              </button>
             </div>
-          </SectionCard>
+          </div>
 
-          <SectionCard title="Assinatura">
-            <SignaturePad onChange={(d) => setSigned(Boolean(d))} />
-          </SectionCard>
+          <section className="min-w-0 space-y-3">
+            <div className="rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
+              <div className="flex items-start gap-3">
+                <span className="grid h-10 w-10 place-items-center rounded-[var(--radius-md)] bg-[var(--color-primary)]/10 text-[var(--color-primary)]">
+                  <FileText className="h-5 w-5" />
+                </span>
+                <div>
+                  <h2 className="font-semibold">Preview real do relatório</h2>
+                  <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">
+                    Salve as evidências antes de atualizar, renderizar ou baixar. Este viewer consome exclusivamente o Document Engine.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <DocumentViewer
+              source={{ operationId: op.id, type: "TECHNICAL_REPORT" }}
+              title={`Relatório de Visita · OP-${String(op.number).padStart(6, "0")}`}
+              onRendered={detail.refetch}
+            />
+          </section>
         </div>
-
-        <div className="space-y-4">
-          <SectionCard title="Resumo">
-            <dl className="space-y-2 text-sm">
-              <ReviewRow label="Cliente" value={customer?.name ?? "—"} />
-              <ReviewRow label="Equipamento" value={equipment?.name ?? "—"} />
-              <ReviewRow label="Operador" value={operator?.name ?? "—"} />
-              <ReviewRow label="Fotos" value={String(photos.length)} />
-              <ReviewRow label="Assinatura" value={signed ? "Coletada" : "Pendente"} />
-            </dl>
-            <p className="mt-3 text-caption">Preview e PDF oficiais são feitos apenas pelo Document Engine após criação de Operation.</p>
-          </SectionCard>
-        </div>
-      </div>
+      ) : (
+        <SectionCard title="Nenhuma Operation disponível">
+          <p className="text-sm text-[var(--color-muted-foreground)]">Crie uma Operation antes de registrar evidências de visita.</p>
+        </SectionCard>
+      )}
     </div>
   );
 }
 
-function ReviewRow({ label, value }: { label: string; value: string }) {
+function operationLabel(operation: OperationSummary): string {
+  return `OP-${String(operation.number).padStart(6, "0")} · ${operation.customer?.name ?? "Cliente"} · ${operation.equipment?.name ?? "sem equipamento"} · ${operation.status}`;
+}
+
+function Info({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between gap-4">
-      <dt className="text-caption">{label}</dt>
-      <dd className="text-right">{value}</dd>
+    <div>
+      <div className="text-[11px] uppercase tracking-wider text-[var(--color-muted-foreground)]">{label}</div>
+      <div className="font-medium">{value}</div>
     </div>
   );
 }
 
-function Select({
-  label, value, onChange, options, placeholder, disabled,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  options: { value: string; label: string }[];
-  placeholder: string;
-  disabled?: boolean;
-}) {
-  return (
-    <label className="block space-y-1.5">
-      <span className="text-sm font-medium">{label}</span>
-      <select value={value} onChange={(e) => onChange(e.target.value)} disabled={disabled} className="w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-3 h-9 text-sm outline-none focus:border-[var(--color-primary)] disabled:opacity-60">
-        <option value="">{placeholder}</option>
-        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
-    </label>
-  );
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
 }

@@ -75,17 +75,22 @@ const USER_SELECT = {
   preferences: { select: PREFERENCES_SELECT },
 } satisfies Prisma.UserSelect;
 
-const AVATAR_SELECT = {
+const AVATAR_PUBLIC_SELECT = {
   id: true,
-  storageKey: true,
   mimeType: true,
   originalFileName: true,
   fileSize: true,
   createdAt: true,
 } satisfies Prisma.UserAvatarAssetSelect;
 
+const AVATAR_SELECT = {
+  ...AVATAR_PUBLIC_SELECT,
+  storageKey: true,
+} satisfies Prisma.UserAvatarAssetSelect;
+
 type UserResponse = Prisma.UserGetPayload<{ select: typeof USER_SELECT }>;
-type AvatarResponse = Prisma.UserAvatarAssetGetPayload<{ select: typeof AVATAR_SELECT }>;
+type AvatarInternalResponse = Prisma.UserAvatarAssetGetPayload<{ select: typeof AVATAR_SELECT }>;
+type AvatarResponse = Prisma.UserAvatarAssetGetPayload<{ select: typeof AVATAR_PUBLIC_SELECT }>;
 type PreferencesResponse = Prisma.UserPreferencesGetPayload<{ select: typeof PREFERENCES_SELECT }>;
 type PermissionResponse = {
   canFinancial: boolean;
@@ -497,7 +502,7 @@ export class UsersService {
       if (current.avatarAsset) {
         await this.storage.delete(current.avatarAsset.storageKey);
       }
-      return created;
+      return this.toAvatarResponse(created);
     } catch (error: unknown) {
       await this.storage.delete(storageKey);
       throw error;
@@ -517,7 +522,7 @@ export class UsersService {
       );
     }
     const stored = await this.storage.get(avatar.storageKey);
-    return { ...avatar, contentBase64: stored.content.toString('base64') };
+    return { ...this.toAvatarResponse(avatar), contentBase64: stored.content.toString('base64') };
   }
 
   async deleteAvatar(userId: string, context: UserAuditContext): Promise<{ deleted: true }> {
@@ -729,6 +734,12 @@ export class UsersService {
 
   private avatarExtension(file: UploadedAvatarFile): 'png' | 'jpg' {
     return file.mimetype === 'image/png' ? 'png' : 'jpg';
+  }
+
+  private toAvatarResponse(avatar: AvatarInternalResponse): AvatarResponse {
+    const { storageKey, ...safe } = avatar;
+    void storageKey;
+    return safe;
   }
 
   private sanitizeName(name: string): string {

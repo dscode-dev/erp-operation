@@ -266,49 +266,48 @@ function TemplateModelCard({
   const active = template?.isActive ?? false;
 
   return (
-    <article className="group relative overflow-hidden rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-card)] p-5 shadow-[var(--shadow-card)] transition duration-200 hover:-translate-y-1 hover:border-[var(--color-primary)]/40 hover:shadow-[var(--shadow-floating)]">
-      <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[var(--color-primary)]/80 via-[var(--color-secondary)]/60 to-transparent opacity-70" />
+    <article className="group rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 transition duration-200 hover:border-[var(--color-primary)]/35 hover:bg-[var(--color-muted)]/20">
       <div className="flex items-start gap-3">
-        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[var(--color-primary)]/10 text-[var(--color-primary)] transition group-hover:scale-105">
-          <Icon className="h-5 w-5" />
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-muted)]/40 text-[var(--color-muted-foreground)] transition group-hover:border-[var(--color-primary)]/30 group-hover:text-[var(--color-primary)]">
+          <Icon className="h-4 w-4" />
         </span>
         <div className="min-w-0 flex-1">
-          <h3 className="truncate text-base font-semibold">{template?.name || card.label}</h3>
+          <h3 className="truncate text-sm font-semibold">{template?.name || card.label}</h3>
           <p className="mt-1 line-clamp-2 text-sm text-[var(--color-muted-foreground)]">{card.description}</p>
         </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap gap-2">
+      <div className="mt-4 flex flex-wrap gap-1.5">
         <Badge tone={active ? "success" : "muted"}>{active ? "Ativo" : "Inativo"}</Badge>
         <Badge tone={template?.requiresSignature ? "info" : "muted"}>
-          {template?.requiresSignature ? "Assinatura obrigatória" : "Assinatura opcional"}
+          {template?.requiresSignature ? "Ass. obrigatória" : "Ass. opcional"}
         </Badge>
-        <Badge tone={template?.signatureMode === "FIXED" || template?.signatureMode === "HYBRID" ? "primary" : "muted"}>
-          {signature ? `Fixa: ${signature.name}` : SIGNATURE_MODE_LABEL[template?.signatureMode ?? "NONE"]}
+        <Badge tone={signature ? "primary" : "muted"}>
+          {signature ? `Fixa · ${signature.name}` : SIGNATURE_MODE_LABEL[template?.signatureMode ?? "NONE"]}
         </Badge>
-        {template?.isDefault && <Badge tone="primary">Template padrão</Badge>}
+        {template?.isDefault && <Badge tone="primary">Padrão</Badge>}
       </div>
 
-      <dl className="mt-5 grid gap-2 text-sm">
+      <dl className="mt-4 grid gap-2 text-sm">
         <Meta label="Tipo" value={DOCUMENT_KIND_LABEL[card.type]} />
         <Meta label="Atualizado" value={template?.updatedAt ? formatDate(template.updatedAt) : "Ainda não configurado"} />
       </dl>
 
-      <div className="mt-5 grid gap-2">
-        <button type="button" onClick={onModelPreview} className="inline-flex h-9 items-center justify-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 text-sm font-medium transition hover:bg-[var(--color-muted)]">
+      <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-[var(--color-border)] pt-3">
+        <button type="button" onClick={onModelPreview} className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[var(--radius-md)] border border-[var(--color-border)] px-2.5 text-xs font-medium transition hover:bg-[var(--color-muted)]">
           <Eye className="h-4 w-4" />
-          Visualizar modelo
+          Modelo
         </button>
-        <button type="button" onClick={onRealPreview} className="inline-flex h-9 items-center justify-center gap-2 rounded-[var(--radius-md)] bg-[var(--color-primary)] px-3 text-sm font-medium text-[var(--color-primary-foreground)] transition hover:opacity-90">
+        <button type="button" onClick={onRealPreview} className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[var(--radius-md)] border border-[var(--color-primary)]/30 px-2.5 text-xs font-medium text-[var(--color-primary)] transition hover:bg-[var(--color-primary)]/10">
           <FileText className="h-4 w-4" />
-          Pré-visualizar com dados reais
+          Dados reais
         </button>
         <button
           type="button"
           onClick={onConfigure}
           disabled={!canEdit}
           title={!canEdit ? "Somente OWNER pode configurar modelos." : undefined}
-          className="inline-flex h-9 items-center justify-center gap-2 rounded-[var(--radius-md)] bg-[var(--color-foreground)] px-3 text-sm font-medium text-[var(--color-background)] transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+          className="ml-auto inline-flex h-8 items-center justify-center gap-1.5 rounded-[var(--radius-md)] px-2.5 text-xs font-medium text-[var(--color-muted-foreground)] transition hover:bg-[var(--color-muted)] hover:text-[var(--color-foreground)] disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Settings2 className="h-4 w-4" />
           Configurar
@@ -388,6 +387,12 @@ function TemplatePreviewDrawer({
               <Meta label="Atualizado em" value={template?.updatedAt ? formatDate(template.updatedAt) : "—"} />
             </dl>
 
+            <div className="mt-4 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-muted)]/30 p-3 text-sm text-[var(--color-muted-foreground)]">
+              {mode === "model"
+                ? "Este preview mostra a estrutura do modelo, placeholders oficiais e configurações visuais. Ele não usa Operation, cliente ou equipamento reais."
+                : "Este preview usa uma Operation real pelo mesmo Document Engine utilizado na emissão do PDF. Se houver assinatura coletada na execução, ela deve aparecer aqui e no PDF renderizado."}
+            </div>
+
             <div className="mt-4 flex flex-wrap gap-2">
               <button
                 type="button"
@@ -412,41 +417,41 @@ function TemplatePreviewDrawer({
           </section>
 
           {mode === "real" && (
-          <section className="space-y-3 rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <h3 className="text-sm font-semibold">Fonte real do preview</h3>
-                <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
-                  Selecione uma Operation real. Preview, renderização e download usam `/documents/operations/:operationId/:type`.
-                </p>
+            <section className="space-y-3 rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold">Fonte real do preview</h3>
+                  <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
+                    Selecione uma Operation real. Preview, renderização e download usam `/documents/operations/:operationId/:type`.
+                  </p>
+                </div>
+                <select
+                  value={selectedOperation?.id ?? ""}
+                  onChange={(event) => setOperationId(event.target.value)}
+                  disabled={operationsLoading || operations.length === 0}
+                  className="h-9 min-w-[280px] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm outline-none focus:border-[var(--color-primary)] disabled:opacity-60"
+                  aria-label="Operation para preview oficial"
+                >
+                  {operations.length === 0 ? (
+                    <option value="">Nenhuma Operation disponível</option>
+                  ) : (
+                    operations.map((operation) => (
+                      <option key={operation.id} value={operation.id}>
+                        OP-{String(operation.number).padStart(6, "0")} · {operation.customer?.name ?? "Cliente"} · {operation.equipment?.name ?? "sem equipamento"}
+                      </option>
+                    ))
+                  )}
+                </select>
               </div>
-              <select
-                value={selectedOperation?.id ?? ""}
-                onChange={(event) => setOperationId(event.target.value)}
-                disabled={operationsLoading || operations.length === 0}
-                className="h-9 min-w-[280px] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm outline-none focus:border-[var(--color-primary)] disabled:opacity-60"
-                aria-label="Operation para preview oficial"
-              >
-                {operations.length === 0 ? (
-                  <option value="">Nenhuma Operation disponível</option>
-                ) : (
-                  operations.map((operation) => (
-                    <option key={operation.id} value={operation.id}>
-                      OP-{String(operation.number).padStart(6, "0")} · {operation.customer?.name ?? "Cliente"} · {operation.equipment?.name ?? "sem equipamento"}
-                    </option>
-                  ))
-                )}
-              </select>
-            </div>
-            {selectedOperation && (
-              <div className="grid gap-2 text-sm sm:grid-cols-4">
-                <Meta label="Cliente" value={selectedOperation.customer?.name ?? "—"} />
-                <Meta label="Equipamento" value={selectedOperation.equipment?.name ?? "—"} />
-                <Meta label="Operador" value={selectedOperation.operator?.name ?? "—"} />
-                <Meta label="Status" value={selectedOperation.status} />
-              </div>
-            )}
-          </section>
+              {selectedOperation && (
+                <div className="grid gap-2 text-sm sm:grid-cols-4">
+                  <Meta label="Cliente" value={selectedOperation.customer?.name ?? "—"} />
+                  <Meta label="Equipamento" value={selectedOperation.equipment?.name ?? "—"} />
+                  <Meta label="Operador" value={selectedOperation.operator?.name ?? "—"} />
+                  <Meta label="Status" value={selectedOperation.status} />
+                </div>
+              )}
+            </section>
           )}
 
           <section className="min-w-0 rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-card)] p-3">

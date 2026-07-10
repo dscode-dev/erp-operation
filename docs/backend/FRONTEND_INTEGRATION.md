@@ -1,5 +1,53 @@
 # Frontend Integration
 
+## Product Backlog Closure 05 — assinatura em preview real e PDF
+
+O frontend não precisa mudar contratos para exibir assinatura executada.
+
+Regras de consumo:
+
+- Preview de modelo continua usando `GET /documents/templates/:templateId/preview`; ele é estrutural
+  e não deve exibir assinatura de Operation.
+- Preview com dados reais deve usar `GET /documents/operations/:operationId/:type/preview`.
+- Render/download devem usar o fluxo oficial do `DocumentViewer`.
+- Para documentos `WORK_ORDER`, `TECHNICAL_REPORT`, `REPORT` e `RECEIPT`, uma Operation assinada em
+  campo retorna a assinatura coletada dentro de `SignatureComponent.signatures[].image`.
+- O PDF renderizado usa o mesmo blueprint; se a assinatura aparece no preview real, ela deve aparecer
+  no PDF emitido.
+
+Semântica:
+
+- Assinatura fixa: cadastro reutilizável do domínio Signature, configurada no template.
+- Assinatura coletada: artifact da execução da Operation, normalmente capturada no Operator PWA.
+- Assinatura híbrida: combina assinatura fixa e área/assinatura coletada quando configurado.
+
+O frontend não deve converter assinatura coletada em assinatura fixa nem armazenar nova imagem de
+assinatura fora da Operation.
+
+Achado de integração: a rota Platform `/reports/visita` permanece visual-only e não persiste a
+assinatura. Para aparecer em preview/PDF real, a assinatura precisa chegar ao backend em
+`Operation.signatureData`.
+
+## Product Backlog Closure 05.1 — Platform Visit Report consolidated
+
+O achado acima foi resolvido: `/reports/visita` agora é Operation-bound.
+
+Fluxo frontend oficial:
+
+1. selecionar uma Operation real;
+2. editar checklist/observações;
+3. anexar fotos PNG/JPEG;
+4. coletar assinatura;
+5. salvar via `PATCH /operations/:id`;
+6. abrir `DocumentViewer` com:
+
+```tsx
+<DocumentViewer source={{ operationId, type: "TECHNICAL_REPORT" }} />
+```
+
+Após salvar, fotos e assinatura entram no `DocumentContext` e aparecem no preview real e no PDF
+renderizado pelo Document Engine.
+
 ## Sprint 21 — Performance and observability integration
 
 Novos endpoints operacionais disponíveis para health/observabilidade:
@@ -2029,3 +2077,23 @@ Assinatura desenhada:
 - canvas gera PNG transparente;
 - o PNG deve ser convertido para `File`;
 - o upload deve convergir no endpoint oficial de assinatura.
+
+## Product Backlog Closure 04 — Avatar e Notification Center
+
+Avatar:
+
+- selecionar arquivo;
+- recortar/reposicionar no cliente;
+- gerar PNG 512×512;
+- enviar por `POST /users/avatar`;
+- chamar refresh oficial da sessão (`GET /users/me`);
+- renderizar avatar usando `avatarAssetId` + `GET /users/avatar/:id`.
+
+Notifications:
+
+- contador do sino: `GET /notifications/unread-count`;
+- painel: `GET /notifications?limit=8`;
+- uma lida: `PATCH /notifications/:id/read`;
+- todas lidas: `PATCH /notifications/read-all`;
+- `actionUrl` deve ser tratado como rota interna e usado apenas se iniciar com `/`;
+- refresh V1: load no shell, focus/visibility e polling moderado de 60s quando visível.

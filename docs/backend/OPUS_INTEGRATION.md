@@ -1,5 +1,46 @@
 # OPUS Frontend Integration
 
+## Product Backlog Closure 05 — Reports and signature consistency
+
+Use somente `DocumentViewer` para modelo, preview real, renderização e download.
+
+Matriz de preview:
+
+| Ação UI | Endpoint | Dados reais? | Assinatura de execução? |
+|---|---|---:|---:|
+| Visualizar modelo | `GET /documents/templates/:templateId/preview` | Não | Não |
+| Preview com Operation | `GET /documents/operations/:operationId/:type/preview` | Sim | Sim, quando aplicável |
+| Renderizar documento | `POST /documents/operations/:operationId/:type/render` | Sim | Sim, quando aplicável |
+| Download | `GET /documents/:documentId/download` | Sim | Sim, mesmo blueprint renderizado |
+
+Tipos que aceitam assinatura coletada da Operation:
+
+- `WORK_ORDER`
+- `TECHNICAL_REPORT`
+- `REPORT`
+- `RECEIPT`
+
+O Opus não deve tentar interpretar base64 de assinatura fora do `SignatureComponent`. Renderize a
+imagem somente quando `component.kind === "signature"` e `signature.image` existir.
+
+## Product Backlog Closure 05.1 — Visit evidence workflow
+
+`/reports/visita` deve ser tratado como workflow de evidências de uma Operation real.
+
+Contrato de persistência:
+
+- `PATCH /operations/:id`
+- campos: `observations`, `checklist`, `photos[]`, `signatureData`, `signedAt`.
+
+Contrato de preview/render:
+
+- preview: `GET /documents/operations/:operationId/TECHNICAL_REPORT/preview`;
+- render: `POST /documents/operations/:operationId/TECHNICAL_REPORT/render`;
+- download: `GET /documents/:documentId/download`.
+
+Fotos aparecem no blueprint como `component.kind === "image"` e, quando autorizadas/resolvidas pelo
+backend, possuem `component.image.contentBase64`. Não usar object URLs como fonte documental.
+
 ## Sprint 21 — Performance notes for Opus
 
 Nenhum endpoint de negócio foi alterado. O Opus deve continuar usando os contratos oficiais já
@@ -1669,3 +1710,16 @@ Assinaturas:
 - campo de imagem público: `hasImage`;
 - não existe `imageStorageKey` no contrato público;
 - desenho livre deve virar PNG e ser enviado ao mesmo `POST /signatures/:id/upload`.
+
+## Product Backlog Closure 04 — Avatar Crop e Notifications
+
+Frontend deve usar:
+
+- `POST /users/avatar` para persistir PNG final já recortado;
+- `GET /users/me` após upload/remove para sincronizar shell;
+- `GET /users/avatar/:id` para render autenticado;
+- `GET /notifications/unread-count` para badge;
+- `GET /notifications` para painel;
+- `PATCH /notifications/:id/read` e `/notifications/read-all` para estados reais.
+
+Não usar storage keys, AuditLog, notificações locais fake ou URLs externas.

@@ -397,7 +397,24 @@ function ComponentPreview({ component }: { component: DocumentComponent }) {
     );
   }
   if (component.kind === "image") {
-    return <div className="rounded-md border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">Imagem protegida · {component.mimeType} · {formatBytes(component.fileSize)}</div>;
+    return (
+      <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <span className="font-medium text-slate-700">{component.caption ?? "Evidência fotográfica"}</span>
+          <span>{component.mimeType} · {formatBytes(component.fileSize)}</span>
+        </div>
+        {component.image ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={`data:${component.image.mimeType};base64,${component.image.contentBase64}`}
+            alt={component.caption ?? "Evidência fotográfica"}
+            className="max-h-72 w-full rounded object-contain"
+          />
+        ) : (
+          <div>Imagem protegida indisponível no preview.</div>
+        )}
+      </div>
+    );
   }
   return <p className="whitespace-pre-wrap text-sm leading-relaxed">{("text" in component ? component.text : "") || "—"}</p>;
 }

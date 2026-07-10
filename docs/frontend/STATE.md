@@ -1,5 +1,42 @@
 # STATE — Frontend
 
+## Product Backlog Closure 05 — Reports visual refinement and document consistency
+
+Status: concluída em 10 de julho de 2026.
+
+Correções e refinamentos:
+
+- `/reports` teve os cards de modelos refinados para layout mais compacto, com ações discretas e
+  menos peso visual.
+- O drawer explicita a diferença entre preview estrutural de modelo e preview com dados reais.
+- Preview de modelo continua usando `DocumentViewer source={{ templateId }}`.
+- Preview real/render/download continuam usando `DocumentViewer source={{ operationId, type }}`.
+- Nenhum preview local, `DocumentPaper` ou fallback visual foi reintroduzido.
+- O frontend passou a receber assinatura coletada da execução pelo mesmo `SignatureComponent` usado
+  pelo PDF.
+- Achado então pendente: `/reports/visita` era visual-only. Resolvido na Closure 05.1 abaixo.
+
+Validação:
+
+- `frontend npm run build`: passou.
+- `frontend npm run lint`: passou com 2 warnings pré-existentes fora do escopo.
+
+## Product Backlog Closure 05.1 — Platform Visit Report consolidated
+
+Status: concluída em 10 de julho de 2026.
+
+- `/reports/visita` deixou de ser visual-only.
+- A rota agora seleciona uma Operation real e persiste evidências por `PATCH /operations/:id`.
+- Checklist, observações, fotos e assinatura passam a pertencer à Operation.
+- O preview usa `DocumentViewer source={{ operationId, type: "TECHNICAL_REPORT" }}`.
+- Não há PDF local, object URL persistente ou modelo frontend paralelo.
+- Fotos persistidas aparecem no `DocumentViewer` quando o backend resolve a imagem no blueprint.
+
+Validação:
+
+- `frontend npm run lint`: passou com 2 warnings pré-existentes.
+- `frontend npm run build`: passou.
+
 ## Sprint 23 — V1 Product Completion & End-to-End Workflow Closure
 
 Status: parcial/concluída em 10 de julho de 2026.
@@ -706,6 +743,15 @@ Validação:
 
 - `npm run lint` passou com 2 warnings preexistentes;
 - `npm run build` passou.
+
+## Product Backlog Closure 04 — Avatar e Notifications
+
+- `/profile` agora usa crop/reposition antes do upload de avatar;
+- avatar final enviado ao backend é PNG 512×512;
+- shell/topbar usa componente compartilhado de avatar e reflete `avatarAssetId` da sessão;
+- Notification Bell da Platform consome endpoints reais;
+- Notification Bell do Operator consome unread/list/read-all reais;
+- não há estado local fake de notificações.
 
 ## Document Semantics Closure — explicit preview modes and Laudo type
 

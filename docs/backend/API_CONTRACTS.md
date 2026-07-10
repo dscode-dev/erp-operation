@@ -1,5 +1,90 @@
 # API Contracts
 
+## Product Backlog Closure 05 — Document preview/render consistency
+
+Contratos HTTP preservados. Nenhum endpoint novo foi criado e nenhum payload público obrigatório foi
+alterado.
+
+Impacto nos contratos existentes do Document Engine:
+
+- `GET /documents/operations/:operationId/:type/preview`
+- `POST /documents/operations/:operationId/:type/render`
+- `GET /documents/:documentId/preview`
+- `POST /documents/:documentId/render`
+- `GET /documents/:documentId/download`
+
+Quando a Operation possuir assinatura de execução válida (`signatureData` + `signedAt`) e o tipo
+documental aceitar assinatura operacional, o blueprint retornará um componente:
+
+```json
+{
+  "kind": "signature",
+  "mode": "COLLECTED",
+  "signatures": [
+    {
+      "id": "collected-signature",
+      "role": "collected",
+      "label": "Assinatura do cliente/responsável",
+      "name": null,
+      "title": null,
+      "signedAt": "2026-07-10T12:00:00.000Z",
+      "caption": "Assinatura coletada na execução",
+      "image": {
+        "mimeType": "image/png",
+        "fileSize": 1024,
+        "contentBase64": "..."
+      }
+    }
+  ]
+}
+```
+
+Tipos com assinatura operacional automática quando há execução assinada:
+
+- `WORK_ORDER`
+- `TECHNICAL_REPORT`
+- `REPORT`
+- `RECEIPT`
+
+`QUOTE`, `BUDGET`, `PMOC` e `TECHNICAL_OPINION` continuam dependendo apenas da configuração
+documental do template.
+
+`Operation.signatureData` na criação continua sendo opcional, mas quando informado deve ser
+`data:image/png;base64,...` ou `data:image/jpeg;base64,...`; binários inválidos retornam
+`400 OPERATION_PHOTO_INVALID`.
+
+## Product Backlog Closure 05.1 — Operation evidence update
+
+`PATCH /operations/:id` foi estendido, sem novo domínio, para persistir evidências oficiais de uma
+Operation já existente.
+
+Payload adicional opcional:
+
+```json
+{
+  "observations": "Serviço executado conforme checklist.",
+  "checklist": [
+    { "label": "Teste de funcionamento", "done": true, "note": "Operação normal" }
+  ],
+  "signatureData": "data:image/png;base64,...",
+  "signedAt": "2026-07-10T12:00:00.000Z",
+  "photos": [
+    {
+      "dataUrl": "data:image/jpeg;base64,...",
+      "caption": "Condensadora após manutenção"
+    }
+  ]
+}
+```
+
+Regras:
+
+- `signatureData` aceita apenas PNG/JPEG data URL válido.
+- `photos[].dataUrl` aceita apenas PNG/JPEG data URL válido.
+- Fotos são armazenadas via StorageProvider e retornam somente metadados públicos.
+- `storageKey` nunca é retornado.
+- A resposta segue `OperationDetail` existente.
+
 ## Conventions
 
 - Base path: `/api/v1`
@@ -4406,3 +4491,41 @@ Export limits:
 - grava `active=false`;
 - grava `deletedAt=now`;
 - não remove arquivo do storage para preservar histórico.
+
+## Product Backlog Closure 04 — Avatar e Notifications
+
+`POST /api/v1/users/avatar` retorna metadados públicos sem `storageKey`.
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "1f3f8e65-6d6e-40cc-9a6b-fd8e3d68e6c1",
+    "mimeType": "image/png",
+    "originalFileName": "avatar-1783700000000.png",
+    "fileSize": 18432,
+    "createdAt": "2026-07-10T17:00:00.000Z"
+  }
+}
+```
+
+### GET `/api/v1/notifications`
+
+Query: `page`, `limit` máximo 50, `unread`, `type`.
+
+### GET `/api/v1/notifications/unread-count`
+
+```json
+{ "success": true, "data": { "count": 3 } }
+```
+
+### PATCH `/api/v1/notifications/:id/read`
+
+Marca como lida apenas notificação do usuário autenticado. Cross-user retorna
+`NOTIFICATION_NOT_FOUND`.
+
+### PATCH `/api/v1/notifications/read-all`
+
+```json
+{ "success": true, "data": { "updated": 3 } }
+```

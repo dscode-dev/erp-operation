@@ -12,6 +12,8 @@ export const OPERATION_AUDIT_ACTIONS = {
 export const MAX_OPERATION_PHOTOS = 16;
 export const MAX_OPERATION_PHOTO_SIZE_BYTES = 5 * 1024 * 1024;
 export const OPERATION_PHOTO_MIME_TYPES = ['image/png', 'image/jpeg'] as const;
+export const MAX_OPERATION_SIGNATURE_SIZE_BYTES = 2 * 1024 * 1024;
+export const OPERATION_SIGNATURE_MIME_TYPES = ['image/png', 'image/jpeg'] as const;
 
 /** Document number prefixes per produced document type. */
 export const OPERATION_DOCUMENT_PREFIX: Record<string, string> = {

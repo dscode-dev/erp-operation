@@ -14,6 +14,7 @@ import { buildPaginatedResponse } from '../../shared/types/pagination.types';
 import { LifecyclePublisher } from '../asset-lifecycle/lifecycle-publisher.service';
 import { PrismaService } from '../database/prisma.service';
 import { MaintenancePlanningService } from '../maintenance-planning/maintenance-planning.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import type {
   AssignmentNotesDto,
   CreateAssignmentDto,
@@ -63,6 +64,7 @@ export class AssignmentsService {
     private readonly prisma: PrismaService,
     private readonly lifecycle: LifecyclePublisher,
     private readonly maintenance: MaintenancePlanningService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async list(query: ListAssignmentsQueryDto, actor: AuthenticatedUser): Promise<unknown> {
@@ -345,6 +347,7 @@ export class AssignmentsService {
       },
       context,
     );
+    await this.notifications.notifyAssignmentAssignedTx(tx, assignment.id);
     return { id: assignment.id };
   }
 
@@ -425,6 +428,12 @@ export class AssignmentsService {
       if (config.syncOperationCompletion) {
         await this.lifecycle.publishOperationCompletedTx(tx, assignment.operationId, actor.id, context);
         await this.maintenance.syncOperationCompletedTx(tx, assignment.operationId, actor.id, context);
+      }
+      if (config.status === AssignmentStatus.STARTED) {
+        await this.notifications.notifyAssignmentStartedTx(tx, assignment.id);
+      }
+      if (config.status === AssignmentStatus.COMPLETED) {
+        await this.notifications.notifyAssignmentCompletedTx(tx, assignment.id);
       }
       return tx.assignment.findUniqueOrThrow({ where: { id }, include: ASSIGNMENT_INCLUDE });
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });

@@ -252,6 +252,12 @@ export class DocumentEngineService {
               blueprintVersion: blueprint.version,
               pageCount: pdf.pageCount,
               generatedAt: blueprint.metadata.generatedAt,
+              sourceKind: blueprint.metadata.sourceKind ?? (document.budgetId ? 'budget' : 'operation'),
+              sourceId: blueprint.metadata.sourceId ?? document.budgetId ?? document.operationId ?? document.id,
+              templateId: blueprint.metadata.templateId ?? null,
+              templateUpdatedAt: blueprint.metadata.templateUpdatedAt ?? null,
+              documentType: blueprint.metadata.documentType,
+              documentNumber: blueprint.metadata.documentNumber,
             },
           },
         });

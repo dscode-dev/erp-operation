@@ -79,6 +79,10 @@ export class DocumentBuilderService {
         documentId: document.id,
         documentType: type,
         documentNumber: document.number,
+        sourceKind: 'operation',
+        sourceId: operation.id,
+        templateId: context.template?.id ?? null,
+        templateUpdatedAt: context.template?.updatedAt ? new Date(context.template.updatedAt).toISOString() : null,
         generatedAt,
         locale: 'pt-BR',
         timezone: settings.timezone,
@@ -119,10 +123,14 @@ export class DocumentBuilderService {
     return {
       version: '1.0',
       metadata: {
-        operationId: template.id,
+        operationId: null,
         documentId: null,
         documentType: template.type,
         documentNumber: placeholders.documentNumber,
+        sourceKind: 'template',
+        sourceId: template.id,
+        templateId: template.id,
+        templateUpdatedAt: new Date(template.updatedAt).toISOString(),
         generatedAt,
         locale: 'pt-BR',
         timezone: settings.timezone,
@@ -165,9 +173,14 @@ export class DocumentBuilderService {
       version: '1.0',
       metadata: {
         operationId: budget.operationId ?? budget.id,
+        budgetId: budget.id,
         documentId: budget.document?.id ?? null,
         documentType: DocumentTemplateType.BUDGET,
         documentNumber: number,
+        sourceKind: 'budget',
+        sourceId: budget.id,
+        templateId: context.template?.id ?? null,
+        templateUpdatedAt: context.template?.updatedAt ? new Date(context.template.updatedAt).toISOString() : null,
         generatedAt,
         locale: 'pt-BR',
         timezone: settings.timezone,
@@ -332,7 +345,7 @@ export class DocumentBuilderService {
       this.materialsSection(operation),
       this.observationSection(operation, 'Diagnóstico e observações da visita'),
     ].filter((section): section is DocumentSection => Boolean(section));
-    if (operation.photos.length > 0) sections.push(this.photosSection(operation, 'Evidências da visita'));
+    if (operation.photos.length > 0) sections.push(this.photosSection(context, 'Evidências da visita'));
     return sections;
   }
 
@@ -513,7 +526,7 @@ export class DocumentBuilderService {
     const { operation } = context;
     const sections: DocumentSection[] = [];
     if (context.configuration.type !== DocumentTemplateType.TECHNICAL_REPORT && operation.photos.length > 0) {
-      sections.push(this.photosSection(operation, 'Evidências fotográficas'));
+      sections.push(this.photosSection(context, 'Evidências fotográficas'));
     }
     if (operation.documents.length > 0) {
       sections.push({
@@ -693,7 +706,8 @@ export class DocumentBuilderService {
     };
   }
 
-  private photosSection(operation: DocumentContext['operation'], title: string): DocumentSection {
+  private photosSection(context: DocumentContext, title: string): DocumentSection {
+    const { operation } = context;
     return {
       id: `photos-${this.slug(title)}`,
       title,
@@ -704,9 +718,22 @@ export class DocumentBuilderService {
         caption: photo.caption ? this.clean(photo.caption) : null,
         mimeType: photo.mimeType,
         fileSize: photo.fileSize,
+        image: this.imageForPhoto(context, photo.id),
         keepTogether: true,
       })),
     };
+  }
+
+  private imageForPhoto(context: DocumentContext, photoId: string): { mimeType: string; fileSize: number; contentBase64: string } | null {
+    const photo = context.operation.photos.find((item) => item.id === photoId);
+    const resolved = photo ? context.assets.images.find((image) => image.storageKey === photo.storageKey) : null;
+    return resolved
+      ? {
+          mimeType: resolved.mimeType,
+          fileSize: resolved.fileSize,
+          contentBase64: resolved.contentBase64,
+        }
+      : null;
   }
 
   private purposeTitle(type: DocumentTemplateType): string {
@@ -969,12 +996,20 @@ export class DocumentBuilderService {
       signatures.push({
         id: 'collected-signature',
         role: 'collected',
-        label: signature.collectedSignature.label,
-        name: null,
-        title: null,
+        label: this.clean(signature.collectedSignature.label),
+        name: signature.collectedSignature.name ? this.clean(signature.collectedSignature.name) : null,
+        title: signature.collectedSignature.title ? this.clean(signature.collectedSignature.title) : null,
         signedAt: signature.collectedSignature.signedAt,
-        caption: 'Assinatura coletada em campo',
-        image: null,
+        caption: signature.collectedSignature.caption
+          ? this.clean(signature.collectedSignature.caption)
+          : 'Assinatura coletada em campo',
+        image: signature.collectedSignature.image
+          ? {
+              mimeType: signature.collectedSignature.image.mimeType,
+              fileSize: signature.collectedSignature.image.fileSize,
+              contentBase64: signature.collectedSignature.image.contentBase64,
+            }
+          : null,
       });
     }
 

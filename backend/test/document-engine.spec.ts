@@ -5,6 +5,8 @@ import type { DocumentBlueprint } from '../src/modules/document-engine/blueprint
 import { LayoutEngine } from '../src/modules/document-engine/layout/layout-engine.service';
 import { DocumentMeasureService } from '../src/modules/document-engine/measurement/document-measure.service';
 import { DocumentBuilderService } from '../src/modules/document-engine/builder/document-builder.service';
+import { DocumentContextService } from '../src/modules/document-engine/context/document-context.service';
+import { OperationsService } from '../src/modules/operations/operations.service';
 
 const ONE_PIXEL_PNG =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=';
@@ -241,6 +243,140 @@ describe('DocumentEngine foundation', () => {
     expect(opinionSectionIds).toContain('technical-opinion-object');
     expect(opinionSectionIds).toContain('technical-opinion-conclusion');
     expect(opinionSectionIds).not.toEqual(reportSectionIds);
+  });
+
+  it('hydrates collected execution signatures into the official document context', async () => {
+    const now = new Date('2026-07-10T12:00:00.000Z');
+    const operation = (operationContext(DocumentTemplateType.WORK_ORDER) as unknown as { operation: Record<string, unknown> }).operation;
+    operation.signatureData = `data:image/png;base64,${ONE_PIXEL_PNG}`;
+    operation.signedAt = now;
+    operation.documents = [];
+
+    const context = new DocumentContextService(
+      {
+        operation: {
+          findUnique: jest.fn().mockResolvedValue(operation),
+        },
+      } as never,
+      {
+        getConfigurationForType: jest.fn().mockResolvedValue({
+          type: DocumentTemplateType.WORK_ORDER,
+          organization: {
+            legalName: 'ERP Operation LTDA',
+            tradeName: 'Orbit',
+            cnpj: '00.000.000/0001-00',
+            email: 'contato@orbit.local',
+            phone: '+55 81 99999-9999',
+            city: 'Recife',
+            state: 'PE',
+            primaryColor: '#111827',
+            secondaryColor: '#2563EB',
+          },
+          settings: { timezone: 'America/Recife', currency: 'BRL' },
+          defaultTemplate: {
+            id: 'template-work-order',
+            organizationId: 'organization-id',
+            type: DocumentTemplateType.WORK_ORDER,
+            name: 'OS padrão',
+            headerContent: '',
+            footerContent: '',
+            observations: '',
+            isDefault: true,
+            isSystem: true,
+            isActive: true,
+            requiresSignature: false,
+            signatureMode: 'NONE',
+            signatureId: null,
+            createdAt: now,
+            updatedAt: now,
+            signature: null,
+          },
+        }),
+      } as never,
+      {} as never,
+    );
+
+    const created = await context.create('operation-id', DocumentTemplateType.WORK_ORDER);
+    const builder = new DocumentBuilderService({} as never);
+    const blueprint = (builder as unknown as { buildFromContext: (ctx: unknown) => DocumentBlueprint }).buildFromContext(created);
+    const signature = blueprint.sections
+      .flatMap((section) => section.components)
+      .find((component) => component.kind === 'signature');
+
+    expect(created.signature.requiresSignature).toBe(true);
+    expect(created.signature.signatureMode).toBe('COLLECTED');
+    expect(created.signature.collectedSignature?.image?.contentBase64).toBe(ONE_PIXEL_PNG);
+    expect(signature).toBeDefined();
+    expect(signature && 'signatures' in signature ? signature.signatures[0]?.image?.contentBase64 : null).toBe(ONE_PIXEL_PNG);
+  });
+
+  it('hydrates persisted operation photos into image blueprint components', async () => {
+    const now = new Date('2026-07-10T12:00:00.000Z');
+    const operation = (operationContext(DocumentTemplateType.TECHNICAL_REPORT) as unknown as { operation: Record<string, unknown> }).operation;
+    operation.photos = [
+      {
+        id: 'photo-id',
+        operationId: operation.id,
+        storageKey: 'operations/op/photos/photo.png',
+        caption: 'Condensadora antes da manutenção',
+        mimeType: 'image/png',
+        fileSize: Buffer.from(ONE_PIXEL_PNG, 'base64').length,
+        createdAt: now,
+      },
+    ];
+    operation.documents = [];
+
+    const context = new DocumentContextService(
+      {
+        operation: {
+          findUnique: jest.fn().mockResolvedValue(operation),
+        },
+      } as never,
+      {
+        getConfigurationForType: jest.fn().mockResolvedValue({
+          type: DocumentTemplateType.TECHNICAL_REPORT,
+          organization: {
+            legalName: 'ERP Operation LTDA',
+            tradeName: 'Orbit',
+            cnpj: '00.000.000/0001-00',
+            email: 'contato@orbit.local',
+            phone: '+55 81 99999-9999',
+            city: 'Recife',
+            state: 'PE',
+            primaryColor: '#111827',
+            secondaryColor: '#2563EB',
+          },
+          settings: { timezone: 'America/Recife', currency: 'BRL' },
+          defaultTemplate: null,
+        }),
+      } as never,
+      {
+        resolveDocumentImage: jest.fn().mockResolvedValue({
+          storageKey: 'operations/op/photos/photo.png',
+          mimeType: 'image/png',
+          fileSize: Buffer.from(ONE_PIXEL_PNG, 'base64').length,
+          contentBase64: ONE_PIXEL_PNG,
+        }),
+      } as never,
+    );
+
+    const created = await context.create('operation-id', DocumentTemplateType.TECHNICAL_REPORT);
+    const builder = new DocumentBuilderService({} as never);
+    const blueprint = (builder as unknown as { buildFromContext: (ctx: unknown) => DocumentBlueprint }).buildFromContext(created);
+    const image = blueprint.sections
+      .flatMap((section) => section.components)
+      .find((component) => component.kind === 'image');
+
+    expect(created.assets.images[0]?.contentBase64).toBe(ONE_PIXEL_PNG);
+    expect(image).toBeDefined();
+    expect(image && 'image' in image ? image.image?.contentBase64 : null).toBe(ONE_PIXEL_PNG);
+  });
+
+  it('rejects invalid collected signature payloads before persistence', () => {
+    const service = new OperationsService({} as never, {} as never, {} as never, {} as never, {} as never);
+    const normalize = (service as unknown as { normalizeSignatureData: (value?: string) => string | null }).normalizeSignatureData.bind(service);
+
+    expect(() => normalize(`data:image/png;base64,${Buffer.from('bad').toString('base64')}`)).toThrow('Signature binary is invalid');
   });
 });
 

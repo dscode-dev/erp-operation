@@ -1,5 +1,5 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { AssetLifecycleEventType, BudgetHistoryAction, BudgetStatus, DocumentTemplateType, Prisma } from '@prisma/client';
+import { AssetLifecycleEventType, BudgetHistoryAction, BudgetStatus, DocumentTemplateType, NotificationType, Prisma } from '@prisma/client';
 import { BUDGET_AUDIT_ACTIONS, BUDGET_RESOURCE } from '../../shared/constants/budgets.constants';
 import { ERROR_CODES } from '../../shared/constants/error-codes.constants';
 import { ApplicationException } from '../../shared/exceptions/application.exception';
@@ -7,6 +7,7 @@ import type { AuthenticatedUser } from '../../shared/types/authenticated-user.ty
 import { buildPaginatedResponse, type PaginatedResponse } from '../../shared/types/pagination.types';
 import { LifecyclePublisher } from '../asset-lifecycle/lifecycle-publisher.service';
 import { PrismaService } from '../database/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PricingService } from '../pricing/pricing.service';
 import type { BudgetDecisionDto, BudgetItemInputDto, CreateBudgetDto, ListBudgetsQueryDto, UpdateBudgetDto } from './dto/budget.dto';
 
@@ -73,6 +74,7 @@ export class BudgetsService {
     private readonly prisma: PrismaService,
     private readonly pricing: PricingService,
     private readonly lifecycle: LifecyclePublisher,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async list(query: ListBudgetsQueryDto): Promise<unknown> {
@@ -267,6 +269,7 @@ export class BudgetsService {
         },
         context,
       );
+      await this.notifications.notifyBudgetDecisionTx(tx, id, NotificationType.BUDGET_APPROVED);
       return budget;
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
@@ -307,6 +310,7 @@ export class BudgetsService {
         },
         context,
       );
+      await this.notifications.notifyBudgetDecisionTx(tx, id, NotificationType.BUDGET_REJECTED);
       return budget;
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }

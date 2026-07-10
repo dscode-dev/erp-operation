@@ -1,5 +1,21 @@
 # ROUTES — Frontend
 
+## Product Backlog Closure 05 — Reports route
+
+- `/reports`: biblioteca de modelos documentais refinada.
+  - **Modelo** abre preview estrutural via `GET /documents/templates/:templateId/preview`.
+  - **Dados reais** abre preview/render/download via Operation real e Document Engine.
+  - O drawer usa `DocumentViewer` para os dois fluxos.
+  - Nenhuma rota nova foi criada.
+
+## Product Backlog Closure 05.1 — Visit Report route
+
+- `/reports/visita`: consolidada como workflow de evidências de Operation real.
+  - seleciona Operation existente;
+  - salva evidências via `PATCH /operations/:id`;
+  - pré-visualiza `TECHNICAL_REPORT` via `DocumentViewer`;
+  - render/download continuam exclusivos do Document Engine.
+
 ## Sprint 23 — V1 product workflow closure
 
 - `/operator/services/[id]`: rota de detalhe de campo refinada.
@@ -349,3 +365,10 @@ Nenhuma rota nova foi criada.
 - `/documentos`: export PDF consome `GET /documents/export` com filtros ativos.
 - `/equipamentos`: export PDF consome `GET /equipments/export` com filtros ativos.
 - `/settings`: gestão de assinaturas usa Drawer, upload e desenho freehand; deletadas não aparecem.
+
+## Product Backlog Closure 04 — route behavior
+
+- `/profile`: seleção de avatar abre recorte antes do upload oficial;
+- shell Platform: sino abre Notification Center real;
+- Operator home/header: sino usa notificações reais;
+- action URLs de notificação navegam apenas para rotas existentes como `/operacoes` e `/budgets`.

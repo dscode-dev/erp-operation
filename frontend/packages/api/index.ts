@@ -40,6 +40,7 @@ export * as inventoryApi from "./inventory";
 export * as pricingApi from "./pricing";
 export * as budgetsApi from "./budgets";
 export * as cepApi from "./cep";
+export * as notificationsApi from "./notifications";
 
 export { isDemoDisabled, DemoUnavailableError } from "./demo";
 export type { DashboardData } from "./dashboard";
@@ -57,3 +58,4 @@ export type { ListSignaturesParams, SignaturePayload } from "./signatures";
 export type { ListAssetLifecycleParams } from "./asset-lifecycle";
 export type { ListAssignmentsParams } from "./assignments";
 export type { ListBudgetsParams } from "./budgets";
+export type { ListNotificationsParams } from "./notifications";

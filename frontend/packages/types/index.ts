@@ -141,10 +141,36 @@ export type ResetPasswordResult = {
 
 export type AvatarMeta = {
   id: string;
-  storageKey: string;
   mimeType: string;
   originalFileName: string;
   fileSize: number;
+  createdAt: string;
+};
+
+/* ============ Notifications ============ */
+
+export type NotificationType =
+  | "ASSIGNMENT_ASSIGNED"
+  | "ASSIGNMENT_REASSIGNED"
+  | "ASSIGNMENT_OVERDUE"
+  | "OPERATION_STARTED"
+  | "OPERATION_COMPLETED"
+  | "BUDGET_APPROVED"
+  | "BUDGET_REJECTED";
+
+export type NotificationSeverity = "INFO" | "SUCCESS" | "WARNING" | "DANGER";
+export type NotificationEntityType = "ASSIGNMENT" | "OPERATION" | "BUDGET" | "MAINTENANCE" | "PMOC";
+
+export type NotificationItem = {
+  id: string;
+  type: NotificationType;
+  severity: NotificationSeverity;
+  title: string;
+  message: string;
+  entityType: NotificationEntityType;
+  entityId: string;
+  actionUrl: string | null;
+  readAt: string | null;
   createdAt: string;
 };
 

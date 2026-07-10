@@ -1,5 +1,38 @@
 # Security
 
+## Product Backlog Closure 05 — execution signature AppSec
+
+Assinatura executada em campo é classificada como artifact da `Operation`, não como assinatura fixa
+reutilizável do domínio `Signature`.
+
+Controles aplicados:
+
+- `Operation.signatureData` aceita apenas data URL PNG/JPEG.
+- O backend valida assinatura por MIME declarado e magic bytes binários.
+- Limite máximo: 2 MiB.
+- A assinatura coletada não é gravada em AuditLog, metadata de lifecycle ou renderMetadata.
+- `DocumentContextService` só injeta assinatura de execução em tipos documentais compatíveis:
+  `WORK_ORDER`, `TECHNICAL_REPORT`, `REPORT` e `RECEIPT`.
+- `DocumentViewer` e PDF consomem a assinatura exclusivamente via blueprint oficial.
+- A assinatura fixa cadastrada continua protegida pelo domínio Signature e StorageProvider.
+
+Essa separação evita confundir uma assinatura de execução pontual com uma credencial visual
+reutilizável da empresa.
+
+## Product Backlog Closure 05.1 — Operation evidence security
+
+`/reports/visita` deixou de persistir estado local e passou a usar `PATCH /operations/:id`.
+
+Controles:
+
+- fotos aceitam apenas PNG/JPEG data URL e são salvas em storage privado;
+- assinatura usa validação PNG/JPEG, magic bytes e limite de 2 MiB;
+- respostas públicas de fotos não retornam `storageKey`;
+- DocumentContext resolve imagens server-side por `DocumentAssetResolver`;
+- audit/lifecycle/renderMetadata não recebem base64;
+- frontend não usa object URL como fonte persistente de documento;
+- RBAC do controller de Operations continua sendo a autoridade.
+
 ## Sprint 21 — Performance and observability AppSec review
 
 Sprint 21 adicionou observabilidade sem expor dados sensíveis.
@@ -1617,3 +1650,21 @@ Signatures:
 - contrato público usa `hasImage` e não expõe `imageStorageKey`;
 - upload e desenho convergem no mesmo endpoint, preservando validação MIME/binária, limite 2 MiB,
   storage UUID e auditoria sem base64/storage key.
+
+## Product Backlog Closure 04 — Avatar e Notifications AppSec
+
+Avatar:
+
+- crop é apenas UX; backend continua autoridade de validação;
+- storage key não é exposta publicamente;
+- upload/delete operam apenas no usuário autenticado;
+- MIME spoofing, extensão inválida e arquivo oversized continuam bloqueados.
+
+Notifications:
+
+- notificações são privadas por `recipientUserId`;
+- list/count/read/read-all usam usuário autenticado;
+- cross-user read retorna `NOTIFICATION_NOT_FOUND`;
+- `eventKey` único previne duplicidade em retries;
+- `actionUrl` é gerada pelo servidor e restrita a rotas internas;
+- não há endpoint público para criação de notificações.

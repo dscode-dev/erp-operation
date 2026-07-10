@@ -1,16 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
-import { Camera, Loader2, Trash2, KeyRound, Check, ShieldCheck, Building2 } from "lucide-react";
+import { Camera, Loader2, Trash2, KeyRound, Check, ShieldCheck, Building2, ZoomIn } from "lucide-react";
 import { PageHeader } from "@platform/components/page-header";
+import { Drawer } from "@erp/ui/drawer";
 import { SectionCard } from "@erp/ui/section-card";
 import { StatusChip } from "@erp/ui/status-chip";
+import { UserAvatar } from "@erp/ui/user-avatar";
 import { useAuth } from "@erp/ui/auth/auth-provider";
 import { usersApi, ApiClientError, type UserTheme } from "@erp/api";
-import { initials } from "@erp/utils";
 import { ROLE_LABEL, ROLE_TONE, PERMISSION_KEYS, PERMISSION_LABEL } from "@platform/user-display";
 
 const THEME_OPTIONS: { value: UserTheme; label: string }[] = [
@@ -83,32 +83,31 @@ export default function ProfilePage() {
 }
 
 function AvatarCard({ name, avatarAssetId, onChanged }: { name: string; avatarAssetId: string | null; onChanged: () => Promise<void> }) {
-  const [src, setSrc] = useState<string | null>(null);
+  const [cropSource, setCropSource] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    setSrc(null);
-    if (!avatarAssetId) return;
-    let active = true;
-    usersApi.getAvatar(avatarAssetId).then((a) => { if (active) setSrc(`data:${a.mimeType};base64,${a.contentBase64}`); }).catch(() => {});
-    return () => { active = false; };
-  }, [avatarAssetId]);
-
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 2 * 1024 * 1024) { setError("Máximo de 2 MiB."); return; }
+    if (!["image/png", "image/jpeg"].includes(file.type)) { setError("Use PNG ou JPG."); return; }
+    if (file.size > 5 * 1024 * 1024) { setError("Imagem original até 5 MiB antes do recorte."); return; }
+    setError(null);
+    setCropSource(file);
+    if (inputRef.current) inputRef.current.value = "";
+  }
+
+  async function uploadCropped(file: File) {
     setBusy(true); setError(null);
     try {
       await usersApi.uploadAvatar(file);
       await onChanged();
+      setCropSource(null);
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Falha no upload.");
     } finally {
       setBusy(false);
-      if (inputRef.current) inputRef.current.value = "";
     }
   }
 
@@ -127,8 +126,8 @@ function AvatarCard({ name, avatarAssetId, onChanged }: { name: string; avatarAs
   return (
     <SectionCard title="Avatar">
       <div className="flex flex-col items-center gap-3">
-        <div className="relative h-24 w-24 rounded-full bg-[var(--color-accent)] grid place-items-center text-white text-2xl font-semibold overflow-hidden">
-          {src ? <Image src={src} alt={name} fill sizes="96px" unoptimized className="object-cover" /> : initials(name)}
+        <div className="relative">
+          <UserAvatar name={name} avatarAssetId={avatarAssetId} size="xl" />
           {busy && <div className="absolute inset-0 grid place-items-center bg-black/40"><Loader2 className="h-5 w-5 animate-spin text-white" /></div>}
         </div>
         {error && <p className="text-[11px] text-[var(--color-danger)]">{error}</p>}
@@ -143,9 +142,148 @@ function AvatarCard({ name, avatarAssetId, onChanged }: { name: string; avatarAs
           )}
         </div>
         <input ref={inputRef} type="file" accept="image/png,image/jpeg" onChange={onFile} className="hidden" aria-label="Enviar avatar" />
-        <p className="text-[11px] text-[var(--color-muted-foreground)]">PNG ou JPG, até 2 MiB.</p>
+        <p className="text-[11px] text-[var(--color-muted-foreground)]">PNG ou JPG. O avatar final será recortado em 512×512 PNG.</p>
       </div>
+      <AvatarCropDrawer
+        file={cropSource}
+        busy={busy}
+        onClose={() => setCropSource(null)}
+        onConfirm={uploadCropped}
+      />
     </SectionCard>
+  );
+}
+
+function AvatarCropDrawer({
+  file,
+  busy,
+  onClose,
+  onConfirm,
+}: {
+  file: File | null;
+  busy: boolean;
+  onClose: () => void;
+  onConfirm: (file: File) => Promise<void>;
+}) {
+  const [src, setSrc] = useState<string | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [imageSize, setImageSize] = useState<{ width: number; height: number } | null>(null);
+  const [dragStart, setDragStart] = useState<{ x: number; y: number; ox: number; oy: number } | null>(null);
+  const imageRef = useRef<HTMLImageElement | null>(null);
+  const cropSize = 288;
+
+  useEffect(() => {
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    setSrc(url);
+    setZoom(1);
+    setOffset({ x: 0, y: 0 });
+    setImageSize(null);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+
+  if (!file || !src) return null;
+
+  function pointer(event: React.PointerEvent<HTMLDivElement>) {
+    return { x: event.clientX, y: event.clientY };
+  }
+
+  async function confirm() {
+    const image = imageRef.current;
+    if (!image) return;
+    const canvas = document.createElement("canvas");
+    canvas.width = 512;
+    canvas.height = 512;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.fillStyle = "transparent";
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const naturalRatio = image.naturalWidth / image.naturalHeight;
+    const baseWidth = naturalRatio >= 1 ? cropSize * naturalRatio : cropSize;
+    const baseHeight = naturalRatio >= 1 ? cropSize : cropSize / naturalRatio;
+    const displayedWidth = baseWidth * zoom;
+    const displayedHeight = baseHeight * zoom;
+    const scale = 512 / cropSize;
+    const dx = ((cropSize - displayedWidth) / 2 + offset.x) * scale;
+    const dy = ((cropSize - displayedHeight) / 2 + offset.y) * scale;
+    ctx.drawImage(image, dx, dy, displayedWidth * scale, displayedHeight * scale);
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png", 0.92));
+    if (!blob) return;
+    await onConfirm(new File([blob], `avatar-${Date.now()}.png`, { type: "image/png" }));
+  }
+
+  return (
+    <Drawer
+      open
+      onClose={onClose}
+      eyebrow="Perfil"
+      title="Recortar avatar"
+      width="max-w-lg"
+      footer={
+        <>
+          <button type="button" onClick={onClose} disabled={busy} className="inline-flex h-9 items-center justify-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 text-sm hover:bg-[var(--color-muted)] disabled:opacity-50">Cancelar</button>
+          <button type="button" onClick={confirm} disabled={busy} className="inline-flex h-9 items-center justify-center gap-2 rounded-[var(--radius-md)] bg-[var(--color-primary)] px-3 text-sm font-medium text-[var(--color-primary-foreground)] disabled:opacity-50">
+            {busy && <Loader2 className="h-4 w-4 animate-spin" />} Confirmar recorte
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-5">
+        <p className="text-sm text-[var(--color-muted-foreground)]">Arraste para reposicionar e ajuste o zoom. Nada será enviado até confirmar.</p>
+        <div
+          className="relative mx-auto h-72 w-72 touch-none overflow-hidden rounded-full border border-[var(--color-border)] bg-[var(--color-muted)]"
+          onPointerDown={(event) => {
+            const p = pointer(event);
+            setDragStart({ x: p.x, y: p.y, ox: offset.x, oy: offset.y });
+            event.currentTarget.setPointerCapture(event.pointerId);
+          }}
+          onPointerMove={(event) => {
+            if (!dragStart) return;
+            const p = pointer(event);
+            setOffset({ x: dragStart.ox + p.x - dragStart.x, y: dragStart.oy + p.y - dragStart.y });
+          }}
+          onPointerUp={() => setDragStart(null)}
+          onPointerCancel={() => setDragStart(null)}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            ref={imageRef}
+            src={src}
+            alt="Prévia do avatar"
+            className="absolute left-1/2 top-1/2 max-w-none select-none"
+            draggable={false}
+            onLoad={(event) => {
+              const image = event.currentTarget;
+              const ratio = image.naturalWidth / image.naturalHeight;
+              setImageSize({
+                width: ratio >= 1 ? cropSize * ratio : cropSize,
+                height: ratio >= 1 ? cropSize : cropSize / ratio,
+              });
+            }}
+            style={{
+              width: imageSize ? `${imageSize.width * zoom}px` : `${cropSize}px`,
+              height: imageSize ? `${imageSize.height * zoom}px` : `${cropSize}px`,
+              transform: `translate(calc(-50% + ${offset.x}px), calc(-50% + ${offset.y}px))`,
+            }}
+          />
+          <div className="pointer-events-none absolute inset-0 rounded-full ring-2 ring-white/80 ring-offset-2 ring-offset-black/15" />
+        </div>
+        <label className="block space-y-2">
+          <span className="flex items-center gap-2 text-sm font-medium"><ZoomIn className="h-4 w-4" /> Zoom</span>
+          <input
+            type="range"
+            min={1}
+            max={3}
+            step={0.05}
+            value={zoom}
+            onChange={(event) => setZoom(Number(event.target.value))}
+            className="w-full accent-[var(--color-primary)]"
+          />
+        </label>
+      </div>
+    </Drawer>
   );
 }
 

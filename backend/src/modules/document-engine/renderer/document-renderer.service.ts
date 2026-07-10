@@ -299,35 +299,50 @@ export class DocumentRendererService {
   }
 
   private imageBlock(component: ImageComponent): LayoutBlock {
-    const height = 96;
+    const height = component.image ? 172 : 96;
     return {
       component,
       height,
-      draw: (x, y, width) => [
-        { type: 'rect', x, y: y - height + 4, width, height },
-        {
-          type: 'text',
-          x: x + 8,
-          y: y - 18,
-          text: `Imagem: ${component.caption ?? component.sourceId}`,
-          size: 10,
-          bold: true,
-        },
-        {
-          type: 'text',
-          x: x + 8,
-          y: y - 34,
-          text: `${component.mimeType} · ${component.fileSize} bytes`,
-          size: 8,
-        },
-        {
-          type: 'text',
-          x: x + 8,
-          y: y - 52,
-          text: 'Conteúdo binário protegido no storage; renderização inline será expandida em sprint futura.',
-          size: 8,
-        },
-      ],
+      draw: (x, y, width): RenderedElement[] => {
+        const elements: RenderedElement[] = [
+          { type: 'rect', x, y: y - height + 4, width, height },
+          {
+            type: 'text',
+            x: x + 8,
+            y: y - 18,
+            text: `Imagem: ${component.caption ?? component.sourceId}`,
+            size: 10,
+            bold: true,
+          },
+          {
+            type: 'text',
+            x: x + 8,
+            y: y - 34,
+            text: `${component.mimeType} · ${component.fileSize} bytes`,
+            size: 8,
+          },
+        ];
+        if (component.image) {
+          elements.push({
+            type: 'image',
+            x: x + 8,
+            y: y - 160,
+            width: Math.min(width - 16, 260),
+            height: 112,
+            mimeType: component.image.mimeType,
+            contentBase64: component.image.contentBase64,
+          });
+        } else {
+          elements.push({
+            type: 'text',
+            x: x + 8,
+            y: y - 52,
+            text: 'Conteúdo binário protegido no storage.',
+            size: 8,
+          });
+        }
+        return elements;
+      },
     };
   }
 

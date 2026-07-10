@@ -1,0 +1,326 @@
+import { HttpStatus, Injectable } from '@nestjs/common';
+import {
+  AssignmentStatus,
+  NotificationEntityType,
+  NotificationSeverity,
+  NotificationType,
+  Prisma,
+  Role,
+} from '@prisma/client';
+import { ERROR_CODES } from '../../shared/constants/error-codes.constants';
+import { ApplicationException } from '../../shared/exceptions/application.exception';
+import type { AuthenticatedUser } from '../../shared/types/authenticated-user.type';
+import { buildPaginatedResponse } from '../../shared/types/pagination.types';
+import { PrismaService } from '../database/prisma.service';
+import type { ListNotificationsQueryDto } from './dto/notification.dto';
+
+const SAFE_ACTION_URLS = {
+  operations: '/operacoes',
+  budgets: '/budgets',
+} as const;
+
+const NOTIFICATION_SELECT = {
+  id: true,
+  type: true,
+  severity: true,
+  title: true,
+  message: true,
+  entityType: true,
+  entityId: true,
+  actionUrl: true,
+  readAt: true,
+  createdAt: true,
+} satisfies Prisma.NotificationSelect;
+
+type NotificationInput = {
+  organizationId: string;
+  recipientUserId: string;
+  type: NotificationType;
+  severity: NotificationSeverity;
+  title: string;
+  message: string;
+  entityType: NotificationEntityType;
+  entityId: string;
+  actionUrl: string;
+  eventKey: string;
+};
+
+@Injectable()
+export class NotificationsService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async list(query: ListNotificationsQueryDto, actor: AuthenticatedUser): Promise<unknown> {
+    await this.syncOverdueAssignments(actor);
+    const where = this.userWhere(actor.id, query);
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.notification.findMany({
+        where,
+        select: NOTIFICATION_SELECT,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip: (query.page - 1) * query.limit,
+        take: query.limit,
+      }),
+      this.prisma.notification.count({ where }),
+    ]);
+    return buildPaginatedResponse(items, total, query.page, query.limit);
+  }
+
+  async unreadCount(actor: AuthenticatedUser): Promise<{ count: number }> {
+    await this.syncOverdueAssignments(actor);
+    const count = await this.prisma.notification.count({
+      where: { recipientUserId: actor.id, readAt: null, deletedAt: null },
+    });
+    return { count };
+  }
+
+  async markRead(id: string, actor: AuthenticatedUser): Promise<unknown> {
+    const notification = await this.prisma.notification.findFirst({
+      where: { id, recipientUserId: actor.id, deletedAt: null },
+      select: { id: true },
+    });
+    if (!notification) {
+      throw new ApplicationException(
+        ERROR_CODES.NOTIFICATION_NOT_FOUND,
+        'Notification was not found',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    return this.prisma.notification.update({
+      where: { id },
+      data: { readAt: new Date() },
+      select: NOTIFICATION_SELECT,
+    });
+  }
+
+  async markAllRead(actor: AuthenticatedUser): Promise<{ updated: number }> {
+    const result = await this.prisma.notification.updateMany({
+      where: { recipientUserId: actor.id, readAt: null, deletedAt: null },
+      data: { readAt: new Date() },
+    });
+    return { updated: result.count };
+  }
+
+  async notifyAssignmentAssignedTx(
+    tx: Prisma.TransactionClient,
+    assignmentId: string,
+  ): Promise<void> {
+    const assignment = await this.assignmentForNotificationTx(tx, assignmentId);
+    await this.createManyIdempotentTx(tx, [
+      {
+        organizationId: await this.organizationIdTx(tx),
+        recipientUserId: assignment.assignedTo,
+        type: NotificationType.ASSIGNMENT_ASSIGNED,
+        severity: NotificationSeverity.INFO,
+        title: 'Nova atividade atribuída',
+        message: `Você recebeu a operação #${assignment.operation.number}.`,
+        entityType: NotificationEntityType.ASSIGNMENT,
+        entityId: assignment.id,
+        actionUrl: SAFE_ACTION_URLS.operations,
+        eventKey: `assignment:${assignment.id}:assigned`,
+      },
+    ]);
+  }
+
+  async notifyAssignmentStartedTx(
+    tx: Prisma.TransactionClient,
+    assignmentId: string,
+  ): Promise<void> {
+    const assignment = await this.assignmentForNotificationTx(tx, assignmentId);
+    const organizationId = await this.organizationIdTx(tx);
+    const managers = await this.managementRecipientsTx(tx);
+    await this.createManyIdempotentTx(tx, [
+      ...managers.map((recipientUserId) => ({
+        organizationId,
+        recipientUserId,
+        type: NotificationType.OPERATION_STARTED,
+        severity: NotificationSeverity.INFO,
+        title: 'Operação iniciada',
+        message: `Operação #${assignment.operation.number} foi iniciada por ${assignment.assignee.name}.`,
+        entityType: NotificationEntityType.OPERATION,
+        entityId: assignment.operationId,
+        actionUrl: SAFE_ACTION_URLS.operations,
+        eventKey: `operation:${assignment.operationId}:started`,
+      })),
+    ]);
+  }
+
+  async notifyAssignmentCompletedTx(
+    tx: Prisma.TransactionClient,
+    assignmentId: string,
+  ): Promise<void> {
+    const assignment = await this.assignmentForNotificationTx(tx, assignmentId);
+    const organizationId = await this.organizationIdTx(tx);
+    const managers = await this.managementRecipientsTx(tx);
+    await this.createManyIdempotentTx(
+      tx,
+      managers.map((recipientUserId) => ({
+        organizationId,
+        recipientUserId,
+        type: NotificationType.OPERATION_COMPLETED,
+        severity: NotificationSeverity.SUCCESS,
+        title: 'Operação concluída',
+        message: `Operação #${assignment.operation.number} foi concluída por ${assignment.assignee.name}.`,
+        entityType: NotificationEntityType.OPERATION,
+        entityId: assignment.operationId,
+        actionUrl: SAFE_ACTION_URLS.operations,
+        eventKey: `operation:${assignment.operationId}:completed`,
+      })),
+    );
+  }
+
+  async notifyBudgetDecisionTx(
+    tx: Prisma.TransactionClient,
+    budgetId: string,
+    type: typeof NotificationType.BUDGET_APPROVED | typeof NotificationType.BUDGET_REJECTED,
+  ): Promise<void> {
+    const budget = await tx.budget.findUnique({
+      where: { id: budgetId },
+      select: { id: true, number: true, organizationId: true, total: true, customer: { select: { name: true, tradeName: true } } },
+    });
+    if (!budget) return;
+    const recipients = await this.managementRecipientsTx(tx);
+    const approved = type === NotificationType.BUDGET_APPROVED;
+    await this.createManyIdempotentTx(
+      tx,
+      recipients.map((recipientUserId) => ({
+        organizationId: budget.organizationId,
+        recipientUserId,
+        type,
+        severity: approved ? NotificationSeverity.SUCCESS : NotificationSeverity.WARNING,
+        title: approved ? 'Orçamento aprovado' : 'Orçamento rejeitado',
+        message: `Orçamento #${budget.number} ${approved ? 'aprovado' : 'rejeitado'} para ${budget.customer.tradeName || budget.customer.name}.`,
+        entityType: NotificationEntityType.BUDGET,
+        entityId: budget.id,
+        actionUrl: SAFE_ACTION_URLS.budgets,
+        eventKey: `budget:${budget.id}:${approved ? 'approved' : 'rejected'}`,
+      })),
+    );
+  }
+
+  private async syncOverdueAssignments(actor: AuthenticatedUser): Promise<void> {
+    const now = new Date();
+    const assignments = await this.prisma.assignment.findMany({
+      where: {
+        status: { in: [AssignmentStatus.ASSIGNED, AssignmentStatus.ACCEPTED, AssignmentStatus.STARTED] },
+        operation: {
+          scheduledFor: { lt: now },
+          ...(actor.role === Role.OPERATOR ? { operatorId: actor.id } : {}),
+        },
+      },
+      select: {
+        id: true,
+        operationId: true,
+        assignedTo: true,
+        operation: { select: { number: true, scheduledFor: true } },
+      },
+      orderBy: { assignedAt: 'asc' },
+      take: 50,
+    });
+    if (!assignments.length) return;
+    await this.prisma.$transaction(async (tx) => {
+      const organizationId = await this.organizationIdTx(tx);
+      const managers = await this.managementRecipientsTx(tx);
+      const inputs: NotificationInput[] = [];
+      for (const assignment of assignments) {
+        const recipients = new Set([...managers, assignment.assignedTo]);
+        for (const recipientUserId of recipients) {
+          inputs.push({
+            organizationId,
+            recipientUserId,
+            type: NotificationType.ASSIGNMENT_OVERDUE,
+            severity: NotificationSeverity.WARNING,
+            title: 'Atividade em atraso',
+            message: `Operação #${assignment.operation.number} está atrasada.`,
+            entityType: NotificationEntityType.ASSIGNMENT,
+            entityId: assignment.id,
+            actionUrl: SAFE_ACTION_URLS.operations,
+            eventKey: `assignment:${assignment.id}:overdue`,
+          });
+        }
+      }
+      await this.createManyIdempotentTx(tx, inputs);
+    });
+  }
+
+  private userWhere(userId: string, query: ListNotificationsQueryDto): Prisma.NotificationWhereInput {
+    return {
+      recipientUserId: userId,
+      deletedAt: null,
+      ...(query.unread ? { readAt: null } : {}),
+      ...(query.type ? { type: query.type } : {}),
+    };
+  }
+
+  private async createManyIdempotentTx(tx: Prisma.TransactionClient, inputs: NotificationInput[]): Promise<void> {
+    const data = inputs
+      .filter((input) => this.safeActionUrl(input.actionUrl))
+      .map((input) => ({
+        ...input,
+        title: this.clean(input.title, 140),
+        message: this.clean(input.message, 300),
+      }));
+    if (!data.length) return;
+    await tx.notification.createMany({ data, skipDuplicates: true });
+  }
+
+  private async assignmentForNotificationTx(tx: Prisma.TransactionClient, assignmentId: string): Promise<{
+    id: string;
+    operationId: string;
+    assignedTo: string;
+    operation: { number: number };
+    assignee: { name: string };
+  }> {
+    return tx.assignment.findUniqueOrThrow({
+      where: { id: assignmentId },
+      select: {
+        id: true,
+        operationId: true,
+        assignedTo: true,
+        operation: { select: { number: true } },
+        assignee: { select: { name: true } },
+      },
+    });
+  }
+
+  private async organizationIdTx(tx: Prisma.TransactionClient): Promise<string> {
+    const organization = await tx.organization.findFirst({ orderBy: { createdAt: 'asc' }, select: { id: true } });
+    if (!organization) {
+      throw new ApplicationException(
+        ERROR_CODES.ORGANIZATION_NOT_FOUND,
+        'Organization was not found',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    return organization.id;
+  }
+
+  private async managementRecipientsTx(tx: Prisma.TransactionClient): Promise<string[]> {
+    const users = await tx.user.findMany({
+      where: {
+        role: { in: [Role.OWNER, Role.MANAGER] },
+        isActive: true,
+        disabledAt: null,
+        OR: [{ preferences: null }, { preferences: { notificationsEnabled: true } }],
+      },
+      select: { id: true },
+    });
+    return users.map((user) => user.id);
+  }
+
+  private safeActionUrl(value: string): boolean {
+    return Object.values(SAFE_ACTION_URLS).includes(value as (typeof SAFE_ACTION_URLS)[keyof typeof SAFE_ACTION_URLS]);
+  }
+
+  private clean(value: string, max: number): string {
+    return value
+      .split('')
+      .filter((char) => {
+        const code = char.charCodeAt(0);
+        return code === 9 || code === 10 || code === 13 || (code >= 32 && code !== 127);
+      })
+      .join('')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, max);
+  }
+}

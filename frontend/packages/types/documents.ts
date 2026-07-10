@@ -31,6 +31,7 @@ export type DocumentComponent =
       caption: string | null;
       mimeType: string;
       fileSize: number;
+      image?: { mimeType: string; fileSize: number; contentBase64: string } | null;
       keepTogether?: boolean;
     }
   | { id: string; kind: "qrCode"; label: string; value: string; keepTogether?: boolean }
@@ -74,6 +75,10 @@ export type DocumentBlueprint = {
     documentId: string | null;
     documentType: DocumentKind;
     documentNumber: string;
+    sourceKind?: "operation" | "budget" | "template";
+    sourceId?: string | null;
+    templateId?: string | null;
+    templateUpdatedAt?: string | null;
     generatedAt: string;
     locale: "pt-BR";
     timezone: string;

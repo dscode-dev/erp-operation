@@ -164,7 +164,11 @@ export interface DocumentSignatureContext {
   } | null;
   collectedSignature: {
     label: string;
+    name: string | null;
+    title: string | null;
     signedAt: string | null;
+    caption: string | null;
+    image: ResolvedDocumentAsset | null;
   } | null;
 }
 
@@ -248,6 +252,14 @@ export class DocumentContextService {
 
     const template = configuration.defaultTemplate;
     const signature = await this.resolveSignature(template, operation);
+    const images = await Promise.all(
+      operation.photos.map((photo) =>
+        this.assets.resolveDocumentImage(photo.storageKey, {
+          mimeType: photo.mimeType,
+          fileSize: photo.fileSize,
+        }),
+      ),
+    );
 
     return {
       kind: 'operation',
@@ -260,7 +272,7 @@ export class DocumentContextService {
         logo: null,
         watermark: null,
         qrCode: null,
-        images: [],
+        images,
       },
     };
   }
@@ -385,16 +397,33 @@ export class DocumentContextService {
     operation: DocumentContextOperation | null,
   ): Promise<DocumentSignatureContext> {
     const mode = template?.signatureMode ?? SignatureMode.NONE;
-    const requiresSignature = Boolean(template?.requiresSignature && mode !== SignatureMode.NONE);
+    const executionSignature = this.resolveExecutionSignature(operation, template?.type ?? null);
+    const executionSignatureApplies = Boolean(executionSignature);
+    const effectiveMode = executionSignatureApplies
+      ? mode === SignatureMode.NONE
+        ? SignatureMode.COLLECTED
+        : mode === SignatureMode.FIXED
+          ? SignatureMode.HYBRID
+          : mode
+      : mode;
+    const requiresSignature = Boolean(
+      (template?.requiresSignature && effectiveMode !== SignatureMode.NONE) || executionSignatureApplies,
+    );
     const collectedSignature =
-      mode === SignatureMode.COLLECTED || mode === SignatureMode.HYBRID
+      effectiveMode === SignatureMode.COLLECTED || effectiveMode === SignatureMode.HYBRID
         ? {
             label: 'Assinatura do cliente/responsável',
+            name: null,
+            title: null,
             signedAt: operation?.signedAt?.toISOString() ?? null,
+            caption: executionSignature
+              ? 'Assinatura coletada na execução'
+              : 'Espaço reservado para assinatura coletada',
+            image: executionSignature?.image ?? null,
           }
         : null;
 
-    if (!requiresSignature || mode === SignatureMode.NONE) {
+    if (!requiresSignature || effectiveMode === SignatureMode.NONE) {
       return {
         requiresSignature: false,
         signatureMode: SignatureMode.NONE,
@@ -404,10 +433,10 @@ export class DocumentContextService {
       };
     }
 
-    if (mode === SignatureMode.COLLECTED) {
+    if (effectiveMode === SignatureMode.COLLECTED) {
       return {
         requiresSignature,
-        signatureMode: mode,
+        signatureMode: effectiveMode,
         signatureId: null,
         fixedSignature: null,
         collectedSignature,
@@ -444,7 +473,7 @@ export class DocumentContextService {
 
     return {
       requiresSignature,
-      signatureMode: mode,
+      signatureMode: effectiveMode,
       signatureId: template.signatureId,
       fixedSignature: {
         id: signature.id,
@@ -454,6 +483,65 @@ export class DocumentContextService {
       },
       collectedSignature,
     };
+  }
+
+  private resolveExecutionSignature(
+    operation: DocumentContextOperation | null,
+    type: DocumentTemplateType | null,
+  ): { image: ResolvedDocumentAsset } | null {
+    if (!operation?.signatureData) return null;
+    if (!this.documentTypeAcceptsExecutionSignature(type)) return null;
+
+    const dataUrl = operation.signatureData.trim();
+    const match = /^data:(image\/png|image\/jpeg);base64,([A-Za-z0-9+/=\s]+)$/i.exec(dataUrl);
+    if (!match) {
+      throw new ApplicationException(
+        ERROR_CODES.DOCUMENT_RENDER_FAILED,
+        'Execution signature must be a PNG or JPEG data URL',
+        HttpStatus.CONFLICT,
+      );
+    }
+
+    const mimeType = match[1].toLowerCase();
+    const base64 = match[2].replace(/\s/g, '');
+    const buffer = Buffer.from(base64, 'base64');
+    if (!this.isValidSignatureBinary(buffer, mimeType)) {
+      throw new ApplicationException(
+        ERROR_CODES.DOCUMENT_RENDER_FAILED,
+        'Execution signature binary is invalid',
+        HttpStatus.CONFLICT,
+      );
+    }
+
+    return {
+      image: {
+        storageKey: `operation-signature:${operation.id}`,
+        mimeType,
+        fileSize: buffer.length,
+        contentBase64: buffer.toString('base64'),
+      },
+    };
+  }
+
+  private documentTypeAcceptsExecutionSignature(type: DocumentTemplateType | null): boolean {
+    const supported = new Set<DocumentTemplateType>([
+      DocumentTemplateType.WORK_ORDER,
+      DocumentTemplateType.TECHNICAL_REPORT,
+      DocumentTemplateType.REPORT,
+      DocumentTemplateType.RECEIPT,
+    ]);
+    return Boolean(type && supported.has(type));
+  }
+
+  private isValidSignatureBinary(buffer: Buffer, mimeType: string): boolean {
+    if (buffer.length === 0 || buffer.length > 2_000_000) return false;
+    if (mimeType === 'image/png') {
+      return buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    }
+    if (mimeType === 'image/jpeg') {
+      return buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[buffer.length - 2] === 0xff && buffer[buffer.length - 1] === 0xd9;
+    }
+    return false;
   }
 
   private async resolveLatestBrandAsset(

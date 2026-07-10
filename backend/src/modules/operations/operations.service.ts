@@ -9,10 +9,12 @@ import { ERROR_CODES } from '../../shared/constants/error-codes.constants';
 import {
   MAX_OPERATION_PHOTOS,
   MAX_OPERATION_PHOTO_SIZE_BYTES,
+  MAX_OPERATION_SIGNATURE_SIZE_BYTES,
   OPERATION_AUDIT_ACTIONS,
   OPERATION_DOCUMENT_PREFIX,
   OPERATION_PHOTO_MIME_TYPES,
   OPERATION_RESOURCE,
+  OPERATION_SIGNATURE_MIME_TYPES,
   formatDocumentNumber,
 } from '../../shared/constants/operations.constants';
 import { ApplicationException } from '../../shared/exceptions/application.exception';
@@ -136,6 +138,7 @@ export class OperationsService {
       );
     }
     const assignment = await this.resolveOperatorAssignment(dto.operatorId, actor);
+    const signatureData = this.normalizeSignatureData(dto.signatureData);
 
     // Operation + auto Work Order draft are created atomically. The OS number is
     // derived from the operation sequential number.
@@ -153,8 +156,8 @@ export class OperationsService {
           completedAt: dto.completedAt ? new Date(dto.completedAt) : null,
           checklist: this.normalizeChecklist(dto.checklist),
           observations: dto.observations ?? null,
-          signatureData: dto.signatureData ?? null,
-          signedAt: dto.signedAt ? new Date(dto.signedAt) : null,
+          signatureData,
+          signedAt: signatureData ? (dto.signedAt ? new Date(dto.signedAt) : new Date()) : null,
         },
       });
       await tx.operationDocument.create({
@@ -246,6 +249,15 @@ export class OperationsService {
     context: OperationAuditContext,
   ): Promise<unknown> {
     await this.operationOrThrow(id);
+    const photos = (dto.photos ?? []).map((p) => this.decodePhoto(p));
+    if (photos.length > MAX_OPERATION_PHOTOS) {
+      throw new ApplicationException(
+        ERROR_CODES.OPERATION_PHOTO_INVALID,
+        `A maximum of ${MAX_OPERATION_PHOTOS} photos is allowed per update`,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const signatureData = this.normalizeSignatureData(dto.signatureData);
     return this.prisma.$transaction(async (tx) => {
       await tx.operation.update({
         where: { id },
@@ -255,6 +267,7 @@ export class OperationsService {
           ...(dto.completedAt ? { completedAt: new Date(dto.completedAt) } : {}),
           ...(dto.checklist ? { checklist: this.normalizeChecklist(dto.checklist) } : {}),
           ...(dto.observations !== undefined ? { observations: dto.observations } : {}),
+          ...(signatureData ? { signatureData, signedAt: dto.signedAt ? new Date(dto.signedAt) : new Date() } : {}),
         },
       });
       await tx.auditLog.create({
@@ -271,8 +284,25 @@ export class OperationsService {
       });
       await this.lifecycle.publishOperationCompletedTx(tx, id, actor.id, context);
       await this.maintenance.syncOperationCompletedTx(tx, id, actor.id, context);
-      return tx.operation.findUniqueOrThrow({ where: { id }, include: OPERATION_INCLUDE });
     });
+    for (const photo of photos) {
+      const storageKey = `operations/${id}/photos/${randomUUID()}.${photo.ext}`;
+      try {
+        await this.storage.save({ storageKey, content: photo.buffer });
+        await this.prisma.operationPhoto.create({
+          data: {
+            operationId: id,
+            storageKey,
+            caption: photo.caption,
+            mimeType: photo.mimeType,
+            fileSize: photo.buffer.length,
+          },
+        });
+      } catch {
+        await this.storage.delete(storageKey).catch(() => undefined);
+      }
+    }
+    return this.operationOrThrow(id);
   }
 
   async getPhoto(photoId: string): Promise<unknown> {
@@ -330,6 +360,53 @@ export class OperationsService {
       ext: mimeType === 'image/png' ? 'png' : 'jpg',
       caption: input.caption ?? null,
     };
+  }
+
+  private normalizeSignatureData(value?: string): string | null {
+    if (!value) return null;
+    const dataUrl = value.trim();
+    const match = /^data:(image\/png|image\/jpeg);base64,([A-Za-z0-9+/=\s]+)$/i.exec(dataUrl);
+    if (!match)
+      throw new ApplicationException(
+        ERROR_CODES.OPERATION_PHOTO_INVALID,
+        'Signature must be a PNG or JPEG data URL',
+        HttpStatus.BAD_REQUEST,
+      );
+
+    const mimeType = match[1].toLowerCase();
+    if (!OPERATION_SIGNATURE_MIME_TYPES.includes(mimeType as never))
+      throw new ApplicationException(
+        ERROR_CODES.OPERATION_PHOTO_INVALID,
+        'Signature MIME type is not allowed',
+        HttpStatus.BAD_REQUEST,
+      );
+
+    const base64 = match[2].replace(/\s/g, '');
+    const buffer = Buffer.from(base64, 'base64');
+    if (buffer.length === 0 || buffer.length > MAX_OPERATION_SIGNATURE_SIZE_BYTES)
+      throw new ApplicationException(
+        ERROR_CODES.OPERATION_PHOTO_INVALID,
+        'Signature is empty or exceeds the 2 MiB limit',
+        HttpStatus.BAD_REQUEST,
+      );
+    if (!this.isValidSignatureBinary(buffer, mimeType))
+      throw new ApplicationException(
+        ERROR_CODES.OPERATION_PHOTO_INVALID,
+        'Signature binary is invalid',
+        HttpStatus.BAD_REQUEST,
+      );
+
+    return `data:${mimeType};base64,${buffer.toString('base64')}`;
+  }
+
+  private isValidSignatureBinary(buffer: Buffer, mimeType: string): boolean {
+    if (mimeType === 'image/png') {
+      return buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    }
+    if (mimeType === 'image/jpeg') {
+      return buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[buffer.length - 2] === 0xff && buffer[buffer.length - 1] === 0xd9;
+    }
+    return false;
   }
 
   private async validateRelations(

@@ -1,5 +1,56 @@
 # ARCHITECTURE — Frontend
 
+## Product Backlog Closure 05 — document preview architecture
+
+Arquitetura preservada:
+
+```text
+Reports
+↓
+DocumentViewer
+↓
+Document Engine API
+↓
+Blueprint oficial
+↓
+Preview / Render / Download
+```
+
+Decisões:
+
+- Preview de modelo e preview de dados reais são fluxos semanticamente diferentes, mas usam o mesmo
+  viewer.
+- O frontend não monta documentos e não acessa assinatura de Operation diretamente.
+- Preview e PDF devem divergir apenas quando o backend emitir novo blueprint/render; após render,
+  `renderMetadata` contém proveniência (`sourceKind`, `sourceId`, `templateId`).
+
+## Product Backlog Closure 05.1 — Platform visit workflow architecture
+
+`/reports/visita` segue a arquitetura oficial:
+
+```text
+Platform Visit Evidence UI
+↓
+PATCH /operations/:id
+↓
+Operation + OperationPhoto + StorageProvider
+↓
+DocumentContext
+↓
+DocumentBuilder
+↓
+DocumentBlueprint
+├─ DocumentViewer
+└─ PDF Engine
+```
+
+Decisões:
+
+- não existe `VisitReport` frontend/domain;
+- fotos não são armazenadas como object URLs;
+- assinatura não é anexada manualmente ao preview;
+- PDF não é gerado no frontend.
+
 ## Sprint 23 — V1 product workflow closure
 
 Sprint 23 preserva a arquitetura oficial:
@@ -700,3 +751,24 @@ Signature management:
 - freehand capture is client-side input only, exported as transparent PNG and persisted by the official signature storage pipeline;
 - deleted signatures are removed by backend filtering, not by frontend-only hiding;
 - the Settings signature area uses a Drawer to keep creation, editing, upload, drawing and preview in a single reusable workflow.
+
+## Product Backlog Closure 04 — Avatar and Notification architecture
+
+Avatar flow:
+
+```text
+File selection → Canvas crop 512×512 PNG → POST /users/avatar → AuthProvider.refresh()
+→ session.user.avatarAssetId → UserAvatar → GET /users/avatar/:id
+```
+
+Identity state remains centralized in `AuthProvider`; no second user store was introduced.
+
+Notification flow:
+
+```text
+Domain transition → NotificationsService inside transaction → Notification rows
+→ Topbar/Operator bell → unread/list/read APIs
+```
+
+No WebSocket/realtime infra was added. V1 refresh uses shell load, focus/visibility and 60s polling
+while visible.

@@ -1,5 +1,63 @@
 # Backend State
 
+## Product Backlog Closure 05 — Reports Preview/PDF and Execution Signature Consistency
+
+Status: concluída em 10 de julho de 2026.
+
+Correções aplicadas sem migrations:
+
+- `DocumentContextService` agora hidrata a assinatura capturada na execução (`Operation.signatureData`)
+  como assinatura coletada oficial para `WORK_ORDER`, `TECHNICAL_REPORT`, `REPORT` legado e
+  `RECEIPT`.
+- A assinatura executada é validada como data URL PNG/JPEG, com checagem binária e limite de 2 MiB,
+  antes de entrar no contexto documental.
+- `DocumentBuilderService` preserva a imagem da assinatura coletada no `SignatureComponent`;
+  `DocumentViewer` e PDF Engine passam a consumir o mesmo blueprint.
+- `renderMetadata` dos documentos renderizados recebeu proveniência do blueprint:
+  `sourceKind`, `sourceId`, `templateId`, `templateUpdatedAt`, `documentType` e `documentNumber`.
+- `OperationsService` passou a normalizar/validar `signatureData` na criação da Operation, evitando
+  persistência de assinatura inválida.
+
+Validação executada:
+
+- `backend npm run build`: passou.
+- `backend npm run lint`: passou.
+- `backend npm test -- --runInBand backend/test/document-engine.spec.ts`: 7 testes passaram.
+
+Nenhuma migration foi criada.
+
+## Product Backlog Closure 05.1 — Platform Visit Report Workflow Consolidation
+
+Status: concluída em 10 de julho de 2026.
+
+Decisão arquitetural: `/reports/visita` era uma implementação paralela/legada de coleta de
+evidências de Operation. A rota foi consolidada como interface Operation-bound.
+
+Alterações:
+
+- `PATCH /operations/:id` aceita evidências oficiais: `photos[]`, `signatureData`, `signedAt`,
+  checklist e observações.
+- Fotos são persistidas como `OperationPhoto` via StorageProvider.
+- `DocumentContextService` resolve fotos persistidas por `DocumentAssetResolver`.
+- `DocumentBuilderService` emite componentes `image` com conteúdo seguro para preview/render.
+- `DocumentRendererService` e `DocumentViewer` renderizam a imagem real quando presente no
+  blueprint.
+- `/reports/visita` seleciona Operation real, salva evidências e usa `DocumentViewer` para
+  `TECHNICAL_REPORT`.
+
+Validação:
+
+- `backend npm run build`: passou.
+- `backend npm run lint`: passou.
+- `backend npm test -- --silent`: 16 suites / 44 testes passaram.
+- `frontend npm run build`: passou.
+- `frontend npm run lint`: passou com 2 warnings pré-existentes.
+- `npx prisma generate`: passou.
+- `DATABASE_URL=... npx prisma validate`: passou.
+- `git diff --check`: passou.
+
+Nenhuma migration foi criada.
+
 ## Sprint 21 — Performance, Load & Observability
 
 Status: concluída em 6 de julho de 2026.
@@ -2219,6 +2277,27 @@ Findings:
 Veredito:
 
 - `ORBIT_RELEASE_CANDIDATE_NOT_READY`.
+
+## Product Backlog Closure 04 — Avatar Crop, Identity Sync e Notification Center
+
+Status: implementada em 10 de julho de 2026.
+
+Avatar:
+
+- perfil passa a abrir crop/reposition UI antes de persistir avatar;
+- avatar final é PNG 512×512;
+- persistência continua em `POST /api/v1/users/avatar`;
+- backend mantém validação de MIME, extensão, tamanho e assinatura binária;
+- resposta pública de avatar não expõe `storageKey`;
+- shell/header e menu usam estado autenticado oficial via `AuthProvider.refresh()`.
+
+Notifications:
+
+- criado domínio persistido `Notification`;
+- criado índice único `(recipientUserId, eventKey)` para idempotência;
+- endpoints criados: listagem, unread count, mark read e mark all read;
+- eventos iniciais vêm de Assignment/Budget, não de AuditLog;
+- overdue de Assignment é detectado por sync bounded/idempotente ao ler notificações.
 
 ## Product Backlog Closure 03 — Production PDF Exports & Signature Management UX
 

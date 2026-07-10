@@ -1,5 +1,26 @@
 # COMPONENTS — Frontend
 
+## Product Backlog Closure 05 — Reports and DocumentViewer
+
+| Item | Local | Uso |
+|---|---|---|
+| `TemplateModelCard` refinado | `app/(platform)/reports/page.tsx` | Card compacto para biblioteca de modelos, com badges suaves e ações discretas |
+| `TemplatePreviewDrawer` | `app/(platform)/reports/page.tsx` | Explica preview estrutural vs preview com Operation real |
+| `DocumentViewer` | `packages/ui/documents/document-viewer.tsx` | Continua sendo o único viewer para modelo, dados reais, render e download |
+
+Regra: assinatura coletada deve ser renderizada apenas quando vier no `SignatureComponent` do
+blueprint oficial. Não interpretar `Operation.signatureData` diretamente no frontend.
+
+## Product Backlog Closure 05.1 — Visit Report workflow
+
+| Item | Local | Uso |
+|---|---|---|
+| Visit evidence workflow | `app/(platform)/reports/visita/page.tsx` | Seleciona Operation real, salva checklist/observações/fotos/assinatura e abre DocumentViewer |
+| `DocumentViewer` image component | `packages/ui/documents/document-viewer.tsx` | Renderiza evidência fotográfica quando `component.kind === "image"` e `component.image` existe |
+
+Regra: fotos selecionadas viram data URL apenas para envio imediato ao backend. O documento nunca
+usa object URL ou blob local como fonte persistente.
+
 ## Sprint 23 — Product workflow closure
 
 | Item | Local | Uso |
@@ -476,3 +497,10 @@ Tipos:
 
 - `TECHNICAL_OPINION` foi adicionado aos tipos frontend e aparece como “Laudo Técnico”.
 - `REPORT` permanece rotulado como legado.
+
+## Product Backlog Closure 04 — Components
+
+- `UserAvatar`: componente compartilhado para renderizar avatar autenticado por `avatarAssetId`;
+- `AvatarCropDrawer`: drawer local do perfil para recortar/reposicionar avatar antes de persistir;
+- `PlatformTopbar`: Notification Center real com badge, painel, retry, empty/loading e mark read/all;
+- `OperatorHeader`: sino conectado ao backend com contador e painel compacto.

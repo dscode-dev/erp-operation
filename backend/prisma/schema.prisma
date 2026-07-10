@@ -265,6 +265,31 @@ enum PurchaseHistoryAction {
   CANCELED
 }
 
+enum NotificationType {
+  ASSIGNMENT_ASSIGNED
+  ASSIGNMENT_REASSIGNED
+  ASSIGNMENT_OVERDUE
+  OPERATION_STARTED
+  OPERATION_COMPLETED
+  BUDGET_APPROVED
+  BUDGET_REJECTED
+}
+
+enum NotificationSeverity {
+  INFO
+  SUCCESS
+  WARNING
+  DANGER
+}
+
+enum NotificationEntityType {
+  ASSIGNMENT
+  OPERATION
+  BUDGET
+  MAINTENANCE
+  PMOC
+}
+
 model SystemSetting {
   id        String   @id @default(uuid()) @db.Uuid
   key       String   @unique @db.VarChar(150)
@@ -324,6 +349,7 @@ model User {
   purchaseOrdersCreated    PurchaseOrder[]    @relation("PurchaseOrderCreatedBy")
   purchaseReceiptsReceived PurchaseReceipt[]  @relation("PurchaseReceiptReceivedBy")
   purchaseHistoryEvents    PurchaseHistory[]  @relation("PurchaseHistoryActor")
+  notifications            Notification[]     @relation("NotificationRecipient")
 
   @@map("users")
 }
@@ -368,6 +394,7 @@ model Organization {
   financialCategories FinancialCategory[]
   financialEntries    FinancialEntry[]
   purchaseOrders      PurchaseOrder[]
+  notifications       Notification[]
 
   @@map("organizations")
 }
@@ -483,6 +510,32 @@ model UserAvatarAsset {
   user             User?
 
   @@map("user_avatar_assets")
+}
+
+model Notification {
+  id              String                 @id @default(uuid()) @db.Uuid
+  organizationId  String                 @map("organization_id") @db.Uuid
+  recipientUserId String                 @map("recipient_user_id") @db.Uuid
+  type            NotificationType
+  severity        NotificationSeverity   @default(INFO)
+  title           String                 @db.VarChar(140)
+  message         String                 @db.VarChar(300)
+  entityType      NotificationEntityType @map("entity_type")
+  entityId        String                 @map("entity_id") @db.Uuid
+  actionUrl       String?                @map("action_url") @db.VarChar(255)
+  eventKey        String                 @map("event_key") @db.VarChar(180)
+  readAt          DateTime?              @map("read_at") @db.Timestamptz(3)
+  createdAt       DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  deletedAt       DateTime?              @map("deleted_at") @db.Timestamptz(3)
+  organization    Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  recipient       User                   @relation("NotificationRecipient", fields: [recipientUserId], references: [id], onDelete: Cascade)
+
+  @@unique([recipientUserId, eventKey])
+  @@index([organizationId, createdAt])
+  @@index([recipientUserId, readAt, createdAt])
+  @@index([type, createdAt])
+  @@index([deletedAt])
+  @@map("notifications")
 }
 
 model Customer {

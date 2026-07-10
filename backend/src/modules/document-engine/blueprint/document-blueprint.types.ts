@@ -14,10 +14,15 @@ export type DocumentComponentKind =
   | 'observation';
 
 export interface DocumentMetadata {
-  operationId: string;
+  operationId: string | null;
+  budgetId?: string | null;
   documentId: string | null;
   documentType: DocumentTemplateType;
   documentNumber: string;
+  sourceKind?: 'operation' | 'budget' | 'template';
+  sourceId?: string | null;
+  templateId?: string | null;
+  templateUpdatedAt?: string | null;
   generatedAt: string;
   locale: 'pt-BR';
   timezone: string;
@@ -81,6 +86,11 @@ export interface ImageComponent extends BlueprintBaseComponent {
   caption: string | null;
   mimeType: string;
   fileSize: number;
+  image?: {
+    mimeType: string;
+    fileSize: number;
+    contentBase64: string;
+  } | null;
 }
 
 export interface QrCodeComponent extends BlueprintBaseComponent {

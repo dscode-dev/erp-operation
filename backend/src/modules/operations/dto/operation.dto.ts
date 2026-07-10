@@ -83,4 +83,11 @@ export class UpdateOperationDto {
   @IsString()
   @MaxLength(5000)
   observations?: string;
+  @IsOptional() @IsString() @MaxLength(2_000_000) signatureData?: string;
+  @IsOptional() @IsDateString() signedAt?: string;
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => OperationPhotoInputDto)
+  photos?: OperationPhotoInputDto[];
 }
