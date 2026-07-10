@@ -101,6 +101,64 @@ describe('DocumentEngine foundation', () => {
     expect(result.buffer.toString('latin1')).toContain('/Type /Page');
   });
 
+  it('sanitizes unsupported unicode punctuation before writing PDF literal strings', () => {
+    const result = new PdfEngineService().create({
+      blueprint: {
+        version: '1.0',
+        metadata: {
+          operationId: 'unicode-punctuation',
+          documentId: 'unicode-punctuation',
+          documentNumber: 'DOC-UNICODE',
+          documentType: 'REPORT',
+          generatedAt: new Date('2026-07-10T12:00:00.000Z').toISOString(),
+          locale: 'pt-BR',
+          timezone: 'America/Recife',
+          currency: 'BRL',
+          organization: {
+            legalName: 'Orbit ERP',
+            tradeName: 'Orbit ERP',
+            cnpj: '',
+            email: '',
+            phone: '',
+            city: '',
+            state: '',
+            primaryColor: '#000000',
+            secondaryColor: '#000000',
+          },
+        },
+        header: {
+          title: 'Exportação — “produção”',
+          subtitle: 'PDF-safe',
+          organizationName: 'Orbit ERP',
+          documentNumber: 'DOC-UNICODE',
+        },
+        footer: {
+          content: 'Footer',
+          generatedAt: new Date('2026-07-10T12:00:00.000Z').toISOString(),
+        },
+        sections: [],
+      },
+      pages: [
+        {
+          pageNumber: 1,
+          elements: [
+            {
+              type: 'text',
+              text: 'Cliente — operação “crítica” não deve corromper o PDF',
+              x: 40,
+              y: 760,
+              size: 10,
+            },
+          ],
+        },
+      ],
+    });
+    const latin1 = result.buffer.toString('latin1');
+    expect(latin1).toContain('%PDF-');
+    expect(latin1).toContain('Exportação - "produção"');
+    expect(latin1).not.toContain('\x14');
+  });
+
   it('measures text and computes printable layout boundaries', () => {
     const measure = new DocumentMeasureService();
     const layout = new LayoutEngine(measure);

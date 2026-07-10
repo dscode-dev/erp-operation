@@ -342,8 +342,8 @@ function DocumentConfigurationSection({ configurations }: { configurations: Docu
 }
 
 function SignaturesSection({ signatures, canEdit, onChanged }: { signatures: Signature[]; canEdit: boolean; onChanged: () => void }) {
-  const [editing, setEditing] = useState<Signature | null>(null);
-  const [creating, setCreating] = useState(false);
+  const [editor, setEditor] = useState<{ mode: "create"; signature: null } | { mode: "edit"; signature: Signature } | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState<Signature | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -359,13 +359,15 @@ function SignaturesSection({ signatures, canEdit, onChanged }: { signatures: Sig
     }
   }
 
-  async function remove(signature: Signature) {
+  async function remove(signature: Signature): Promise<boolean> {
     setBusy(signature.id); setError(null);
     try {
       await signaturesApi.deleteSignature(signature.id);
       onChanged();
+      return true;
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Falha ao remover assinatura.");
+      return false;
     } finally {
       setBusy(null);
     }
@@ -398,7 +400,7 @@ function SignaturesSection({ signatures, canEdit, onChanged }: { signatures: Sig
       title="Assinaturas"
       icon={PenLine}
       description="Assinaturas fixas reutilizáveis por templates. Imagens ficam no storage do backend."
-      action={canEdit ? <button type="button" onClick={() => setCreating(true)} className={primaryBtn}>Nova assinatura</button> : <StatusChip tone="info">Somente leitura</StatusChip>}
+      action={canEdit ? <button type="button" onClick={() => setEditor({ mode: "create", signature: null })} className={primaryBtn}>Nova assinatura</button> : <StatusChip tone="info">Somente leitura</StatusChip>}
     >
       {error && <div className="mb-3 rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 px-3 py-2 text-sm text-[var(--color-danger)]">{error}</div>}
       {signatures.length === 0 ? (
@@ -422,9 +424,9 @@ function SignaturesSection({ signatures, canEdit, onChanged }: { signatures: Sig
                 <SmallAction icon={Download} label="Download" busy={busy === signature.id} onClick={() => download(signature)} />
                 {canEdit && (
                   <>
-                    <SmallAction icon={PenLine} label="Editar" onClick={() => setEditing(signature)} />
+                    <SmallAction icon={PenLine} label="Editar" onClick={() => setEditor({ mode: "edit", signature })} />
                     <SmallAction icon={Check} label={signature.active ? "Desativar" : "Ativar"} busy={busy === signature.id} onClick={() => toggle(signature)} />
-                    <SmallAction icon={Trash2} label="Excluir" danger busy={busy === signature.id} onClick={() => remove(signature)} />
+                    <SmallAction icon={Trash2} label="Excluir" danger busy={busy === signature.id} onClick={() => setConfirmingDelete(signature)} />
                   </>
                 )}
               </div>
@@ -432,7 +434,53 @@ function SignaturesSection({ signatures, canEdit, onChanged }: { signatures: Sig
           ))}
         </ul>
       )}
-      <SignatureEditor open={creating || editing !== null} signature={editing} onClose={() => { setCreating(false); setEditing(null); }} onSaved={() => { setCreating(false); setEditing(null); onChanged(); }} />
+      {editor && (
+        <SignatureEditor
+          key={editor.mode === "edit" ? `edit-${editor.signature.id}` : "create-signature"}
+          open
+          signature={editor.signature}
+          onClose={() => setEditor(null)}
+          onSaved={() => { setEditor(null); onChanged(); }}
+        />
+      )}
+      <Drawer
+        open={confirmingDelete !== null}
+        onClose={() => setConfirmingDelete(null)}
+        eyebrow="Confirmação"
+        title="Excluir assinatura?"
+        width="max-w-lg"
+        footer={
+          <>
+            <button type="button" onClick={() => setConfirmingDelete(null)} className={secondaryBtn}>Cancelar</button>
+            <button
+              type="button"
+              onClick={() => confirmingDelete && remove(confirmingDelete).then((deleted) => { if (deleted) setConfirmingDelete(null); })}
+              disabled={!confirmingDelete || busy === confirmingDelete.id}
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-[var(--radius-md)] bg-[var(--color-danger)] px-3 text-sm font-medium text-white disabled:opacity-50"
+            >
+              {confirmingDelete && busy === confirmingDelete.id && <Loader2 className="h-4 w-4 animate-spin" />}
+              Excluir assinatura
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div className="rounded-[var(--radius-lg)] border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 p-4">
+            <p className="text-sm font-medium text-[var(--color-danger)]">Esta ação remove a assinatura da listagem normal.</p>
+            <p className="mt-2 text-sm text-[var(--color-muted-foreground)]">
+              Confirme apenas se você realmente deseja excluir
+              {confirmingDelete ? ` “${confirmingDelete.name}”` : ""}. A assinatura será desativada e marcada como removida.
+            </p>
+          </div>
+          {confirmingDelete && (
+            <dl className="grid gap-2 rounded-[var(--radius-lg)] border border-[var(--color-border)] p-4 text-sm">
+              <RowText label="Nome" value={confirmingDelete.name} />
+              <RowText label="Título" value={confirmingDelete.title} />
+              <RowText label="Status" value={confirmingDelete.active ? "Ativa" : "Inativa"} />
+            </dl>
+          )}
+        </div>
+      </Drawer>
     </SectionCard>
   );
 }

@@ -44,7 +44,7 @@ export class PdfEngineService {
       const content = this.contentStream(page.elements, imageResources.map((resource) => resource.name));
       const contentId = this.add(
         objects,
-        `<< /Length ${Buffer.byteLength(content, 'binary')} >>\nstream\n${content}\nendstream`,
+        `<< /Length ${Buffer.byteLength(content, 'latin1')} >>\nstream\n${content}\nendstream`,
       );
       const xObjects =
         imageResources.length > 0
@@ -79,7 +79,7 @@ export class PdfEngineService {
     );
 
     const pdf = this.serialize(objects, infoId);
-    const buffer = Buffer.from(pdf, 'binary');
+    const buffer = Buffer.from(pdf, 'latin1');
     if (buffer.length > DOCUMENT_MAX_PDF_BYTES) {
       throw new ApplicationException(
         ERROR_CODES.DOCUMENT_SIZE_LIMIT_EXCEEDED,
@@ -134,10 +134,10 @@ export class PdfEngineService {
     let output = '%PDF-1.7\n%\xE2\xE3\xCF\xD3\n';
     const offsets = [0];
     objects.forEach((object, index) => {
-      offsets.push(Buffer.byteLength(output, 'binary'));
+      offsets.push(Buffer.byteLength(output, 'latin1'));
       output += `${index + 1} 0 obj\n${object}\nendobj\n`;
     });
-    const xrefOffset = Buffer.byteLength(output, 'binary');
+    const xrefOffset = Buffer.byteLength(output, 'latin1');
     output += `xref\n0 ${objects.length + 1}\n`;
     output += '0000000000 65535 f \n';
     for (let index = 1; index < offsets.length; index += 1) {
@@ -148,16 +148,43 @@ export class PdfEngineService {
   }
 
   private escape(value: string): string {
-    return value
+    return this.toPdfLatin1Text(value)
       .split('')
       .filter((char) => {
         const code = char.charCodeAt(0);
-        return code === 9 || code === 10 || code === 13 || (code >= 32 && code !== 127);
+        return code === 9 || code === 10 || code === 13 || (code >= 32 && code !== 127 && code <= 255);
       })
       .join('')
       .replace(/\\/g, '\\\\')
       .replace(/\(/g, '\\(')
       .replace(/\)/g, '\\)');
+  }
+
+  private toPdfLatin1Text(value: string): string {
+    const replacements: Record<string, string> = {
+      '—': '-',
+      '–': '-',
+      '−': '-',
+      '“': '"',
+      '”': '"',
+      '‘': "'",
+      '’': "'",
+      '…': '...',
+      '•': '-',
+      '™': 'TM',
+      '®': '(R)',
+      '©': '(C)',
+    };
+    return value
+      .normalize('NFKC')
+      .split('')
+      .map((char) => {
+        if (replacements[char]) return replacements[char];
+        const code = char.charCodeAt(0);
+        if (code === 9 || code === 10 || code === 13 || (code >= 32 && code !== 127 && code <= 255)) return char;
+        return '?';
+      })
+      .join('');
   }
 
   private n(value: number): string {
@@ -186,7 +213,7 @@ export class PdfEngineService {
       '/Filter /DCTDecode',
       `/Length ${buffer.length} >>`,
       'stream',
-      buffer.toString('binary'),
+      buffer.toString('latin1'),
       'endstream',
     ].join('\n');
   }
@@ -203,7 +230,7 @@ export class PdfEngineService {
       '/Filter /FlateDecode',
       `/Length ${compressed.length} >>`,
       'stream',
-      compressed.toString('binary'),
+      compressed.toString('latin1'),
       'endstream',
     ].join('\n');
   }
