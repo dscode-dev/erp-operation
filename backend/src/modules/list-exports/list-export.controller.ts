@@ -19,9 +19,9 @@ export class ListExportController {
   @Get('operations/export')
   async operations(
     @Query() query: OperationsPdfExportQueryDto,
-    @Res({ passthrough: true }) response: Response,
-  ): Promise<Buffer> {
-    return this.send(response, await this.exports.operations(query));
+    @Res() response: Response,
+  ): Promise<void> {
+    this.send(response, await this.exports.operations(query));
   }
 
   @RawResponse()
@@ -29,9 +29,9 @@ export class ListExportController {
   @Get('equipments/export')
   async equipments(
     @Query() query: EquipmentsPdfExportQueryDto,
-    @Res({ passthrough: true }) response: Response,
-  ): Promise<Buffer> {
-    return this.send(response, await this.exports.equipments(query));
+    @Res() response: Response,
+  ): Promise<void> {
+    this.send(response, await this.exports.equipments(query));
   }
 
   @RawResponse()
@@ -39,17 +39,17 @@ export class ListExportController {
   @Get('documents/export')
   async documents(
     @Query() query: DocumentsPdfExportQueryDto,
-    @Res({ passthrough: true }) response: Response,
-  ): Promise<Buffer> {
-    return this.send(response, await this.exports.documents(query));
+    @Res() response: Response,
+  ): Promise<void> {
+    this.send(response, await this.exports.documents(query));
   }
 
-  private send(response: Response, result: PdfExportResult): Buffer {
+  private send(response: Response, result: PdfExportResult): void {
     response.setHeader('Content-Type', 'application/pdf');
     response.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
     response.setHeader('Content-Length', String(result.buffer.length));
     response.setHeader('X-Export-Record-Count', String(result.recordCount));
     response.setHeader('X-Export-Page-Count', String(result.pageCount));
-    return result.buffer;
+    response.end(result.buffer);
   }
 }
