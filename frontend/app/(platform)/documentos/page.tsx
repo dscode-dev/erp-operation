@@ -13,7 +13,7 @@ import { ErrorState } from "@erp/ui/states";
 import { EmptyState } from "@erp/ui/empty-state";
 import { Drawer } from "@erp/ui/drawer";
 import { DocumentViewer } from "@erp/ui/documents/document-viewer";
-import { operationApi, useQuery, type OperationDocument, type OperationDocumentStatus } from "@erp/api";
+import { documentsApi, operationApi, useQuery, type OperationDocument, type OperationDocumentStatus } from "@erp/api";
 import type { DocumentKind, OperationSummary } from "@erp/types";
 import { DOCUMENT_KIND_LABEL } from "@erp/types";
 import { formatBytes, formatDate, formatDateTime } from "@erp/utils";
@@ -129,6 +129,18 @@ export default function DocumentosPage() {
           <ExportButton
             label="Exportar"
             fileName="documentos"
+            onPdf={() =>
+              documentsApi.exportDocumentsPdf({
+                search: search.trim() || undefined,
+                customer: customer || undefined,
+                equipment: equipment || undefined,
+                operator: operator || undefined,
+                type: kind || undefined,
+                status: status || undefined,
+                from: from || undefined,
+                to: to || undefined,
+              })
+            }
             rows={rows.map((d) => ({
               documento: d.number,
               tipo: DOCUMENT_KIND_LABEL[d.type],

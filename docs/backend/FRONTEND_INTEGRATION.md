@@ -178,11 +178,12 @@ export type Signature = {
   id: string;
   name: string;
   title: string;
-  imageStorageKey: string | null;
+  hasImage: boolean;
   mimeType: string | null;
   originalFileName: string | null;
   fileSize: number | null;
   active: boolean;
+  deletedAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -1994,3 +1995,37 @@ Taxonomia:
 - `TECHNICAL_REPORT`: relatório técnico factual.
 - `TECHNICAL_OPINION`: laudo técnico analítico.
 - `REPORT`: legado/histórico.
+
+## Product Backlog Closure 03 — PDF Exports and Signatures
+
+PDF exports:
+
+- `GET /operations/export?...`;
+- `GET /documents/export?...`;
+- `GET /equipments/export?...`.
+
+Esses endpoints retornam PDF binário raw (`application/pdf`), fora do envelope `{ success, data }`.
+O frontend deve baixar como `Blob`, usar `Content-Disposition` quando presente e mostrar erro real
+quando a API retornar JSON de erro.
+
+Semântica:
+
+- PDF exporta todos os registros que correspondem aos filtros ativos;
+- limite V1: 500 registros;
+- se ultrapassar o limite, orientar o usuário a restringir filtros;
+- export de lista não é documento oficial emitido e não deve aparecer na Central de Documentos.
+
+Assinaturas:
+
+- `GET /signatures` não retorna soft-deleted;
+- inativas continuam visíveis com badge claro;
+- resposta usa `hasImage`;
+- `imageStorageKey` não deve ser consumido nem exibido;
+- criação/edição envia metadados via `POST/PATCH /signatures` e imagem/desenho via
+  `POST /signatures/:id/upload`.
+
+Assinatura desenhada:
+
+- canvas gera PNG transparente;
+- o PNG deve ser convertido para `File`;
+- o upload deve convergir no endpoint oficial de assinatura.

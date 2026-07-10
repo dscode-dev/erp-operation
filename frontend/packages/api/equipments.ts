@@ -26,6 +26,18 @@ export function listEquipments(params?: {
   return api.get<Paginated<EquipmentSummary>>("/equipments", { query, signal });
 }
 
+export function exportEquipmentsPdf(params?: {
+  search?: string;
+  customerId?: string;
+  addressId?: string;
+  status?: EquipmentStatus;
+  type?: EquipmentType;
+  signal?: AbortSignal;
+}): Promise<{ blob: Blob; filename: string | null }> {
+  const { signal, ...query } = params ?? {};
+  return api.blob("/equipments/export", { query, signal });
+}
+
 export function getEquipmentStats(opts?: { signal?: AbortSignal }): Promise<EquipmentStats> {
   return api.get<EquipmentStats>("/equipments/stats", opts);
 }

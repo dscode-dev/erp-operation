@@ -672,3 +672,31 @@ Taxonomia V1:
 - `TECHNICAL_REPORT` é factual/operacional.
 - `TECHNICAL_OPINION` é analítico/conclusivo com dados existentes.
 - `REPORT` é compatibilidade histórica.
+
+## Product Backlog Closure 03 — PDF exports and signature UX architecture
+
+List exports now use backend-generated PDF blobs:
+
+```text
+Platform list page
+→ ExportButton.onPdf
+→ packages/api api.blob()
+→ backend /operations|documents|equipments/export
+→ browser Blob download
+```
+
+Architecture rules:
+
+- frontend never generates list PDFs;
+- CSV remains a local convenience export for visible rows only;
+- PDF export uses active filters and the backend record limit;
+- `api.blob()` preserves auth, request id and refresh-token replay behavior;
+- filenames are taken from `Content-Disposition` when available and sanitized before download.
+
+Signature management:
+
+- public signature objects use `hasImage`; frontend never receives or stores `imageStorageKey`;
+- upload and freehand drawing converge to the same backend upload endpoint;
+- freehand capture is client-side input only, exported as transparent PNG and persisted by the official signature storage pipeline;
+- deleted signatures are removed by backend filtering, not by frontend-only hiding;
+- the Settings signature area uses a Drawer to keep creation, editing, upload, drawing and preview in a single reusable workflow.

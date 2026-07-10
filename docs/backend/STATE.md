@@ -392,11 +392,12 @@ Entidades/alterações:
   - `id`;
   - `name`;
   - `title`;
-  - `imageStorageKey`;
+  - `imageStorageKey` interno, nunca exposto no contrato público;
   - `mimeType`;
   - `originalFileName`;
   - `fileSize`;
   - `active`;
+  - `deletedAt`;
   - `createdAt`;
   - `updatedAt`.
 - `DocumentTemplate`:
@@ -2218,6 +2219,32 @@ Findings:
 Veredito:
 
 - `ORBIT_RELEASE_CANDIDATE_NOT_READY`.
+
+## Product Backlog Closure 03 — Production PDF Exports & Signature Management UX
+
+Status: concluído em 10 de julho de 2026.
+
+Arquitetura de export:
+
+- criado `src/modules/list-exports`;
+- `ListExportService` consulta dados autoritativos no PostgreSQL, monta `RenderedDocument`
+  administrativo e gera PDF pelo `PdfEngineService`;
+- exports de listas não criam `OperationDocument`, não geram numeração documental oficial e não
+  publicam Asset Lifecycle;
+- limite V1: 500 registros por export PDF.
+
+Endpoints criados:
+
+- `GET /api/v1/operations/export`;
+- `GET /api/v1/documents/export`;
+- `GET /api/v1/equipments/export`.
+
+Assinaturas:
+
+- migration `20260710143000_signature_soft_delete` adiciona `Signature.deletedAt`;
+- listagem normal de assinaturas exclui `deletedAt != null`;
+- DELETE de assinatura marca `active=false` e `deletedAt=now`;
+- contrato público de assinatura não expõe `imageStorageKey`; retorna `hasImage`.
 
 ## Product Backlog Closure 02 — Report Specialization & Production PDF Workflow
 

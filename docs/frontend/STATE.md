@@ -671,6 +671,22 @@ Validação:
 - backend `npm run lint`, `npm run build` e `npm test` passaram;
 - Prisma `validate` e `generate` passaram com `DATABASE_URL` local.
 
+## Product Backlog Closure 03 — PDF Exports and Signature UX
+
+Status: concluído em 10 de julho de 2026.
+
+Correções aplicadas:
+
+- `ExportButton` agora possui ação PDF real via backend, com pending state, erro e download Blob;
+- `/operacoes`, `/documentos` e `/equipamentos` passam filtros ativos para endpoints PDF;
+- Settings/Assinaturas foi redesenhado com Drawer lateral claro para criação/edição;
+- assinatura suporta dois modos explícitos: upload de imagem e desenho freehand;
+- desenho freehand usa canvas pointer/touch/mouse, valida traço vazio, gera PNG transparente e envia
+  pelo endpoint oficial `POST /signatures/:id/upload`;
+- listagem de assinaturas usa `hasImage`, nunca `imageStorageKey`;
+- assinaturas inativas permanecem visíveis; deletadas deixam de aparecer porque o backend filtra
+  `deletedAt=null`.
+
 ## Product Backlog Closure 02 — Reports real preview/render/download
 
 Status: concluído em 10 de julho de 2026.

@@ -86,6 +86,14 @@ function OperacoesInner() {
             <ExportButton
               label="Exportar"
               fileName="operacoes"
+              onPdf={() =>
+                operationApi.exportOperationsPdf({
+                  search: debounced || undefined,
+                  status: status === "all" ? undefined : status,
+                  customerId,
+                  equipmentId,
+                })
+              }
               rows={(list.data?.items ?? []).map((o) => ({
                 numero: operationCode(o.number),
                 cliente: o.customer?.name ?? "",

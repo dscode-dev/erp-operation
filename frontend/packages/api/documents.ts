@@ -5,6 +5,7 @@ import type {
   DocumentConfiguration,
   DocumentDownloadResult,
   DocumentKind,
+  OperationDocumentStatus,
   DocumentRenderResult,
 } from "@erp/types";
 
@@ -37,6 +38,24 @@ export function renderDocument(documentId: string): Promise<DocumentRenderResult
 
 export function downloadDocument(documentId: string, opts?: { signal?: AbortSignal }): Promise<DocumentDownloadResult> {
   return api.get<DocumentDownloadResult>(`/documents/${documentId}/download`, opts);
+}
+
+export function exportDocumentsPdf(params?: {
+  search?: string;
+  customerId?: string;
+  equipmentId?: string;
+  operatorId?: string;
+  customer?: string;
+  equipment?: string;
+  operator?: string;
+  type?: DocumentKind;
+  status?: OperationDocumentStatus;
+  from?: string;
+  to?: string;
+  signal?: AbortSignal;
+}): Promise<{ blob: Blob; filename: string | null }> {
+  const { signal, ...query } = params ?? {};
+  return api.blob("/documents/export", { query, signal });
 }
 
 export function listConfiguration(opts?: { signal?: AbortSignal }): Promise<DocumentConfiguration[]> {

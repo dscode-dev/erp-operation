@@ -195,6 +195,30 @@ async function rawRequest<T>(path: string, opts: RequestOptions): Promise<T> {
   });
 }
 
+async function rawBlobRequest(path: string, opts: RequestOptions): Promise<{ blob: Blob; filename: string | null }> {
+  const { method = "GET", query, auth = true, signal } = opts;
+  const headers: Record<string, string> = { "X-Request-Id": requestId() };
+  if (auth) {
+    const token = getAccessToken();
+    if (token) headers.Authorization = `Bearer ${token}`;
+  }
+  const res = await fetch(buildUrl(path, query), { method, headers, signal });
+  const responseRequestId = res.headers.get("X-Request-Id");
+  if (res.ok) {
+    const disposition = res.headers.get("Content-Disposition");
+    return { blob: await res.blob(), filename: filenameFromDisposition(disposition) };
+  }
+  const payload = (await res.json().catch(() => null)) as ApiErrorBody | null;
+  const error = payload && !payload.success ? payload.error : null;
+  throw new ApiClientError({
+    code: error?.code ?? "UNKNOWN_ERROR",
+    message: error?.message ?? `Request failed with status ${res.status}`,
+    status: res.status,
+    details: error?.details ?? {},
+    requestId: responseRequestId,
+  });
+}
+
 export async function apiRequest<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   try {
     return await rawRequest<T>(path, opts);
@@ -222,6 +246,34 @@ export async function apiRequest<T>(path: string, opts: RequestOptions = {}): Pr
   }
 }
 
+export async function apiBlobRequest(path: string, opts: RequestOptions = {}): Promise<{ blob: Blob; filename: string | null }> {
+  try {
+    return await rawBlobRequest(path, opts);
+  } catch (err) {
+    if (!(err instanceof ApiClientError)) throw err;
+    if (err.requiresPasswordChange) {
+      emitSessionInvalid("password-change");
+      throw err;
+    }
+    const canRetry = opts.auth !== false && opts.retryOnUnauthorized !== false;
+    if (err.status === 401 && canRetry) {
+      const refreshed = await refreshSession();
+      if (refreshed) {
+        return rawBlobRequest(path, { ...opts, retryOnUnauthorized: false });
+      }
+      clearTokens();
+      emitSessionInvalid("expired");
+    }
+    throw err;
+  }
+}
+
+function filenameFromDisposition(disposition: string | null): string | null {
+  if (!disposition) return null;
+  const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
 /* ---------- convenience verbs ---------- */
 
 export const api = {
@@ -235,4 +287,6 @@ export const api = {
     apiRequest<T>(path, { ...opts, method: "DELETE" }),
   upload: <T>(path: string, form: FormData, opts?: Omit<RequestOptions, "method" | "form">) =>
     apiRequest<T>(path, { ...opts, method: "POST", form }),
+  blob: (path: string, opts?: Omit<RequestOptions, "method" | "body" | "form">) =>
+    apiBlobRequest(path, { ...opts, method: "GET" }),
 };

@@ -31,6 +31,7 @@ import { DocumentRendererService } from './renderer/document-renderer.service';
   ],
   exports: [
     DocumentEngineService,
+    PdfEngineService,
     DocumentAssetResolver,
     LayoutEngine,
     DocumentMeasureService,

@@ -587,7 +587,8 @@ Erros: common protected errors, `VALIDATION_ERROR`, `NOT_FOUND`, `ORGANIZATION_N
 ## Signatures
 
 Domínio de assinaturas cadastra assinaturas fixas reutilizáveis por templates. Imagens ficam no
-StorageProvider; o banco armazena apenas metadados e `imageStorageKey`.
+StorageProvider; o backend mantém a storage key apenas internamente. O contrato público retorna
+`hasImage` e nunca expõe `imageStorageKey`.
 
 Permissões:
 
@@ -616,11 +617,12 @@ Response 200:
         "id": "7198f91a-418f-4c3d-b8db-4ff7f8a9c0b1",
         "name": "Responsável Técnico",
         "title": "Eng. Mecânico CREA 000000",
-        "imageStorageKey": "documents/signatures/8f2c.../signature.png",
+        "hasImage": true,
         "mimeType": "image/png",
         "originalFileName": "assinatura.png",
         "fileSize": 18432,
         "active": true,
+        "deletedAt": null,
         "createdAt": "2026-06-29T15:00:00.000Z",
         "updatedAt": "2026-06-29T15:02:00.000Z"
       }
@@ -4348,3 +4350,59 @@ Model preview:
 - não renderiza;
 - não cria `OperationDocument`;
 - não fornece download oficial.
+
+## Product Backlog Closure 03 — List PDF Exports and Signatures
+
+### GET `/api/v1/operations/export`
+
+Roles: `OWNER`, `MANAGER`, `OPERATOR`, `VIEWER`.
+
+Query: `search`, `customerId`, `equipmentId`, `operatorId`, `type`, `status`.
+
+Response 200:
+
+- raw `application/pdf`;
+- `Content-Disposition: attachment; filename="orbit-operacoes-YYYY-MM-DD.pdf"`;
+- `X-Export-Record-Count`;
+- `X-Export-Page-Count`.
+
+### GET `/api/v1/equipments/export`
+
+Roles: `OWNER`, `MANAGER`, `OPERATOR`, `VIEWER`.
+
+Query: `search`, `customerId`, `addressId`, `type`, `status`.
+
+Response: raw PDF, mesmo contrato de headers.
+
+### GET `/api/v1/documents/export`
+
+Roles: `OWNER`, `MANAGER`, `OPERATOR`, `VIEWER`.
+
+Query: `search`, `customerId`, `equipmentId`, `operatorId`, `customer`, `equipment`, `operator`,
+`type`, `status`, `from`, `to`.
+
+Response: raw PDF, mesmo contrato de headers.
+
+Export limits:
+
+- limite V1: 500 registros;
+- acima do limite retorna `400 BAD_REQUEST` com instrução para restringir filtros;
+- exports são efêmeros e não criam `OperationDocument`;
+- PDF deve iniciar com `%PDF-`;
+- `storageKey`, path interno, blueprint bruto e metadados internos não são retornados.
+
+### Signature listing semantics
+
+`GET /api/v1/signatures` retorna apenas assinaturas com `deletedAt=null`.
+
+- assinaturas ativas aparecem;
+- assinaturas inativas aparecem;
+- assinaturas soft-deleted não aparecem na listagem normal;
+- resposta pública de assinatura retorna `hasImage`, não `imageStorageKey`.
+
+`DELETE /api/v1/signatures/:id`:
+
+- soft delete real;
+- grava `active=false`;
+- grava `deletedAt=now`;
+- não remove arquivo do storage para preservar histórico.

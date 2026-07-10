@@ -104,6 +104,14 @@ function EquipamentosInner() {
             <ExportButton
               label="Exportar"
               fileName="equipamentos"
+              onPdf={() =>
+                equipmentsApi.exportEquipmentsPdf({
+                  search: debounced || undefined,
+                  status: status || undefined,
+                  type: type || undefined,
+                  customerId: customerId || undefined,
+                })
+              }
               rows={(list.data?.items ?? []).map((e) => ({
                 tag: e.tag ?? "",
                 nome: e.name,

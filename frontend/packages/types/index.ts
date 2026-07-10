@@ -214,11 +214,12 @@ export type Signature = {
   id: string;
   name: string;
   title: string;
-  imageStorageKey: string | null;
+  hasImage: boolean;
   mimeType: string | null;
   originalFileName: string | null;
   fileSize: number | null;
   active: boolean;
+  deletedAt: string | null;
   createdAt: string;
   updatedAt: string;
 };

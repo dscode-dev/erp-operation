@@ -342,3 +342,10 @@ Nenhuma rota nova foi criada.
 - `/documentos`
   - filtros incluem `TECHNICAL_OPINION`;
   - documentos `REPORT` continuam legíveis como legado.
+
+## Product Backlog Closure 03 — route behavior
+
+- `/operacoes`: export PDF consome `GET /operations/export` com filtros ativos.
+- `/documentos`: export PDF consome `GET /documents/export` com filtros ativos.
+- `/equipamentos`: export PDF consome `GET /equipments/export` com filtros ativos.
+- `/settings`: gestão de assinaturas usa Drawer, upload e desenho freehand; deletadas não aparecem.

@@ -43,6 +43,19 @@ export function listOperations(params?: {
   return api.get<Paginated<OperationSummary>>("/operations", { query, signal });
 }
 
+export function exportOperationsPdf(params?: {
+  search?: string;
+  customerId?: string;
+  equipmentId?: string;
+  operatorId?: string;
+  type?: OperationType;
+  status?: OperationStatus;
+  signal?: AbortSignal;
+}): Promise<{ blob: Blob; filename: string | null }> {
+  const { signal, ...query } = params ?? {};
+  return api.blob("/operations/export", { query, signal });
+}
+
 export function getOperationStats(opts?: { signal?: AbortSignal }): Promise<OperationStats> {
   return api.get<OperationStats>("/operations/stats", opts);
 }

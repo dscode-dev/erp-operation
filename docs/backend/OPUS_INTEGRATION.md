@@ -1646,3 +1646,26 @@ Na UI:
 
 - “Visualizar modelo” deve usar template preview e ocultar render/download.
 - “Pré-visualizar com dados reais” deve exigir Operation e permitir render/download conforme RBAC.
+
+## Product Backlog Closure 03 — Opus integration notes
+
+PDF exports:
+
+```http
+GET /operations/export
+GET /documents/export
+GET /equipments/export
+```
+
+- retornam `application/pdf` raw;
+- usar `Blob`;
+- usar filename de `Content-Disposition` quando existir;
+- preservar filtros ativos;
+- limite: 500 registros.
+
+Assinaturas:
+
+- `GET /signatures` retorna ativas e inativas, nunca soft-deleted;
+- campo de imagem público: `hasImage`;
+- não existe `imageStorageKey` no contrato público;
+- desenho livre deve virar PNG e ser enviado ao mesmo `POST /signatures/:id/upload`.

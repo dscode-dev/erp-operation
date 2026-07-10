@@ -1595,3 +1595,25 @@ Real Data Preview:
 Compatibilidade:
 
 - `REPORT` legado permanece acessível pelas regras existentes para não quebrar histórico.
+
+## Product Backlog Closure 03 — Export and Signature AppSec
+
+List PDF exports:
+
+- são gerados no backend a partir de dados autorizados;
+- retornam PDF raw, sem envelope e sem `storageKey`;
+- não criam `OperationDocument`;
+- não acessam storage;
+- limite V1: 500 registros para evitar leitura/memória sem limite;
+- filtros são validados por DTO;
+- RBAC segue leitura dos domínios Operations, Documents e Equipments.
+
+Signatures:
+
+- soft delete usa `deletedAt` e `active=false`;
+- listagem normal usa `deletedAt=null`;
+- assinaturas inativas aparecem na gestão, mas não podem ser atribuídas a templates;
+- assinaturas deletadas não podem ser atribuídas a templates;
+- contrato público usa `hasImage` e não expõe `imageStorageKey`;
+- upload e desenho convergem no mesmo endpoint, preservando validação MIME/binária, limite 2 MiB,
+  storage UUID e auditoria sem base64/storage key.

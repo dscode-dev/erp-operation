@@ -5,6 +5,7 @@ import Image from "next/image";
 import { Loader2, Check, Upload, FileText, Image as ImageIcon, Palette, Building2, SlidersHorizontal, PenLine, Trash2, Download } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { PageHeader } from "@platform/components/page-header";
+import { Drawer } from "@erp/ui/drawer";
 import { SectionCard } from "@erp/ui/section-card";
 import { StatusChip } from "@erp/ui/status-chip";
 import { SkeletonCard } from "@erp/ui/skeletons";
@@ -407,13 +408,13 @@ function SignaturesSection({ signatures, canEdit, onChanged }: { signatures: Sig
           {signatures.map((signature) => (
             <li key={signature.id} className="rounded-[var(--radius-md)] border border-[var(--color-border)] p-3">
               <div className="flex items-start gap-3">
-                <span className="grid h-10 w-10 place-items-center rounded-[var(--radius-md)] bg-[var(--color-primary)]/10 text-[var(--color-primary)]"><PenLine className="h-5 w-5" /></span>
+                <SignaturePreview signature={signature} />
                 <div className="min-w-0 flex-1">
                   <div className="font-medium truncate">{signature.name}</div>
                   <div className="text-caption truncate">{signature.title}</div>
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     <StatusChip tone={signature.active ? "success" : "neutral"} dot>{signature.active ? "Ativa" : "Inativa"}</StatusChip>
-                    <StatusChip tone={signature.imageStorageKey ? "info" : "neutral"}>{signature.imageStorageKey ? "Imagem enviada" : "Sem imagem"}</StatusChip>
+                    <StatusChip tone={signature.hasImage ? "info" : "neutral"}>{signature.hasImage ? "Imagem enviada" : "Sem imagem"}</StatusChip>
                   </div>
                 </div>
               </div>
@@ -440,29 +441,36 @@ function SignatureEditor({ open, signature, onClose, onSaved }: { open: boolean;
   const [name, setName] = useState("");
   const [title, setTitle] = useState("");
   const [active, setActive] = useState(true);
+  const [mode, setMode] = useState<"upload" | "draw">("upload");
   const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [drawingFile, setDrawingFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!open) return;
     setName(signature?.name ?? "");
     setTitle(signature?.title ?? "");
     setActive(signature?.active ?? true);
+    setMode("upload");
     setFile(null);
+    setPreview(null);
+    setDrawingFile(null);
     setError(null);
   }, [open, signature]);
 
-  if (!open) return null;
-
   async function save() {
     if (!name.trim() || !title.trim()) { setError("Informe nome e título."); return; }
+    if (mode === "draw" && !drawingFile) { setError("Desenhe a assinatura antes de salvar ou use o modo Upload image."); return; }
     setSaving(true); setError(null);
     try {
       const saved = signature
         ? await signaturesApi.updateSignature(signature.id, { name, title, active })
         : await signaturesApi.createSignature({ name, title, active });
-      if (file) await signaturesApi.uploadSignatureImage(saved.id, file);
+      const selectedFile = mode === "draw" ? drawingFile : file;
+      if (selectedFile) await signaturesApi.uploadSignatureImage(saved.id, selectedFile);
       onSaved();
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Falha ao salvar assinatura.");
@@ -471,31 +479,215 @@ function SignatureEditor({ open, signature, onClose, onSaved }: { open: boolean;
     }
   }
 
+  function onUpload(file: File | null) {
+    if (file && file.size > 2 * 1024 * 1024) {
+      setError("A imagem de assinatura deve ter no máximo 2 MiB.");
+      return;
+    }
+    setFile(file);
+    setPreview(file ? URL.createObjectURL(file) : null);
+  }
+
   return (
-    <div className="fixed inset-0 z-[80] grid place-items-center bg-black/35 p-4">
-      <div className="w-full max-w-md rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 shadow-[var(--shadow-card)]">
-        <h3 className="font-semibold">{signature ? "Editar assinatura" : "Nova assinatura"}</h3>
+    <Drawer
+      open={open}
+      onClose={onClose}
+      eyebrow="Assinaturas"
+      title={signature ? "Editar assinatura" : "Nova assinatura"}
+      width="max-w-2xl"
+      footer={
+        <>
+          <button type="button" onClick={onClose} className={secondaryBtn}>Cancelar</button>
+          <button type="button" onClick={save} disabled={saving || !name.trim() || !title.trim()} className={primaryBtn}>
+            {saving && <Loader2 className="h-4 w-4 animate-spin" />} Salvar assinatura
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-5">
+        <p className="text-sm text-[var(--color-muted-foreground)]">
+          Cadastre uma assinatura fixa por upload ou desenho. A imagem é validada e armazenada pelo backend.
+        </p>
         {error && <div className="mt-3 rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 px-3 py-2 text-sm text-[var(--color-danger)]">{error}</div>}
-        <div className="mt-4 space-y-3">
+        <section className="space-y-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] p-4">
+          <div>
+            <h3 className="text-sm font-semibold">Identificação</h3>
+            <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">Use nome e cargo exatamente como devem aparecer nos documentos.</p>
+          </div>
           <Input label="Nome" value={name} onChange={setName} />
           <Input label="Título" value={title} onChange={setTitle} />
           <label className="flex items-center justify-between gap-3 cursor-pointer">
             <span className="text-sm font-medium">Ativa</span>
             <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="h-4 w-4 accent-[var(--color-primary)]" />
           </label>
-          <label className="block space-y-1.5">
-            <span className="text-sm font-medium">Imagem da assinatura</span>
-            <input type="file" accept="image/png,image/jpeg" onChange={(event) => setFile(event.target.files?.[0] ?? null)} className="block w-full text-sm" />
-            <span className="text-caption">PNG/JPG/JPEG · até 2 MiB.</span>
-          </label>
-        </div>
-        <div className="mt-5 flex justify-end gap-2">
-          <button type="button" onClick={onClose} className={secondaryBtn}>Cancelar</button>
-          <button type="button" onClick={save} disabled={saving} className={primaryBtn}>{saving && <Loader2 className="h-4 w-4 animate-spin" />} Salvar</button>
-        </div>
+        </section>
+
+        <section className="space-y-4 rounded-[var(--radius-lg)] border border-[var(--color-border)] p-4">
+          <div className="flex rounded-[var(--radius-md)] border border-[var(--color-border)] p-1">
+            <button type="button" onClick={() => setMode("upload")} className={`flex-1 rounded-[var(--radius-sm)] px-3 py-2 text-sm ${mode === "upload" ? "bg-[var(--color-primary)] text-[var(--color-primary-foreground)]" : "hover:bg-[var(--color-muted)]"}`}>Upload image</button>
+            <button type="button" onClick={() => setMode("draw")} className={`flex-1 rounded-[var(--radius-sm)] px-3 py-2 text-sm ${mode === "draw" ? "bg-[var(--color-primary)] text-[var(--color-primary-foreground)]" : "hover:bg-[var(--color-muted)]"}`}>Draw signature</button>
+          </div>
+
+          {mode === "upload" ? (
+            <div className="space-y-3">
+              <div className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-muted)]/25 p-3 text-xs text-[var(--color-muted-foreground)]">
+                Use PNG com fundo transparente quando possível; assinatura escura, bom contraste, margens cortadas, sem sombras e até 2 MiB. Formatos aceitos pelo backend: PNG, JPG e JPEG.
+              </div>
+              <button type="button" onClick={() => inputRef.current?.click()} className="grid min-h-32 w-full place-items-center rounded-[var(--radius-lg)] border border-dashed border-[var(--color-border)] bg-[var(--color-muted)]/20 p-4 text-center hover:bg-[var(--color-muted)]/35">
+                <span>
+                  <Upload className="mx-auto mb-2 h-5 w-5 text-[var(--color-muted-foreground)]" />
+                  <span className="text-sm font-medium">{file ? file.name : "Clique para enviar uma imagem"}</span>
+                  <span className="mt-1 block text-xs text-[var(--color-muted-foreground)]">PNG/JPG/JPEG · máximo 2 MiB</span>
+                </span>
+              </button>
+              <input ref={inputRef} type="file" accept="image/png,image/jpeg" className="hidden" onChange={(event) => onUpload(event.target.files?.[0] ?? null)} />
+              {file && <button type="button" onClick={() => onUpload(null)} className={secondaryBtn}>Remover arquivo antes de salvar</button>}
+            </div>
+          ) : (
+            <SignatureCanvas onChange={(nextFile, dataUrl) => { setDrawingFile(nextFile); setPreview(dataUrl); }} />
+          )}
+
+          <div className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] p-3">
+            <div className="text-xs font-medium text-[var(--color-muted-foreground)]">Preview</div>
+            <div className="relative mt-2 grid min-h-24 place-items-center rounded-[var(--radius-sm)] bg-[var(--color-muted)]/25">
+              {preview ? <Image src={preview} alt="Preview da assinatura" fill sizes="420px" unoptimized className="object-contain p-2" /> : <span className="text-caption">Nenhuma nova imagem selecionada. Metadados podem ser salvos sem substituir a assinatura atual.</span>}
+            </div>
+          </div>
+        </section>
       </div>
+    </Drawer>
+  );
+}
+
+function SignaturePreview({ signature }: { signature: Signature }) {
+  const [src, setSrc] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    if (!signature.hasImage) {
+      setSrc(null);
+      return;
+    }
+    signaturesApi.downloadSignatureImage(signature.id)
+      .then((image) => {
+        if (alive) setSrc(`data:${image.mimeType};base64,${image.contentBase64}`);
+      })
+      .catch(() => {
+        if (alive) setSrc(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [signature.id, signature.hasImage]);
+
+  return (
+    <span className="relative grid h-14 w-20 shrink-0 place-items-center overflow-hidden rounded-[var(--radius-md)] bg-[var(--color-primary)]/10 text-[var(--color-primary)]">
+      {src ? <Image src={src} alt={signature.name} fill sizes="80px" unoptimized className="object-contain p-1" /> : <PenLine className="h-5 w-5" />}
+    </span>
+  );
+}
+
+function SignatureCanvas({ onChange }: { onChange: (file: File | null, dataUrl: string | null) => void }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const drawing = useRef(false);
+  const [hasStroke, setHasStroke] = useState(false);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext("2d");
+    if (!canvas || !ctx) return;
+    canvas.width = 900;
+    canvas.height = 260;
+    ctx.lineWidth = 5;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = "#111827";
+  }, []);
+
+  function point(event: React.PointerEvent<HTMLCanvasElement>) {
+    const canvas = event.currentTarget;
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: ((event.clientX - rect.left) / rect.width) * canvas.width,
+      y: ((event.clientY - rect.top) / rect.height) * canvas.height,
+    };
+  }
+
+  function start(event: React.PointerEvent<HTMLCanvasElement>) {
+    const ctx = event.currentTarget.getContext("2d");
+    if (!ctx) return;
+    drawing.current = true;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const p = point(event);
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y);
+  }
+
+  function move(event: React.PointerEvent<HTMLCanvasElement>) {
+    if (!drawing.current) return;
+    const ctx = event.currentTarget.getContext("2d");
+    if (!ctx) return;
+    const p = point(event);
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+    setHasStroke(true);
+  }
+
+  async function end(event: React.PointerEvent<HTMLCanvasElement>) {
+    if (!drawing.current) return;
+    drawing.current = false;
+    event.currentTarget.releasePointerCapture(event.pointerId);
+    await emitFile();
+  }
+
+  async function emitFile() {
+    const canvas = canvasRef.current;
+    if (!canvas || !hasCanvasInk(canvas)) {
+      onChange(null, null);
+      return;
+    }
+    const dataUrl = canvas.toDataURL("image/png");
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png", 0.92));
+    if (!blob) return;
+    onChange(new File([blob], `assinatura-${Date.now()}.png`, { type: "image/png" }), dataUrl);
+  }
+
+  function clear() {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext("2d");
+    if (!canvas || !ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    setHasStroke(false);
+    onChange(null, null);
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-muted)]/25 p-3 text-xs text-[var(--color-muted-foreground)]">
+        Desenhe com mouse, caneta ou toque. O resultado vira PNG transparente e passa pelo upload oficial do backend.
+      </div>
+      <canvas
+        ref={canvasRef}
+        onPointerDown={start}
+        onPointerMove={move}
+        onPointerUp={end}
+        onPointerCancel={end}
+        className="h-44 w-full touch-none rounded-[var(--radius-lg)] border border-dashed border-[var(--color-border)] bg-white"
+        aria-label="Área para desenhar assinatura"
+      />
+      <button type="button" onClick={clear} disabled={!hasStroke} className={secondaryBtn}>Limpar desenho</button>
     </div>
   );
+}
+
+function hasCanvasInk(canvas: HTMLCanvasElement): boolean {
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return false;
+  const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  for (let index = 3; index < data.length; index += 4) {
+    if (data[index] > 0) return true;
+  }
+  return false;
 }
 
 /* ---------- Inputs ---------- */

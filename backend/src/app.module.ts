@@ -28,6 +28,7 @@ import { PricingModule } from './modules/pricing/pricing.module';
 import { BudgetsModule } from './modules/budgets/budgets.module';
 import { FinancialModule } from './modules/financial/financial.module';
 import { ProcurementModule } from './modules/procurement/procurement.module';
+import { ListExportModule } from './modules/list-exports/list-export.module';
 import { GlobalExceptionFilter } from './shared/filters/global-exception.filter';
 import { RequestLoggingInterceptor } from './shared/interceptors/request-logging.interceptor';
 import { ResponseEnvelopeInterceptor } from './shared/interceptors/response-envelope.interceptor';
@@ -52,6 +53,7 @@ import { ResponseEnvelopeInterceptor } from './shared/interceptors/response-enve
     UsersModule,
     InternalDemoModule,
     CustomersModule,
+    ListExportModule,
     EquipmentsModule,
     OperationsModule,
     AssignmentsModule,

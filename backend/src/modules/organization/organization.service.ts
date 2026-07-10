@@ -467,9 +467,9 @@ export class OrganizationService {
       }
       const signature = await this.prisma.signature.findUnique({
         where: { id: signatureId },
-        select: { id: true, active: true },
+        select: { id: true, active: true, deletedAt: true },
       });
-      if (!signature) {
+      if (!signature || signature.deletedAt) {
         throw new ApplicationException(
           ERROR_CODES.SIGNATURE_NOT_FOUND,
           'Signature was not found',

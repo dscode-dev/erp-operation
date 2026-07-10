@@ -431,6 +431,17 @@ Decisão de domínio atualizada:
 - o frontend não simula fornecedor em estado local permanente; envia `primarySupplierId` para o
   backend e lê `Product.suppliers[]` nas respostas.
 
+## Product Backlog Closure 03 — component impact
+
+- `ExportButton`: CSV continua client-side para linhas visíveis; PDF chama backend, mostra estado
+  “Gerando PDF…”, trata erro e baixa Blob com filename seguro.
+- Settings/Assinaturas: `SignatureEditor` agora é Drawer lateral, com seções de identificação,
+  método de assinatura, upload/desenho e preview.
+- `SignatureCanvas`: canvas responsivo com pointer/touch/mouse, limpar desenho e conversão para PNG
+  `File`.
+- `SignaturePreview`: baixa imagem apenas via endpoint autorizado de assinatura e não consome
+  storage key.
+
 ## Product Backlog Closure 02 — document component impact
 
 Componentes evoluídos:

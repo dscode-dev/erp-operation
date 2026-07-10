@@ -32,16 +32,22 @@ const SIGNATURE_SELECT = {
   id: true,
   name: true,
   title: true,
-  imageStorageKey: true,
   mimeType: true,
   originalFileName: true,
   fileSize: true,
   active: true,
+  deletedAt: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.SignatureSelect;
 
-export type SignatureResponse = Prisma.SignatureGetPayload<{ select: typeof SIGNATURE_SELECT }>;
+const SIGNATURE_INTERNAL_SELECT = {
+  ...SIGNATURE_SELECT,
+  imageStorageKey: true,
+} satisfies Prisma.SignatureSelect;
+
+type SignatureInternal = Prisma.SignatureGetPayload<{ select: typeof SIGNATURE_INTERNAL_SELECT }>;
+export type SignatureResponse = Prisma.SignatureGetPayload<{ select: typeof SIGNATURE_SELECT }> & { hasImage: boolean };
 
 export interface SignatureImageResponse extends SignatureResponse {
   contentBase64: string;
@@ -56,6 +62,7 @@ export class SignaturesService {
 
   async list(query: ListSignaturesQueryDto): Promise<unknown> {
     const where: Prisma.SignatureWhereInput = {
+      deletedAt: null,
       ...(query.active !== undefined ? { active: query.active } : {}),
       ...(query.search
         ? {
@@ -69,18 +76,18 @@ export class SignaturesService {
     const [items, total] = await this.prisma.$transaction([
       this.prisma.signature.findMany({
         where,
-        select: SIGNATURE_SELECT,
+        select: SIGNATURE_INTERNAL_SELECT,
         orderBy: [{ active: 'desc' }, { name: 'asc' }],
         skip: (query.page - 1) * query.limit,
         take: query.limit,
       }),
       this.prisma.signature.count({ where }),
     ]);
-    return buildPaginatedResponse(items, total, query.page, query.limit);
+    return buildPaginatedResponse(items.map((item) => this.toResponse(item)), total, query.page, query.limit);
   }
 
   async get(id: string): Promise<SignatureResponse> {
-    return this.signatureOrThrow(id);
+    return this.signatureOrThrow(id, { includeDeleted: false });
   }
 
   async create(
@@ -95,14 +102,14 @@ export class SignaturesService {
           title: this.clean(dto.title),
           active: dto.active ?? true,
         },
-        select: SIGNATURE_SELECT,
+        select: SIGNATURE_INTERNAL_SELECT,
       });
       await tx.auditLog.create({
         data: this.auditInput(SIGNATURE_AUDIT_ACTIONS.SIGNATURE_CREATED, actor, context, {
           signatureId: created.id,
         }),
       });
-      return created;
+      return this.toResponse(created);
     });
   }
 
@@ -112,7 +119,7 @@ export class SignaturesService {
     actor: AuthenticatedUser,
     context: SignatureAuditContext,
   ): Promise<SignatureResponse> {
-    await this.signatureOrThrow(id);
+    await this.signatureOrThrow(id, { includeDeleted: false });
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.signature.update({
         where: { id },
@@ -121,7 +128,7 @@ export class SignaturesService {
           ...(dto.title !== undefined ? { title: this.clean(dto.title) } : {}),
           ...(dto.active !== undefined ? { active: dto.active } : {}),
         },
-        select: SIGNATURE_SELECT,
+        select: SIGNATURE_INTERNAL_SELECT,
       });
       await tx.auditLog.create({
         data: this.auditInput(SIGNATURE_AUDIT_ACTIONS.SIGNATURE_UPDATED, actor, context, {
@@ -129,7 +136,7 @@ export class SignaturesService {
           changedFields: Object.keys(dto),
         }),
       });
-      return updated;
+      return this.toResponse(updated);
     });
   }
 
@@ -138,9 +145,9 @@ export class SignaturesService {
     actor: AuthenticatedUser,
     context: SignatureAuditContext,
   ): Promise<{ deleted: true }> {
-    await this.signatureOrThrow(id);
+    await this.signatureOrThrow(id, { includeDeleted: false });
     await this.prisma.$transaction([
-      this.prisma.signature.update({ where: { id }, data: { active: false } }),
+      this.prisma.signature.update({ where: { id }, data: { active: false, deletedAt: new Date() } }),
       this.prisma.auditLog.create({
         data: this.auditInput(SIGNATURE_AUDIT_ACTIONS.SIGNATURE_DELETED, actor, context, {
           signatureId: id,
@@ -157,7 +164,7 @@ export class SignaturesService {
     actor: AuthenticatedUser,
     context: SignatureAuditContext,
   ): Promise<SignatureResponse> {
-    const signature = await this.signatureOrThrow(id);
+    const signature = await this.signatureInternalOrThrow(id, { includeDeleted: false });
     this.validateImage(file);
     const validFile = file as UploadedSignatureFile;
     const extension = this.extensionFor(validFile);
@@ -172,7 +179,7 @@ export class SignaturesService {
             originalFileName: this.sanitizeOriginalName(validFile.originalname),
             fileSize: validFile.size,
           },
-          select: SIGNATURE_SELECT,
+          select: SIGNATURE_INTERNAL_SELECT,
         });
         await tx.auditLog.create({
           data: this.auditInput(SIGNATURE_AUDIT_ACTIONS.SIGNATURE_IMAGE_UPLOADED, actor, context, {
@@ -185,7 +192,7 @@ export class SignaturesService {
       });
       if (signature.imageStorageKey)
         await this.assets.delete(signature.imageStorageKey).catch(() => undefined);
-      return updated;
+      return this.toResponse(updated);
     } catch (error) {
       await this.assets.delete(stored.storageKey).catch(() => undefined);
       throw error;
@@ -197,7 +204,7 @@ export class SignaturesService {
     actor: AuthenticatedUser,
     context: SignatureAuditContext,
   ): Promise<SignatureImageResponse> {
-    const signature = await this.signatureOrThrow(id);
+    const signature = await this.signatureInternalOrThrow(id, { includeDeleted: false });
     if (!signature.imageStorageKey) {
       throw new ApplicationException(
         ERROR_CODES.SIGNATURE_IMAGE_REQUIRED,
@@ -212,14 +219,24 @@ export class SignaturesService {
       }),
     });
     return {
-      ...signature,
+      ...this.toResponse(signature),
       contentBase64: stored.content.toString('base64'),
     };
   }
 
-  private async signatureOrThrow(id: string): Promise<SignatureResponse> {
-    const signature = await this.prisma.signature.findUnique({ where: { id }, select: SIGNATURE_SELECT });
-    if (!signature) {
+  private async signatureOrThrow(
+    id: string,
+    options: { includeDeleted: boolean } = { includeDeleted: false },
+  ): Promise<SignatureResponse> {
+    return this.toResponse(await this.signatureInternalOrThrow(id, options));
+  }
+
+  private async signatureInternalOrThrow(
+    id: string,
+    options: { includeDeleted: boolean } = { includeDeleted: false },
+  ): Promise<SignatureInternal> {
+    const signature = await this.prisma.signature.findUnique({ where: { id }, select: SIGNATURE_INTERNAL_SELECT });
+    if (!signature || (!options.includeDeleted && signature.deletedAt)) {
       throw new ApplicationException(
         ERROR_CODES.SIGNATURE_NOT_FOUND,
         'Signature was not found',
@@ -227,6 +244,12 @@ export class SignaturesService {
       );
     }
     return signature;
+  }
+
+  private toResponse(signature: SignatureInternal): SignatureResponse {
+    const { imageStorageKey, ...safe } = signature;
+    void imageStorageKey;
+    return { ...safe, hasImage: Boolean(signature.imageStorageKey) };
   }
 
   private validateImage(file: UploadedSignatureFile | undefined): void {

@@ -436,11 +436,13 @@ model Signature {
   originalFileName String?            @map("original_file_name") @db.VarChar(255)
   fileSize         Int?               @map("file_size")
   active           Boolean            @default(true)
+  deletedAt        DateTime?          @map("deleted_at") @db.Timestamptz(3)
   createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt        DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
   templates        DocumentTemplate[]
 
   @@index([active, name])
+  @@index([deletedAt])
   @@map("signatures")
 }
 
