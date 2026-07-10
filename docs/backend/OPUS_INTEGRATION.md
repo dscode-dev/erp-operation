@@ -1627,3 +1627,18 @@ Limitação V1:
 
 - “Relatório Técnico” e “Laudo” do frontend ainda compartilham `DocumentTemplateType.REPORT`.
 - Não criar tipo local novo; se o produto precisar diferenciar ambos, abrir backlog para novo enum/contrato backend.
+
+## Document Semantics Closure — Opus update
+
+A limitação acima foi fechada.
+
+Use:
+
+- `TECHNICAL_REPORT` para Relatório Técnico.
+- `TECHNICAL_OPINION` para Laudo Técnico.
+- `REPORT` apenas como tipo legado/histórico quando retornado pelo backend.
+
+Na UI:
+
+- “Visualizar modelo” deve usar template preview e ocultar render/download.
+- “Pré-visualizar com dados reais” deve exigir Operation e permitir render/download conforme RBAC.

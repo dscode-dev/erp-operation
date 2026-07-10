@@ -660,3 +660,26 @@ Validação:
 
 - `npm run lint` passou com 2 warnings preexistentes;
 - `npm run build` passou.
+
+## Document Semantics Closure — explicit preview modes and Laudo type
+
+Status: concluído em 10 de julho de 2026.
+
+Alterações frontend:
+
+- `/reports` passou a exibir dois caminhos distintos nos cards:
+  - “Visualizar modelo”;
+  - “Pré-visualizar com dados reais”.
+- Model preview usa `templateId`, não exige Operation e não mostra render/download.
+- Real data preview usa `operationId + type` e mantém render/download oficiais.
+- `DocumentTemplateType` frontend recebeu `TECHNICAL_OPINION`.
+- `DOCUMENT_KIND_LABEL` diferencia:
+  - `TECHNICAL_REPORT`: Relatório de Visita Técnica;
+  - `TECHNICAL_OPINION`: Laudo Técnico;
+  - `REPORT`: Relatório legado.
+- `/documentos` passa a filtrar/exibir `TECHNICAL_OPINION`.
+
+Validação:
+
+- `npm run lint` passou com 2 warnings preexistentes;
+- `npm run build` passou.

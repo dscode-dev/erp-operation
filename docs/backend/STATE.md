@@ -2238,6 +2238,39 @@ Validação:
 - `npm run build`: passou;
 - `npm test -- --silent`: 10 suites / 27 testes passaram.
 
+## Document Semantics Closure — Model Preview vs Real Data Preview + Technical Opinion
+
+Status: concluído em 10 de julho de 2026.
+
+Alterações:
+
+- `DocumentTemplateType` recebeu `TECHNICAL_OPINION` de forma aditiva.
+- Migration criada: `20260710120000_document_semantics_technical_opinion`.
+- `REPORT` foi preservado como tipo legado/histórico, sem renomear documentos existentes.
+- `TECHNICAL_REPORT` representa relatório técnico factual/operacional.
+- `TECHNICAL_OPINION` representa laudo técnico analítico baseado somente em dados reais disponíveis.
+- Prefixo novo: `TECHNICAL_OPINION -> LDO`.
+- Seeds idempotentes passam a criar template padrão de Laudo Técnico sem sobrescrever customizações existentes.
+- `DocumentBuilderService` agora possui composição distinta para:
+  - Technical Report;
+  - Technical Opinion;
+  - REPORT legado.
+
+Garantias:
+
+- model preview continua usando `TemplatePreviewContext`, sem OperationDocument/render/download;
+- real preview continua usando Operation/Budget context oficial;
+- nenhum dado histórico `REPORT` foi migrado destrutivamente;
+- nenhum PDF é gerado fora do Document Engine.
+
+Validação:
+
+- `DATABASE_URL=... npx prisma validate`: passou;
+- `DATABASE_URL=... npx prisma generate`: passou;
+- `npm run lint`: passou;
+- `npm run build`: passou;
+- `npm test -- --silent`: 10 suites / 28 testes passaram.
+
 Motivo:
 
 - a base local passou nos gates técnicos executados, mas não houve evidência real de staging,

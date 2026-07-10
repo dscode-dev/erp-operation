@@ -1562,3 +1562,25 @@ Cuidados frontend:
 - não construir URL de storage;
 - revogar object URLs temporários ao baixar binários;
 - tratar erros de documento não renderizado como estado controlado.
+
+## Document Semantics Closure — preview mode security
+
+Model Preview:
+
+- usa apenas `DocumentTemplate` e placeholders estruturais;
+- não consulta Operation/Budget;
+- não cria `OperationDocument`;
+- não executa render;
+- não publica lifecycle/history de emissão.
+
+Real Data Preview:
+
+- exige fonte real autorizada;
+- usa Document Context oficial;
+- render/download continuam protegidos por RBAC;
+- `TECHNICAL_REPORT` e `TECHNICAL_OPINION` seguem a mesma política de documentos operacionais;
+- tipos financeiros continuam protegidos.
+
+Compatibilidade:
+
+- `REPORT` legado permanece acessível pelas regras existentes para não quebrar histórico.

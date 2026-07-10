@@ -21,6 +21,7 @@ export const OPERATION_DOCUMENT_PREFIX: Record<string, string> = {
   RECEIPT: 'REC',
   REPORT: 'REL',
   TECHNICAL_REPORT: 'RVT',
+  TECHNICAL_OPINION: 'LDO',
   PMOC: 'PMOC',
 };
 

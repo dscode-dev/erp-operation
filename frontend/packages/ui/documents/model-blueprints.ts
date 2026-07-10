@@ -1,11 +1,8 @@
 /**
  * Document model blueprints — definições modernas e profissionais dos modelos
- * de documento (OS, Relatório Técnico, Visita Técnica, PMOC, Laudo, Orçamento,
- * Recibo). Cada blueprint descreve as seções do documento; `buildDocument`
- * monta um `DocPaperData` (com dados reais/exemplo) para o `DocumentPaper`.
- *
- * A estrutura espelha o que o backend irá renderizar dinamicamente — novos
- * modelos podem ser adicionados aqui sem refatorar as telas.
+ * de documento (OS, Relatório Técnico, PMOC, Laudo, Orçamento, Recibo).
+ * Estes blueprints são metadados de UX para seleção de tipo; a renderização
+ * autoritativa vem do Document Engine.
  */
 import type { DocumentTemplateType } from "@erp/types";
 import { formatCurrencyBRL, formatDate } from "@erp/utils";
@@ -14,7 +11,6 @@ import type { DocPaperData, DocPaperSection } from "./document-paper";
 export type ModelKey =
   | "OS"
   | "RELATORIO_TECNICO"
-  | "VISITA_TECNICA"
   | "PMOC"
   | "LAUDO"
   | "ORCAMENTO"
@@ -59,8 +55,8 @@ export const MODEL_BLUEPRINTS: Blueprint[] = [
   {
     key: "RELATORIO_TECNICO",
     label: "Relatório Técnico",
-    description: "Relatório consolidado de atividade técnica.",
-    templateType: "REPORT",
+    description: "Registro factual de atendimento, inspeção, atividades, materiais e evidências.",
+    templateType: "TECHNICAL_REPORT",
     build: (c) => ({
       sections: [
         { title: "Escopo", kind: "text", text: `Relatório técnico referente ao equipamento ${c.equipment ?? "—"} do cliente ${c.customer}.` },
@@ -69,21 +65,6 @@ export const MODEL_BLUEPRINTS: Blueprint[] = [
         { title: "Conclusão e recomendações", kind: "text", text: "Recomenda-se manutenção preventiva trimestral para preservar a eficiência do sistema." },
       ],
       signatures: [{ name: c.operator ?? "Responsável técnico", role: "Responsável técnico" }],
-    }),
-  },
-  {
-    key: "VISITA_TECNICA",
-    label: "Relatório de Visita Técnica",
-    description: "Registro da visita em campo com fotos e assinatura.",
-    templateType: "TECHNICAL_REPORT",
-    build: (c) => ({
-      sections: [
-        { title: "Identificação da visita", kind: "fields", fields: [{ label: "Cliente", value: c.customer }, { label: "Equipamento", value: c.equipment ?? "—" }, { label: "Operador", value: c.operator ?? "—" }, { label: "Data", value: formatDate(c.date) }] },
-        { title: "Condições encontradas", kind: "text", text: "Descrição das condições do local e do equipamento no momento da visita." },
-        { title: "Atividades realizadas", kind: "list", items: ["Vistoria geral", "Coleta de medições", "Registro fotográfico"] },
-        { title: "Recomendações", kind: "text", text: "Itens e prazos recomendados para a próxima intervenção." },
-      ],
-      signatures: [{ name: c.operator ?? "Técnico", role: "Técnico" }, { name: c.customer, role: "Cliente" }],
     }),
   },
   {
@@ -103,8 +84,8 @@ export const MODEL_BLUEPRINTS: Blueprint[] = [
   {
     key: "LAUDO",
     label: "Laudo Técnico",
-    description: "Parecer técnico formal sobre o equipamento.",
-    templateType: "REPORT",
+    description: "Avaliação técnica analítica baseada nos registros e evidências disponíveis.",
+    templateType: "TECHNICAL_OPINION",
     build: (c) => ({
       sections: [
         { title: "Objeto do laudo", kind: "text", text: `Avaliação técnica do equipamento ${c.equipment ?? "—"} do cliente ${c.customer}.` },

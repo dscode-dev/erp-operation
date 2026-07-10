@@ -331,3 +331,13 @@ Rotas impactadas:
   - documentos emitidos via Reports aparecem pela relação `OperationDocument` existente.
 
 Nenhuma rota nova foi criada.
+
+## Document Semantics Closure — route behavior
+
+- `/reports`
+  - cards exibem “Visualizar modelo” e “Pré-visualizar com dados reais” separadamente;
+  - modelo não exige Operation;
+  - dados reais exigem Operation.
+- `/documentos`
+  - filtros incluem `TECHNICAL_OPINION`;
+  - documentos `REPORT` continuam legíveis como legado.

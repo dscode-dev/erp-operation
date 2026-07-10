@@ -209,7 +209,10 @@ export class DocumentBuilderService {
         sections.push(...this.visitReportSections(context));
         break;
       case DocumentTemplateType.REPORT:
-        sections.push(...this.executionReportSections(context));
+        sections.push(...this.legacyReportSections(context));
+        break;
+      case DocumentTemplateType.TECHNICAL_OPINION:
+        sections.push(...this.technicalOpinionSections(context));
         break;
       case DocumentTemplateType.PMOC:
         sections.push(...this.pmocReportSections(context));
@@ -354,6 +357,84 @@ export class DocumentBuilderService {
       this.checklistSection(operation, 'Atividades executadas'),
       this.materialsSection(operation),
       this.observationSection(operation, 'Resultado operacional'),
+    ].filter((section): section is DocumentSection => Boolean(section));
+  }
+
+  private legacyReportSections(context: DocumentContext): DocumentSection[] {
+    return [
+      {
+        id: 'legacy-report-compatibility',
+        title: 'Relatório legado',
+        critical: true,
+        components: [
+          {
+            id: 'legacy-report-note',
+            kind: 'observation',
+            text: this.clean('Documento REPORT preservado para compatibilidade histórica. Novas emissões analíticas devem usar Laudo Técnico (TECHNICAL_OPINION).'),
+            keepTogether: true,
+          },
+        ],
+      },
+      ...this.executionReportSections(context),
+    ];
+  }
+
+  private technicalOpinionSections(context: DocumentContext): DocumentSection[] {
+    const { operation } = context;
+    return [
+      {
+        id: 'technical-opinion-object',
+        title: 'Objeto da avaliação técnica',
+        critical: true,
+        components: [
+          this.metadata('technical-opinion-object-metadata', [
+            ['Operação analisada', String(operation.number).padStart(6, '0')],
+            ['Cliente', operation.customer.tradeName ?? operation.customer.name],
+            ['Equipamento avaliado', operation.equipment?.name ?? '—'],
+            ['Responsável pela inspeção', operation.operator.name],
+            ['Período observado', `${this.date(operation.startedAt)} → ${this.date(operation.completedAt)}`],
+          ]),
+        ],
+      },
+      {
+        id: 'technical-opinion-findings',
+        title: 'Constatações técnicas',
+        components: [
+          {
+            id: 'technical-opinion-findings-text',
+            kind: 'observation',
+            text: this.clean(operation.observations || 'Sem observações técnicas estruturadas registradas na Operation.'),
+            keepTogether: true,
+          },
+        ],
+      },
+      this.checklistSection(operation, 'Evidências e verificações consideradas'),
+      this.materialsSection(operation),
+      {
+        id: 'technical-opinion-analysis',
+        title: 'Análise técnica',
+        components: [
+          {
+            id: 'technical-opinion-analysis-text',
+            kind: 'paragraph',
+            text: this.clean('Análise baseada exclusivamente nos dados registrados na Operation, checklist, materiais e evidências anexadas. A V1 não gera conclusões regulatórias automáticas.'),
+            keepTogether: true,
+          },
+        ],
+      },
+      {
+        id: 'technical-opinion-conclusion',
+        title: 'Conclusão',
+        critical: true,
+        components: [
+          {
+            id: 'technical-opinion-conclusion-text',
+            kind: 'observation',
+            text: this.clean(operation.status === 'COMPLETED' ? 'Atendimento concluído conforme registros operacionais disponíveis.' : `Operation em status ${operation.status}; conclusão técnica definitiva não registrada.`),
+            keepTogether: true,
+          },
+        ],
+      },
     ].filter((section): section is DocumentSection => Boolean(section));
   }
 
@@ -634,8 +715,9 @@ export class DocumentBuilderService {
       QUOTE: 'Origem do orçamento operacional',
       WORK_ORDER: 'Ordem de serviço',
       RECEIPT: 'Recibo de atendimento',
-      REPORT: 'Relatório de execução',
+      REPORT: 'Relatório legado',
       TECHNICAL_REPORT: 'Relatório de visita técnica',
+      TECHNICAL_OPINION: 'Laudo técnico',
       PMOC: 'Relatório PMOC',
     };
     return titles[type];
@@ -978,8 +1060,9 @@ export class DocumentBuilderService {
       QUOTE: 'Orçamento',
       WORK_ORDER: 'Ordem de Serviço',
       RECEIPT: 'Recibo',
-      REPORT: 'Relatório',
-      TECHNICAL_REPORT: 'Relatório Técnico',
+      REPORT: 'Relatório legado',
+      TECHNICAL_REPORT: 'Relatório de Visita Técnica',
+      TECHNICAL_OPINION: 'Laudo Técnico',
       PMOC: 'PMOC',
     };
     return titles[type];

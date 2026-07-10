@@ -220,8 +220,9 @@ function defaultTemplateName(type: DocumentTemplateType): string {
     QUOTE: 'Orçamento padrão',
     WORK_ORDER: 'Ordem de serviço padrão',
     RECEIPT: 'Recibo padrão',
-    REPORT: 'Relatório padrão',
+    REPORT: 'Relatório legado padrão',
     TECHNICAL_REPORT: 'Relatório técnico padrão',
+    TECHNICAL_OPINION: 'Laudo técnico padrão',
     PMOC: 'PMOC padrão',
   };
   return names[type];

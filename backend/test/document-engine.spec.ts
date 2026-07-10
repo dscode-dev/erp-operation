@@ -4,6 +4,7 @@ import { PdfEngineService } from '../src/modules/document-engine/pdf/pdf-engine.
 import type { DocumentBlueprint } from '../src/modules/document-engine/blueprint/document-blueprint.types';
 import { LayoutEngine } from '../src/modules/document-engine/layout/layout-engine.service';
 import { DocumentMeasureService } from '../src/modules/document-engine/measurement/document-measure.service';
+import { DocumentBuilderService } from '../src/modules/document-engine/builder/document-builder.service';
 
 const ONE_PIXEL_PNG =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=';
@@ -163,4 +164,88 @@ describe('DocumentEngine foundation', () => {
     expect(result.buffer.toString('latin1')).toContain('/Subtype /Image');
     expect(result.buffer.toString('latin1')).toContain('/XObject');
   });
+
+  it('builds semantically different Technical Report and Technical Opinion blueprints', () => {
+    const builder = new DocumentBuilderService({} as never);
+    const base = operationContext(DocumentTemplateType.TECHNICAL_REPORT);
+    const report = (builder as unknown as { buildFromContext: (ctx: unknown) => DocumentBlueprint }).buildFromContext(base);
+    const opinion = (builder as unknown as { buildFromContext: (ctx: unknown) => DocumentBlueprint }).buildFromContext({
+      ...base,
+      configuration: { ...base.configuration, type: DocumentTemplateType.TECHNICAL_OPINION },
+    });
+
+    const reportSectionIds = report.sections.map((section) => section.id);
+    const opinionSectionIds = opinion.sections.map((section) => section.id);
+
+    expect(report.metadata.documentType).toBe(DocumentTemplateType.TECHNICAL_REPORT);
+    expect(opinion.metadata.documentType).toBe(DocumentTemplateType.TECHNICAL_OPINION);
+    expect(reportSectionIds).toContain('visit-timing');
+    expect(opinionSectionIds).toContain('technical-opinion-object');
+    expect(opinionSectionIds).toContain('technical-opinion-conclusion');
+    expect(opinionSectionIds).not.toEqual(reportSectionIds);
+  });
 });
+
+function operationContext(type: DocumentTemplateType): Record<string, unknown> & { configuration: Record<string, unknown> } {
+  const now = new Date('2026-07-10T12:00:00.000Z');
+  return {
+    kind: 'operation',
+    configuration: {
+      type,
+      organization: {
+        legalName: 'ERP Operation LTDA',
+        tradeName: 'Orbit',
+        cnpj: '00.000.000/0001-00',
+        email: 'contato@orbit.local',
+        phone: '+55 81 99999-9999',
+        city: 'Recife',
+        state: 'PE',
+        primaryColor: '#111827',
+        secondaryColor: '#2563EB',
+      },
+      settings: { timezone: 'America/Recife', currency: 'BRL' },
+    },
+    template: null,
+    signature: { requiresSignature: false, signatureMode: 'NONE', signatureId: null, fixedSignature: null, collectedSignature: null },
+    assets: { signature: null, logo: null, watermark: null, qrCode: null, images: [] },
+    operation: {
+      id: '7db71471-0cf4-4414-8d06-83eb9c1917c9',
+      number: 42,
+      type: 'PREVENTIVA',
+      status: 'COMPLETED',
+      scheduledFor: now,
+      startedAt: now,
+      completedAt: now,
+      signedAt: now,
+      checklist: [{ label: 'Inspeção visual', done: true, note: 'Sem avarias aparentes' }],
+      observations: 'Equipamento inspecionado e operando conforme registros do atendimento.',
+      customer: {
+        name: 'Hospital Santa Clara',
+        tradeName: 'Hospital Santa Clara',
+        cnpj: '00.000.000/0001-00',
+        cpf: null,
+        phone: '+55 81 3000-0000',
+        addresses: [{ name: 'Matriz', street: 'Rua A', number: '100', district: 'Boa Viagem', city: 'Recife', state: 'PE' }],
+        contacts: [{ name: 'Ana', phone: '+55 81 98888-0000' }],
+      },
+      address: null,
+      equipment: {
+        name: 'Chiller 01',
+        tag: 'CH-01',
+        type: 'CHILLER',
+        manufacturer: 'York',
+        model: 'YCAL',
+        serialNumber: 'SN-123',
+        qrCode: 'equipment:7db71471-0cf4-4414-8d06-83eb9c1917c9',
+        metrics: [],
+        attachments: [],
+      },
+      operator: { name: 'João Técnico', jobTitle: 'Técnico' },
+      assignment: null,
+      maintenanceExecution: null,
+      parts: [],
+      photos: [],
+      documents: [],
+    },
+  };
+}

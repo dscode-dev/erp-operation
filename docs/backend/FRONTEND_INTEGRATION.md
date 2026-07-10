@@ -1954,3 +1954,29 @@ O frontend não deve:
 - acessar `storageKey`;
 - recalcular materiais, valores ou histórico;
 - criar registros paralelos de documento.
+
+## Document Semantics Closure — preview modes
+
+O frontend deve separar explicitamente:
+
+### Model Preview
+
+- Fonte: `DocumentTemplate`.
+- Endpoint: `GET /documents/templates/:templateId/preview`.
+- Não exige Operation.
+- Não pode renderizar PDF oficial.
+- Não pode baixar PDF oficial.
+- Não cria `OperationDocument`.
+
+### Real Data Preview
+
+- Fonte: domínio real (`Operation` para documentos operacionais; `Budget` para orçamento).
+- Endpoint operacional: `GET /documents/operations/:operationId/:type/preview`.
+- Pode renderizar via ação explícita quando autorizado.
+- Download ocorre apenas depois do render oficial.
+
+Taxonomia:
+
+- `TECHNICAL_REPORT`: relatório técnico factual.
+- `TECHNICAL_OPINION`: laudo técnico analítico.
+- `REPORT`: legado/histórico.

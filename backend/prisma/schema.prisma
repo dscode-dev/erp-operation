@@ -27,6 +27,7 @@ enum DocumentTemplateType {
   RECEIPT
   REPORT
   TECHNICAL_REPORT
+  TECHNICAL_OPINION
   PMOC
 }
 

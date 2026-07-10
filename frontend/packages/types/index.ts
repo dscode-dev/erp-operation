@@ -159,6 +159,7 @@ export type DocumentTemplateType =
   | "RECEIPT"
   | "REPORT"
   | "TECHNICAL_REPORT"
+  | "TECHNICAL_OPINION"
   | "PMOC";
 
 export type SignatureMode = "NONE" | "FIXED" | "COLLECTED" | "HYBRID";
@@ -1447,7 +1448,7 @@ export type DemoDocumentStatus = "DRAFT" | "READY" | "VALIDATED" | "SENT";
 
 export type DemoDocument = {
   id: string;
-  /** Maps to DocumentTemplateType (WORK_ORDER, TECHNICAL_REPORT, PMOC, REPORT, QUOTE, RECEIPT). */
+  /** Maps to DocumentTemplateType (WORK_ORDER, TECHNICAL_REPORT, TECHNICAL_OPINION, PMOC, REPORT, QUOTE, RECEIPT). */
   kind: DocumentTemplateType;
   number: string;
   customer: string;

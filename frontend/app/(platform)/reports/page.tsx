@@ -6,7 +6,6 @@ import {
   CheckCircle2,
   ClipboardCheck,
   Eye,
-  FileSignature,
   FileText,
   LibraryBig,
   Plus,
@@ -43,7 +42,6 @@ type TemplateCard = {
 const ICONS: Record<ModelKey, LucideIcon> = {
   OS: ClipboardCheck,
   RELATORIO_TECNICO: FileText,
-  VISITA_TECNICA: FileSignature,
   PMOC: ShieldCheck,
   LAUDO: ScrollText,
   ORCAMENTO: LibraryBig,
@@ -65,7 +63,7 @@ export default function ReportsPage() {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(6);
   const [editing, setEditing] = useState<TemplateCard | null>(null);
-  const [previewing, setPreviewing] = useState<TemplateCard | null>(null);
+  const [previewing, setPreviewing] = useState<{ card: TemplateCard; mode: "model" | "real" } | null>(null);
   const [creatingType, setCreatingType] = useState<DocumentTemplateType>("WORK_ORDER");
   const [createOpen, setCreateOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<DocumentTemplate | null>(null);
@@ -176,7 +174,8 @@ export default function ReportsPage() {
                 card={card}
                 canEdit={canEdit}
                 signature={findSignature(signatureList, card.template?.signatureId)}
-                onPreview={() => setPreviewing(card)}
+                onModelPreview={() => setPreviewing({ card, mode: "model" })}
+                onRealPreview={() => setPreviewing({ card, mode: "real" })}
                 onConfigure={() => setEditing(card)}
               />
             ))}
@@ -194,9 +193,9 @@ export default function ReportsPage() {
       )}
 
       <TemplatePreviewDrawer
-        card={previewing}
+        state={previewing}
         canEdit={canEdit}
-        signature={findSignature(signatureList, previewing?.template?.signatureId)}
+        signature={findSignature(signatureList, previewing?.card.template?.signatureId)}
         operations={operations.data?.items ?? []}
         operationsLoading={operations.loading}
         onRendered={() => {
@@ -206,7 +205,7 @@ export default function ReportsPage() {
         onClose={() => setPreviewing(null)}
         onConfigure={() => {
           if (!previewing) return;
-          setEditing(previewing);
+          setEditing(previewing.card);
           setPreviewing(null);
         }}
         onDelete={(template) => setDeleteTarget(template)}
@@ -251,13 +250,15 @@ function TemplateModelCard({
   card,
   canEdit,
   signature,
-  onPreview,
+  onModelPreview,
+  onRealPreview,
   onConfigure,
 }: {
   card: TemplateCard;
   canEdit: boolean;
   signature: Signature | null;
-  onPreview: () => void;
+  onModelPreview: () => void;
+  onRealPreview: () => void;
   onConfigure: () => void;
 }) {
   const Icon = ICONS[card.key] ?? FileText;
@@ -293,10 +294,14 @@ function TemplateModelCard({
         <Meta label="Atualizado" value={template?.updatedAt ? formatDate(template.updatedAt) : "Ainda não configurado"} />
       </dl>
 
-      <div className="mt-5 grid grid-cols-2 gap-2">
-        <button type="button" onClick={onPreview} className="inline-flex h-9 items-center justify-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 text-sm font-medium transition hover:bg-[var(--color-muted)]">
+      <div className="mt-5 grid gap-2">
+        <button type="button" onClick={onModelPreview} className="inline-flex h-9 items-center justify-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 text-sm font-medium transition hover:bg-[var(--color-muted)]">
           <Eye className="h-4 w-4" />
-          Visualizar
+          Visualizar modelo
+        </button>
+        <button type="button" onClick={onRealPreview} className="inline-flex h-9 items-center justify-center gap-2 rounded-[var(--radius-md)] bg-[var(--color-primary)] px-3 text-sm font-medium text-[var(--color-primary-foreground)] transition hover:opacity-90">
+          <FileText className="h-4 w-4" />
+          Pré-visualizar com dados reais
         </button>
         <button
           type="button"
@@ -314,7 +319,7 @@ function TemplateModelCard({
 }
 
 function TemplatePreviewDrawer({
-  card,
+  state,
   canEdit,
   signature,
   operations,
@@ -324,7 +329,7 @@ function TemplatePreviewDrawer({
   onConfigure,
   onDelete,
 }: {
-  card: TemplateCard | null;
+  state: { card: TemplateCard; mode: "model" | "real" } | null;
   canEdit: boolean;
   signature: Signature | null;
   operations: OperationSummary[];
@@ -334,6 +339,8 @@ function TemplatePreviewDrawer({
   onConfigure: () => void;
   onDelete: (template: DocumentTemplate) => void;
 }) {
+  const card = state?.card ?? null;
+  const mode = state?.mode ?? "model";
   const template = card?.template ?? null;
   const [operationId, setOperationId] = useState("");
   const selectedOperation = operations.find((operation) => operation.id === operationId) ?? operations[0] ?? null;
@@ -344,7 +351,13 @@ function TemplatePreviewDrawer({
   }, [card, operations]);
 
   return (
-    <Drawer open={Boolean(card)} onClose={onClose} eyebrow="Preview oficial" title={card ? `Modelo · ${card.label}` : "Modelo"} width="max-w-[1280px]">
+    <Drawer
+      open={Boolean(card)}
+      onClose={onClose}
+      eyebrow={mode === "model" ? "Preview de modelo" : "Preview com dados reais"}
+      title={card ? `${mode === "model" ? "Modelo" : "Documento"} · ${card.label}` : "Documento"}
+      width="max-w-[1280px]"
+    >
       {card && (
         <div className="space-y-5">
           <section className="rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 shadow-[var(--shadow-card)]">
@@ -354,7 +367,7 @@ function TemplatePreviewDrawer({
                   <FileText className="h-5 w-5" />
                 </span>
                 <div className="min-w-0">
-                  <p className="text-caption uppercase tracking-wider">{DOCUMENT_KIND_LABEL[card.type]}</p>
+                  <p className="text-caption uppercase tracking-wider">{mode === "model" ? "Inspeção estrutural" : "Documento real"} · {DOCUMENT_KIND_LABEL[card.type]}</p>
                   <h3 className="truncate text-lg font-semibold">{template?.name ?? card.label}</h3>
                   <p className="mt-1 max-w-3xl text-sm text-[var(--color-muted-foreground)]">{card.description}</p>
                 </div>
@@ -398,6 +411,7 @@ function TemplatePreviewDrawer({
             </div>
           </section>
 
+          {mode === "real" && (
           <section className="space-y-3 rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
@@ -433,9 +447,23 @@ function TemplatePreviewDrawer({
               </div>
             )}
           </section>
+          )}
 
           <section className="min-w-0 rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-card)] p-3">
-            {selectedOperation ? (
+            {mode === "model" && template ? (
+              <DocumentViewer
+                source={{ templateId: template.id }}
+                title={`Modelo · ${card.label}`}
+                canRender={false}
+                canDownload={false}
+              />
+            ) : mode === "model" ? (
+              <EmptyState
+                icon={FileText}
+                title="Template indisponível"
+                description="Crie ou configure um modelo antes de solicitar o preview estrutural."
+              />
+            ) : selectedOperation ? (
               <DocumentViewer
                 source={{ operationId: selectedOperation.id, type: card.type }}
                 title={`${card.label} · OP-${String(selectedOperation.number).padStart(6, "0")}`}

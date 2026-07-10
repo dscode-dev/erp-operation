@@ -4303,3 +4303,25 @@ Mudança compatível:
   para documentos operacionais, mantendo o mesmo formato de componentes já contratado.
 - `download` continua retornando `contentBase64` apenas pelo endpoint autorizado de download;
   `storageKey` não é exposto.
+
+## Document Semantics Closure — taxonomy update
+
+Contrato de enum atualizado:
+
+- `TECHNICAL_REPORT`: relatório técnico factual/operacional.
+- `TECHNICAL_OPINION`: laudo técnico analítico.
+- `REPORT`: tipo legado preservado para documentos históricos.
+
+Endpoints não mudaram. Os mesmos contratos aceitam o novo tipo:
+
+- `GET /api/v1/documents/operations/:operationId/TECHNICAL_OPINION/preview`
+- `POST /api/v1/documents/operations/:operationId/TECHNICAL_OPINION/render`
+- `GET /api/v1/documents/:documentId/preview`
+- `GET /api/v1/documents/:documentId/download`
+
+Model preview:
+
+- `GET /api/v1/documents/templates/:templateId/preview`
+- não renderiza;
+- não cria `OperationDocument`;
+- não fornece download oficial.

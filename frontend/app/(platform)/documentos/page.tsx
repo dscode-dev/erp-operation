@@ -25,7 +25,7 @@ const STATUS: Record<OperationDocumentStatus, { tone: ChipTone; label: string }>
   SENT: { tone: "primary", label: "Enviado" },
 };
 
-const KINDS: DocumentKind[] = ["WORK_ORDER", "TECHNICAL_REPORT", "REPORT", "PMOC", "QUOTE", "RECEIPT"];
+const KINDS: DocumentKind[] = ["WORK_ORDER", "TECHNICAL_REPORT", "TECHNICAL_OPINION", "REPORT", "PMOC", "QUOTE", "RECEIPT"];
 const STATUSES: OperationDocumentStatus[] = ["DRAFT", "READY", "VALIDATED", "SENT"];
 const selectCls =
   "h-9 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-2 text-sm outline-none focus:border-[var(--color-primary)]";

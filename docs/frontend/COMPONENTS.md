@@ -430,3 +430,20 @@ Responsabilidade:
 
 - Reports descobre/aciona emissão por tipo documental;
 - Documents lista/historiza documentos emitidos.
+
+## Document Semantics Closure — component semantics
+
+`TemplateModelCard` agora expõe ações semanticamente separadas:
+
+- `Visualizar modelo`: template preview estrutural, sem emissão.
+- `Pré-visualizar com dados reais`: Operation preview, com render/download oficiais.
+
+`DocumentViewer` continua sendo a superfície única de documento, mas recebe fontes distintas:
+
+- `{ templateId }` para Model Preview;
+- `{ operationId, type }` para Real Data Preview.
+
+Tipos:
+
+- `TECHNICAL_OPINION` foi adicionado aos tipos frontend e aparece como “Laudo Técnico”.
+- `REPORT` permanece rotulado como legado.

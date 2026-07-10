@@ -637,3 +637,25 @@ Performance:
 - preview não renderiza PDF automaticamente ao abrir drawer;
 - render é ação explícita do usuário;
 - download ocorre apenas depois de `documentId` existente/renderizado.
+
+## Document Semantics Closure — preview mode architecture
+
+Model Preview e Real Data Preview são caminhos distintos:
+
+```text
+Template → TemplatePreviewContext → Blueprint → DocumentViewer
+```
+
+Sem render/download oficial.
+
+```text
+Operation → DocumentContext → Builder especializado → Blueprint → Render → PDF → Download
+```
+
+Com render/download explícitos.
+
+Taxonomia V1:
+
+- `TECHNICAL_REPORT` é factual/operacional.
+- `TECHNICAL_OPINION` é analítico/conclusivo com dados existentes.
+- `REPORT` é compatibilidade histórica.
