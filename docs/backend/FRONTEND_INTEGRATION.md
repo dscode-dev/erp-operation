@@ -1417,10 +1417,24 @@ type ProductPayload = {
   category?: string;
   technicalDescription?: string;
   weight?: number;
-  dimensions?: Record<string, unknown>;
+  dimensions?: string;
+  primarySupplierId?: string | null;
   isActive?: boolean;
 };
 ```
+
+Product Backlog Closure 01.1:
+
+- o formulário de produto deve carregar fornecedores reais com `GET /suppliers?page=1&limit=100&active=true`;
+- erro de API de fornecedores deve aparecer como erro, não como lista vazia;
+- se o usuário criar um fornecedor pelo fluxo oficial `POST /suppliers`, atualize a lista e selecione
+  o fornecedor criado no produto quando o formulário estiver aberto;
+- envie `primarySupplierId` em `POST/PATCH /products` para persistir fornecedor principal;
+- envie `primarySupplierId: null` para remover o vínculo;
+- `Product.suppliers[]` retorna as relações persistidas, com a relação primária marcada por
+  `isPrimary=true`;
+- categoria deve ser UX de select controlado no frontend e persistida no campo string `category`; a
+  opção `Outros` deve enviar o texto customizado, nunca o literal `Outros`.
 
 Payload de consumo em Operation:
 

@@ -1139,6 +1139,8 @@ Entidades:
 
 - `Product`: catálogo do produto. Não armazena saldo nem movimentações;
 - `Supplier`: cadastro de fornecedores para compras futuras;
+- `ProductSupplier`: vínculo catálogo↔fornecedor. V1 usa fornecedor principal; a junction preserva
+  evolução futura para múltiplos fornecedores por produto sem alterar `Product`;
 - `InventoryItem`: estoque físico associado a um `Product`, preparado para múltiplos almoxarifados;
 - `StockMovement`: evento imutável de estoque;
 - `OperationPart`: material/produto consumido por uma `Operation`.
@@ -1150,6 +1152,7 @@ Enum:
 Migration criada:
 
 - `20260701120000_inventory_materials_domain`.
+- `20260710130000_product_supplier_relationship` adiciona `product_suppliers`.
 
 Decisões arquiteturais:
 
@@ -1163,6 +1166,17 @@ Decisões arquiteturais:
   estoque e publica `PART_REPLACEMENT` via `LifecyclePublisher`;
 - remoção de material de Operation é soft delete no `OperationPart` e gera `StockMovement(RETURN)`;
 - histórico de estoque e histórico do ativo permanecem separados, ligados por referências.
+- Product↔Supplier agora é persistido por junction (`ProductSupplier`), não por campo direto em
+  `Product`, para manter Procurement independente e permitir expansão futura.
+
+Product Backlog Closure 01.1:
+
+- `CreateProductDto` e `UpdateProductDto` aceitam `primarySupplierId?: uuid | null`;
+- `InventoryService` valida fornecedor existente/ativo e sincroniza a relação principal em
+  `product_suppliers`;
+- respostas de `GET/POST/PATCH /products` incluem `suppliers[]` com a entidade `supplier`;
+- `primarySupplierId: null` remove o vínculo do produto;
+- a associação é auditada junto com `PRODUCT_CREATED`/`PRODUCT_UPDATED`.
 
 Endpoints adicionados:
 

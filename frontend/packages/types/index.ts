@@ -848,6 +848,7 @@ export type Product = {
   createdAt: string;
   updatedAt: string;
   inventoryItems?: InventoryItem[];
+  suppliers?: ProductSupplier[];
 };
 
 export type ProductPayload = Partial<{
@@ -862,6 +863,7 @@ export type ProductPayload = Partial<{
   technicalDescription: string | null;
   weight: number | null;
   dimensions: string | null;
+  primarySupplierId: string | null;
   isActive: boolean;
 }>;
 
@@ -941,6 +943,16 @@ export type Supplier = {
   disabledAt?: string | null;
   createdAt: string;
   updatedAt: string;
+};
+
+export type ProductSupplier = {
+  id: string;
+  productId: string;
+  supplierId: string;
+  isPrimary: boolean;
+  createdAt: string;
+  updatedAt: string;
+  supplier: Supplier;
 };
 
 export type SupplierPayload = Partial<{

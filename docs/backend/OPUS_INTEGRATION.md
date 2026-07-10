@@ -1071,6 +1071,10 @@ Campos importantes:
 
 - `Product.sku`: identificador comercial único;
 - `Product.internalCode`: código interno opcional e único;
+- `Product.suppliers[]`: vínculos Product↔Supplier persistidos, com o fornecedor principal em
+  `isPrimary=true`;
+- `primarySupplierId`: campo opcional de `POST/PATCH /products` para definir/remover fornecedor
+  principal (`null` remove);
 - `InventoryItem.currentQuantity`: saldo físico atual recalculado pelo backend;
 - `InventoryItem.reservedQuantity`: reserva administrativa;
 - `InventoryItem.availableQuantity`: saldo disponível;

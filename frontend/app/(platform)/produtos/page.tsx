@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Boxes, DollarSign, History, Package, Plus, Truck } from "lucide-react";
 import { PageHeader } from "@platform/components/page-header";
@@ -63,6 +63,8 @@ export default function ProdutosPage() {
   const [stockItem, setStockItem] = useState<InventoryItem | null>(null);
   const [supplier, setSupplier] = useState<Supplier | null>(null);
   const [supplierOpen, setSupplierOpen] = useState(false);
+  const [preferredSupplierId, setPreferredSupplierId] = useState<string | null>(null);
+  const [preferredSupplier, setPreferredSupplier] = useState<Supplier | null>(null);
   const [pricingProduct, setPricingProduct] = useState<Product | null>(null);
   const [pricingRevision, setPricingRevision] = useState<ProductPricing | null>(null);
   const [pricingOpen, setPricingOpen] = useState(false);
@@ -83,6 +85,10 @@ export default function ProdutosPage() {
     (signal) => inventoryApi.listSuppliers({ page, limit, search, active: active === "all" ? undefined : active === "true", signal }),
     [page, limit, search, active],
   );
+  const supplierOptions = useQuery(
+    (signal) => inventoryApi.listSuppliers({ page: 1, limit: 100, active: true, signal }),
+    [],
+  );
   const pricing = useQuery(
     (signal) => (canSeePricing ? pricingApi.listPricing({ page, limit, search, active: active === "all" ? undefined : active === "true", signal }) : Promise.resolve(null)),
     [page, limit, search, active, canSeePricing],
@@ -93,9 +99,12 @@ export default function ProdutosPage() {
   const products = useMemo(() => productList.data?.items ?? [], [productList.data?.items]);
   const stats = inventoryStats.data;
   const pStats = pricingStats.data;
-  const categoryOptions = useMemo(() => uniqueStrings(products.map((product) => product.category)), [products]);
   const skuOptions = useMemo(() => uniqueStrings(products.map((product) => product.sku)), [products]);
   const internalCodeOptions = useMemo(() => uniqueStrings(products.map((product) => product.internalCode)), [products]);
+  const productFormSuppliers = useMemo(
+    () => mergeSupplierOptions(supplierOptions.data?.items ?? [], preferredSupplier),
+    [supplierOptions.data?.items, preferredSupplier],
+  );
 
   const productColumns: Column<Product>[] = [
     { key: "sku", header: "SKU", className: "w-[140px]", sortAccessor: (p) => p.sku, cell: (p) => <span className="font-mono text-xs">{p.sku}</span> },
@@ -147,6 +156,7 @@ export default function ProdutosPage() {
     inventory.refetch();
     movements.refetch();
     suppliers.refetch();
+    supplierOptions.refetch();
     pricing.refetch();
     inventoryStats.refetch();
     pricingStats.refetch();
@@ -252,7 +262,6 @@ export default function ProdutosPage() {
               <Gate roles={["OWNER"]}>
                 <button
                   onClick={() => { setPricingProduct(null); setPricingRevision(null); setPricingOpen(true); }}
-                  disabled={products.length === 0}
                   className={primaryBtn}
                 >
                   <DollarSign className="h-4 w-4" /> Novo preço
@@ -273,15 +282,32 @@ export default function ProdutosPage() {
       <ProductFormDrawer
         open={productFormOpen}
         product={formProduct}
-        categoryOptions={categoryOptions}
         skuOptions={skuOptions}
         internalCodeOptions={internalCodeOptions}
-        onClose={() => setProductFormOpen(false)}
-        onSaved={() => refreshAll("Produto salvo.")}
+        suppliers={productFormSuppliers}
+        suppliersLoading={supplierOptions.loading && !supplierOptions.data}
+        suppliersError={supplierOptions.error}
+        preferredSupplierId={preferredSupplierId}
+        canCreateSupplier={canManageProducts}
+        onRetrySuppliers={supplierOptions.refetch}
+        onCreateSupplier={() => { setSupplier(null); setSupplierOpen(true); }}
+        onClose={() => { setProductFormOpen(false); setPreferredSupplierId(null); setPreferredSupplier(null); }}
+        onSaved={() => { setPreferredSupplierId(null); setPreferredSupplier(null); refreshAll("Produto salvo."); }}
       />
       <ProductDetailDrawer product={detailProduct} canManage={canManageProducts} canSeePricing={canSeePricing} onClose={() => setDetailProduct(null)} onEdit={(product) => { setFormProduct(product); setProductFormOpen(true); }} onDisable={disableProduct} />
       <InventoryDrawer item={stockItem} onClose={() => setStockItem(null)} onSaved={() => refreshAll("Estoque atualizado.")} />
-      <SupplierDrawer open={supplierOpen} supplier={supplier} onClose={() => setSupplierOpen(false)} onSaved={() => refreshAll("Fornecedor salvo.")} />
+      <SupplierDrawer
+        open={supplierOpen}
+        supplier={supplier}
+        onClose={() => setSupplierOpen(false)}
+        onSaved={(saved) => {
+          if (productFormOpen) {
+            setPreferredSupplierId(saved.id);
+            setPreferredSupplier(saved);
+          }
+          refreshAll("Fornecedor salvo.");
+        }}
+      />
       <PricingDrawer open={pricingOpen || pricingProduct !== null || pricingRevision !== null} product={pricingProduct} revision={pricingRevision} canEdit={canEditPricing} onClose={() => { setPricingOpen(false); setPricingProduct(null); setPricingRevision(null); }} onSaved={() => refreshAll("Preço salvo.")} />
     </div>
   );
@@ -306,6 +332,7 @@ function ProductDetailDrawer({ product, canManage, canSeePricing, onClose, onEdi
             <Info label="Código interno" value={product.internalCode ?? "—"} />
             <Info label="Fabricante" value={product.manufacturerCode ?? "—"} />
             <Info label="Marca / Modelo" value={`${product.brand ?? "—"} / ${product.model ?? "—"}`} />
+            <Info label="Fornecedor principal" value={primarySupplierName(product)} />
             <Info label="Peso" value={product.weight != null ? String(product.weight) : "—"} />
             <Info label="Dimensões" value={product.dimensions ?? "—"} />
           </dl>
@@ -423,7 +450,7 @@ function SuppliersSection({ rows, columns, pagination, onPage, onLimit, onSelect
   );
 }
 
-function SupplierDrawer({ open, supplier, onClose, onSaved }: { open: boolean; supplier: Supplier | null; onClose: () => void; onSaved: () => void }) {
+function SupplierDrawer({ open, supplier, onClose, onSaved }: { open: boolean; supplier: Supplier | null; onClose: () => void; onSaved: (supplier: Supplier) => void }) {
   const [form, setForm] = useState({ legalName: "", tradeName: "", document: "", phone: "", city: "", state: "", notes: "", isActive: true });
   useMemo(() => {
     if (!open) return;
@@ -431,15 +458,14 @@ function SupplierDrawer({ open, supplier, onClose, onSaved }: { open: boolean; s
   }, [open, supplier]);
   async function submit() {
     const payload = { legalName: form.legalName, tradeName: form.tradeName || null, document: form.document || null, contacts: form.phone ? [{ phone: form.phone }] : [], address: { city: form.city, state: form.state }, notes: form.notes || null, isActive: form.isActive };
-    if (supplier) await inventoryApi.updateSupplier(supplier.id, payload);
-    else await inventoryApi.createSupplier(payload);
-    onSaved();
+    const saved = supplier ? await inventoryApi.updateSupplier(supplier.id, payload) : await inventoryApi.createSupplier(payload);
+    onSaved(saved);
     onClose();
   }
   async function disable() {
     if (!supplier || !confirm(`Desativar ${supplier.legalName}?`)) return;
     await inventoryApi.deleteSupplier(supplier.id);
-    onSaved();
+    onSaved({ ...supplier, isActive: false, disabledAt: new Date().toISOString() });
     onClose();
   }
   return (
@@ -458,18 +484,37 @@ function SupplierDrawer({ open, supplier, onClose, onSaved }: { open: boolean; s
 }
 
 function PricingDrawer({ open, product, revision, canEdit, onClose, onSaved }: { open: boolean; product: Product | null; revision: ProductPricing | null; canEdit: boolean; onClose: () => void; onSaved: () => void }) {
-  const products = useQuery((signal) => inventoryApi.listProducts({ limit: 100, active: true, signal }), []);
-  const targetProduct = product ?? products.data?.items.find((item) => item.id === revision?.productId) ?? products.data?.items[0] ?? null;
   const [productId, setProductId] = useState("");
   const [form, setForm] = useState({ costPrice: "", replacementCost: "", averageCost: "", salePrice: "", minimumSalePrice: "", suggestedSalePrice: "", validFrom: new Date().toISOString().slice(0, 10) });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const products = useQuery((signal) => inventoryApi.listProducts({ limit: 100, active: true, signal }), []);
+  const targetProduct = product ?? products.data?.items.find((item) => item.id === revision?.productId) ?? null;
   const history = useQuery((signal) => (targetProduct ? pricingApi.getPricingHistory(targetProduct.id, { limit: 10, signal }) : Promise.resolve(null)), [targetProduct?.id]);
 
-  useMemo(() => {
-    setProductId(targetProduct?.id ?? "");
-    if (revision) setForm({ costPrice: String(revision.costPrice), replacementCost: String(revision.replacementCost), averageCost: String(revision.averageCost), salePrice: String(revision.salePrice), minimumSalePrice: String(revision.minimumSalePrice), suggestedSalePrice: String(revision.suggestedSalePrice), validFrom: new Date().toISOString().slice(0, 10) });
-  }, [targetProduct?.id, revision]);
+  useEffect(() => {
+    if (!open) return;
+    setError(null);
+    const resolvedProductId = targetProduct?.id ?? "";
+    setProductId(resolvedProductId);
+    setForm(revision
+      ? { costPrice: String(revision.costPrice), replacementCost: String(revision.replacementCost), averageCost: String(revision.averageCost), salePrice: String(revision.salePrice), minimumSalePrice: String(revision.minimumSalePrice), suggestedSalePrice: String(revision.suggestedSalePrice), validFrom: new Date().toISOString().slice(0, 10) }
+      : { costPrice: "", replacementCost: "", averageCost: "", salePrice: "", minimumSalePrice: "", suggestedSalePrice: "", validFrom: new Date().toISOString().slice(0, 10) });
+  }, [open, targetProduct?.id, revision]);
+
+  const canSubmitPricing = canEdit && Boolean(productId) && Boolean(form.validFrom) && [
+    form.costPrice,
+    form.replacementCost,
+    form.averageCost,
+    form.salePrice,
+    form.minimumSalePrice,
+    form.suggestedSalePrice,
+  ].every((value) => value !== "" && Number.isFinite(Number(value)) && Number(value) >= 0);
 
   async function submit() {
+    if (!canSubmitPricing) return;
+    setSaving(true);
+    setError(null);
     const payload = {
       costPrice: Number(form.costPrice),
       replacementCost: Number(form.replacementCost),
@@ -479,16 +524,41 @@ function PricingDrawer({ open, product, revision, canEdit, onClose, onSaved }: {
       suggestedSalePrice: Number(form.suggestedSalePrice),
       validFrom: `${form.validFrom}T00:00:00.000Z`,
     };
-    if (revision) await pricingApi.revisePricing(revision.id, payload);
-    else if (productId) await pricingApi.createProductPricing(productId, payload);
-    onSaved();
-    onClose();
+    try {
+      if (revision) await pricingApi.revisePricing(revision.id, payload);
+      else await pricingApi.createProductPricing(productId, payload);
+      onSaved();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : "Não foi possível salvar o preço.");
+    } finally {
+      setSaving(false);
+    }
   }
   return (
-    <Drawer open={open} onClose={onClose} eyebrow="Pricing" title={revision ? "Revisar preço" : "Novo preço"} width="max-w-2xl" footer={<>{canEdit && <button onClick={submit} className={primaryBtn} disabled={!productId || !form.salePrice}>Salvar preço</button>}<button onClick={onClose} className={secondaryBtn}>Fechar</button></>}>
+    <Drawer open={open} onClose={onClose} eyebrow="Pricing" title={revision ? "Revisar preço" : "Novo preço"} width="max-w-2xl" footer={<>{canEdit && <button onClick={submit} className={primaryBtn} disabled={saving || !canSubmitPricing}>{saving ? "Salvando…" : "Salvar preço"}</button>}<button onClick={onClose} className={secondaryBtn}>Fechar</button></>}>
       {!canEdit && <ErrorState error={new ApiClientError({ code: "AUTH_FORBIDDEN", status: 403, message: "Sem permissão para editar pricing", details: {} })} />}
       <div className="space-y-4">
-        {!revision && <Field label="Produto"><select value={productId} onChange={(e) => setProductId(e.target.value)} className={inputCls}>{products.data?.items.map((p) => <option key={p.id} value={p.id}>{p.sku} · {p.name}</option>)}</select></Field>}
+        {error && <div className="rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 px-3 py-2 text-sm text-[var(--color-danger)]">{error}</div>}
+        {!revision && (
+          <Field label="Produto">
+            {products.loading && !products.data ? (
+              <p className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-muted)]/35 px-3 py-2 text-sm text-[var(--color-muted-foreground)]">Carregando produtos ativos…</p>
+            ) : products.error ? (
+              <div className="rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 px-3 py-2 text-sm text-[var(--color-danger)]">
+                <div>Não foi possível carregar produtos para precificação.</div>
+                <button type="button" onClick={products.refetch} className="mt-2 underline">Tentar novamente</button>
+              </div>
+            ) : (products.data?.items ?? []).length === 0 ? (
+              <p className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-muted)]/35 px-3 py-2 text-sm text-[var(--color-muted-foreground)]">Cadastre um produto ativo antes de criar preço.</p>
+            ) : (
+              <select value={productId} onChange={(e) => setProductId(e.target.value)} className={inputCls}>
+                <option value="">Selecione um produto</option>
+                {products.data?.items.map((p) => <option key={p.id} value={p.id}>{p.sku} · {p.name}</option>)}
+              </select>
+            )}
+          </Field>
+        )}
         <div className="grid gap-3 sm:grid-cols-3">
           <Field label="Custo"><input type="number" value={form.costPrice} onChange={(e) => setForm((f) => ({ ...f, costPrice: e.target.value }))} className={inputCls} /></Field>
           <Field label="Reposição"><input type="number" value={form.replacementCost} onChange={(e) => setForm((f) => ({ ...f, replacementCost: e.target.value }))} className={inputCls} /></Field>
@@ -522,6 +592,11 @@ function StockStatus({ item }: { item: InventoryItem }) {
   if (available <= 0) return <StatusChip tone="danger" dot>Sem estoque</StatusChip>;
   if (minimum > 0 && available <= minimum) return <StatusChip tone="warning" dot>Crítico</StatusChip>;
   return <StatusChip tone="success" dot>OK</StatusChip>;
+}
+
+function primarySupplierName(product: Product): string {
+  const relation = product.suppliers?.find((item) => item.isPrimary) ?? product.suppliers?.[0];
+  return relation?.supplier?.tradeName || relation?.supplier?.legalName || "—";
 }
 
 function Info({ label, value }: { label: string; value: React.ReactNode }) {
@@ -589,6 +664,11 @@ function phoneFrom(contacts?: unknown[]): string {
 
 function uniqueStrings(values: Array<string | null | undefined>): string[] {
   return Array.from(new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value)))).sort((a, b) => a.localeCompare(b, "pt-BR"));
+}
+
+function mergeSupplierOptions(options: Supplier[], preferred: Supplier | null): Supplier[] {
+  if (!preferred || options.some((supplier) => supplier.id === preferred.id)) return options;
+  return [preferred, ...options];
 }
 
 const primaryBtn = "inline-flex items-center gap-2 rounded-[var(--radius-md)] bg-[var(--color-primary)] text-[var(--color-primary-foreground)] px-3 h-9 text-sm font-medium shadow-[var(--shadow-card)] disabled:opacity-50";

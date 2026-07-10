@@ -70,6 +70,7 @@ export async function resetDatabase(): Promise<void> {
       "operation_parts",
       "stock_movements",
       "inventory_items",
+      "product_suppliers",
       "purchase_history",
       "purchase_receipts",
       "purchase_order_items",

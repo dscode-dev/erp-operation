@@ -411,7 +411,25 @@ Novo adapter:
 
 Decisão de domínio:
 
-- nenhum componente cria relação direta Produto↔Fornecedor, porque fornecedores pertencem aos fluxos de Procurement/Purchase Orders.
+- decisão superada pelo Product Backlog Closure 01.1: Produto↔Fornecedor agora é persistido via
+  junction backend `ProductSupplier`.
+
+## Product Backlog Closure 01.1 — component impact
+
+Componentes evoluídos:
+
+- `ProductFormDrawer`: categoria agora usa select oficial com opções fixas e `Outros` com campo
+  customizado; SKU/código interno usam entrada assistida com prefixos; fornecedor principal usa
+  selector real de `Supplier`.
+- `SupplierDrawer`: continua sendo o fluxo oficial de criação/edição de fornecedor e agora retorna o
+  fornecedor salvo para auto-seleção no formulário de produto quando aplicável.
+- `PricingDrawer`: abre a partir da aba Preços sem depender da lista paginada de Produtos; trata
+  loading, erro, estado vazio, saving e validação básica antes de chamar a API oficial.
+
+Decisão de domínio atualizada:
+
+- o frontend não simula fornecedor em estado local permanente; envia `primarySupplierId` para o
+  backend e lê `Product.suppliers[]` nas respostas.
 
 ## Product Backlog Closure 02 — document component impact
 

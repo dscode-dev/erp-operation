@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ApiClientError, inventoryApi, type Product, type ProductPayload } from "@erp/api";
+import { ApiClientError, inventoryApi, type Product, type ProductPayload, type Supplier } from "@erp/api";
 import { Drawer } from "@erp/ui/drawer";
 
 type FormState = {
@@ -12,12 +12,32 @@ type FormState = {
   unit: string;
   brand: string;
   model: string;
-  category: string;
+  categoryOption: string;
+  customCategory: string;
   technicalDescription: string;
   weight: string;
   dimensions: string;
+  primarySupplierId: string;
   isActive: boolean;
 };
+
+const CATEGORY_OPTIONS = [
+  "Peças e Componentes",
+  "Materiais de Consumo",
+  "Ferramentas",
+  "Equipamentos",
+  "Elétrica",
+  "Eletrônica",
+  "Refrigeração",
+  "Climatização",
+  "Hidráulica",
+  "EPIs",
+  "Limpeza e Higienização",
+  "Outros",
+];
+
+const SKU_PATTERNS = ["HVAC-", "REFR-", "CLIM-", "ELE-", "HID-", "EPI-", "MAT-", "FERR-"];
+const INTERNAL_CODE_PATTERNS = ["MAT-", "PEC-", "EQP-", "SRV-", "EST-"];
 
 const blank: FormState = {
   sku: "",
@@ -27,27 +47,41 @@ const blank: FormState = {
   unit: "UN",
   brand: "",
   model: "",
-  category: "",
+  categoryOption: "Peças e Componentes",
+  customCategory: "",
   technicalDescription: "",
   weight: "",
   dimensions: "",
+  primarySupplierId: "",
   isActive: true,
 };
 
 export function ProductFormDrawer({
   open,
   product,
-  categoryOptions = [],
   skuOptions = [],
   internalCodeOptions = [],
+  suppliers = [],
+  suppliersLoading = false,
+  suppliersError = null,
+  preferredSupplierId = null,
+  canCreateSupplier = false,
+  onRetrySuppliers,
+  onCreateSupplier,
   onClose,
   onSaved,
 }: {
   open: boolean;
   product?: Product | null;
-  categoryOptions?: string[];
   skuOptions?: string[];
   internalCodeOptions?: string[];
+  suppliers?: Supplier[];
+  suppliersLoading?: boolean;
+  suppliersError?: Error | null;
+  preferredSupplierId?: string | null;
+  canCreateSupplier?: boolean;
+  onRetrySuppliers?: () => void;
+  onCreateSupplier?: () => void;
   onClose: () => void;
   onSaved?: (product: Product) => void;
 }) {
@@ -61,11 +95,20 @@ export function ProductFormDrawer({
     setForm(product ? fromProduct(product) : blank);
   }, [open, product]);
 
+  useEffect(() => {
+    if (!open || product || !preferredSupplierId) return;
+    set("primarySupplierId", preferredSupplierId);
+  }, [open, product, preferredSupplierId]);
+
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }));
   }
 
   async function submit() {
+    if (form.categoryOption === "Outros" && !form.customCategory.trim()) {
+      setError("Informe a categoria personalizada.");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -111,12 +154,22 @@ export function ProductFormDrawer({
           <SectionTitle title="Identificação comercial" description="SKU e código interno são identificadores únicos do catálogo técnico." />
           <div className="grid gap-3 sm:grid-cols-3">
             <Field label="SKU">
-              <input value={form.sku} onChange={(e) => set("sku", e.target.value.toUpperCase())} className={inputCls} placeholder="HVAC-FILTRO-G4-001" list="product-sku-options" />
-              <datalist id="product-sku-options">{skuOptions.map((option) => <option key={option} value={option} />)}</datalist>
+              <AssistedCodeInput
+                value={form.sku}
+                onChange={(value) => set("sku", value)}
+                placeholder="HVAC-FILTRO-G4-001"
+                patterns={SKU_PATTERNS}
+                existingOptions={skuOptions}
+              />
             </Field>
             <Field label="Código interno">
-              <input value={form.internalCode} onChange={(e) => set("internalCode", e.target.value.toUpperCase())} className={inputCls} placeholder="MAT-0001" list="product-internal-code-options" />
-              <datalist id="product-internal-code-options">{internalCodeOptions.map((option) => <option key={option} value={option} />)}</datalist>
+              <AssistedCodeInput
+                value={form.internalCode}
+                onChange={(value) => set("internalCode", value)}
+                placeholder="MAT-0001"
+                patterns={INTERNAL_CODE_PATTERNS}
+                existingOptions={internalCodeOptions}
+              />
             </Field>
             <Field label="Unidade">
               <input value={form.unit} onChange={(e) => set("unit", e.target.value.toUpperCase())} className={inputCls} placeholder="UN, KG, M" list="product-unit-options" />
@@ -132,12 +185,18 @@ export function ProductFormDrawer({
         </section>
 
         <section className={sectionCls}>
-          <SectionTitle title="Classificação técnica" description="Categoria é texto controlado pelo uso: selecione uma existente ou crie uma nova sem entidade extra." />
+          <SectionTitle title="Classificação técnica" description="Categoria é selecionada por opções oficiais e continua persistida como texto no catálogo." />
           <div className="grid gap-3 sm:grid-cols-3">
             <Field label="Categoria">
-              <input value={form.category} onChange={(e) => set("category", e.target.value)} className={inputCls} placeholder="Filtros, Elétrica…" list="product-category-options" />
-              <datalist id="product-category-options">{categoryOptions.map((option) => <option key={option} value={option} />)}</datalist>
+              <select value={form.categoryOption} onChange={(e) => set("categoryOption", e.target.value)} className={inputCls}>
+                {CATEGORY_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+              </select>
             </Field>
+            {form.categoryOption === "Outros" && (
+              <Field label="Categoria personalizada">
+                <input value={form.customCategory} onChange={(e) => set("customCategory", e.target.value)} className={inputCls} placeholder="Ex.: Automação predial" />
+              </Field>
+            )}
             <Field label="Código do fabricante">
               <input value={form.manufacturerCode} onChange={(e) => set("manufacturerCode", e.target.value)} className={inputCls} placeholder="Código do fabricante" />
             </Field>
@@ -157,10 +216,44 @@ export function ProductFormDrawer({
         </section>
 
         <section className={sectionCls}>
-          <SectionTitle title="Fornecedor" description="O catálogo não possui fornecedor fixo. Fornecedores são gerenciados em Compras e preservados nos snapshots dos pedidos." />
-          <p className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-muted)]/35 px-3 py-2 text-sm text-[var(--color-muted-foreground)]">
-            Para vincular fornecedor de forma auditável, crie o fornecedor na aba Fornecedores e utilize-o no Pedido de Compra. O produto permanece apenas como catálogo técnico.
-          </p>
+          <SectionTitle title="Fornecedor principal" description="Selecione um fornecedor real do Orbit para orientar compras e cadastro comercial do produto." />
+          {suppliersError ? (
+            <div className="rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 px-3 py-2 text-sm text-[var(--color-danger)]">
+              <div>Não foi possível carregar fornecedores. Isso não é tratado como lista vazia.</div>
+              {onRetrySuppliers && <button type="button" onClick={onRetrySuppliers} className="mt-2 underline">Tentar novamente</button>}
+            </div>
+          ) : suppliersLoading ? (
+            <p className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-muted)]/35 px-3 py-2 text-sm text-[var(--color-muted-foreground)]">
+              Carregando fornecedores ativos…
+            </p>
+          ) : suppliers.length === 0 ? (
+            <div className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-muted)]/35 px-3 py-2 text-sm text-[var(--color-muted-foreground)]">
+              <div>Nenhum fornecedor ativo encontrado.</div>
+              {canCreateSupplier && onCreateSupplier && (
+                <button type="button" onClick={onCreateSupplier} className="mt-2 rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 h-8 text-xs hover:bg-[var(--color-muted)]">
+                  Criar fornecedor
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+              <Field label="Fornecedor">
+                <select value={form.primarySupplierId} onChange={(e) => set("primarySupplierId", e.target.value)} className={inputCls}>
+                  <option value="">Sem fornecedor principal</option>
+                  {suppliers.map((supplier) => (
+                    <option key={supplier.id} value={supplier.id}>
+                      {supplier.tradeName || supplier.legalName}{supplier.document ? ` · ${supplier.document}` : ""}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              {canCreateSupplier && onCreateSupplier && (
+                <button type="button" onClick={onCreateSupplier} className="self-end rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 h-9 text-sm hover:bg-[var(--color-muted)]">
+                  Novo fornecedor
+                </button>
+              )}
+            </div>
+          )}
         </section>
 
         <section className={sectionCls}>
@@ -180,6 +273,9 @@ export function ProductFormDrawer({
 }
 
 function fromProduct(product: Product): FormState {
+  const category = product.category ?? "";
+  const knownCategory = CATEGORY_OPTIONS.includes(category) && category !== "Outros";
+  const primarySupplier = product.suppliers?.find((item) => item.isPrimary) ?? product.suppliers?.[0];
   return {
     sku: product.sku ?? "",
     internalCode: product.internalCode ?? "",
@@ -188,15 +284,18 @@ function fromProduct(product: Product): FormState {
     unit: product.unit ?? "UN",
     brand: product.brand ?? "",
     model: product.model ?? "",
-    category: product.category ?? "",
+    categoryOption: knownCategory ? category : category ? "Outros" : "Peças e Componentes",
+    customCategory: knownCategory ? "" : category,
     technicalDescription: product.technicalDescription ?? "",
     weight: product.weight != null ? String(product.weight) : "",
     dimensions: product.dimensions ?? "",
+    primarySupplierId: primarySupplier?.supplierId ?? "",
     isActive: product.isActive,
   };
 }
 
 function toPayload(form: FormState): ProductPayload {
+  const category = form.categoryOption === "Outros" ? form.customCategory.trim() : form.categoryOption;
   return {
     sku: form.sku,
     internalCode: nullable(form.internalCode),
@@ -205,10 +304,11 @@ function toPayload(form: FormState): ProductPayload {
     unit: form.unit,
     brand: nullable(form.brand),
     model: nullable(form.model),
-    category: nullable(form.category),
+    category: nullable(category),
     technicalDescription: nullable(form.technicalDescription),
     weight: form.weight ? Number(form.weight) : null,
     dimensions: nullable(form.dimensions),
+    primarySupplierId: form.primarySupplierId || null,
     isActive: form.isActive,
   };
 }
@@ -237,5 +337,37 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <span className="text-sm font-medium">{label}</span>
       {children}
     </label>
+  );
+}
+
+function AssistedCodeInput({
+  value,
+  onChange,
+  placeholder,
+  patterns,
+  existingOptions,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  patterns: string[];
+  existingOptions: string[];
+}) {
+  return (
+    <div className="space-y-1.5">
+      <div className="grid grid-cols-[1fr_120px] gap-2">
+        <input value={value} onChange={(e) => onChange(e.target.value.toUpperCase())} className={inputCls} placeholder={placeholder} />
+        <select value="" onChange={(e) => e.target.value && onChange(e.target.value)} className={inputCls} aria-label="Aplicar prefixo">
+          <option value="">Prefixo</option>
+          {patterns.map((pattern) => <option key={pattern} value={pattern}>{pattern}</option>)}
+        </select>
+      </div>
+      {existingOptions.length > 0 && (
+        <select value="" onChange={(e) => e.target.value && onChange(e.target.value)} className={`${inputCls} text-xs`} aria-label="Referências existentes">
+          <option value="">Referências existentes — valide unicidade antes de reutilizar</option>
+          {existingOptions.slice(0, 25).map((option) => <option key={option} value={option}>{option}</option>)}
+        </select>
+      )}
+    </div>
   );
 }

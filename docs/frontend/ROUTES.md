@@ -310,7 +310,8 @@ Rotas impactadas:
 - `/produtos`
   - botão superior permanece focado em “Novo produto”;
   - preço é criado/revisado pela aba Preços;
-  - fornecedor permanece na aba Fornecedores/Compras, sem vínculo direto no cadastro do produto.
+  - fornecedor pode ser gerenciado na aba Fornecedores e também selecionado como fornecedor principal
+    no drawer de produto via relação backend `ProductSupplier`.
 - `/clientes`
   - drawer de criação permite endereço inicial usando o contrato existente de endereços do cliente;
   - retries de endereço não recriam o cliente.

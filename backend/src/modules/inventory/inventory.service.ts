@@ -47,6 +47,12 @@ const PRODUCT_INCLUDE = {
       isActive: true,
     },
   },
+  suppliers: {
+    include: {
+      supplier: true,
+    },
+    orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+  },
 } satisfies Prisma.ProductInclude;
 
 const INVENTORY_INCLUDE = {
@@ -123,8 +129,8 @@ export class InventoryService {
       return await this.prisma.$transaction(async (tx) => {
         const product = await tx.product.create({
           data: this.productData(dto),
-          include: PRODUCT_INCLUDE,
         });
+        await this.syncPrimarySupplierTx(tx, product.id, dto.primarySupplierId);
         const organization = await tx.organization.findFirst({
           orderBy: { createdAt: 'asc' },
           select: { id: true },
@@ -146,8 +152,9 @@ export class InventoryService {
         await this.auditTx(tx, INVENTORY_AUDIT_ACTIONS.PRODUCT_CREATED, PRODUCT_RESOURCE, actor, context, {
           productId: product.id,
           sku: product.sku,
+          primarySupplierId: dto.primarySupplierId ?? null,
         });
-        return product;
+        return tx.product.findUniqueOrThrow({ where: { id: product.id }, include: PRODUCT_INCLUDE });
       });
     } catch (error) {
       this.throwConflict(error, ERROR_CODES.PRODUCT_CONFLICT, 'Product SKU or code already exists');
@@ -166,13 +173,14 @@ export class InventoryService {
         const product = await tx.product.update({
           where: { id },
           data: this.productData(dto),
-          include: PRODUCT_INCLUDE,
         });
+        await this.syncPrimarySupplierTx(tx, id, dto.primarySupplierId);
         await this.auditTx(tx, INVENTORY_AUDIT_ACTIONS.PRODUCT_UPDATED, PRODUCT_RESOURCE, actor, context, {
           productId: id,
           changedFields: Object.keys(dto),
+          primarySupplierId: dto.primarySupplierId ?? undefined,
         });
-        return product;
+        return tx.product.findUniqueOrThrow({ where: { id: product.id }, include: PRODUCT_INCLUDE });
       });
     } catch (error) {
       this.throwConflict(error, ERROR_CODES.PRODUCT_CONFLICT, 'Product SKU or code already exists');
@@ -772,6 +780,28 @@ export class InventoryService {
     } as Prisma.SupplierUncheckedCreateInput;
   }
 
+  private async syncPrimarySupplierTx(
+    tx: Prisma.TransactionClient,
+    productId: string,
+    supplierId: string | null | undefined,
+  ): Promise<void> {
+    if (supplierId === undefined) return;
+    if (!supplierId) {
+      await tx.productSupplier.deleteMany({ where: { productId } });
+      return;
+    }
+    await this.assertSupplierActiveTx(tx, supplierId);
+    await tx.productSupplier.updateMany({
+      where: { productId },
+      data: { isPrimary: false },
+    });
+    await tx.productSupplier.upsert({
+      where: { productId_supplierId: { productId, supplierId } },
+      create: { productId, supplierId, isPrimary: true },
+      update: { isPrimary: true },
+    });
+  }
+
   private async productOrThrow(id: string): Promise<ProductWithInventory> {
     const product = await this.prisma.product.findUnique({ where: { id }, include: PRODUCT_INCLUDE });
     if (!product) {
@@ -786,6 +816,16 @@ export class InventoryService {
       throw new ApplicationException(ERROR_CODES.SUPPLIER_NOT_FOUND, 'Supplier was not found', HttpStatus.NOT_FOUND);
     }
     return supplier;
+  }
+
+  private async assertSupplierActiveTx(tx: Prisma.TransactionClient, id: string): Promise<void> {
+    const supplier = await tx.supplier.findUnique({ where: { id }, select: { id: true, isActive: true } });
+    if (!supplier) {
+      throw new ApplicationException(ERROR_CODES.SUPPLIER_NOT_FOUND, 'Supplier was not found', HttpStatus.NOT_FOUND);
+    }
+    if (!supplier.isActive) {
+      throw new ApplicationException(ERROR_CODES.SUPPLIER_NOT_FOUND, 'Supplier is inactive', HttpStatus.CONFLICT);
+    }
   }
 
   private async inventoryItemOrThrow(id: string): Promise<InventoryItemWithProduct> {

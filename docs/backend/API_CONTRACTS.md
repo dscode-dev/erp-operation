@@ -2887,6 +2887,17 @@ type Product = {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  suppliers?: ProductSupplier[];
+};
+
+type ProductSupplier = {
+  id: string;
+  productId: string;
+  supplierId: string;
+  isPrimary: boolean;
+  createdAt: string;
+  updatedAt: string;
+  supplier: Supplier;
 };
 
 type InventoryItem = {
@@ -2928,7 +2939,7 @@ Response 200:
 
 ### GET `/api/v1/products/:id`
 
-Response 200: `Product` com `inventoryItems`.
+Response 200: `Product` com `inventoryItems` e `suppliers`.
 
 ### POST `/api/v1/products`
 
@@ -2946,15 +2957,19 @@ Roles: `OWNER`, `MANAGER`.
   "category": "Filtros",
   "technicalDescription": "Filtro para AHU",
   "weight": 1.2,
-  "dimensions": { "width": 600, "height": 600, "depth": 50 }
+  "dimensions": "600x600x50",
+  "primarySupplierId": "a57b10a6-c070-4955-945f-5e0e6ab32c4c"
 }
 ```
 
-Response 201: produto criado. O backend cria item de inventário inicial com saldo zero.
+Response 201: produto criado com `inventoryItems` e `suppliers`. O backend cria item de inventário
+inicial com saldo zero. Quando `primarySupplierId` é enviado, o fornecedor precisa existir e estar
+ativo.
 
 ### PATCH `/api/v1/products/:id`
 
-Payload parcial do cadastro. Response 200: produto atualizado.
+Payload parcial do cadastro. `primarySupplierId: null` remove o fornecedor principal. Response 200:
+produto atualizado com relações.
 
 ### DELETE `/api/v1/products/:id`
 
@@ -3129,6 +3144,14 @@ Erros:
 | 404  | `OPERATION_NOT_FOUND`        | Operation inexistente                          |
 | 409  | `PRODUCT_CONFLICT`           | SKU/código já cadastrado                       |
 | 409  | `SUPPLIER_CONFLICT`          | Documento de fornecedor já cadastrado          |
+
+Nota Product↔Supplier:
+
+- `Product` continua sem preço e sem saldo;
+- fornecedor principal é persistido via `ProductSupplier`, não em campo direto de `Product`;
+- a instalação é single-company, então não há `tenant_id`/`company_id` na relação;
+- `primarySupplierId` é validado por UUID, existência e `isActive=true`;
+- `GET /products` e `GET /products/:id` retornam `suppliers[]`, ordenados com o primário primeiro.
 
 Eventos de auditoria:
 

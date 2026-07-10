@@ -53,6 +53,7 @@ export class CreateProductDto {
   technicalDescription?: string;
   @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 3 }) @Min(0) weight?: number;
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(120) dimensions?: string;
+  @IsOptional() @IsUUID('4') primarySupplierId?: string | null;
   @IsOptional() @IsBoolean() isActive?: boolean;
 }
 
@@ -76,6 +77,7 @@ export class UpdateProductDto {
   technicalDescription?: string;
   @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 3 }) @Min(0) weight?: number;
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(120) dimensions?: string;
+  @IsOptional() @IsUUID('4') primarySupplierId?: string | null;
   @IsOptional() @IsBoolean() isActive?: boolean;
 }
 

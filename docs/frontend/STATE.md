@@ -641,6 +641,36 @@ Validação:
 - `npm run build` passou;
 - `git diff --check` passou antes da documentação.
 
+## Product Backlog Closure 01.1 — Product Form, Supplier Resolution and Pricing Flow Fix
+
+Status: concluído em 10 de julho de 2026.
+
+Correções aplicadas:
+
+- `ProductFormDrawer` substituiu categoria livre/datalist por select visível com categorias oficiais
+  e opção `Outros` com campo obrigatório de categoria customizada;
+- edição restaura categoria conhecida como opção selecionada e categoria desconhecida como `Outros`
+  preenchido;
+- SKU e código interno usam entrada assistida com prefixos técnicos e referências existentes sem
+  remover a validação de unicidade do backend;
+- fornecedores ativos são carregados de `GET /suppliers?page=1&limit=100&active=true` dentro do fluxo
+  do formulário de produto;
+- falha ao carregar fornecedores aparece como erro com retry, não como estado vazio;
+- criação de fornecedor reaproveita o `SupplierDrawer` oficial, atualiza opções e auto-seleciona o
+  fornecedor recém-criado quando o formulário de produto está aberto;
+- produto envia `primarySupplierId` para persistência real no backend;
+- aba Pricing abre sempre o `PricingDrawer` oficial para OWNER e o drawer trata loading/erro/estado
+  vazio de produtos;
+- fluxo de criação/revisão de preço mantém `pricingApi.createProductPricing` e
+  `pricingApi.revisePricing`.
+
+Validação:
+
+- frontend `npm run lint` passou com 2 warnings preexistentes;
+- frontend `npm run build` passou;
+- backend `npm run lint`, `npm run build` e `npm test` passaram;
+- Prisma `validate` e `generate` passaram com `DATABASE_URL` local.
+
 ## Product Backlog Closure 02 — Reports real preview/render/download
 
 Status: concluído em 10 de julho de 2026.

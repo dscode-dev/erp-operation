@@ -857,6 +857,17 @@ RBAC:
 - `VIEWER`: somente leitura em produtos, estoque e materiais;
 - fornecedores são visíveis apenas para `OWNER` e `MANAGER`.
 
+Product↔Supplier:
+
+- `primarySupplierId` em criação/edição de produto é opcional e validado por UUID;
+- o backend valida existência e `isActive=true` do fornecedor antes de criar a relação;
+- fornecedor inativo ou inexistente não é aceito como fornecedor principal;
+- o vínculo é persistido em `ProductSupplier`, mantendo histórico de auditoria em
+  `PRODUCT_CREATED`/`PRODUCT_UPDATED`;
+- `Product` continua sem preço, custo ou saldo físico;
+- como a instalação é single-company, a proteção contra atribuição cruzada é feita pelo isolamento do
+  banco/storage da instalação, sem introduzir multi-tenant compartilhado.
+
 Movimentações imutáveis:
 
 - `StockMovement` não possui endpoint de edição ou exclusão;

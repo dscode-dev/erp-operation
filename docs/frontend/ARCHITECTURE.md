@@ -591,12 +591,25 @@ Supply-chain closure:
 
 Arquitetura preservada:
 
-- Product continua sendo catálogo técnico, sem preço e sem fornecedor fixo.
+- Product continua sendo catálogo técnico, sem preço e sem saldo físico.
 - Pricing continua sendo a única fonte comercial para custo/preço/margem/vigência.
-- Supplier continua pertencendo ao Inventory/Procurement como base para compras.
+- Supplier continua pertencendo ao Inventory/Procurement como base para compras; a relação
+  Product↔Supplier foi posteriormente oficializada no Product Backlog Closure 01.1 por junction
+  backend, sem mover regra de compras para Product.
 - CustomerAddress continua sendo recurso separado de Customer; criação com endereço usa duas mutações reais e estado de retry seguro.
 - Equipment continua validando endereço pelo cliente selecionado; o frontend não permite seleção fora da lista carregada daquele cliente.
 - Reports/Modelos continua renderizando via Document Engine e `DocumentViewer`; não há preview local nem `DocumentPaper`.
+
+## Product Backlog Closure 01.1 — architecture notes
+
+- Product form consome `inventoryApi.listSuppliers` em query própria para não depender da aba
+  Fornecedores nem da paginação/filtro atual da página.
+- A criação inline de fornecedor reutiliza o `SupplierDrawer` oficial; o fornecedor retornado é
+  temporariamente mesclado às opções até o refetch concluir.
+- O frontend persiste fornecedor principal enviando `primarySupplierId` e consome
+  `Product.suppliers[]`; não há cache local como fonte de verdade.
+- Pricing tab abre o `PricingDrawer` oficial independentemente da página atual do catálogo de
+  produtos; o drawer carrega produtos ativos e chama `pricingApi`.
 
 CEP:
 
