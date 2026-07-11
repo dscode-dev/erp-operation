@@ -1,5 +1,24 @@
 # Security
 
+## DC-01 — Work Order
+
+- novos textos possuem limites de DTO e passam pela sanitização do Builder;
+- logo/fotos continuam resolvidos exclusivamente pelo DocumentAssetResolver;
+- nenhum storageKey ou path é introduzido no contrato público;
+- assinatura de execução e institucional continuam sob a política do template;
+- render/download e stale detection permanecem no backend;
+- nenhuma consulta Prisma foi adicionada ao Builder ou Renderer.
+
+## Document Engine D1
+
+- catálogo aplica RBAC e oculta tipos financeiros para roles não autorizadas;
+- UUIDs, datas, enums e paginação são validados por DTO;
+- catálogo/templates não expõem `storageKey`, base64, paths, binários ou tokens;
+- assinaturas institucionais vinculadas devem existir, estar ativas e possuir imagem;
+- relação múltipla é atualizada transacionalmente e rejeita duplicatas;
+- download permanece no backend com stale detection;
+- DocumentContext centraliza assets; Builder e domínios não acessam Storage.
+
 ## Product Backlog Closure 06.1 — font and runtime verification security
 
 - Noto Sans é empacotada como dependência interna OFL; nenhum endpoint expõe o arquivo de fonte.

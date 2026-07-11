@@ -156,6 +156,8 @@ export class OperationsService {
           completedAt: dto.completedAt ? new Date(dto.completedAt) : null,
           checklist: this.normalizeChecklist(dto.checklist),
           observations: dto.observations ?? null,
+          reportedIssue: dto.reportedIssue ?? null,
+          serviceDescription: dto.serviceDescription ?? null,
           signatureData,
           signedAt: signatureData ? (dto.signedAt ? new Date(dto.signedAt) : new Date()) : null,
         },
@@ -267,6 +269,8 @@ export class OperationsService {
           ...(dto.completedAt ? { completedAt: new Date(dto.completedAt) } : {}),
           ...(dto.checklist ? { checklist: this.normalizeChecklist(dto.checklist) } : {}),
           ...(dto.observations !== undefined ? { observations: dto.observations } : {}),
+          ...(dto.reportedIssue !== undefined ? { reportedIssue: dto.reportedIssue } : {}),
+          ...(dto.serviceDescription !== undefined ? { serviceDescription: dto.serviceDescription } : {}),
           ...(signatureData ? { signatureData, signedAt: dto.signedAt ? new Date(dto.signedAt) : new Date() } : {}),
         },
       });

@@ -54,6 +54,7 @@ export type { ListMaintenancePlansParams, ListMaintenanceExecutionsParams } from
 export type { ListPmocParams } from "./pmoc";
 export type { OrdersData, ProductsData, ServicesData } from "./operations";
 export type { OperationPhotoContent } from "./operation";
+export type { DocumentCatalogItem } from "./documents";
 export type { ListSignaturesParams, SignaturePayload } from "./signatures";
 export type { ListAssetLifecycleParams } from "./asset-lifecycle";
 export type { ListAssignmentsParams } from "./assignments";

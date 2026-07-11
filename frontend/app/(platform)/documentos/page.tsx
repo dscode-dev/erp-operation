@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import { FileText } from "lucide-react";
 import { PageHeader } from "@platform/components/page-header";
 import { DataTable, type Column } from "@platform/components/data-table";
-import { ExportButton } from "@platform/components/export-button";
 import { Pagination } from "@platform/components/pagination";
 import { FilterBar } from "@erp/ui/filter-bar";
 import { StatusChip, type ChipTone } from "@erp/ui/status-chip";
@@ -13,203 +12,64 @@ import { ErrorState } from "@erp/ui/states";
 import { EmptyState } from "@erp/ui/empty-state";
 import { Drawer } from "@erp/ui/drawer";
 import { DocumentViewer } from "@erp/ui/documents/document-viewer";
-import { documentsApi, operationApi, useQuery, type OperationDocument, type OperationDocumentStatus } from "@erp/api";
-import type { DocumentKind, OperationSummary } from "@erp/types";
+import { documentsApi, useQuery, type DocumentCatalogItem, type DocumentKind, type OperationDocumentStatus } from "@erp/api";
 import { DOCUMENT_KIND_LABEL } from "@erp/types";
 import { formatBytes, formatDate, formatDateTime } from "@erp/utils";
 
 const STATUS: Record<OperationDocumentStatus, { tone: ChipTone; label: string }> = {
-  DRAFT: { tone: "neutral", label: "Rascunho" },
-  READY: { tone: "info", label: "Pronto" },
-  VALIDATED: { tone: "success", label: "Validado" },
-  SENT: { tone: "primary", label: "Enviado" },
+  DRAFT: { tone: "neutral", label: "Rascunho" }, READY: { tone: "info", label: "Pronto" },
+  VALIDATED: { tone: "success", label: "Validado" }, SENT: { tone: "primary", label: "Enviado" },
 };
-
-const KINDS: DocumentKind[] = ["WORK_ORDER", "TECHNICAL_REPORT", "TECHNICAL_OPINION", "REPORT", "PMOC", "QUOTE", "RECEIPT"];
-const STATUSES: OperationDocumentStatus[] = ["DRAFT", "READY", "VALIDATED", "SENT"];
-const selectCls =
-  "h-9 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-2 text-sm outline-none focus:border-[var(--color-primary)]";
-
-type DocumentRow = {
-  document: OperationDocument;
-  operation: OperationSummary;
-  id: string;
-  type: DocumentKind;
-  number: string;
-  customer: string;
-  equipment: string;
-  operator: string;
-  date: string;
-  status: OperationDocumentStatus;
-  fileSize: number | null;
-  renderedAt: string | null;
-};
+const KINDS: DocumentKind[] = ["WORK_ORDER", "TECHNICAL_REPORT", "TECHNICAL_OPINION", "PMOC", "BUDGET", "QUOTE", "RECEIPT", "REPORT"];
+const selectCls = "h-9 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-2 text-sm outline-none focus:border-[var(--color-primary)]";
 
 export default function DocumentosPage() {
-  const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(20);
-  const ops = useQuery((s) => operationApi.listOperations({ page, limit, signal: s }), [page, limit]);
-  const [detail, setDetail] = useState<DocumentRow | null>(null);
-
-  const [search, setSearch] = useState("");
-  const [customer, setCustomer] = useState("");
-  const [equipment, setEquipment] = useState("");
-  const [operator, setOperator] = useState("");
-  const [kind, setKind] = useState<"" | DocumentKind>("");
-  const [status, setStatus] = useState<"" | OperationDocumentStatus>("");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
-
-  const all = useMemo<DocumentRow[]>(() => {
-    return (ops.data?.items ?? []).flatMap((op) =>
-      op.documents.map((doc) => ({
-        document: doc,
-        operation: op,
-        id: doc.id,
-        type: doc.type,
-        number: doc.number,
-        customer: op.customer?.name ?? "—",
-        equipment: op.equipment?.name ?? "—",
-        operator: op.operator?.name ?? "—",
-        date: doc.renderedAt ?? doc.createdAt,
-        status: doc.status,
-        fileSize: doc.fileSize ?? null,
-        renderedAt: doc.renderedAt ?? null,
-      })),
-    );
-  }, [ops.data]);
-
-  const distinct = (key: "customer" | "equipment" | "operator") =>
-    Array.from(new Set(all.map((d) => d[key]).filter((value) => value && value !== "—"))).sort();
-
-  const rows = useMemo(() => {
-    return all.filter((d) => {
-      if (customer && d.customer !== customer) return false;
-      if (equipment && d.equipment !== equipment) return false;
-      if (operator && d.operator !== operator) return false;
-      if (kind && d.type !== kind) return false;
-      if (status && d.status !== status) return false;
-      if (from && d.date < from) return false;
-      if (to && d.date > `${to}T23:59:59`) return false;
-      const q = search.trim().toLowerCase();
-      if (q && ![d.number, d.customer, d.equipment, d.operator].join(" ").toLowerCase().includes(q)) return false;
-      return true;
-    });
-  }, [all, customer, equipment, operator, kind, status, from, to, search]);
-
-  const columns: Column<DocumentRow>[] = [
-    {
-      key: "doc",
-      header: "Documento",
-      sortAccessor: (d) => d.number,
-      cell: (d) => (
-        <div className="min-w-0">
-          <div className="font-medium truncate">{d.number}</div>
-          <div className="text-caption truncate">{DOCUMENT_KIND_LABEL[d.type]}</div>
-        </div>
-      ),
-    },
-    { key: "customer", header: "Cliente", className: "w-[170px]", sortAccessor: (d) => d.customer, cell: (d) => <span className="text-sm truncate">{d.customer}</span> },
-    { key: "equipment", header: "Equipamento", className: "w-[170px]", cell: (d) => <span className="text-sm truncate">{d.equipment}</span> },
-    { key: "operator", header: "Operador", className: "w-[140px]", cell: (d) => <span className="text-sm">{d.operator}</span> },
-    { key: "date", header: "Data", className: "w-[110px]", sortAccessor: (d) => d.date, cell: (d) => <span className="font-mono text-xs">{formatDate(d.date)}</span> },
-    { key: "size", header: "Tamanho", className: "w-[95px]", cell: (d) => <span className="text-xs font-mono">{formatBytes(d.fileSize)}</span> },
-    { key: "rendered", header: "Renderizado", className: "w-[135px]", cell: (d) => <span className="text-xs">{formatDateTime(d.renderedAt)}</span> },
-    { key: "version", header: "Versão", className: "w-[86px]", cell: () => <span className="text-caption">v1</span> },
-    { key: "status", header: "Status", className: "w-[120px]", sortAccessor: (d) => d.status, cell: (d) => <StatusChip tone={STATUS[d.status].tone} dot>{STATUS[d.status].label}</StatusChip> },
+  const [page, setPage] = useState(1); const [limit, setLimit] = useState(20);
+  const [search, setSearch] = useState(""); const [customerId, setCustomerId] = useState("");
+  const [equipmentId, setEquipmentId] = useState(""); const [operatorId, setOperatorId] = useState("");
+  const [kind, setKind] = useState<"" | DocumentKind>(""); const [status, setStatus] = useState<"" | OperationDocumentStatus>("");
+  const [from, setFrom] = useState(""); const [to, setTo] = useState("");
+  const [detail, setDetail] = useState<DocumentCatalogItem | null>(null);
+  const docs = useQuery((signal) => documentsApi.listDocuments({ page, limit, search: search || undefined, customerId: customerId || undefined, equipmentId: equipmentId || undefined, operatorId: operatorId || undefined, type: kind || undefined, status: status || undefined, from: from || undefined, to: to || undefined, signal }), [page, limit, search, customerId, equipmentId, operatorId, kind, status, from, to]);
+  const items = useMemo(() => docs.data?.items ?? [], [docs.data]);
+  const options = useMemo(() => ({
+    customers: unique(items.flatMap((item) => item.customer ? [item.customer] : [])),
+    equipments: unique(items.flatMap((item) => item.equipment ? [item.equipment] : [])),
+    operators: unique(items.flatMap((item) => item.responsible ? [item.responsible] : [])),
+  }), [items]);
+  const columns: Column<DocumentCatalogItem>[] = [
+    { key: "doc", header: "Documento", cell: (d) => <div><div className="font-medium">{d.number}</div><div className="text-caption">{DOCUMENT_KIND_LABEL[d.type]}</div></div> },
+    { key: "customer", header: "Cliente", cell: (d) => d.customer?.name ?? "—" },
+    { key: "equipment", header: "Equipamento", cell: (d) => d.equipment?.name ?? "—" },
+    { key: "origin", header: "Origem", cell: (d) => d.origin === "BUDGET" ? "Orçamento" : "Operação" },
+    { key: "responsible", header: "Responsável", cell: (d) => d.responsible?.name ?? "—" },
+    { key: "issued", header: "Emissão", cell: (d) => formatDate(d.issuedAt) },
+    { key: "version", header: "Versão", cell: (d) => `v${d.version}` },
+    { key: "status", header: "Status", cell: (d) => <StatusChip tone={STATUS[d.status].tone} dot>{STATUS[d.status].label}</StatusChip> },
   ];
-
-  return (
-    <div className="space-y-6 max-w-[1500px]">
-      <PageHeader
-        eyebrow="Operação"
-        title="Central de documentos"
-        description="Preview, renderização e download consomem exclusivamente o Document Engine do backend."
-        actions={
-          <ExportButton
-            label="Exportar"
-            fileName="documentos"
-            onPdf={() =>
-              documentsApi.exportDocumentsPdf({
-                search: search.trim() || undefined,
-                customer: customer || undefined,
-                equipment: equipment || undefined,
-                operator: operator || undefined,
-                type: kind || undefined,
-                status: status || undefined,
-                from: from || undefined,
-                to: to || undefined,
-              })
-            }
-            rows={rows.map((d) => ({
-              documento: d.number,
-              tipo: DOCUMENT_KIND_LABEL[d.type],
-              cliente: d.customer,
-              equipamento: d.equipment,
-              operador: d.operator,
-              data: formatDate(d.date),
-              tamanho: formatBytes(d.fileSize),
-              renderizadoEm: formatDateTime(d.renderedAt),
-              status: STATUS[d.status].label,
-              versao: "v1",
-            }))}
-          />
-        }
-      />
-
-      <FilterBar search={search} onSearch={(value) => { setSearch(value); setPage(1); }} searchPlaceholder="Buscar por documento, cliente, equipamento…">
-        <select value={customer} onChange={(e) => { setCustomer(e.target.value); setPage(1); }} className={selectCls} aria-label="Cliente">
-          <option value="">Todos os clientes</option>
-          {distinct("customer").map((v) => <option key={v} value={v}>{v}</option>)}
-        </select>
-        <select value={equipment} onChange={(e) => { setEquipment(e.target.value); setPage(1); }} className={selectCls} aria-label="Equipamento">
-          <option value="">Todos os equipamentos</option>
-          {distinct("equipment").map((v) => <option key={v} value={v}>{v}</option>)}
-        </select>
-        <select value={operator} onChange={(e) => { setOperator(e.target.value); setPage(1); }} className={selectCls} aria-label="Operador">
-          <option value="">Todos os operadores</option>
-          {distinct("operator").map((v) => <option key={v} value={v}>{v}</option>)}
-        </select>
-        <select value={kind} onChange={(e) => { setKind(e.target.value as DocumentKind | ""); setPage(1); }} className={selectCls} aria-label="Tipo">
-          <option value="">Todos os tipos</option>
-          {KINDS.map((k) => <option key={k} value={k}>{DOCUMENT_KIND_LABEL[k]}</option>)}
-        </select>
-        <select value={status} onChange={(e) => { setStatus(e.target.value as OperationDocumentStatus | ""); setPage(1); }} className={selectCls} aria-label="Status">
-          <option value="">Todos os status</option>
-          {STATUSES.map((s) => <option key={s} value={s}>{STATUS[s].label}</option>)}
-        </select>
-        <input type="date" value={from} onChange={(e) => { setFrom(e.target.value); setPage(1); }} className={selectCls} aria-label="De" />
-        <input type="date" value={to} onChange={(e) => { setTo(e.target.value); setPage(1); }} className={selectCls} aria-label="Até" />
-      </FilterBar>
-
-      {ops.loading && all.length === 0 ? (
-        <SkeletonList rows={6} />
-      ) : ops.error && !ops.data ? (
-        <ErrorState error={ops.error} onRetry={ops.refetch} />
-      ) : rows.length === 0 ? (
-        <EmptyState icon={FileText} title="Nenhum documento" description="Registre operações ou ajuste os filtros." />
-      ) : (
-        <div className="space-y-3">
-          <DataTable columns={columns} rows={rows} onRowClick={(d) => setDetail(d)} />
-          {ops.data && (
-            <Pagination
-              pagination={ops.data.pagination}
-              onPageChange={setPage}
-              onPageSizeChange={(next) => { setLimit(next); setPage(1); }}
-            />
-          )}
-        </div>
-      )}
-
-      <Drawer open={detail !== null} onClose={() => setDetail(null)} eyebrow="Documento" title={detail?.number ?? ""} width="max-w-[1280px]">
-        {detail && (
-          <DocumentViewer
-            source={{ documentId: detail.id, operationId: detail.operation.id, type: detail.type }}
-            title={detail.number}
-            onRendered={() => ops.refetch()}
-          />
-        )}
-      </Drawer>
-    </div>
-  );
+  const resetPage = <T,>(setter: (value: T) => void) => (value: T) => { setter(value); setPage(1); };
+  return <div className="space-y-6 max-w-[1500px]">
+    <PageHeader eyebrow="Document Engine" title="Central de documentos" description="Repositório oficial de todos os documentos emitidos pelo Orbit." />
+    <FilterBar search={search} onSearch={resetPage(setSearch)} searchPlaceholder="Número, cliente ou equipamento…">
+      <Select label="Cliente" value={customerId} onChange={resetPage(setCustomerId)} options={options.customers} />
+      <Select label="Equipamento" value={equipmentId} onChange={resetPage(setEquipmentId)} options={options.equipments} />
+      <Select label="Operador" value={operatorId} onChange={resetPage(setOperatorId)} options={options.operators} />
+      <select className={selectCls} value={kind} onChange={(e) => resetPage(setKind)(e.target.value as DocumentKind | "")}><option value="">Todos os tipos</option>{KINDS.map((item) => <option key={item} value={item}>{DOCUMENT_KIND_LABEL[item]}</option>)}</select>
+      <select className={selectCls} value={status} onChange={(e) => resetPage(setStatus)(e.target.value as OperationDocumentStatus | "")}><option value="">Todos os status</option>{Object.entries(STATUS).map(([key, value]) => <option key={key} value={key}>{value.label}</option>)}</select>
+      <input className={selectCls} type="date" value={from} onChange={(e) => resetPage(setFrom)(e.target.value)} aria-label="Data inicial" />
+      <input className={selectCls} type="date" value={to} onChange={(e) => resetPage(setTo)(e.target.value)} aria-label="Data final" />
+    </FilterBar>
+    {docs.loading && !docs.data ? <SkeletonList rows={6} /> : docs.error && !docs.data ? <ErrorState error={docs.error} onRetry={docs.refetch} /> : items.length === 0 ? <EmptyState icon={FileText} title="Nenhum documento" description="Nenhum documento emitido corresponde aos filtros." /> : <div className="space-y-3"><DataTable columns={columns} rows={items} onRowClick={setDetail} />{docs.data && <Pagination pagination={docs.data.pagination} onPageChange={setPage} onPageSizeChange={(value) => { setLimit(value); setPage(1); }} />}</div>}
+    <Drawer open={Boolean(detail)} onClose={() => setDetail(null)} eyebrow="Documento oficial" title={detail?.number ?? ""} width="max-w-[1280px]">
+      {detail && <div className="space-y-5">
+        <section><h3 className="font-semibold">Resumo</h3><p className="text-sm text-[var(--color-muted-foreground)]">{DOCUMENT_KIND_LABEL[detail.type]} · {STATUS[detail.status].label} · versão {detail.version}</p></section>
+        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><Meta label="Cliente" value={detail.customer?.name} /><Meta label="Equipamento" value={detail.equipment?.name} /><Meta label="Responsável" value={detail.responsible?.name} /><Meta label="Emissão" value={formatDateTime(detail.issuedAt)} /><Meta label="Origem" value={detail.origin === "BUDGET" ? "Orçamento" : "Operação"} /><Meta label="Tamanho" value={formatBytes(detail.fileSize)} /></section>
+        <section><h3 className="font-semibold mb-2">Assinaturas, preview e ações</h3><DocumentViewer source={{ documentId: detail.id, type: detail.type }} title={detail.number} onRendered={() => docs.refetch()} /></section>
+      </div>}
+    </Drawer>
+  </div>;
 }
+
+function unique<T extends { id: string; name: string }>(items: T[]): T[] { return Array.from(new Map(items.map((item) => [item.id, item])).values()); }
+function Select({ label, value, onChange, options }: { label: string; value: string; onChange: (value: string) => void; options: Array<{ id: string; name: string }> }) { return <select className={selectCls} aria-label={label} value={value} onChange={(e) => onChange(e.target.value)}><option value="">Todos · {label.toLowerCase()}</option>{options.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>; }
+function Meta({ label, value }: { label: string; value?: string | null }) { return <div className="rounded-[var(--radius-md)] border border-[var(--color-border)] p-3"><div className="text-caption">{label}</div><div className="text-sm font-medium">{value || "—"}</div></div>; }

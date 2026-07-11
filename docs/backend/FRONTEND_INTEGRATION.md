@@ -1,5 +1,22 @@
 # Frontend Integration
 
+## DC-01 — Work Order
+
+Ao criar/encerrar uma Operation, envie separadamente `reportedIssue`, `serviceDescription` e
+`observations`. Use uma linha por serviço quando quiser apresentação em lista. A OS continua em
+`GET /documents/operations/:operationId/WORK_ORDER/preview`, render oficial e download por
+`documentId`. Não monte seções no frontend.
+
+## Document Engine D1
+
+Use `GET /documents` como única fonte da Central de Documentos. Não derive o catálogo de Operations.
+Envie filtros/paginação ao backend e use o `id` em `GET /documents/:id/preview`,
+`POST /documents/:id/render` e `GET /documents/:id/download` pelo `DocumentViewer`.
+
+`institutionalSignatureIds` é uma lista ordenada sem limite artificial. As flags
+`executionSignatureClient`, `executionSignatureTechnician` e `executionSignatureOperator` definem
+os papéis. O frontend nunca resolve imagens ou combina assinaturas.
+
 ## Product Backlog Closure 05 — assinatura em preview real e PDF
 
 O frontend não precisa mudar contratos para exibir assinatura executada.

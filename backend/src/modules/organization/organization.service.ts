@@ -40,6 +40,12 @@ const ORGANIZATION_SELECT = {
   cnpj: true,
   email: true,
   phone: true,
+  website: true,
+  zipCode: true,
+  street: true,
+  number: true,
+  complement: true,
+  district: true,
   city: true,
   state: true,
   primaryColor: true,
@@ -75,6 +81,13 @@ const TEMPLATE_SELECT = {
   requiresSignature: true,
   signatureMode: true,
   signatureId: true,
+  executionSignatureClient: true,
+  executionSignatureTechnician: true,
+  executionSignatureOperator: true,
+  institutionalSignatures: {
+    orderBy: { position: 'asc' as const },
+    select: { signatureId: true, position: true },
+  },
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.DocumentTemplateSelect;
@@ -205,11 +218,17 @@ export class OrganizationService {
           data: { isDefault: false },
         });
       }
+      const requestedInstitutionalIds = dto.institutionalSignatureIds ?? [];
       const signatureConfig = await this.resolveSignatureConfig({
         requiresSignature: dto.requiresSignature,
         signatureMode: dto.signatureMode,
-        signatureId: dto.signatureId,
+        signatureId: dto.signatureId ?? requestedInstitutionalIds[0],
       });
+      const institutionalSignatureIds = await this.resolveInstitutionalSignatureIds(
+        signatureConfig.signatureMode === SignatureMode.FIXED || signatureConfig.signatureMode === SignatureMode.HYBRID
+          ? (requestedInstitutionalIds.length > 0 ? requestedInstitutionalIds : signatureConfig.signatureId ? [signatureConfig.signatureId] : [])
+          : [],
+      );
       const created = await transaction.documentTemplate.create({
         data: {
           organizationId: organization.id,
@@ -221,6 +240,12 @@ export class OrganizationService {
           isDefault: dto.isDefault ?? false,
           isActive: dto.isActive ?? true,
           ...signatureConfig,
+          executionSignatureClient: dto.executionSignatureClient ?? false,
+          executionSignatureTechnician: dto.executionSignatureTechnician ?? false,
+          executionSignatureOperator: dto.executionSignatureOperator ?? false,
+          institutionalSignatures: {
+            create: institutionalSignatureIds.map((signatureId, position) => ({ signatureId, position })),
+          },
           isSystem: false,
         },
         select: TEMPLATE_SELECT,
@@ -254,16 +279,36 @@ export class OrganizationService {
           data: { isDefault: false },
         });
       }
+      const nextMode = dto.signatureMode ?? existing.signatureMode;
+      const requestedInstitutionalIds = dto.institutionalSignatureIds;
+      const primarySignatureId = nextMode === SignatureMode.FIXED || nextMode === SignatureMode.HYBRID
+        ? (dto.signatureId !== undefined ? dto.signatureId : requestedInstitutionalIds?.[0] ?? existing.signatureId)
+        : null;
       const signatureConfig = await this.resolveSignatureConfig({
         requiresSignature: dto.requiresSignature ?? existing.requiresSignature,
-        signatureMode: dto.signatureMode ?? existing.signatureMode,
-        signatureId: dto.signatureId !== undefined ? dto.signatureId : existing.signatureId,
+        signatureMode: nextMode,
+        signatureId: primarySignatureId,
       });
+      const effectiveRequestedIds = nextMode === SignatureMode.FIXED || nextMode === SignatureMode.HYBRID
+        ? requestedInstitutionalIds
+        : [];
+      const institutionalSignatureIds = effectiveRequestedIds === undefined
+        ? null
+        : await this.resolveInstitutionalSignatureIds(effectiveRequestedIds);
+      const { institutionalSignatureIds: _institutionalSignatureIds, ...templateData } = dto;
+      void _institutionalSignatureIds;
       const updated = await transaction.documentTemplate.update({
         where: { id },
         data: {
-          ...dto,
+          ...templateData,
           ...signatureConfig,
+          ...(institutionalSignatureIds === null ? {} : {
+            institutionalSignatures: {
+              deleteMany: {},
+              create: institutionalSignatureIds.map((signatureId, position) => ({ signatureId, position })),
+            },
+            signatureId: institutionalSignatureIds[0] ?? signatureConfig.signatureId,
+          }),
         },
         select: TEMPLATE_SELECT,
       });
@@ -487,6 +532,22 @@ export class OrganizationService {
     }
 
     return { requiresSignature: true, signatureMode: mode, signatureId: null };
+  }
+
+  private async resolveInstitutionalSignatureIds(ids: string[]): Promise<string[]> {
+    if (ids.length === 0) return [];
+    const signatures = await this.prisma.signature.findMany({
+      where: { id: { in: ids }, active: true, deletedAt: null },
+      select: { id: true, imageStorageKey: true },
+    });
+    if (signatures.length !== ids.length || signatures.some((signature) => !signature.imageStorageKey)) {
+      throw new ApplicationException(
+        ERROR_CODES.SIGNATURE_NOT_FOUND,
+        'Every institutional signature must exist, be active and have an uploaded image',
+        HttpStatus.CONFLICT,
+      );
+    }
+    return ids;
   }
 
   private async getAssetOrThrow(organizationId: string, id: string): Promise<AssetResponse> {

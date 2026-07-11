@@ -172,6 +172,9 @@ function OrganizationSection({ org, canEdit, onSaved }: { org: Organization; can
       await organizationApi.updateOrganization({
         legalName: form.legalName, tradeName: form.tradeName, cnpj: form.cnpj, email: form.email,
         phone: form.phone, city: form.city, state: form.state,
+        website: form.website ?? undefined, zipCode: form.zipCode ?? undefined,
+        street: form.street ?? undefined, number: form.number ?? undefined,
+        complement: form.complement ?? undefined, district: form.district ?? undefined,
         primaryColor: form.primaryColor, secondaryColor: form.secondaryColor,
       });
       applyBranding(form.primaryColor, form.secondaryColor);
@@ -196,6 +199,12 @@ function OrganizationSection({ org, canEdit, onSaved }: { org: Organization; can
         <Input label="CNPJ" value={form.cnpj} onChange={(v) => set("cnpj", v)} disabled={!canEdit} />
         <Input label="E-mail" value={form.email} onChange={(v) => set("email", v)} disabled={!canEdit} />
         <Input label="Telefone" value={form.phone} onChange={(v) => set("phone", v)} disabled={!canEdit} />
+        <Input label="Website" value={form.website ?? ""} onChange={(v) => set("website", v)} disabled={!canEdit} />
+        <Input label="CEP" value={form.zipCode ?? ""} onChange={(v) => set("zipCode", v)} disabled={!canEdit} />
+        <Input label="Logradouro" value={form.street ?? ""} onChange={(v) => set("street", v)} disabled={!canEdit} />
+        <Input label="Número" value={form.number ?? ""} onChange={(v) => set("number", v)} disabled={!canEdit} />
+        <Input label="Complemento" value={form.complement ?? ""} onChange={(v) => set("complement", v)} disabled={!canEdit} />
+        <Input label="Bairro" value={form.district ?? ""} onChange={(v) => set("district", v)} disabled={!canEdit} />
         <div className="grid grid-cols-2 gap-3">
           <Input label="Cidade" value={form.city} onChange={(v) => set("city", v)} disabled={!canEdit} />
           <Input label="UF" value={form.state} onChange={(v) => set("state", v)} disabled={!canEdit} />
@@ -488,6 +497,8 @@ function SignaturesSection({ signatures, canEdit, onChanged }: { signatures: Sig
 function SignatureEditor({ open, signature, onClose, onSaved }: { open: boolean; signature: Signature | null; onClose: () => void; onSaved: () => void }) {
   const [name, setName] = useState("");
   const [title, setTitle] = useState("");
+  const [professionalCouncil, setProfessionalCouncil] = useState("");
+  const [department, setDepartment] = useState("");
   const [active, setActive] = useState(true);
   const [mode, setMode] = useState<"upload" | "draw">("upload");
   const [file, setFile] = useState<File | null>(null);
@@ -501,6 +512,8 @@ function SignatureEditor({ open, signature, onClose, onSaved }: { open: boolean;
     if (!open) return;
     setName(signature?.name ?? "");
     setTitle(signature?.title ?? "");
+    setProfessionalCouncil(signature?.professionalCouncil ?? "");
+    setDepartment(signature?.department ?? "");
     setActive(signature?.active ?? true);
     setMode("upload");
     setFile(null);
@@ -515,8 +528,8 @@ function SignatureEditor({ open, signature, onClose, onSaved }: { open: boolean;
     setSaving(true); setError(null);
     try {
       const saved = signature
-        ? await signaturesApi.updateSignature(signature.id, { name, title, active })
-        : await signaturesApi.createSignature({ name, title, active });
+        ? await signaturesApi.updateSignature(signature.id, { name, title, professionalCouncil, department, active })
+        : await signaturesApi.createSignature({ name, title, professionalCouncil, department, active });
       const selectedFile = mode === "draw" ? drawingFile : file;
       if (selectedFile) await signaturesApi.uploadSignatureImage(saved.id, selectedFile);
       onSaved();
@@ -564,6 +577,8 @@ function SignatureEditor({ open, signature, onClose, onSaved }: { open: boolean;
           </div>
           <Input label="Nome" value={name} onChange={setName} />
           <Input label="Título" value={title} onChange={setTitle} />
+          <Input label="Conselho profissional" value={professionalCouncil} onChange={setProfessionalCouncil} />
+          <Input label="Departamento" value={department} onChange={setDepartment} />
           <label className="flex items-center justify-between gap-3 cursor-pointer">
             <span className="text-sm font-medium">Ativa</span>
             <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="h-4 w-4 accent-[var(--color-primary)]" />

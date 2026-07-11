@@ -1,5 +1,16 @@
 # ARCHITECTURE — Frontend
 
+## DC-01
+
+A especialização visual/semântica da OS reside no DocumentBuilder. O frontend apenas captura campos
+da Operation e representa o Blueprint oficial no DocumentViewer; não possui template local de OS.
+
+## Document Engine D1
+
+`GET /documents` é o read model documental oficial. O frontend não agrega Operations, Budgets ou
+snapshots. `DocumentViewer` permanece a fronteira única para Blueprint, render e download.
+TemplateFormDrawer envia políticas e IDs; resolução, autorização e assets permanecem no backend.
+
 ## Product Backlog Closure 05 — document preview architecture
 
 Arquitetura preservada:

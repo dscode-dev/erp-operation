@@ -1,5 +1,28 @@
 # API Contracts
 
+## DC-01 — campos da Work Order
+
+`POST /operations` e `PATCH /operations/:id` aceitam `reportedIssue?: string` (até 10.000) e
+`serviceDescription?: string` (até 20.000). Ambos são texto operacional, sanitizado pelo DTO e
+utilizado pelo WORK_ORDER Blueprint. Organization aceita opcionalmente `website`, `zipCode`,
+`street`, `number`, `complement` e `district` para o cabeçalho/rodapé documental.
+
+Os endpoints de preview/render/download não mudaram.
+
+## Document repository D1 — GET `/api/v1/documents`
+
+Roles: OWNER, MANAGER, OPERATOR, VIEWER; documentos financeiros conservam restrição de OWNER.
+Query: `page`, `limit`, `search`, `type`, `status`, `customerId`, `equipmentId`, `operatorId`, `from`,
+`to`. Todos os filtros combinam com AND.
+
+Cada item retorna `id`, `number`, `type`, `status`, `origin`, `originId`, `customer`, `equipment`,
+`responsible`, `issuedAt`, `renderedAt`, `fileSize`, `version`, `createdAt`, `updatedAt`, dentro do
+envelope paginado padrão. Não retorna conteúdo ou chaves de Storage.
+
+Templates aceitam `institutionalSignatureIds: UUID[]`, `executionSignatureClient`,
+`executionSignatureTechnician` e `executionSignatureOperator`. Signatures aceitam
+`professionalCouncil` e `department` opcionais.
+
 ## Product Backlog Closure 06.1 — runtime-confirmed contracts
 
 `GET /operations` e `GET /operations/:id` retornaram em runtime `createdAt` e `scheduledFor`.

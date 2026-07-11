@@ -69,7 +69,7 @@ export class DocumentBuilderService {
     };
 
     const generatedAt = new Date().toISOString();
-    const sections = this.sections(context);
+    const sections = this.sections(context, generatedAt, document.number);
     this.assertBlueprintLimits(sections);
 
     return {
@@ -93,6 +93,8 @@ export class DocumentBuilderService {
           cnpj: this.clean(organization.cnpj),
           email: this.clean(organization.email),
           phone: this.clean(organization.phone),
+          website: this.clean(organization.website ?? ''),
+          address: this.organizationAddress(organization),
           city: this.clean(organization.city),
           state: this.clean(organization.state),
           primaryColor: organization.primaryColor,
@@ -104,9 +106,10 @@ export class DocumentBuilderService {
         subtitle: `Operação ${String(operation.number).padStart(6, '0')}`,
         organizationName: this.clean(organization.tradeName || organization.legalName),
         documentNumber: document.number,
+        logo: context.assets.logo ? { mimeType: context.assets.logo.mimeType, fileSize: context.assets.logo.fileSize, contentBase64: context.assets.logo.contentBase64 } : null,
       },
       footer: {
-        content: this.clean(`Gerado por ${organization.tradeName} · ${organization.email}`),
+        content: this.clean(`${organization.tradeName || organization.legalName} · ${this.organizationAddress(organization)} · ${organization.phone} · ${organization.email}${organization.website ? ` · ${organization.website}` : ''} · ${document.number} · Blueprint v1.0`),
         generatedAt,
       },
       sections,
@@ -141,6 +144,8 @@ export class DocumentBuilderService {
           cnpj: this.clean(organization.cnpj),
           email: this.clean(organization.email),
           phone: this.clean(organization.phone),
+          website: this.clean(organization.website ?? ''),
+          address: this.organizationAddress(organization),
           city: this.clean(organization.city),
           state: this.clean(organization.state),
           primaryColor: organization.primaryColor,
@@ -152,6 +157,7 @@ export class DocumentBuilderService {
         subtitle: 'Pré-visualização de modelo',
         organizationName: this.clean(organization.tradeName || organization.legalName),
         documentNumber: placeholders.documentNumber,
+        logo: context.assets.logo ? { mimeType: context.assets.logo.mimeType, fileSize: context.assets.logo.fileSize, contentBase64: context.assets.logo.contentBase64 } : null,
       },
       footer: {
         content: this.clean(template.footerContent || `Modelo gerado por ${organization.tradeName}`),
@@ -191,6 +197,8 @@ export class DocumentBuilderService {
           cnpj: this.clean(organization.cnpj),
           email: this.clean(organization.email),
           phone: this.clean(organization.phone),
+          website: this.clean(organization.website ?? ''),
+          address: this.organizationAddress(organization),
           city: this.clean(organization.city),
           state: this.clean(organization.state),
           primaryColor: organization.primaryColor,
@@ -202,6 +210,7 @@ export class DocumentBuilderService {
         subtitle: budget.operation ? `Operação ${String(budget.operation.number).padStart(6, '0')}` : budget.title,
         organizationName: this.clean(organization.tradeName || organization.legalName),
         documentNumber: number,
+        logo: context.assets.logo ? { mimeType: context.assets.logo.mimeType, fileSize: context.assets.logo.fileSize, contentBase64: context.assets.logo.contentBase64 } : null,
       },
       footer: {
         content: this.clean(context.template?.footerContent || `Gerado por ${organization.tradeName} · ${organization.email}`),
@@ -211,12 +220,13 @@ export class DocumentBuilderService {
     };
   }
 
-  private sections(context: DocumentContext): DocumentSection[] {
-    const sections = this.sharedIdentitySections(context);
+  private sections(context: DocumentContext, generatedAt: string, documentNumber: string): DocumentSection[] {
+    const sections = context.configuration.type === DocumentTemplateType.WORK_ORDER
+      ? this.workOrderSections(context, generatedAt, documentNumber)
+      : this.sharedIdentitySections(context);
 
     switch (context.configuration.type) {
       case DocumentTemplateType.WORK_ORDER:
-        sections.push(...this.workOrderSections(context));
         break;
       case DocumentTemplateType.TECHNICAL_REPORT:
         sections.push(...this.visitReportSections(context));
@@ -301,26 +311,52 @@ export class DocumentBuilderService {
     return sections;
   }
 
-  private workOrderSections(context: DocumentContext): DocumentSection[] {
+  private workOrderSections(context: DocumentContext, generatedAt: string, documentNumber: string): DocumentSection[] {
     const { operation } = context;
+    const address = operation.address ?? operation.customer.addresses[0] ?? null;
+    const contact = operation.customer.contacts[0] ?? null;
+    const serviceItems = this.lines(operation.serviceDescription);
     return [
       {
-        id: 'work-order-execution',
-        title: 'Programação e responsável',
+        id: 'work-order-identification',
+        title: 'Identificação da ordem de serviço',
         critical: true,
         components: [
-          this.metadata('work-order-execution-metadata', [
-            ['Operador responsável', operation.operator.name],
-            ['Cargo', operation.operator.jobTitle ?? '—'],
-            ['Atribuição', operation.assignment?.status ?? 'Sem assignment'],
-            ['Aceite', this.date(operation.assignment?.acceptedAt ?? null)],
-            ['Início previsto', this.date(operation.scheduledFor)],
-            ['Início real', this.date(operation.startedAt)],
+          this.metadata('work-order-identification-metadata', [
+            ['Número', documentNumber],
+            ['Data de emissão', this.date(generatedAt)],
+            ['Data de criação', this.date(operation.createdAt)],
+            ['Data do agendamento', this.date(operation.scheduledFor)],
+            ['Status', operation.status],
+            ['Responsável', operation.assignment?.assignee.name ?? operation.operator.name],
+            ['Operador', operation.operator.name],
           ]),
         ],
       },
-      this.checklistSection(operation, 'Escopo/checklist da OS'),
-      this.observationSection(operation, 'Orientações da OS'),
+      {
+        id: 'work-order-customer', title: 'Cliente', critical: true,
+        components: [this.metadata('work-order-customer-metadata', [
+          ['Cliente', operation.customer.tradeName ?? operation.customer.name],
+          ['Razão/Nome', operation.customer.name],
+          ['Documento', operation.customer.cnpj ?? operation.customer.cpf ?? '—'],
+          ['Contato', contact ? `${contact.name}${contact.phone ? ` · ${contact.phone}` : ''}` : operation.customer.phone ?? '—'],
+          ['Endereço', address ? this.address(address) : '—'],
+        ])],
+      },
+      operation.equipment ? this.equipmentSection(operation) : null,
+      {
+        id: 'work-order-reported-issue', title: 'Defeito ou solicitação informada',
+        components: [{ id: 'work-order-reported-issue-text', kind: 'observation', text: this.clean(operation.reportedIssue || 'Não informado.'), keepTogether: true }],
+      },
+      {
+        id: 'work-order-services', title: 'Serviços executados',
+        components: serviceItems.length > 1
+          ? [{ id: 'work-order-services-list', kind: 'list', items: serviceItems }]
+          : [{ id: 'work-order-services-text', kind: 'paragraph', text: this.clean(operation.serviceDescription || 'A execução deve ser detalhada no checklist e nos registros operacionais.'), keepTogether: true }],
+      },
+      this.checklistSection(operation, 'Checklist da execução'),
+      this.materialsSection(operation),
+      this.observationSection(operation, 'Observações e resultado operacional'),
     ].filter((section): section is DocumentSection => Boolean(section));
   }
 
@@ -979,38 +1015,38 @@ export class DocumentBuilderService {
     if (!signature.requiresSignature || signature.signatureMode === SignatureMode.NONE) return null;
 
     const signatures: Extract<DocumentBlueprintComponent, { kind: 'signature' }>['signatures'] = [];
-    if (signature.fixedSignature) {
+    for (const institutional of signature.institutionalSignatures) {
       signatures.push({
-        id: signature.fixedSignature.id,
+        id: institutional.id,
         role: 'fixed',
-        label: 'Assinatura fixa',
-        name: this.clean(signature.fixedSignature.name),
-        title: this.clean(signature.fixedSignature.title),
+        label: 'Assinatura institucional',
+        name: this.clean(institutional.name),
+        title: this.clean([institutional.title, institutional.professionalCouncil, institutional.department].filter(Boolean).join(' · ')),
         signedAt: null,
-        caption: 'Assinatura cadastrada',
+        caption: 'Assinatura institucional cadastrada',
         image: {
-          mimeType: signature.fixedSignature.image.mimeType,
-          fileSize: signature.fixedSignature.image.fileSize,
-          contentBase64: signature.fixedSignature.image.contentBase64,
+          mimeType: institutional.image.mimeType,
+          fileSize: institutional.image.fileSize,
+          contentBase64: institutional.image.contentBase64,
         },
       });
     }
-    if (signature.collectedSignature) {
+    for (const execution of signature.executionSignatures) {
       signatures.push({
-        id: 'collected-signature',
+        id: `execution-signature-${execution.role}`,
         role: 'collected',
-        label: this.clean(signature.collectedSignature.label),
-        name: signature.collectedSignature.name ? this.clean(signature.collectedSignature.name) : null,
-        title: signature.collectedSignature.title ? this.clean(signature.collectedSignature.title) : null,
-        signedAt: signature.collectedSignature.signedAt,
-        caption: signature.collectedSignature.caption
-          ? this.clean(signature.collectedSignature.caption)
+        label: this.clean(execution.label),
+        name: execution.name ? this.clean(execution.name) : null,
+        title: execution.title ? this.clean(execution.title) : null,
+        signedAt: execution.signedAt,
+        caption: execution.caption
+          ? this.clean(execution.caption)
           : 'Assinatura coletada em campo',
-        image: signature.collectedSignature.image
+        image: execution.image
           ? {
-              mimeType: signature.collectedSignature.image.mimeType,
-              fileSize: signature.collectedSignature.image.fileSize,
-              contentBase64: signature.collectedSignature.image.contentBase64,
+              mimeType: execution.image.mimeType,
+              fileSize: execution.image.fileSize,
+              contentBase64: execution.image.contentBase64,
             }
           : null,
       });
@@ -1073,9 +1109,29 @@ export class DocumentBuilderService {
     );
   }
 
+  private organizationAddress(organization: {
+    street?: string | null; number?: string | null; complement?: string | null;
+    district?: string | null; city: string; state: string; zipCode?: string | null;
+  }): string {
+    return this.clean([
+      [organization.street, organization.number].filter(Boolean).join(', '),
+      organization.complement,
+      organization.district,
+      `${organization.city}/${organization.state}`,
+      organization.zipCode ? `CEP ${organization.zipCode}` : null,
+    ].filter(Boolean).join(' · '));
+  }
+
+  private lines(value: string | null): string[] {
+    if (!value) return [];
+    return value.split(/\r?\n/).map((line) => line.replace(/^\s*[-•*]\s*/, '').trim()).filter(Boolean).map((line) => this.clean(line));
+  }
+
   private date(value: Date | string | null): string {
     if (!value) return '—';
-    return new Date(value).toISOString();
+    return new Intl.DateTimeFormat('pt-BR', {
+      dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Recife',
+    }).format(new Date(value));
   }
 
   private decimal(value: Prisma.Decimal | number | string): string {

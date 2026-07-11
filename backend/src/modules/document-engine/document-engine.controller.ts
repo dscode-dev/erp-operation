@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Post, Req } from '@nestjs/common';
+import { Controller, Get, Param, Post, Query, Req } from '@nestjs/common';
 import { Role } from '@prisma/client';
 import { CurrentUser } from '../../shared/decorators/current-user.decorator';
 import { Roles } from '../../shared/decorators/roles.decorator';
@@ -7,6 +7,7 @@ import type { RequestWithId } from '../../shared/types/request-with-id.type';
 import { DocumentEngineService, contextFromRequest } from './document-engine.service';
 import {
   DocumentIdParamsDto,
+  ListDocumentsQueryDto,
   OperationDocumentParamsDto,
   TemplatePreviewParamsDto,
 } from './dto/document-engine.dto';
@@ -14,6 +15,12 @@ import {
 @Controller('documents')
 export class DocumentEngineController {
   constructor(private readonly documents: DocumentEngineService) {}
+
+  @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR, Role.VIEWER)
+  @Get()
+  listDocuments(@Query() query: ListDocumentsQueryDto, @CurrentUser() actor: AuthenticatedUser): Promise<unknown> {
+    return this.documents.listDocuments(query, actor);
+  }
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR, Role.VIEWER)
   @Get('operations/:operationId/:type/preview')

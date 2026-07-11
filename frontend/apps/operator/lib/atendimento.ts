@@ -56,7 +56,7 @@ export async function createOperationFromDraft(draft: AtendimentoDraft): Promise
     startedAt: draft.startedAt ?? now,
     completedAt: now,
     checklist: draft.checklist,
-    observations: draft.notes.trim() || null,
+    serviceDescription: draft.notes.trim() || null,
     signatureData: draft.signature,
     signedAt: draft.signature ? now : null,
     photos,

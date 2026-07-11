@@ -141,6 +141,8 @@ try {
       scheduledFor,
       startedAt: '2026-07-15T13:35:00.000Z',
       completedAt: '2026-07-15T14:40:00.000Z',
+      reportedIssue: 'Cliente relata temperatura elevada, perda de capacidade e desconforto térmico no ambiente.',
+      serviceDescription: 'Inspeção do circuito elétrico\nCorreção do ponto de vazamento\nLimpeza interna do sistema\nRecarga de fluido refrigerante\nTestes finais de funcionamento',
       observations: 'Revisão técnica concluída — pressão, vazão e condição do equipamento estão estáveis.',
       checklist: [
         { label: 'Verificação elétrica e tensão', done: true, note: 'Conexões íntegras' },
@@ -176,6 +178,10 @@ try {
   const pdf = Buffer.from(download.contentBase64, 'base64');
   const components = preview.sections.flatMap((section) => section.components.map((component) => component.kind));
   const signature = preview.sections.flatMap((section) => section.components).find((component) => component.kind === 'signature');
+  const expectedOrder = ['work-order-identification', 'work-order-customer', ...(equipment ? ['equipment'] : []), 'work-order-reported-issue', 'work-order-services', 'checklist-checklist-da-execucao'];
+  if (!expectedOrder.every((id, index) => preview.sections[index]?.id === id)) {
+    throw new Error(`Unexpected Work Order section order: ${preview.sections.map((section) => section.id).join(', ')}`);
+  }
 
   await writeFile(`${outputDir}/orbit-work-order-06-1.pdf`, pdf);
   await writeFile(`${outputDir}/orbit-runtime-06-1-credentials.json`, JSON.stringify({ email, password }));
@@ -190,6 +196,10 @@ try {
     sourceFingerprint: preview.metadata.sourceFingerprint,
     componentKinds: components,
     sectionTitles: preview.sections.map((section) => section.title),
+    sectionIds: preview.sections.map((section) => section.id),
+    reportedIssuePresent: JSON.stringify(preview).includes('temperatura elevada'),
+    serviceDescriptionPresent: JSON.stringify(preview).includes('Recarga de fluido refrigerante'),
+    organizationLogoPresent: Boolean(preview.header.logo),
     signaturePersisted: Boolean(reloaded.signatureData),
     signedAt: reloaded.signedAt,
     signatureComponentPresent: Boolean(signature),

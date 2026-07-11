@@ -18,6 +18,9 @@ const CONFIG_TEMPLATE_SELECT = {
   requiresSignature: true,
   signatureMode: true,
   signatureId: true,
+  executionSignatureClient: true,
+  executionSignatureTechnician: true,
+  executionSignatureOperator: true,
   createdAt: true,
   updatedAt: true,
   signature: {
@@ -29,6 +32,15 @@ const CONFIG_TEMPLATE_SELECT = {
       mimeType: true,
       fileSize: true,
       active: true,
+      professionalCouncil: true,
+      department: true,
+    },
+  },
+  institutionalSignatures: {
+    orderBy: { position: 'asc' as const },
+    select: {
+      position: true,
+      signature: { select: { id: true, name: true, title: true, professionalCouncil: true, department: true, imageStorageKey: true, mimeType: true, fileSize: true, active: true, deletedAt: true } },
     },
   },
 } satisfies Prisma.DocumentTemplateSelect;
@@ -40,6 +52,12 @@ const CONFIG_ORGANIZATION_SELECT = {
   cnpj: true,
   email: true,
   phone: true,
+  website: true,
+  zipCode: true,
+  street: true,
+  number: true,
+  complement: true,
+  district: true,
   city: true,
   state: true,
   primaryColor: true,

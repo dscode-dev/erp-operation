@@ -20,6 +20,10 @@ type FormState = {
   requiresSignature: boolean;
   signatureMode: SignatureMode;
   signatureId: string;
+  institutionalSignatureIds: string[];
+  executionSignatureClient: boolean;
+  executionSignatureTechnician: boolean;
+  executionSignatureOperator: boolean;
 };
 
 export function TemplateFormDrawer({
@@ -58,6 +62,10 @@ export function TemplateFormDrawer({
             requiresSignature: template.requiresSignature,
             signatureMode: template.signatureMode,
             signatureId: template.signatureId ?? "",
+            institutionalSignatureIds: template.institutionalSignatures?.map((item) => item.signatureId) ?? (template.signatureId ? [template.signatureId] : []),
+            executionSignatureClient: template.executionSignatureClient ?? false,
+            executionSignatureTechnician: template.executionSignatureTechnician ?? false,
+            executionSignatureOperator: template.executionSignatureOperator ?? false,
           }
         : { ...blank(), name: `${typeLabel} — Climatize` },
     );
@@ -160,15 +168,29 @@ export function TemplateFormDrawer({
             </select>
           </Field>
           {(form.signatureMode === "FIXED" || form.signatureMode === "HYBRID") && (
-            <Field label="Assinatura fixa">
-              <select value={form.signatureId} onChange={(e) => set("signatureId", e.target.value)} className={inputCls}>
-                <option value="">Selecione…</option>
-                {signatures.map((signature) => (
-                  <option key={signature.id} value={signature.id}>{signature.name} · {signature.title}</option>
+            <Field label="Assinaturas institucionais">
+              <div className="space-y-2">
+                {form.institutionalSignatureIds.map((id, index) => (
+                  <div key={`${id}-${index}`} className="flex gap-2">
+                    <select value={id} onChange={(e) => set("institutionalSignatureIds", form.institutionalSignatureIds.map((value, i) => i === index ? e.target.value : value))} className={inputCls}>
+                      <option value="">Selecione…</option>
+                      {signatures.filter((signature) => !form.institutionalSignatureIds.includes(signature.id) || signature.id === id).map((signature) => (
+                        <option key={signature.id} value={signature.id}>{signature.name} · {signature.title}</option>
+                      ))}
+                    </select>
+                    <button type="button" onClick={() => set("institutionalSignatureIds", form.institutionalSignatureIds.filter((_, i) => i !== index))} className="px-3 rounded border border-[var(--color-border)]">Remover</button>
+                  </div>
                 ))}
-              </select>
+                <button type="button" onClick={() => set("institutionalSignatureIds", [...form.institutionalSignatureIds, ""])} className="text-sm text-[var(--color-primary)]">+ Adicionar assinatura institucional</button>
+              </div>
             </Field>
           )}
+          <div className="space-y-2 border-t border-[var(--color-border)] pt-3">
+            <div className="text-sm font-medium">Assinaturas de execução</div>
+            {([['executionSignatureClient', 'Cliente'], ['executionSignatureTechnician', 'Técnico'], ['executionSignatureOperator', 'Operador']] as const).map(([key, label]) => (
+              <label key={key} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form[key]} onChange={(e) => set(key, e.target.checked)} /> {label}</label>
+            ))}
+          </div>
         </div>
       </div>
     </Drawer>
@@ -188,6 +210,10 @@ function blank(): FormState {
     requiresSignature: false,
     signatureMode: "NONE",
     signatureId: "",
+    institutionalSignatureIds: [],
+    executionSignatureClient: false,
+    executionSignatureTechnician: false,
+    executionSignatureOperator: false,
   };
 }
 
@@ -202,7 +228,11 @@ function payload(form: FormState) {
     isActive: form.isActive,
     requiresSignature: form.signatureMode === "NONE" ? false : form.requiresSignature,
     signatureMode: form.signatureMode,
-    signatureId: fixed ? form.signatureId || null : null,
+    signatureId: fixed ? (form.institutionalSignatureIds.find(Boolean) ?? form.signatureId ?? null) : null,
+    institutionalSignatureIds: fixed ? form.institutionalSignatureIds.filter(Boolean) : [],
+    executionSignatureClient: form.executionSignatureClient,
+    executionSignatureTechnician: form.executionSignatureTechnician,
+    executionSignatureOperator: form.executionSignatureOperator,
   };
 }
 

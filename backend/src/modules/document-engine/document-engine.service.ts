@@ -24,6 +24,8 @@ import type { DocumentBlueprint } from './blueprint/document-blueprint.types';
 import { DocumentBuilderService } from './builder/document-builder.service';
 import { PdfEngineService } from './pdf/pdf-engine.service';
 import { DocumentRendererService } from './renderer/document-renderer.service';
+import type { ListDocumentsQueryDto } from './dto/document-engine.dto';
+import { buildPaginatedResponse } from '../../shared/types/pagination.types';
 
 export interface DocumentAuditContext {
   requestId: string;
@@ -47,6 +49,59 @@ export class DocumentEngineService {
     private readonly assets: DocumentAssetResolver,
     private readonly lifecycle: LifecyclePublisher,
   ) {}
+
+  async listDocuments(query: ListDocumentsQueryDto, actor: AuthenticatedUser): Promise<unknown> {
+    const period = {
+      ...(query.from ? { gte: new Date(query.from) } : {}),
+      ...(query.to ? { lte: new Date(`${query.to}T23:59:59.999Z`) } : {}),
+    };
+    const where: Prisma.OperationDocumentWhereInput = {
+      ...(query.type ? { type: query.type } : {}),
+      ...(query.status ? { status: query.status } : {}),
+      ...(actor.role === Role.OWNER ? {} : { type: { notIn: [...FINANCIAL_DOCUMENT_TYPES] } }),
+      ...(query.operatorId ? { operation: { operatorId: query.operatorId } } : {}),
+      AND: [
+        ...(query.from || query.to ? [{ OR: [{ renderedAt: period }, { renderedAt: null, createdAt: period }] }] : []),
+        ...(query.customerId ? [{ OR: [{ operation: { customerId: query.customerId } }, { budget: { customerId: query.customerId } }] }] : []),
+        ...(query.equipmentId ? [{ OR: [{ operation: { equipmentId: query.equipmentId } }, { budget: { equipmentId: query.equipmentId } }] }] : []),
+        ...(query.search ? [{ OR: [
+          { number: { contains: query.search, mode: 'insensitive' as const } },
+          { operation: { customer: { name: { contains: query.search, mode: 'insensitive' as const } } } },
+          { operation: { equipment: { name: { contains: query.search, mode: 'insensitive' as const } } } },
+          { budget: { customer: { name: { contains: query.search, mode: 'insensitive' as const } } } },
+        ] }] : []),
+      ],
+    };
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.operationDocument.findMany({
+        where, skip: (query.page - 1) * query.limit, take: query.limit,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        include: {
+          operation: { select: { id: true, number: true, customer: { select: { id: true, name: true } }, equipment: { select: { id: true, name: true, tag: true } }, operator: { select: { id: true, name: true } } } },
+          budget: { select: { id: true, number: true, customer: { select: { id: true, name: true } }, equipment: { select: { id: true, name: true, tag: true } }, creator: { select: { id: true, name: true } } } },
+        },
+      }),
+      this.prisma.operationDocument.count({ where }),
+    ]);
+    return buildPaginatedResponse(items.map((document) => ({
+      id: document.id, number: document.number, type: document.type, status: document.status,
+      origin: document.budget ? 'BUDGET' : 'OPERATION',
+      originId: document.budgetId ?? document.operationId,
+      customer: document.operation?.customer ?? document.budget?.customer ?? null,
+      equipment: document.operation?.equipment ?? document.budget?.equipment ?? null,
+      responsible: document.operation?.operator ?? document.budget?.creator ?? null,
+      issuedAt: document.renderedAt ?? document.createdAt,
+      renderedAt: document.renderedAt, fileSize: document.fileSize,
+      version: this.blueprintVersion(document.renderMetadata),
+      createdAt: document.createdAt, updatedAt: document.updatedAt,
+    })), total, query.page, query.limit);
+  }
+
+  private blueprintVersion(metadata: Prisma.JsonValue | null): string {
+    if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return '1.0';
+    const value = metadata.blueprintVersion;
+    return typeof value === 'string' || typeof value === 'number' ? String(value) : '1.0';
+  }
 
   async previewOperation(
     operationId: string,

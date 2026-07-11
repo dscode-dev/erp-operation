@@ -197,6 +197,12 @@ export type Organization = {
   cnpj: string;
   email: string;
   phone: string;
+  website: string | null;
+  zipCode: string | null;
+  street: string | null;
+  number: string | null;
+  complement: string | null;
+  district: string | null;
   city: string;
   state: string;
   primaryColor: string;
@@ -232,6 +238,10 @@ export type DocumentTemplate = {
   requiresSignature: boolean;
   signatureMode: SignatureMode;
   signatureId: string | null;
+  institutionalSignatures?: Array<{ signatureId: string; position: number }>;
+  executionSignatureClient: boolean;
+  executionSignatureTechnician: boolean;
+  executionSignatureOperator: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -240,6 +250,8 @@ export type Signature = {
   id: string;
   name: string;
   title: string;
+  professionalCouncil: string | null;
+  department: string | null;
   hasImage: boolean;
   mimeType: string | null;
   originalFileName: string | null;
@@ -291,6 +303,12 @@ export type UpdateOrganizationPayload = Partial<{
   cnpj: string;
   email: string;
   phone: string;
+  website: string;
+  zipCode: string;
+  street: string;
+  number: string;
+  complement: string;
+  district: string;
   city: string;
   state: string;
   primaryColor: string;
@@ -316,6 +334,10 @@ export type CreateDocumentTemplatePayload = {
   requiresSignature?: boolean;
   signatureMode?: SignatureMode;
   signatureId?: string | null;
+  institutionalSignatureIds?: string[];
+  executionSignatureClient?: boolean;
+  executionSignatureTechnician?: boolean;
+  executionSignatureOperator?: boolean;
 };
 
 export type UpdateDocumentTemplatePayload = Partial<CreateDocumentTemplatePayload>;
@@ -667,6 +689,8 @@ export type OperationDetail = Omit<OperationSummary, "equipment"> & {
   equipment: { id: string; name: string; tag: string | null; type: EquipmentType } | null;
   checklist: OperationChecklistItem[];
   observations: string | null;
+  reportedIssue: string | null;
+  serviceDescription: string | null;
   signatureData: string | null;
   signedAt: string | null;
   photos: OperationPhoto[];
@@ -691,6 +715,8 @@ export type CreateOperationPayload = {
   completedAt?: string | null;
   checklist?: OperationChecklistItem[];
   observations?: string | null;
+  reportedIssue?: string | null;
+  serviceDescription?: string | null;
   signatureData?: string | null;
   signedAt?: string | null;
   photos?: { dataUrl: string; caption?: string | null }[];

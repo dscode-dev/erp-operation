@@ -31,6 +31,8 @@ function blueprint(rowCount: number): DocumentBlueprint {
         cnpj: '00.000.000/0001-00',
         email: 'contato@example.com',
         phone: '+55 81 99999-9999',
+        website: 'https://orbit.local',
+        address: 'Rua Orbit, 100 · Recife/PE',
         city: 'Recife',
         state: 'PE',
         primaryColor: '#111827',
@@ -125,6 +127,8 @@ describe('DocumentEngine foundation', () => {
             cnpj: '',
             email: '',
             phone: '',
+            website: '',
+            address: '',
             city: '',
             state: '',
             primaryColor: '#000000',
@@ -230,6 +234,26 @@ describe('DocumentEngine foundation', () => {
     expect(result.buffer.toString('latin1')).toContain('/XObject');
   });
 
+  it('builds multiple institutional signatures together with an execution signature', () => {
+    const context = operationContext(DocumentTemplateType.WORK_ORDER);
+    context.signature = {
+      requiresSignature: true,
+      signatureMode: 'HYBRID',
+      signatureId: 'institutional-1',
+      fixedSignature: null,
+      institutionalSignatures: [
+        { id: 'institutional-1', name: 'Ana', title: 'Responsável técnica', professionalCouncil: 'CREA 123', department: 'Engenharia', image: { storageKey: 'a', mimeType: 'image/png', fileSize: 68, contentBase64: ONE_PIXEL_PNG } },
+        { id: 'institutional-2', name: 'Bruno', title: 'Diretor técnico', professionalCouncil: null, department: 'Diretoria', image: { storageKey: 'b', mimeType: 'image/png', fileSize: 68, contentBase64: ONE_PIXEL_PNG } },
+      ],
+      collectedSignature: null,
+      executionSignatures: [{ role: 'client', label: 'Assinatura do cliente', name: null, title: null, signedAt: null, caption: 'Coletada na execução', image: null }],
+    };
+    const builder = new DocumentBuilderService({} as never);
+    const built = (builder as unknown as { buildFromContext: (ctx: unknown) => DocumentBlueprint }).buildFromContext(context);
+    const component = built.sections.flatMap((section) => section.components).find((item) => item.kind === 'signature');
+    expect(component && 'signatures' in component ? component.signatures : []).toHaveLength(3);
+  });
+
   it('builds semantically different Technical Report and Technical Opinion blueprints', () => {
     const builder = new DocumentBuilderService({} as never);
     const base = operationContext(DocumentTemplateType.TECHNICAL_REPORT);
@@ -250,6 +274,29 @@ describe('DocumentEngine foundation', () => {
     expect(opinionSectionIds).not.toEqual(reportSectionIds);
   });
 
+  it('certifies Work Order semantic order and keeps the same Blueprint for preview and PDF render', async () => {
+    const context = operationContext(DocumentTemplateType.WORK_ORDER);
+    const operation = context.operation as Record<string, unknown>;
+    operation.reportedIssue = 'Cliente relata temperatura elevada — equipamento sem rendimento.';
+    operation.serviceDescription = 'Inspeção técnica completa\n- Correção do vazamento\nRecarga de fluido refrigerante';
+    (context.assets as Record<string, unknown>).logo = { storageKey: 'organization/logo.png', mimeType: 'image/png', fileSize: 68, contentBase64: ONE_PIXEL_PNG };
+    const builder = new DocumentBuilderService({} as never);
+    const workOrder = (builder as unknown as { buildFromContext: (ctx: unknown) => DocumentBlueprint }).buildFromContext(context);
+    const ids = workOrder.sections.map((section) => section.id);
+    expect(ids).toEqual([
+      'work-order-identification', 'work-order-customer', 'equipment', 'work-order-reported-issue',
+      'work-order-services', 'checklist-checklist-da-execucao', 'observations-observacoes-e-resultado-operacional',
+    ]);
+    const rendered = renderer().render(workOrder);
+    const pdf = await new PdfEngineService().create(rendered);
+    expect(rendered.blueprint).toBe(workOrder);
+    expect(rendered.pages[0]?.elements.some((element) => element.type === 'image')).toBe(true);
+    const checklistPage = rendered.pages.find((page) => page.elements.some((element) => element.type === 'text' && element.text === 'Checklist da execução'));
+    expect(checklistPage?.elements.some((element) => element.type === 'text' && element.text.includes('Inspeção visual'))).toBe(true);
+    expect(pdf.buffer.subarray(0, 5).toString('latin1')).toBe('%PDF-');
+    expect(JSON.stringify(workOrder)).toContain('temperatura elevada — equipamento');
+  });
+
   it('hydrates collected execution signatures into the official document context', async () => {
     const now = new Date('2026-07-10T12:00:00.000Z');
     const operation = (operationContext(DocumentTemplateType.WORK_ORDER) as unknown as { operation: Record<string, unknown> }).operation;
@@ -262,6 +309,7 @@ describe('DocumentEngine foundation', () => {
         operation: {
           findUnique: jest.fn().mockResolvedValue(operation),
         },
+        brandAsset: { findFirst: jest.fn().mockResolvedValue(null) },
       } as never,
       {
         getConfigurationForType: jest.fn().mockResolvedValue({
@@ -336,6 +384,7 @@ describe('DocumentEngine foundation', () => {
         operation: {
           findUnique: jest.fn().mockResolvedValue(operation),
         },
+        brandAsset: { findFirst: jest.fn().mockResolvedValue(null) },
       } as never,
       {
         getConfigurationForType: jest.fn().mockResolvedValue({
@@ -494,6 +543,21 @@ describe('DocumentEngine foundation', () => {
     expect(fingerprint(first)).toBe(fingerprint(regenerated));
     expect(fingerprint(changed)).not.toBe(fingerprint(first));
   });
+
+  it('lists the official repository with server-side filters and pagination', async () => {
+    const now = new Date('2026-07-11T12:00:00.000Z');
+    const findMany = jest.fn(); const count = jest.fn();
+    const prisma = { operationDocument: { findMany, count }, $transaction: jest.fn().mockResolvedValue([[{
+      id: 'doc', number: 'OS-1', type: 'WORK_ORDER', status: 'READY', budgetId: null, operationId: 'op',
+      renderedAt: now, createdAt: now, updatedAt: now, fileSize: 100, renderMetadata: { blueprintVersion: '1.0' }, budget: null,
+      operation: { id: 'op', number: 1, customer: { id: 'c', name: 'Cliente' }, equipment: { id: 'e', name: 'Equipamento', tag: 'EQ' }, operator: { id: 'u', name: 'Operador' } },
+    }], 1]) };
+    const service = new DocumentEngineService(prisma as never, {} as never, {} as never, {} as never, {} as never, {} as never, {} as never);
+    const result = await service.listDocuments({ page: 1, limit: 20, search: 'OS', customerId: '00000000-0000-4000-8000-000000000001' }, { id: 'owner', role: Role.OWNER } as never) as { items: Array<{ number: string; origin: string }>; pagination: { total: number } };
+    expect(result.items[0]).toMatchObject({ number: 'OS-1', origin: 'OPERATION' });
+    expect(result.pagination.total).toBe(1);
+    expect(prisma.$transaction).toHaveBeenCalled();
+  });
 });
 
 function operationContext(type: DocumentTemplateType): Record<string, unknown> & { configuration: Record<string, unknown> } {
@@ -508,6 +572,12 @@ function operationContext(type: DocumentTemplateType): Record<string, unknown> &
         cnpj: '00.000.000/0001-00',
         email: 'contato@orbit.local',
         phone: '+55 81 99999-9999',
+        website: 'https://orbit.local',
+        zipCode: '50000-000',
+        street: 'Rua Orbit',
+        number: '100',
+        complement: null,
+        district: 'Centro',
         city: 'Recife',
         state: 'PE',
         primaryColor: '#111827',
@@ -516,7 +586,7 @@ function operationContext(type: DocumentTemplateType): Record<string, unknown> &
       settings: { timezone: 'America/Recife', currency: 'BRL' },
     },
     template: null,
-    signature: { requiresSignature: false, signatureMode: 'NONE', signatureId: null, fixedSignature: null, collectedSignature: null },
+    signature: { requiresSignature: false, signatureMode: 'NONE', signatureId: null, fixedSignature: null, institutionalSignatures: [], collectedSignature: null, executionSignatures: [] },
     assets: { signature: null, logo: null, watermark: null, qrCode: null, images: [] },
     operation: {
       id: '7db71471-0cf4-4414-8d06-83eb9c1917c9',
@@ -529,6 +599,8 @@ function operationContext(type: DocumentTemplateType): Record<string, unknown> &
       signedAt: now,
       checklist: [{ label: 'Inspeção visual', done: true, note: 'Sem avarias aparentes' }],
       observations: 'Equipamento inspecionado e operando conforme registros do atendimento.',
+      reportedIssue: null,
+      serviceDescription: null,
       customer: {
         name: 'Hospital Santa Clara',
         tradeName: 'Hospital Santa Clara',

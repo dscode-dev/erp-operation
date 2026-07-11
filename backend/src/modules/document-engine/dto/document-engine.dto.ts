@@ -1,5 +1,22 @@
 import { DocumentTemplateType } from '@prisma/client';
-import { IsEnum, IsUUID } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import { IsDateString, IsEnum, IsInt, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
+import { OperationDocumentStatus } from '@prisma/client';
+
+const trim = (value: unknown): unknown => typeof value === 'string' ? value.trim() : value;
+
+export class ListDocumentsQueryDto {
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) page = 1;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) limit = 20;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(100) search?: string;
+  @IsOptional() @IsEnum(DocumentTemplateType) type?: DocumentTemplateType;
+  @IsOptional() @IsEnum(OperationDocumentStatus) status?: OperationDocumentStatus;
+  @IsOptional() @IsUUID('4') customerId?: string;
+  @IsOptional() @IsUUID('4') equipmentId?: string;
+  @IsOptional() @IsUUID('4') operatorId?: string;
+  @IsOptional() @IsDateString() from?: string;
+  @IsOptional() @IsDateString() to?: string;
+}
 
 export class OperationDocumentParamsDto {
   @IsUUID('4') operationId!: string;

@@ -311,16 +311,25 @@ function DocumentPage({ blueprint, sections, page, total }: { blueprint: Documen
       <div className="h-2 bg-[var(--color-primary)]" />
       <div className="p-10">
         <header className="flex items-start justify-between gap-6 border-b border-slate-200 pb-5">
-          <div>
+          <div className="flex items-start gap-4">
+            {blueprint.header.logo && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={`data:${blueprint.header.logo.mimeType};base64,${blueprint.header.logo.contentBase64}`} alt={`Logo ${blueprint.header.organizationName}`} className="h-14 w-24 object-contain" />
+            )}
+            <div>
             <h1 className="text-2xl font-semibold">{blueprint.header.title}</h1>
             <p className="mt-1 text-sm text-slate-500">{blueprint.header.subtitle}</p>
             <p className="mt-2 font-mono text-xs text-slate-500">{blueprint.header.documentNumber}</p>
+            </div>
           </div>
           <div className="text-right text-xs leading-relaxed text-slate-500">
             <strong className="block text-sm text-slate-900">{blueprint.header.organizationName}</strong>
             <span>{blueprint.metadata.organization.cnpj}</span>
             <br />
-            <span>{blueprint.metadata.organization.city}/{blueprint.metadata.organization.state}</span>
+            <span>{blueprint.metadata.organization.address || `${blueprint.metadata.organization.city}/${blueprint.metadata.organization.state}`}</span>
+            <br />
+            <span>{blueprint.metadata.organization.phone} · {blueprint.metadata.organization.email}</span>
+            {blueprint.metadata.organization.website && <><br /><span>{blueprint.metadata.organization.website}</span></>}
           </div>
         </header>
         <div className="mt-7 space-y-7">

@@ -32,6 +32,8 @@ const SIGNATURE_SELECT = {
   id: true,
   name: true,
   title: true,
+  professionalCouncil: true,
+  department: true,
   mimeType: true,
   originalFileName: true,
   fileSize: true,
@@ -100,6 +102,8 @@ export class SignaturesService {
         data: {
           name: this.clean(dto.name),
           title: this.clean(dto.title),
+          professionalCouncil: dto.professionalCouncil ? this.clean(dto.professionalCouncil) : null,
+          department: dto.department ? this.clean(dto.department) : null,
           active: dto.active ?? true,
         },
         select: SIGNATURE_INTERNAL_SELECT,
@@ -126,6 +130,8 @@ export class SignaturesService {
         data: {
           ...(dto.name !== undefined ? { name: this.clean(dto.name) } : {}),
           ...(dto.title !== undefined ? { title: this.clean(dto.title) } : {}),
+          ...(dto.professionalCouncil !== undefined ? { professionalCouncil: this.clean(dto.professionalCouncil) || null } : {}),
+          ...(dto.department !== undefined ? { department: this.clean(dto.department) || null } : {}),
           ...(dto.active !== undefined ? { active: dto.active } : {}),
         },
         select: SIGNATURE_INTERNAL_SELECT,

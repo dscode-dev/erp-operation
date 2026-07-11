@@ -230,6 +230,8 @@ export class ListExportService {
             cnpj: org.cnpj,
             email: org.email,
             phone: org.phone,
+            website: '',
+            address: `${org.city}/${org.state}`,
             city: org.city,
             state: org.state,
             primaryColor: org.primaryColor,

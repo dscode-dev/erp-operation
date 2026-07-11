@@ -1,6 +1,6 @@
 import { DocumentTemplateType, SignatureMode } from '@prisma/client';
 import { Transform } from 'class-transformer';
-import { IsBoolean, IsEnum, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { ArrayUnique, IsArray, IsBoolean, IsEnum, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 
 function trim(value: unknown): unknown {
   return typeof value === 'string' ? value.trim() : value;
@@ -49,6 +49,13 @@ export class CreateDocumentTemplateDto {
   @IsOptional()
   @IsUUID('4')
   signatureId?: string | null;
+
+  @IsOptional() @IsArray() @ArrayUnique() @IsUUID('4', { each: true })
+  institutionalSignatureIds?: string[];
+
+  @IsOptional() @IsBoolean() executionSignatureClient?: boolean;
+  @IsOptional() @IsBoolean() executionSignatureTechnician?: boolean;
+  @IsOptional() @IsBoolean() executionSignatureOperator?: boolean;
 }
 
 export class UpdateDocumentTemplateDto {
@@ -99,4 +106,11 @@ export class UpdateDocumentTemplateDto {
   @IsOptional()
   @IsUUID('4')
   signatureId?: string | null;
+
+  @IsOptional() @IsArray() @ArrayUnique() @IsUUID('4', { each: true })
+  institutionalSignatureIds?: string[];
+
+  @IsOptional() @IsBoolean() executionSignatureClient?: boolean;
+  @IsOptional() @IsBoolean() executionSignatureTechnician?: boolean;
+  @IsOptional() @IsBoolean() executionSignatureOperator?: boolean;
 }

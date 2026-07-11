@@ -5,6 +5,7 @@ import {
   IsHexColor,
   IsOptional,
   IsString,
+  IsUrl,
   Length,
   Matches,
   MaxLength,
@@ -52,6 +53,15 @@ export class UpdateOrganizationDto {
   @IsString()
   @MaxLength(30)
   phone?: string;
+
+  @IsOptional() @Transform(({ value }) => lowercase(value)) @IsUrl({ require_protocol: true }) @MaxLength(255)
+  website?: string;
+
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(10) zipCode?: string;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(180) street?: string;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(20) number?: string;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(120) complement?: string;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(120) district?: string;
 
   @IsOptional()
   @Transform(({ value }) => trim(value))

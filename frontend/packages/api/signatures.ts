@@ -13,6 +13,8 @@ export type ListSignaturesParams = {
 export type SignaturePayload = {
   name: string;
   title: string;
+  professionalCouncil?: string;
+  department?: string;
   active?: boolean;
 };
 

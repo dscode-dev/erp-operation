@@ -1,5 +1,16 @@
 # ROUTES — Frontend
 
+## DC-01
+
+`/operacoes`, `/operator/atendimento` e `/documentos` preservam o fluxo Operation → WORK_ORDER →
+DocumentViewer → render → download. Nenhuma rota ou preview paralelo foi criado.
+
+## `/documentos` — catálogo oficial D1
+
+Lista todas as origens por `GET /api/v1/documents`, com filtros de tipo, cliente, equipamento,
+operador, período, status e busca. A linha abre o `DocumentViewer`; a descoberta por Operations foi
+removida.
+
 ## Product Backlog Closure 05 — Reports route
 
 - `/reports`: biblioteca de modelos documentais refinada.

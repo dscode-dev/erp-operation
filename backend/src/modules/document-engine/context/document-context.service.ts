@@ -162,6 +162,10 @@ export interface DocumentSignatureContext {
     title: string;
     image: ResolvedDocumentAsset;
   } | null;
+  institutionalSignatures: Array<{
+    id: string; name: string; title: string; professionalCouncil: string | null;
+    department: string | null; image: ResolvedDocumentAsset;
+  }>;
   collectedSignature: {
     label: string;
     name: string | null;
@@ -170,6 +174,11 @@ export interface DocumentSignatureContext {
     caption: string | null;
     image: ResolvedDocumentAsset | null;
   } | null;
+  executionSignatures: Array<{
+    role: 'client' | 'technician' | 'operator'; label: string; name: string | null;
+    title: string | null; signedAt: string | null; caption: string | null;
+    image: ResolvedDocumentAsset | null;
+  }>;
 }
 
 export interface DocumentContext {
@@ -252,14 +261,15 @@ export class DocumentContextService {
 
     const template = configuration.defaultTemplate;
     const signature = await this.resolveSignature(template, operation);
-    const images = await Promise.all(
-      operation.photos.map((photo) =>
+    const [images, logo] = await Promise.all([
+      Promise.all(operation.photos.map((photo) =>
         this.assets.resolveDocumentImage(photo.storageKey, {
           mimeType: photo.mimeType,
           fileSize: photo.fileSize,
         }),
-      ),
-    );
+      )),
+      this.resolveLatestBrandAsset(configuration.organization.id, BrandAssetType.LOGO),
+    ]);
 
     return {
       kind: 'operation',
@@ -269,7 +279,7 @@ export class DocumentContextService {
       signature,
       assets: {
         signature: signature.fixedSignature?.image ?? null,
-        logo: null,
+        logo,
         watermark: null,
         qrCode: null,
         images,
@@ -294,6 +304,9 @@ export class DocumentContextService {
         requiresSignature: true,
         signatureMode: true,
         signatureId: true,
+        executionSignatureClient: true,
+        executionSignatureTechnician: true,
+        executionSignatureOperator: true,
         createdAt: true,
         updatedAt: true,
         signature: {
@@ -305,7 +318,13 @@ export class DocumentContextService {
             mimeType: true,
             fileSize: true,
             active: true,
+            professionalCouncil: true,
+            department: true,
           },
+        },
+        institutionalSignatures: {
+          orderBy: { position: 'asc' },
+          select: { position: true, signature: { select: { id: true, name: true, title: true, professionalCouncil: true, department: true, imageStorageKey: true, mimeType: true, fileSize: true, active: true, deletedAt: true } } },
         },
       },
     });
@@ -397,8 +416,15 @@ export class DocumentContextService {
     operation: DocumentContextOperation | null,
   ): Promise<DocumentSignatureContext> {
     const mode = template?.signatureMode ?? SignatureMode.NONE;
-    const executionSignature = this.resolveExecutionSignature(operation, template?.type ?? null);
-    const executionSignatureApplies = Boolean(executionSignature);
+    const executionSignature = this.resolveExecutionSignature(operation);
+    const hasExplicitExecutionPolicy = Boolean(template && (template.executionSignatureClient || template.executionSignatureTechnician || template.executionSignatureOperator));
+    const clientEnabled = template?.executionSignatureClient || (!hasExplicitExecutionPolicy && Boolean(executionSignature));
+    const executionSignatures: DocumentSignatureContext['executionSignatures'] = [
+      ...(clientEnabled ? [{ role: 'client' as const, label: 'Assinatura do cliente/responsável', name: null, title: null, signedAt: operation?.signedAt?.toISOString() ?? null, caption: executionSignature ? 'Assinatura coletada na execução' : 'Espaço reservado para assinatura do cliente', image: executionSignature?.image ?? null }] : []),
+      ...(template?.executionSignatureTechnician ? [{ role: 'technician' as const, label: 'Assinatura do técnico', name: operation?.operator?.name ?? null, title: operation?.operator?.jobTitle ?? null, signedAt: null, caption: 'Espaço reservado para assinatura do técnico', image: null }] : []),
+      ...(template?.executionSignatureOperator ? [{ role: 'operator' as const, label: 'Assinatura do operador', name: operation?.operator?.name ?? null, title: operation?.operator?.jobTitle ?? null, signedAt: null, caption: 'Espaço reservado para assinatura do operador', image: null }] : []),
+    ];
+    const executionSignatureApplies = executionSignatures.length > 0;
     const effectiveMode = executionSignatureApplies
       ? mode === SignatureMode.NONE
         ? SignatureMode.COLLECTED
@@ -429,7 +455,9 @@ export class DocumentContextService {
         signatureMode: SignatureMode.NONE,
         signatureId: null,
         fixedSignature: null,
+        institutionalSignatures: [],
         collectedSignature: null,
+        executionSignatures: [],
       };
     }
 
@@ -439,26 +467,33 @@ export class DocumentContextService {
         signatureMode: effectiveMode,
         signatureId: null,
         fixedSignature: null,
+        institutionalSignatures: [],
         collectedSignature,
+        executionSignatures,
       };
     }
 
-    const signature = template?.signature;
-    if (!signature || !template.signatureId) {
+    const configured = template?.institutionalSignatures
+      ?.map((link) => link.signature)
+      .filter((signature) => signature.active && !signature.deletedAt) ?? [];
+    const signatures = configured.length > 0
+      ? configured
+      : template?.signature ? [template.signature] : [];
+    if (signatures.length === 0) {
       throw new ApplicationException(
         ERROR_CODES.SIGNATURE_NOT_FOUND,
         'Document template requires a fixed signature, but no active signature is configured',
         HttpStatus.CONFLICT,
       );
     }
-    if (!signature.active) {
+    if (signatures.some((signature) => !signature.active)) {
       throw new ApplicationException(
         ERROR_CODES.SIGNATURE_INACTIVE,
         'Configured signature is inactive',
         HttpStatus.CONFLICT,
       );
     }
-    if (!signature.imageStorageKey || !signature.mimeType || !signature.fileSize) {
+    if (signatures.some((signature) => !signature.imageStorageKey || !signature.mimeType || !signature.fileSize)) {
       throw new ApplicationException(
         ERROR_CODES.SIGNATURE_IMAGE_REQUIRED,
         'Configured signature image was not uploaded',
@@ -466,31 +501,38 @@ export class DocumentContextService {
       );
     }
 
-    const image = await this.assets.resolveSignature(signature.imageStorageKey, {
-      mimeType: signature.mimeType,
-      fileSize: signature.fileSize,
-    });
+    const institutionalSignatures = await Promise.all(signatures.map(async (signature) => ({
+      id: signature.id,
+      name: signature.name,
+      title: signature.title,
+      professionalCouncil: signature.professionalCouncil ?? null,
+      department: signature.department ?? null,
+      image: await this.assets.resolveSignature(signature.imageStorageKey!, {
+        mimeType: signature.mimeType!, fileSize: signature.fileSize!,
+      }),
+    })));
+    const first = institutionalSignatures[0];
 
     return {
       requiresSignature,
       signatureMode: effectiveMode,
-      signatureId: template.signatureId,
+      signatureId: first.id,
       fixedSignature: {
-        id: signature.id,
-        name: signature.name,
-        title: signature.title,
-        image,
+        id: first.id,
+        name: first.name,
+        title: first.title,
+        image: first.image,
       },
+      institutionalSignatures,
       collectedSignature,
+      executionSignatures,
     };
   }
 
   private resolveExecutionSignature(
     operation: DocumentContextOperation | null,
-    type: DocumentTemplateType | null,
   ): { image: ResolvedDocumentAsset } | null {
     if (!operation?.signatureData) return null;
-    if (!this.documentTypeAcceptsExecutionSignature(type)) return null;
 
     const dataUrl = operation.signatureData.trim();
     const match = /^data:(image\/png|image\/jpeg);base64,([A-Za-z0-9+/=\s]+)$/i.exec(dataUrl);
@@ -521,16 +563,6 @@ export class DocumentContextService {
         contentBase64: buffer.toString('base64'),
       },
     };
-  }
-
-  private documentTypeAcceptsExecutionSignature(type: DocumentTemplateType | null): boolean {
-    const supported = new Set<DocumentTemplateType>([
-      DocumentTemplateType.WORK_ORDER,
-      DocumentTemplateType.TECHNICAL_REPORT,
-      DocumentTemplateType.REPORT,
-      DocumentTemplateType.RECEIPT,
-    ]);
-    return Boolean(type && supported.has(type));
   }
 
   private isValidSignatureBinary(buffer: Buffer, mimeType: string): boolean {

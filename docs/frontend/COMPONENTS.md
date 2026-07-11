@@ -1,5 +1,18 @@
 # COMPONENTS — Frontend
 
+## DC-01
+
+- `OperationCreationDrawer`: campos semânticos de defeito, serviços e observações.
+- `DocumentViewer`: header com logo e contato institucional, sem composição específica de OS.
+- `AtendimentoWizard`: notas da execução alimentam `serviceDescription`.
+
+## Document Engine D1
+
+- `DocumentViewer`: visualizador único preservado para preview, render e download.
+- `TemplateFormDrawer`: edita coleção de assinaturas institucionais e políticas de execução.
+- `DocumentosPage`: catálogo paginado e drawer documental oficial.
+- `BudgetDetailDrawer`: reutilizado sem fluxo documental paralelo.
+
 ## Product Backlog Closure 05 — Reports and DocumentViewer
 
 | Item | Local | Uso |

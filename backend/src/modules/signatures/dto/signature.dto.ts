@@ -40,6 +40,12 @@ export class CreateSignatureDto {
   @MaxLength(120)
   title!: string;
 
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(120)
+  professionalCouncil?: string;
+
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(120)
+  department?: string;
+
   @IsOptional()
   @IsBoolean()
   active?: boolean;
@@ -57,6 +63,12 @@ export class UpdateSignatureDto {
   @IsString()
   @MaxLength(120)
   title?: string;
+
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(120)
+  professionalCouncil?: string;
+
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(120)
+  department?: string;
 
   @IsOptional()
   @IsBoolean()

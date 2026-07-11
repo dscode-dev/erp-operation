@@ -60,6 +60,8 @@ export class CreateOperationDto {
   @IsString()
   @MaxLength(5000)
   observations?: string;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(10000) reportedIssue?: string;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(20000) serviceDescription?: string;
   @IsOptional() @IsString() @MaxLength(2_000_000) signatureData?: string;
   @IsOptional() @IsDateString() signedAt?: string;
   @IsOptional()
@@ -83,6 +85,8 @@ export class UpdateOperationDto {
   @IsString()
   @MaxLength(5000)
   observations?: string;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(10000) reportedIssue?: string;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(20000) serviceDescription?: string;
   @IsOptional() @IsString() @MaxLength(2_000_000) signatureData?: string;
   @IsOptional() @IsDateString() signedAt?: string;
   @IsOptional()

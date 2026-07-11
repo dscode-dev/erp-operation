@@ -34,6 +34,8 @@ export interface DocumentMetadata {
     cnpj: string;
     email: string;
     phone: string;
+    website: string;
+    address: string;
     city: string;
     state: string;
     primaryColor: string;
@@ -46,6 +48,7 @@ export interface DocumentHeader {
   subtitle?: string;
   organizationName: string;
   documentNumber: string;
+  logo?: { mimeType: string; fileSize: number; contentBase64: string } | null;
 }
 
 export interface DocumentFooter {

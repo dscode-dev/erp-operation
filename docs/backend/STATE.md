@@ -1,5 +1,31 @@
 # Backend State
 
+## DC-01 — certificação da Ordem de Serviço
+
+- WORK_ORDER agora segue identificação → cliente → equipamento → defeito → serviços → checklist →
+  materiais → observações → fotos → assinaturas.
+- Operation recebeu `reportedIssue` e `serviceDescription`.
+- Organization recebeu endereço institucional e website opcionais.
+- logo é resolvida pelo DocumentAssetResolver e entregue no Blueprint/header.
+- Renderer mantém título da seção junto ao primeiro bloco e formata data de assinatura em pt-BR.
+- Migration: `20260711210000_work_order_certification`.
+- Runtime real confirmou a ordem das oito seções, assinatura, Unicode, PDF `%PDF-`, stale/re-render e
+  paginação sem título de seção órfão.
+
+## Document Engine D1 — catálogo e políticas de assinatura
+
+- `OperationDocument` alimenta diretamente o novo `GET /documents`, catálogo oficial paginado para
+  documentos de Operation e Budget.
+- filtros: tipo, cliente, equipamento, operador, período, status e busca textual.
+- `DocumentTemplateSignature` permite múltiplas assinaturas institucionais ordenadas; `signatureId`
+  permanece como fallback compatível.
+- Template recebeu políticas de execução para cliente, técnico e operador; Signature recebeu
+  conselho profissional e departamento.
+- DocumentContext entrega assinaturas institucionais e de execução resolvidas; Builder não consulta
+  Prisma nem Storage.
+- Migration: `20260711193000_document_catalog_signature_policies`.
+- Validação PostgreSQL: integração 7/7, concorrência 24/24 e AppSec focado 7/7.
+
 ## Product Backlog Closure 06.1 — runtime PDF parity and Unicode
 
 Status: concluída em 11 de julho de 2026 após render/download reais em Docker local.

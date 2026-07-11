@@ -45,7 +45,8 @@ export class DocumentRendererService {
 
     for (const section of blueprint.sections) {
       const sectionHeader = this.sectionHeader(section.title, blueprint.metadata.organization.primaryColor);
-      if (this.layout.shouldBreak(y, sectionHeader.height)) {
+      const firstBlockHeight = section.components[0] ? (this.blocks(section.components[0], width)[0]?.height ?? 0) : 0;
+      if (this.layout.shouldBreak(y, sectionHeader.height + firstBlockHeight)) {
         current = this.newPage(blueprint, pages.length + 1);
         pages.push(current);
         y = this.layout.contentTop();
@@ -397,7 +398,7 @@ export class DocumentRendererService {
           type: 'text',
           x,
           y: y - 4,
-          text: `Modo de assinatura: ${component.mode}`,
+          text: 'Assinaturas',
           size: 8,
         });
         component.signatures.forEach((signature, index) => {
@@ -444,7 +445,7 @@ export class DocumentRendererService {
             text: [
               signature.title,
               signature.caption,
-              signature.signedAt ? `Data: ${signature.signedAt}` : null,
+              signature.signedAt ? `Data: ${this.formatDate(signature.signedAt)}` : null,
             ]
               .filter(Boolean)
               .join(' · '),
@@ -457,6 +458,8 @@ export class DocumentRendererService {
   }
 
   private newPage(blueprint: DocumentBlueprint, pageNumber: number): RenderedPage {
+    const logo = blueprint.header.logo;
+    const headerTextX = DOCUMENT_PAGE.marginLeft + (logo ? 82 : 0);
     return {
       pageNumber,
       elements: [
@@ -479,8 +482,25 @@ export class DocumentRendererService {
           strokeColor: blueprint.metadata.organization.primaryColor,
         },
         {
+          ...(logo ? {
+            type: 'image' as const,
+            x: DOCUMENT_PAGE.marginLeft,
+            y: DOCUMENT_PAGE.height - 72,
+            width: 68,
+            height: 42,
+            mimeType: logo.mimeType,
+            contentBase64: logo.contentBase64,
+          } : {
+            type: 'rect' as const,
+            x: DOCUMENT_PAGE.marginLeft,
+            y: DOCUMENT_PAGE.height - 30,
+            width: 0,
+            height: 0,
+          }),
+        },
+        {
           type: 'text',
-          x: DOCUMENT_PAGE.marginLeft,
+          x: headerTextX,
           y: DOCUMENT_PAGE.height - 34,
           text: blueprint.header.organizationName,
           size: 11,
@@ -488,7 +508,7 @@ export class DocumentRendererService {
         },
         {
           type: 'text',
-          x: DOCUMENT_PAGE.marginLeft,
+          x: headerTextX,
           y: DOCUMENT_PAGE.height - 50,
           text: blueprint.header.title,
           size: 16,
@@ -497,10 +517,24 @@ export class DocumentRendererService {
         {
           type: 'text',
           x: DOCUMENT_PAGE.width - 190,
-          y: DOCUMENT_PAGE.height - 50,
+          y: DOCUMENT_PAGE.height - 66,
           text: blueprint.header.documentNumber,
           size: 10,
           bold: true,
+        },
+        {
+          type: 'text',
+          x: DOCUMENT_PAGE.width - 260,
+          y: DOCUMENT_PAGE.height - 30,
+          text: blueprint.metadata.organization.address,
+          size: 7,
+        },
+        {
+          type: 'text',
+          x: DOCUMENT_PAGE.width - 260,
+          y: DOCUMENT_PAGE.height - 42,
+          text: `${blueprint.metadata.organization.phone} · ${blueprint.metadata.organization.email}${blueprint.metadata.organization.website ? ` · ${blueprint.metadata.organization.website}` : ''}`,
+          size: 7,
         },
         {
           type: 'line',
@@ -536,6 +570,12 @@ export class DocumentRendererService {
 
   private wrap(text: string, width: number, fontSize: number): string[] {
     return this.layout.wrapText(text, width, fontSize);
+  }
+
+  private formatDate(value: string): string {
+    return new Intl.DateTimeFormat('pt-BR', {
+      dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Recife',
+    }).format(new Date(value));
   }
 
   private chunk<T>(items: T[], size: number): T[][] {

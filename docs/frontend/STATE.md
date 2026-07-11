@@ -1,5 +1,21 @@
 # STATE — Frontend
 
+## DC-01 — Work Order
+
+- criação de Operation coleta defeito, serviços e observações separadamente;
+- Operator envia notas de execução como `serviceDescription`;
+- configurações da organização permitem endereço e website institucionais;
+- DocumentViewer renderiza logo e informações institucionais do Blueprint.
+
+## Document Engine D1
+
+- `/documentos` consome `GET /documents`, sem mesclar Operations ou datasets locais.
+- filtros, busca e paginação são server-side e cumulativos.
+- drawer apresenta resumo, metadados e `DocumentViewer` para preview/render/download.
+- templates suportam múltiplas assinaturas institucionais e políticas de execução.
+- assinaturas suportam conselho profissional e departamento.
+- BudgetDetailDrawer foi preservado por já consumir o Document Engine oficial.
+
 ## Product Backlog Closure 06.1 — visual runtime verification
 
 Status: concluída em 11 de julho de 2026.

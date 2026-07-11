@@ -7,7 +7,27 @@ import type {
   DocumentKind,
   OperationDocumentStatus,
   DocumentRenderResult,
+  Paginated,
 } from "@erp/types";
+
+export type DocumentCatalogItem = {
+  id: string; number: string; type: DocumentKind; status: OperationDocumentStatus;
+  origin: "OPERATION" | "BUDGET"; originId: string | null;
+  customer: { id: string; name: string } | null;
+  equipment: { id: string; name: string; tag: string } | null;
+  responsible: { id: string; name: string } | null;
+  issuedAt: string; renderedAt: string | null; fileSize: number | null;
+  version: string; createdAt: string; updatedAt: string;
+};
+
+export function listDocuments(params?: {
+  page?: number; limit?: number; search?: string; type?: DocumentKind;
+  status?: OperationDocumentStatus; customerId?: string; equipmentId?: string;
+  operatorId?: string; from?: string; to?: string; signal?: AbortSignal;
+}): Promise<Paginated<DocumentCatalogItem>> {
+  const { signal, ...query } = params ?? {};
+  return api.get<Paginated<DocumentCatalogItem>>("/documents", { query, signal });
+}
 
 export function previewOperationDocument(
   operationId: string,

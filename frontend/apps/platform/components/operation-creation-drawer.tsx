@@ -78,6 +78,8 @@ export function OperationCreationDrawer({
   const [checklist, setChecklist] = useState(DEFAULT_CHECKLIST);
   const [newItem, setNewItem] = useState("");
   const [observations, setObservations] = useState("");
+  const [reportedIssue, setReportedIssue] = useState("");
+  const [serviceDescription, setServiceDescription] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<OperationDetail | null>(null);
@@ -133,6 +135,8 @@ export function OperationCreationDrawer({
         operatorId: operatorId || null,
         checklist: checklist.map((label) => ({ label, done: false })),
         observations: observations || null,
+        reportedIssue: reportedIssue || null,
+        serviceDescription: serviceDescription || null,
       });
       setCreated(operation);
       onCreated?.(operation);
@@ -224,9 +228,9 @@ export function OperationCreationDrawer({
             )}
             {step === 4 && (
               <div className="space-y-3">
-                <Field label="Observações">
-                  <textarea value={observations} onChange={(event) => setObservations(event.target.value)} className={`${inputCls} min-h-28 py-2`} autoFocus />
-                </Field>
+                <Field label="Defeito ou solicitação"><textarea value={reportedIssue} onChange={(event) => setReportedIssue(event.target.value)} className={`${inputCls} min-h-24 py-2`} autoFocus /></Field>
+                <Field label="Serviços previstos ou executados"><textarea value={serviceDescription} onChange={(event) => setServiceDescription(event.target.value)} className={`${inputCls} min-h-28 py-2`} placeholder="Um item por linha" /></Field>
+                <Field label="Observações"><textarea value={observations} onChange={(event) => setObservations(event.target.value)} className={`${inputCls} min-h-24 py-2`} /></Field>
                 <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 text-sm">
                   <div><strong>Cliente:</strong> {customerId ? "selecionado" : "—"}</div>
                   <div><strong>Tipo:</strong> {type}</div>
