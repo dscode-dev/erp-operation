@@ -31,9 +31,9 @@ export function OperatorHome() {
   const { session } = useAuth();
   const assignments = useQuery((signal) => assignmentsApi.listMyAssignments({ limit: 50, signal }), []);
   const items = assignments.data?.items ?? [];
-  const today = items.filter((item) => isSameDay(item.operation.scheduledFor ?? item.assignedAt));
+  const today = items.filter((item) => isSameDay(item.operation.scheduledFor));
   const ongoing = items.filter((item) => item.status === "STARTED");
-  const upcoming = items.filter((item) => !isSameDay(item.operation.scheduledFor ?? item.assignedAt) && !isPast(item)).slice(0, 4);
+  const upcoming = items.filter((item) => Boolean(item.operation.scheduledFor) && !isSameDay(item.operation.scheduledFor) && !isPast(item)).slice(0, 4);
   const overdue = items.filter(isPast);
 
   return (
@@ -71,9 +71,8 @@ export function OperatorHome() {
               {ongoing.map((assignment) => <AssignmentCard key={assignment.id} assignment={assignment} />)}
             </Section>
           )}
-          <Section title="Hoje">
-            {(today.length ? today : items.slice(0, 3)).map((assignment) => <AssignmentCard key={assignment.id} assignment={assignment} />)}
-          </Section>
+          {today.length > 0 && <Section title="Hoje">{today.map((assignment) => <AssignmentCard key={assignment.id} assignment={assignment} />)}</Section>}
+          {today.length === 0 && <Section title="Minhas atividades">{items.slice(0, 3).map((assignment) => <AssignmentCard key={assignment.id} assignment={assignment} />)}</Section>}
           {overdue.length > 0 && (
             <Section title="Atrasadas">
               {overdue.map((assignment) => <AssignmentCard key={assignment.id} assignment={assignment} />)}

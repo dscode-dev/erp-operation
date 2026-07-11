@@ -1,5 +1,6 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { BudgetHistoryAction, BudgetStatus, DocumentTemplateType, type OperationDocument, Prisma, Role } from '@prisma/client';
+import { createHash } from 'node:crypto';
 import {
   DOCUMENT_ENGINE_AUDIT_ACTIONS,
   DOCUMENT_ENGINE_RESOURCE,
@@ -54,7 +55,7 @@ export class DocumentEngineService {
     context: DocumentAuditContext,
   ): Promise<unknown> {
     this.assertTypeAccess(type, actor);
-    const blueprint = await this.builder.buildFromOperation(operationId, type);
+    const blueprint = this.withSourceFingerprint(await this.builder.buildFromOperation(operationId, type));
     await this.audit(
       DOCUMENT_ENGINE_AUDIT_ACTIONS.DOCUMENT_PREVIEWED,
       DOCUMENT_ENGINE_RESOURCE,
@@ -118,7 +119,7 @@ export class DocumentEngineService {
       );
     }
     this.assertTypeAccess(template.type, actor);
-    const blueprint = await this.builder.buildFromTemplate(templateId);
+    const blueprint = this.withSourceFingerprint(await this.builder.buildFromTemplate(templateId));
     await this.audit(
       DOCUMENT_ENGINE_AUDIT_ACTIONS.TEMPLATE_PREVIEWED,
       DOCUMENT_ENGINE_RESOURCE,
@@ -225,7 +226,7 @@ export class DocumentEngineService {
           HttpStatus.CONFLICT,
         );
       }
-      const blueprint = await this.buildBlueprintForDocument(document);
+      const blueprint = this.withSourceFingerprint(await this.buildBlueprintForDocument(document));
       const rendered = this.renderer.render(blueprint);
       const pdf = this.pdf.create(rendered);
       const stored = await this.assets.saveDocumentPdf({
@@ -234,9 +235,6 @@ export class DocumentEngineService {
         documentType: document.type,
         content: pdf.buffer,
       });
-
-      if (document.storageKey)
-        await this.assets.delete(document.storageKey).catch(() => undefined);
 
       const updated = await this.prisma.$transaction(async (tx) => {
         const persisted = await tx.operationDocument.updateMany({
@@ -258,6 +256,7 @@ export class DocumentEngineService {
               templateUpdatedAt: blueprint.metadata.templateUpdatedAt ?? null,
               documentType: blueprint.metadata.documentType,
               documentNumber: blueprint.metadata.documentNumber,
+              sourceFingerprint: blueprint.metadata.sourceFingerprint,
             },
           },
         });
@@ -289,6 +288,10 @@ export class DocumentEngineService {
         await this.lifecycle.publishDocumentRenderedTx(tx, saved.id, actor.id, context);
         return saved;
       });
+
+      if (document.storageKey && document.storageKey !== stored.storageKey) {
+        await this.assets.delete(document.storageKey).catch(() => undefined);
+      }
 
       this.logger.info('Document rendered', {
         event: 'document.rendered',
@@ -328,6 +331,21 @@ export class DocumentEngineService {
         ERROR_CODES.DOCUMENT_DOWNLOAD_NOT_READY,
         'Document has not been rendered yet',
         HttpStatus.CONFLICT,
+      );
+    }
+    const currentBlueprint = this.withSourceFingerprint(await this.buildBlueprintForDocument(document));
+    const renderedFingerprint = this.renderedSourceFingerprint(document.renderMetadata);
+    if (!renderedFingerprint || renderedFingerprint !== currentBlueprint.metadata.sourceFingerprint) {
+      throw new ApplicationException(
+        ERROR_CODES.DOCUMENT_STALE,
+        'Document is outdated because its source changed; render it again before downloading',
+        HttpStatus.CONFLICT,
+        {
+          documentId: document.id,
+          operationId: document.operationId,
+          documentType: document.type,
+          rerenderRequired: true,
+        },
       );
     }
     let stored: { content: Buffer };
@@ -449,6 +467,32 @@ export class DocumentEngineService {
       );
     }
     return this.builder.buildFromOperation(document.operationId, document.type);
+  }
+
+  private withSourceFingerprint(blueprint: DocumentBlueprint): DocumentBlueprint {
+    const sourceFingerprint = createHash('sha256')
+      .update(
+        JSON.stringify({
+          ...blueprint,
+          metadata: {
+            ...blueprint.metadata,
+            generatedAt: null,
+            sourceFingerprint: undefined,
+          },
+          footer: { ...blueprint.footer, generatedAt: null },
+        }),
+      )
+      .digest('hex');
+    return {
+      ...blueprint,
+      metadata: { ...blueprint.metadata, sourceFingerprint },
+    };
+  }
+
+  private renderedSourceFingerprint(metadata: Prisma.JsonValue | null): string | null {
+    if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return null;
+    const value = metadata.sourceFingerprint;
+    return typeof value === 'string' && /^[a-f0-9]{64}$/.test(value) ? value : null;
   }
 
   private documentPayload(document: {

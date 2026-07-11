@@ -94,6 +94,7 @@ export function DocumentViewer({
   const pages = useMemo(() => paginate(blueprint), [blueprint]);
   const currentPage = pages[Math.min(page, Math.max(0, pages.length - 1))] ?? [];
   const docTitle = title ?? blueprint?.header.title ?? (source.type ? DOCUMENT_KIND_LABEL[source.type] : "Documento");
+  const isModelPreview = "templateId" in source;
 
   const render = useCallback(async () => {
     setRendering(true);
@@ -232,13 +233,16 @@ export function DocumentViewer({
         )}
 
         <div className="grid gap-2">
+          <div className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-muted)]/50 px-3 py-2 text-xs text-[var(--color-muted-foreground)]">
+            {isModelPreview ? "Visualização do modelo — sem dados reais e sem emissão oficial." : "Pré-visualização com dados reais da operação."}
+          </div>
           <button type="button" onClick={() => setTick((value) => value + 1)} className={secondaryButtonCls}>
             <RefreshCw className="h-4 w-4" /> Atualizar preview
           </button>
           {canRender && (
             <button type="button" onClick={render} disabled={rendering} className={primaryButtonCls}>
               {rendering ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
-              Renderizar documento
+              Renderizar documento atual
             </button>
           )}
           {canDownload && (

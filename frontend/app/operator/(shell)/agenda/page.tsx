@@ -13,12 +13,12 @@ export default function OperatorAgendaPage() {
 
   const groups = useMemo(() => {
     const items = [...(assignments.data?.items ?? [])].sort((a, b) =>
-      (a.operation.scheduledFor ?? a.assignedAt).localeCompare(b.operation.scheduledFor ?? b.assignedAt),
+      (a.operation.scheduledFor ?? "9999").localeCompare(b.operation.scheduledFor ?? "9999"),
     );
     const map = new Map<string, typeof items>();
     for (const it of items) {
-      const d = new Date(it.operation.scheduledFor ?? it.assignedAt);
-      const key = Number.isNaN(d.getTime()) ? "Sem data" : d.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" });
+      const d = it.operation.scheduledFor ? new Date(it.operation.scheduledFor) : null;
+      const key = !d || Number.isNaN(d.getTime()) ? "Não agendado" : d.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" });
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(it);
     }

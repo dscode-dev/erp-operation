@@ -1723,3 +1723,11 @@ Frontend deve usar:
 - `PATCH /notifications/:id/read` e `/notifications/read-all` para estados reais.
 
 Não usar storage keys, AuditLog, notificações locais fake ou URLs externas.
+# Closure 06 — instruções para Work Order
+
+Para OS, use somente `operationId + WORK_ORDER`. `templateId` é preview estrutural e
+`TECHNICAL_REPORT` pertence ao relatório de visita. Depois de qualquer mutation de assinatura,
+checklist, observação, foto, material ou estado, recarregue a Operation e renderize novamente.
+Download com HTTP 409/`DOCUMENT_STALE` deve mostrar ação de re-renderização.
+
+Datas: `createdAt` é criação; `scheduledFor` é agendamento; nunca faça fallback para `assignedAt`.

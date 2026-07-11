@@ -772,3 +772,9 @@ Domain transition → NotificationsService inside transaction → Notification r
 
 No WebSocket/realtime infra was added. V1 refresh uses shell load, focus/visibility and 60s polling
 while visible.
+# Closure 06 — document source consistency
+
+O frontend distingue três fontes: template preview, Operation preview e documento persistido. Para
+Work Order, a fonte real é sempre `operationId + WORK_ORDER`. A API bloqueia download obsoleto; o
+cliente apresenta o erro e exige render explícito depois de mutations. Datas operacionais não são
+normalizadas para um campo genérico: `createdAt` e `scheduledFor` permanecem conceitos distintos.

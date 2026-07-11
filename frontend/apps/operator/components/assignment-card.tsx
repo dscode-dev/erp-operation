@@ -35,7 +35,7 @@ export function AssignmentCard({ assignment }: { assignment: Assignment }) {
       </div>
       <div className="mt-3 grid gap-2 text-sm text-[var(--color-muted-foreground)]">
         <span className="inline-flex items-center gap-2">
-          <Clock className="h-4 w-4" /> {assignmentTime(op.scheduledFor ?? assignment.assignedAt)}
+          <Clock className="h-4 w-4" /> {op.scheduledFor ? assignmentTime(op.scheduledFor) : "Não agendado"}
         </span>
         <span className="inline-flex items-center gap-2 truncate">
           <MapPin className="h-4 w-4 shrink-0" /> {address}

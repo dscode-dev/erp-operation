@@ -1,5 +1,14 @@
 # Security
 
+## Product Backlog Closure 06 — stale PDF and signature integrity
+
+- PDFs persistidos possuem SHA-256 da semântica do blueprint em `renderMetadata`.
+- O download autorizado reconstrói a fonte e recusa binário obsoleto com `DOCUMENT_STALE`.
+- Fingerprint não substitui autorização, não contém base64 e não expõe storage key.
+- Assinaturas continuam validadas por data URL, MIME, magic bytes e limite de tamanho.
+- Mutation de evidências aguarda persistência e retorna estado autoritativo antes de preview/render.
+- A chave antiga do PDF só é removida após persistência concorrente bem-sucedida do novo render.
+
 ## Product Backlog Closure 05 — execution signature AppSec
 
 Assinatura executada em campo é classificada como artifact da `Operation`, não como assinatura fixa

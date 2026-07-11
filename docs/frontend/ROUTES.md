@@ -372,3 +372,9 @@ Nenhuma rota nova foi criada.
 - shell Platform: sino abre Notification Center real;
 - Operator home/header: sino usa notificações reais;
 - action URLs de notificação navegam apenas para rotas existentes como `/operacoes` e `/budgets`.
+# Closure 06
+
+- `/operacoes`: colunas Criado e Data do agendamento; drawer com datas e assinatura da OS.
+- `/operator/services/:id`: agendamento destacado e criação apresentada como contexto secundário.
+- `/operator/agenda`: Operations sem `scheduledFor` ficam em “Não agendado”.
+- `/reports`: “Visualizar modelo” usa template; preview real usa Operation e tipo documental explícito.

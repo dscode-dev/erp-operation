@@ -1,4 +1,4 @@
-import { DocumentTemplateType } from '@prisma/client';
+import { DocumentTemplateType, Role } from '@prisma/client';
 import { DocumentRendererService } from '../src/modules/document-engine/renderer/document-renderer.service';
 import { PdfEngineService } from '../src/modules/document-engine/pdf/pdf-engine.service';
 import type { DocumentBlueprint } from '../src/modules/document-engine/blueprint/document-blueprint.types';
@@ -7,6 +7,7 @@ import { DocumentMeasureService } from '../src/modules/document-engine/measureme
 import { DocumentBuilderService } from '../src/modules/document-engine/builder/document-builder.service';
 import { DocumentContextService } from '../src/modules/document-engine/context/document-context.service';
 import { OperationsService } from '../src/modules/operations/operations.service';
+import { DocumentEngineService } from '../src/modules/document-engine/document-engine.service';
 
 const ONE_PIXEL_PNG =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=';
@@ -377,6 +378,117 @@ describe('DocumentEngine foundation', () => {
     const normalize = (service as unknown as { normalizeSignatureData: (value?: string) => string | null }).normalizeSignatureData.bind(service);
 
     expect(() => normalize(`data:image/png;base64,${Buffer.from('bad').toString('base64')}`)).toThrow('Signature binary is invalid');
+  });
+
+  it('waits for signature/photo persistence and returns the authoritative Operation after update', async () => {
+    const operation = { id: '7db71471-0cf4-4414-8d06-83eb9c1917c9', signatureData: null, signedAt: null, photos: [] };
+    const transactionOperationUpdate = jest.fn().mockResolvedValue(operation);
+    const operationFindUnique = jest.fn().mockResolvedValue(operation);
+    const photoCreate = jest.fn().mockResolvedValue({ id: 'photo-id' });
+    const prisma = {
+      operation: { findUnique: operationFindUnique },
+      operationPhoto: { create: photoCreate },
+      $transaction: jest.fn(async (callback: (tx: unknown) => Promise<void>) => callback({
+        operation: { update: transactionOperationUpdate },
+        auditLog: { create: jest.fn() },
+      })),
+    };
+    const storageSave = jest.fn().mockResolvedValue(undefined);
+    const service = new OperationsService(
+      prisma as never,
+      { save: storageSave, delete: jest.fn() } as never,
+      { publishOperationCompletedTx: jest.fn() } as never,
+      { syncOperationCompletedTx: jest.fn() } as never,
+      {} as never,
+    );
+
+    const result = await service.update(
+      operation.id,
+      {
+        signatureData: `data:image/png;base64,${ONE_PIXEL_PNG}`,
+        signedAt: '2026-07-11T10:00:00.000Z',
+        photos: [{ dataUrl: `data:image/png;base64,${ONE_PIXEL_PNG}`, caption: 'Evidência' }],
+      },
+      { id: 'actor-id', role: Role.OWNER } as never,
+      { requestId: 'request-id', ip: null, userAgent: null },
+    );
+
+    expect(transactionOperationUpdate).toHaveBeenCalled();
+    expect(storageSave).toHaveBeenCalled();
+    expect(photoCreate).toHaveBeenCalled();
+    expect(operationFindUnique).toHaveBeenCalledTimes(2);
+    expect(result).toBe(operation);
+  });
+
+  it('detects a previously rendered Work Order as stale after its signature changes', async () => {
+    const current = blueprint(1);
+    current.sections.push({
+      id: 'signature',
+      title: 'Assinatura',
+      critical: true,
+      components: [{
+        id: 'execution-signature',
+        kind: 'signature',
+        mode: 'COLLECTED',
+        signatures: [{
+          id: 'collected',
+          role: 'collected',
+          label: 'Assinatura do cliente',
+          name: null,
+          title: null,
+          signedAt: '2026-07-11T10:00:00.000Z',
+          caption: 'Assinatura coletada na execução',
+          image: { mimeType: 'image/png', fileSize: 68, contentBase64: ONE_PIXEL_PNG },
+        }],
+      }],
+    });
+    const document = {
+      id: 'f50e8e28-0ee0-4cd1-b9e3-3f22f1d744f5',
+      operationId: current.metadata.operationId,
+      budgetId: null,
+      type: DocumentTemplateType.WORK_ORDER,
+      number: 'OS-000001',
+      status: 'READY',
+      storageKey: 'documents/old.pdf',
+      mimeType: 'application/pdf',
+      fileSize: 100,
+      renderedAt: new Date('2026-07-11T09:00:00.000Z'),
+      renderMetadata: { sourceFingerprint: 'a'.repeat(64) },
+      createdAt: new Date('2026-07-11T09:00:00.000Z'),
+      updatedAt: new Date('2026-07-11T09:00:00.000Z'),
+    };
+    const getDocumentPdf = jest.fn();
+    const service = new DocumentEngineService(
+      { operationDocument: { findUnique: jest.fn().mockResolvedValue(document) } } as never,
+      { buildFromOperation: jest.fn().mockResolvedValue(current) } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { getDocumentPdf } as never,
+      {} as never,
+    );
+
+    await expect(service.downloadDocument(
+      document.id,
+      { id: 'actor-id', role: Role.OWNER } as never,
+      { requestId: 'request-id', ip: null, userAgent: null },
+    )).rejects.toMatchObject({ code: 'DOCUMENT_STALE' });
+    expect(getDocumentPdf).not.toHaveBeenCalled();
+  });
+
+  it('keeps source fingerprints stable across preview timestamps and changes them for semantic content', () => {
+    const service = new DocumentEngineService({} as never, {} as never, {} as never, {} as never, {} as never, {} as never, {} as never);
+    const fingerprint = (value: DocumentBlueprint): string | undefined => (service as unknown as {
+      withSourceFingerprint: (blueprint: DocumentBlueprint) => DocumentBlueprint;
+    }).withSourceFingerprint(value).metadata.sourceFingerprint;
+    const first = blueprint(1);
+    const regenerated = { ...first, metadata: { ...first.metadata, generatedAt: '2026-07-11T12:00:00.000Z' }, footer: { ...first.footer, generatedAt: '2026-07-11T12:00:00.000Z' } };
+    const changed = structuredClone(first);
+    const metadata = changed.sections[0]?.components[0];
+    if (metadata?.kind === 'metadata' && metadata.items[0]) metadata.items[0].value = 'Outro cliente';
+
+    expect(fingerprint(first)).toBe(fingerprint(regenerated));
+    expect(fingerprint(changed)).not.toBe(fingerprint(first));
   });
 });
 

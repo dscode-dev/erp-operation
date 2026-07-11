@@ -79,6 +79,7 @@ export type DocumentBlueprint = {
     sourceId?: string | null;
     templateId?: string | null;
     templateUpdatedAt?: string | null;
+    sourceFingerprint?: string;
     generatedAt: string;
     locale: "pt-BR";
     timezone: string;

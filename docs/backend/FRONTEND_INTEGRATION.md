@@ -2097,3 +2097,13 @@ Notifications:
 - todas lidas: `PATCH /notifications/read-all`;
 - `actionUrl` deve ser tratado como rota interna e usado apenas se iniciar com `/`;
 - refresh V1: load no shell, focus/visibility e polling moderado de 60s quando visível.
+# Closure 06 — OS real, stale render e datas
+
+- Modelo: `DocumentViewer source={{ templateId }}`; ação “Visualizar modelo”; nunca é documento real.
+- OS real: `DocumentViewer source={{ operationId, type: "WORK_ORDER" }}`; ação “Pré-visualizar com
+  dados reais”.
+- Após salvar assinatura/evidências, aguarde `PATCH /operations/:id`, use a resposta autoritativa ou
+  refaça o GET, atualize o preview e solicite novo render.
+- `DOCUMENT_STALE` (409) exige re-render explícito; não ofereça o binário antigo como atual.
+- Exiba `createdAt` como “Criado” e `scheduledFor` como “Data do agendamento”. Não use `assignedAt`
+  como data de serviço. Para `scheduledFor: null`, exiba “Não agendado”.

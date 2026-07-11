@@ -1,5 +1,24 @@
 # Backend State
 
+## Product Backlog Closure 06 — Work Order runtime consistency
+
+Status: concluída em 11 de julho de 2026, sem migration.
+
+- Corrigido retorno prematuro de `OperationsService.update`; evidências são concluídas antes da
+  resposta e a Operation autoritativa é recarregada.
+- Preview/render de documentos recebem `sourceFingerprint` SHA-256 sem timestamps voláteis.
+- `renderMetadata.sourceFingerprint` identifica exatamente a fonte usada no PDF.
+- Download reconstrói a fonte atual e retorna `409 DOCUMENT_STALE` quando o PDF persistido é antigo.
+- `WORK_ORDER` continua usando exclusivamente Operation → DocumentContext → Builder → Renderer → PDF.
+- Testes focados: 12 passaram; assinatura aparece no blueprint e no PDF.
+
+Validação final: Prisma validate/generate, build e lint passaram; suíte completa passou com 16
+suites/47 testes. Suítes integration/concurrency/security com PostgreSQL dedicado não foram
+executadas porque o daemon Docker local estava indisponível.
+
+Reprodução PostgreSQL via Docker não ocorreu porque o daemon local estava indisponível; o defeito foi
+rastreado conclusivamente por serviço e testes de pipeline, sem uso de banco de produção.
+
 ## Product Backlog Closure 05 — Reports Preview/PDF and Execution Signature Consistency
 
 Status: concluída em 10 de julho de 2026.

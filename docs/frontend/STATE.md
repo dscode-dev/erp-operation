@@ -1,5 +1,18 @@
 # STATE — Frontend
 
+## Product Backlog Closure 06 — OS real e datas operacionais
+
+Status: concluída em 11 de julho de 2026.
+
+- Tabela de Operações separa “Criado” (`createdAt`) e “Data do agendamento” (`scheduledFor`).
+- Drawer da Operation ganhou seção Datas e captura persistente de assinatura para a OS.
+- Confirmação da assinatura aguarda backend e recarrega a fonte autoritativa.
+- DocumentViewer identifica visualmente modelo versus preview com dados reais e pede render atual.
+- Operator prioriza `scheduledFor`; ausência aparece como “Não agendado”, sem usar `assignedAt`.
+
+Validação final: build passou; lint passou com 2 warnings pré-existentes (imports não utilizados em
+`bottom-nav.tsx` e `sidebar.tsx`).
+
 ## Product Backlog Closure 05 — Reports visual refinement and document consistency
 
 Status: concluída em 10 de julho de 2026.

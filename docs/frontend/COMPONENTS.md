@@ -504,3 +504,8 @@ Tipos:
 - `AvatarCropDrawer`: drawer local do perfil para recortar/reposicionar avatar antes de persistir;
 - `PlatformTopbar`: Notification Center real com badge, painel, retry, empty/loading e mark read/all;
 - `OperatorHeader`: sino conectado ao backend com contador e painel compacto.
+# Closure 06
+
+- `OperationDetailDrawer`: seção Datas e coleta de assinatura da OS com persistência autoritativa.
+- `DocumentViewer`: identificação de preview de modelo versus dados reais; render explícito atual.
+- `AssignmentCard`: data operacional vem somente de `operation.scheduledFor`.

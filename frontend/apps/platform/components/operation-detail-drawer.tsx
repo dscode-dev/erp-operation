@@ -15,9 +15,10 @@ import { AssetTimeline } from "@erp/ui/assets/asset-timeline";
 import { OperationView } from "@erp/ui/operations/operation-view";
 import { OPERATION_STATUS, OPERATION_TYPE_LABEL, operationCode } from "@erp/ui/operations/operation-shared";
 import { DocumentViewer } from "@erp/ui/documents/document-viewer";
+import { SignaturePad } from "@erp/ui/documents/signature-pad";
 import { Gate } from "@erp/ui/auth/gate";
 import { assignmentsApi, budgetsApi, inventoryApi, operationApi, pricingApi, useQuery, type Assignment, type Budget, type BudgetItemPayload, type BudgetPayload, type InventoryItem, type OperationDetail, type OperationDocument, type OperationPart, type Product, type ProductPricing } from "@erp/api";
-import { formatCurrencyBRL, formatNumber } from "@erp/utils";
+import { formatCurrencyBRL, formatDateTime, formatNumber } from "@erp/utils";
 import { ASSIGNMENT_STATUS_LABEL, assignmentTime } from "@erp/ui/assignments/assignment-shared";
 import { UserSelect } from "./entity-select";
 
@@ -78,6 +79,10 @@ export function OperationDetailDrawer({
 
           <AssignmentSection assignment={assignmentQuery.data?.items[0] ?? null} loading={assignmentQuery.loading} onRefresh={() => { assignmentQuery.refetch(); detail.refetch(); }} />
 
+          <OperationDates operation={op} assignment={assignmentQuery.data?.items[0] ?? null} />
+
+          <WorkOrderSignatureSection operation={op} onSaved={detail.refetch} />
+
           <OperationBudgetsSection operation={op} />
 
           <section className="space-y-2">
@@ -103,6 +108,70 @@ export function OperationDetailDrawer({
         )}
       </Drawer>
     </Drawer>
+  );
+}
+
+function OperationDates({ operation, assignment }: { operation: OperationDetail; assignment: Assignment | null }) {
+  const dates = [
+    ["Criado em", formatDateTime(operation.createdAt)],
+    ["Agendado para", operation.scheduledFor ? formatDateTime(operation.scheduledFor) : "Não agendado"],
+    ...(assignment?.acceptedAt ? [["Aceito em", formatDateTime(assignment.acceptedAt)]] : []),
+    ...(operation.startedAt ? [["Iniciado em", formatDateTime(operation.startedAt)]] : []),
+    ...(operation.completedAt ? [["Concluído em", formatDateTime(operation.completedAt)]] : []),
+    ...(operation.signedAt ? [["Assinado em", formatDateTime(operation.signedAt)]] : []),
+  ];
+  return (
+    <section className="space-y-2">
+      <h3 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)]">Datas</h3>
+      <div className="grid gap-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 sm:grid-cols-2">
+        {dates.map(([label, value]) => (
+          <div key={label} className={label === "Agendado para" ? "rounded-[var(--radius-md)] bg-[var(--color-primary)]/8 p-2 -m-2" : ""}>
+            <Info label={label} value={value} />
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function WorkOrderSignatureSection({ operation, onSaved }: { operation: OperationDetail; onSaved: () => void }) {
+  const [signature, setSignature] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save(value = signature) {
+    if (!value || saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await operationApi.updateOperation(operation.id, {
+        signatureData: value,
+        signedAt: new Date().toISOString(),
+      });
+      setSignature(null);
+      await Promise.resolve(onSaved());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Não foi possível salvar a assinatura.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Gate roles={["OWNER", "MANAGER", "OPERATOR"]}>
+      <section className="space-y-2">
+        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)]">Assinatura da Ordem de Serviço</h3>
+        <div className="space-y-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
+          {operation.signedAt && <p className="text-sm text-[var(--color-success)]">Assinatura persistida em {formatDateTime(operation.signedAt)}.</p>}
+          <SignaturePad onChange={setSignature} onConfirm={(value) => { setSignature(value); void save(value); }} />
+          {error && <p className="text-sm text-[var(--color-danger)]">{error}</p>}
+          <button type="button" onClick={() => void save()} disabled={!signature || saving} className="h-9 rounded-[var(--radius-md)] bg-[var(--color-primary)] px-3 text-sm font-medium text-[var(--color-primary-foreground)] disabled:opacity-50">
+            {saving ? "Salvando assinatura…" : "Salvar assinatura"}
+          </button>
+          <p className="text-xs text-[var(--color-muted-foreground)]">Após a confirmação do backend, abra a OS e renderize novamente. PDFs anteriores ficam bloqueados como desatualizados.</p>
+        </div>
+      </section>
+    </Gate>
   );
 }
 

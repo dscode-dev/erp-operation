@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Camera, CheckCircle2, ClipboardCheck, FileText, MapPin, Package, PenLine, Play, XCircle } from "lucide-react";
+import { ArrowLeft, Camera, CheckCircle2, ClipboardCheck, Clock, FileText, MapPin, Package, PenLine, Play, XCircle } from "lucide-react";
 import { SkeletonCard, SkeletonList } from "@erp/ui/skeletons";
 import { EmptyState } from "@erp/ui/empty-state";
 import { ErrorState } from "@erp/ui/states";
@@ -125,7 +125,8 @@ function AssignmentWorkflow({
           <p className="text-sm text-[var(--color-muted-foreground)]">
             OP-{String(op.number).padStart(6, "0")} · {op.equipment?.name ?? "Sem equipamento"}
           </p>
-          <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">{assignmentTime(op.scheduledFor ?? assignment.assignedAt)}</p>
+          <p className="mt-1 text-sm font-medium text-[var(--color-primary)]">{op.scheduledFor ? assignmentTime(op.scheduledFor) : "Não agendado"}</p>
+          <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">Criada em {assignmentTime(op.createdAt)}</p>
         </div>
       </header>
 
@@ -135,6 +136,7 @@ function AssignmentWorkflow({
         <InfoRow icon={MapPin} label="Endereço" value={address} />
         <InfoRow icon={Package} label="Equipamento" value={op.equipment?.name ?? "Sem equipamento vinculado"} />
         <InfoRow icon={ClipboardCheck} label="Tipo / status da Operation" value={`${op.type} · ${op.status}`} />
+        <InfoRow icon={Clock} label="Data do agendamento" value={op.scheduledFor ? assignmentTime(op.scheduledFor) : "Não agendado"} />
       </section>
 
       <section className="grid gap-2">

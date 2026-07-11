@@ -1,5 +1,32 @@
 # API Contracts
 
+## Product Backlog Closure 06 — current Work Order contract
+
+Contratos existentes preservados:
+
+- `GET /documents/operations/:operationId/WORK_ORDER/preview` retorna o blueprint atual e
+  `metadata.sourceFingerprint`.
+- `POST /documents/operations/:operationId/WORK_ORDER/render` sempre reconstrói a fonte atual e
+  persiste `renderMetadata.sourceFingerprint`.
+- `GET /documents/:documentId/download` retorna `409 DOCUMENT_STALE` quando a fonte atual diverge do
+  último render (ou o render legado não possui fingerprint). `error.details.rerenderRequired = true`.
+- `PATCH /operations/:id` só conclui depois de persistir a mutation e processar evidências; retorna a
+  `OperationDetail` recarregada.
+
+`OperationSummary` e `OperationDetail` mantêm campos temporais distintos:
+
+```json
+{
+  "createdAt": "2026-07-11T10:00:00.000Z",
+  "scheduledFor": "2026-07-12T13:00:00.000Z",
+  "startedAt": null,
+  "completedAt": null,
+  "signedAt": null
+}
+```
+
+`scheduledFor: null` significa explicitamente que a Operation não está agendada.
+
 ## Product Backlog Closure 05 — Document preview/render consistency
 
 Contratos HTTP preservados. Nenhum endpoint novo foi criado e nenhum payload público obrigatório foi

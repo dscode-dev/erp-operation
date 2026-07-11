@@ -22,7 +22,7 @@ import { OperationCreationDrawer } from "@platform/components/operation-creation
 import { Gate } from "@erp/ui/auth/gate";
 import { OPERATION_STATUS, OPERATION_TYPE_LABEL, operationCode } from "@erp/ui/operations/operation-shared";
 import { operationApi, useQuery, type OperationSummary, type OperationStatus } from "@erp/api";
-import { useDebounce, formatDate } from "@erp/utils";
+import { useDebounce, formatDateTime } from "@erp/utils";
 
 const STATUS_FILTERS: Array<{ key: "all" | OperationStatus; label: string }> = [
   { key: "all", label: "Todas" },
@@ -69,7 +69,8 @@ function OperacoesInner() {
       },
       { key: "operator", header: "Operador", className: "w-[150px]", cell: (o) => <span className="text-sm truncate">{o.operator?.name ?? "—"}</span> },
       { key: "type", header: "Tipo", className: "w-[140px]", cell: (o) => <span className="text-sm">{OPERATION_TYPE_LABEL[o.type]}</span> },
-      { key: "date", header: "Data", className: "w-[120px]", cell: (o) => <span className="font-mono text-xs">{formatDate(o.completedAt ?? o.createdAt)}</span> },
+      { key: "createdAt", header: "Criado", className: "w-[125px]", cell: (o) => <span className="font-mono text-xs">{formatDateTime(o.createdAt)}</span> },
+      { key: "scheduledFor", header: "Data do agendamento", className: "w-[155px]", cell: (o) => <span className="font-mono text-xs">{o.scheduledFor ? formatDateTime(o.scheduledFor) : "Não agendado"}</span> },
       { key: "status", header: "Status", className: "w-[150px]", cell: (o) => <StatusChip tone={OPERATION_STATUS[o.status].tone} dot>{OPERATION_STATUS[o.status].label}</StatusChip> },
     ],
     [],
@@ -100,7 +101,8 @@ function OperacoesInner() {
                 equipamento: o.equipment?.name ?? "",
                 operador: o.operator?.name ?? "",
                 tipo: OPERATION_TYPE_LABEL[o.type],
-                data: formatDate(o.completedAt ?? o.createdAt),
+                criadoEm: formatDateTime(o.createdAt),
+                agendadoPara: o.scheduledFor ? formatDateTime(o.scheduledFor) : "Não agendado",
                 status: OPERATION_STATUS[o.status].label,
               }))}
             />

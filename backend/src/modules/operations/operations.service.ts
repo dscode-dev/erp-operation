@@ -258,7 +258,7 @@ export class OperationsService {
       );
     }
     const signatureData = this.normalizeSignatureData(dto.signatureData);
-    return this.prisma.$transaction(async (tx) => {
+    await this.prisma.$transaction(async (tx) => {
       await tx.operation.update({
         where: { id },
         data: {
