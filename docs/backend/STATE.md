@@ -1,5 +1,21 @@
 # Backend State
 
+## Product Backlog Closure 06.1 — runtime PDF parity and Unicode
+
+Status: concluída em 11 de julho de 2026 após render/download reais em Docker local.
+
+- PDF adapter migrado para PDFKit com Noto Sans incorporada (Unicode, OFL).
+- Renderer ganhou fundo branco, cor primária em seções e superfícies equivalentes ao preview.
+- O documento corrente não entra mais em “Documentos relacionados”, evitando stale autorreferente.
+- Runtime confirmou `WORK_ORDER`, template `162d3c80…`, assinatura visível, PDF `%PDF-` e texto
+  português extraível.
+- Mutation posterior retornou `409 DOCUMENT_STALE`; re-render e download atual passaram.
+- Validação final: build/lint; 16 suítes/47 testes padrão; 2 suítes/7 testes de integração; 2
+  suítes/24 testes de concorrência; e 2 suítes/7 testes AppSec focados foram aprovados.
+- A suíte AppSec agregada conserva uma falha preexistente de isolamento entre specs (ator removido e
+  sessão revogada compartilhados); as suítes de Document Engine e Signatures passam isoladamente.
+- Nenhuma migration.
+
 ## Product Backlog Closure 06 — Work Order runtime consistency
 
 Status: concluída em 11 de julho de 2026, sem migration.

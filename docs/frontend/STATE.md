@@ -1,5 +1,15 @@
 # STATE — Frontend
 
+## Product Backlog Closure 06.1 — visual runtime verification
+
+Status: concluída em 11 de julho de 2026.
+
+- `/operacoes` exibiu em Chrome real `Criado` e `Data do agendamento` com valores distintos.
+- Drawer exibiu `Datas` e `Agendado para` sem fallback.
+- DocumentViewer real exibiu assinatura na página 3/3.
+- `Drawer` usa portal no `document.body`, corrigindo clipping de viewers aninhados.
+- Script opt-in de inspeção visual registra screenshots temporários e evidência segura.
+
 ## Product Backlog Closure 06 — OS real e datas operacionais
 
 Status: concluída em 11 de julho de 2026.

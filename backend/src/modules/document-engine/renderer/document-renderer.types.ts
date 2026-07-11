@@ -10,6 +10,7 @@ export interface RenderedTextLine {
   y: number;
   size: number;
   bold?: boolean;
+  color?: string;
 }
 
 export interface RenderedRect {
@@ -18,6 +19,8 @@ export interface RenderedRect {
   y: number;
   width: number;
   height: number;
+  fillColor?: string;
+  strokeColor?: string;
 }
 
 export interface RenderedLine {
@@ -26,6 +29,7 @@ export interface RenderedLine {
   y1: number;
   x2: number;
   y2: number;
+  color?: string;
 }
 
 export interface RenderedImage {

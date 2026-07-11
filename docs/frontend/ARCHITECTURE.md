@@ -778,3 +778,11 @@ O frontend distingue três fontes: template preview, Operation preview e documen
 Work Order, a fonte real é sempre `operationId + WORK_ORDER`. A API bloqueia download obsoleto; o
 cliente apresenta o erro e exige render explícito depois de mutations. Datas operacionais não são
 normalizadas para um campo genérico: `createdAt` e `scheduledFor` permanecem conceitos distintos.
+# Closure 06.1 — runtime UI and nested overlays
+
+Drawers são portais para `document.body`; isso impede que transforms de um drawer pai criem um novo
+containing block para overlays `fixed`. DocumentViewer mantém blueprint oficial e passa a ocupar a
+largura solicitada mesmo quando aberto a partir de OperationDetailDrawer ou Timeline.
+
+O script `test/runtime/verify-operations-ui.mjs` valida opt-in a rota ativa, contrato visível, drawer
+e assinatura no preview sem introduzir uma suíte/browser como dependência de produção.

@@ -8,6 +8,7 @@ import { DocumentBuilderService } from '../src/modules/document-engine/builder/d
 import { DocumentContextService } from '../src/modules/document-engine/context/document-context.service';
 import { OperationsService } from '../src/modules/operations/operations.service';
 import { DocumentEngineService } from '../src/modules/document-engine/document-engine.service';
+import type { RenderedDocument } from '../src/modules/document-engine/renderer/document-renderer.types';
 
 const ONE_PIXEL_PNG =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=';
@@ -96,16 +97,17 @@ describe('DocumentEngine foundation', () => {
     expect(rendered.pages.every((page) => page.elements.length > 0)).toBe(true);
   });
 
-  it('generates a direct PDF buffer with PDF header and pages', () => {
+  it('generates a direct PDF buffer with PDF header and pages', async () => {
     const rendered = renderer().render(blueprint(12));
-    const result = new PdfEngineService().create(rendered);
+    const result = await new PdfEngineService().create(rendered);
     expect(result.pageCount).toBe(rendered.pages.length);
     expect(result.buffer.subarray(0, 5).toString('latin1')).toBe('%PDF-');
     expect(result.buffer.toString('latin1')).toContain('/Type /Page');
   });
 
-  it('sanitizes unsupported unicode punctuation before writing PDF literal strings', () => {
-    const result = new PdfEngineService().create({
+  it('embeds a Unicode font without stripping Portuguese text and punctuation', async () => {
+    const unicodeSample = 'á à â ã é ê í ó ô õ ú ç Á É Í Ó Ú Ç º ª – — R$';
+    const rendered: RenderedDocument = {
       blueprint: {
         version: '1.0',
         metadata: {
@@ -147,7 +149,7 @@ describe('DocumentEngine foundation', () => {
           elements: [
             {
               type: 'text',
-              text: 'Cliente — operação “crítica” não deve corromper o PDF',
+              text: unicodeSample,
               x: 40,
               y: 760,
               size: 10,
@@ -155,11 +157,13 @@ describe('DocumentEngine foundation', () => {
           ],
         },
       ],
-    });
+    };
+    const result = await new PdfEngineService().create(rendered);
     const latin1 = result.buffer.toString('latin1');
+    expect(rendered.pages[0]?.elements[0]).toMatchObject({ text: unicodeSample });
     expect(latin1).toContain('%PDF-');
-    expect(latin1).toContain('Exportação - "produção"');
-    expect(latin1).not.toContain('\x14');
+    expect(latin1).toContain('/ToUnicode');
+    expect(latin1).toContain('/FontFile');
   });
 
   it('measures text and computes printable layout boundaries', () => {
@@ -173,7 +177,7 @@ describe('DocumentEngine foundation', () => {
     expect(wrapped.length).toBeGreaterThan(1);
   });
 
-  it('keeps signature blocks together and embeds fixed signature images in the PDF', () => {
+  it('keeps signature blocks together and embeds fixed signature images in the PDF', async () => {
     const doc = blueprint(55);
     doc.sections.push({
       id: 'signature',
@@ -219,7 +223,7 @@ describe('DocumentEngine foundation', () => {
     const signaturePages = rendered.pages.filter((page) =>
       page.elements.some((element) => element.type === 'image'),
     );
-    const result = new PdfEngineService().create(rendered);
+    const result = await new PdfEngineService().create(rendered);
 
     expect(signaturePages).toHaveLength(1);
     expect(result.buffer.toString('latin1')).toContain('/Subtype /Image');

@@ -228,7 +228,7 @@ export class DocumentEngineService {
       }
       const blueprint = this.withSourceFingerprint(await this.buildBlueprintForDocument(document));
       const rendered = this.renderer.render(blueprint);
-      const pdf = this.pdf.create(rendered);
+      const pdf = await this.pdf.create(rendered);
       const stored = await this.assets.saveDocumentPdf({
         operationId: document.operationId,
         sourceId: document.budgetId ?? document.operationId ?? document.id,

@@ -1,5 +1,14 @@
 # API Contracts
 
+## Product Backlog Closure 06.1 — runtime-confirmed contracts
+
+`GET /operations` e `GET /operations/:id` retornaram em runtime `createdAt` e `scheduledFor`.
+`scheduledFor` permanece o campo canônico; `null` significa “Não agendado”.
+
+Preview e render de OS usam o mesmo tipo/template/componentes. Download continua retornando
+`409 DOCUMENT_STALE` após mudança semântica e funciona após re-render explícito. O formato HTTP do
+PDF não mudou; somente o binário passou a incorporar fonte Unicode e apresentação equivalente.
+
 ## Product Backlog Closure 06 — current Work Order contract
 
 Contratos existentes preservados:

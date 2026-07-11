@@ -44,7 +44,7 @@ export class DocumentRendererService {
     const width = this.layout.contentWidth();
 
     for (const section of blueprint.sections) {
-      const sectionHeader = this.sectionHeader(section.title);
+      const sectionHeader = this.sectionHeader(section.title, blueprint.metadata.organization.primaryColor);
       if (this.layout.shouldBreak(y, sectionHeader.height)) {
         current = this.newPage(blueprint, pages.length + 1);
         pages.push(current);
@@ -111,13 +111,13 @@ export class DocumentRendererService {
     }
   }
 
-  private sectionHeader(title: string): LayoutBlock {
+  private sectionHeader(title: string, primaryColor: string): LayoutBlock {
     return {
       component: { id: `section-${title}`, kind: 'paragraph', text: title },
       height: SECTION_TITLE_HEIGHT,
       draw: (x, y, width) => [
-        { type: 'text', x, y, text: title, size: 13, bold: true },
-        { type: 'line', x1: x, y1: y - 8, x2: x + width, y2: y - 8 },
+        { type: 'text', x, y, text: title, size: 13, bold: true, color: primaryColor },
+        { type: 'line', x1: x, y1: y - 8, x2: x + width, y2: y - 8, color: '#e2e8f0' },
       ],
     };
   }
@@ -128,7 +128,7 @@ export class DocumentRendererService {
       component,
       height,
       draw: (x, y, width): RenderedElement[] => {
-        const elements: RenderedElement[] = [{ type: 'rect', x, y: y - height + 4, width, height }];
+        const elements: RenderedElement[] = [{ type: 'rect', x, y: y - height + 4, width, height, fillColor: '#f8fafc', strokeColor: '#e2e8f0' }];
         component.items.forEach((item, index) => {
           const lineY = y - 13 - index * LINE_HEIGHT;
           elements.push({
@@ -170,7 +170,7 @@ export class DocumentRendererService {
       component,
       height,
       draw: (x, y, blockWidth) => [
-        { type: 'rect', x, y: y - height + 4, width: blockWidth, height },
+        { type: 'rect', x, y: y - height + 4, width: blockWidth, height, fillColor: '#f8fafc', strokeColor: '#e2e8f0' },
         ...lines.map((line, index) => ({
           type: 'text' as const,
           x: x + 8,
@@ -264,7 +264,7 @@ export class DocumentRendererService {
     const totalWidth = widths.reduce((sum, value) => sum + value, 0);
     widths[widths.length - 1] += width - totalWidth;
     let cursor = x;
-    elements.push({ type: 'rect', x, y: y - headerHeight + 4, width, height: headerHeight });
+    elements.push({ type: 'rect', x, y: y - headerHeight + 4, width, height: headerHeight, fillColor: '#f1f5f9', strokeColor: '#cbd5e1' });
     component.columns.forEach((column, index) => {
       elements.push({
         type: 'text',
@@ -460,6 +460,24 @@ export class DocumentRendererService {
     return {
       pageNumber,
       elements: [
+        {
+          type: 'rect',
+          x: 0,
+          y: 0,
+          width: DOCUMENT_PAGE.width,
+          height: DOCUMENT_PAGE.height,
+          fillColor: '#ffffff',
+          strokeColor: '#ffffff',
+        },
+        {
+          type: 'rect',
+          x: 0,
+          y: DOCUMENT_PAGE.height - 8,
+          width: DOCUMENT_PAGE.width,
+          height: 8,
+          fillColor: blueprint.metadata.organization.primaryColor,
+          strokeColor: blueprint.metadata.organization.primaryColor,
+        },
         {
           type: 'text',
           x: DOCUMENT_PAGE.marginLeft,

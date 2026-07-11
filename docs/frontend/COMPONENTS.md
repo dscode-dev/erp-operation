@@ -509,3 +509,9 @@ Tipos:
 - `OperationDetailDrawer`: seção Datas e coleta de assinatura da OS com persistência autoritativa.
 - `DocumentViewer`: identificação de preview de modelo versus dados reais; render explícito atual.
 - `AssignmentCard`: data operacional vem somente de `operation.scheduledFor`.
+# Closure 06.1
+
+- `Drawer`: agora usa React portal, permitindo drawers documentais aninhados em largura integral.
+- `DocumentViewer`: verificado com fonte real `operationId + WORK_ORDER`, 3 páginas e assinatura
+  visível.
+- `DataTable` ativo em `/operacoes`: confirmou as colunas Criado e Data do agendamento.

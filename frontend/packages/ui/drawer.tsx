@@ -7,6 +7,7 @@
  * Handles overlay click, Escape, scroll lock and the slide-in animation.
  */
 import { useEffect, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
 export function Drawer({
@@ -41,7 +42,7 @@ export function Drawer({
 
   if (!open) return null;
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-fade-in" onClick={onClose} />
       <aside
@@ -66,6 +67,7 @@ export function Drawer({
           <div className="border-t border-[var(--color-border)] p-4 flex items-center justify-end gap-2">{footer}</div>
         )}
       </aside>
-    </div>
+    </div>,
+    document.body,
   );
 }

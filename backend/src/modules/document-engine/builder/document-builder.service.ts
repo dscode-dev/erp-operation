@@ -528,7 +528,10 @@ export class DocumentBuilderService {
     if (context.configuration.type !== DocumentTemplateType.TECHNICAL_REPORT && operation.photos.length > 0) {
       sections.push(this.photosSection(context, 'Evidências fotográficas'));
     }
-    if (operation.documents.length > 0) {
+    const relatedDocuments = operation.documents.filter(
+      (document) => document.type !== context.configuration.type,
+    );
+    if (relatedDocuments.length > 0) {
       sections.push({
         id: 'related-documents',
         title: 'Documentos relacionados',
@@ -536,7 +539,7 @@ export class DocumentBuilderService {
           {
             id: 'related-documents-list',
             kind: 'list',
-            items: operation.documents
+            items: relatedDocuments
               .map((doc) => `${doc.number} · ${doc.type} · ${doc.status}`)
               .map((item) => this.clean(item)),
           },

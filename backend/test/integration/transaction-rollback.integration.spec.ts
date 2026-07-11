@@ -102,6 +102,7 @@ describe('cross-domain transaction rollback with real PostgreSQL', () => {
       prisma as never,
       new PricingService(prisma as never),
       new ThrowingLifecyclePublisher(prisma as never),
+      { notifyBudgetDecisionTx: jest.fn() } as never,
     );
 
     await expect(budgets.approve(fixture.budgetId, {}, actor, context)).rejects.toThrow('forced budget rollback');

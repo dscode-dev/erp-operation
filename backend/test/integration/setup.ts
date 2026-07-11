@@ -40,6 +40,7 @@ process.env.ENABLE_DEMO_DATA = process.env.ENABLE_DEMO_DATA ?? 'false';
 process.env.ENABLE_DEMO_ENDPOINTS = process.env.ENABLE_DEMO_ENDPOINTS ?? 'false';
 
 beforeAll(() => {
+  if (process.env.ORBIT_TEST_SKIP_MIGRATE === 'true') return;
   execFileSync('npx', ['prisma', 'migrate', 'deploy'], {
     cwd: process.cwd(),
     env: { ...process.env, DATABASE_URL: process.env.TEST_DATABASE_URL },

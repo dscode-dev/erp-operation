@@ -1731,3 +1731,8 @@ checklist, observação, foto, material ou estado, recarregue a Operation e rend
 Download com HTTP 409/`DOCUMENT_STALE` deve mostrar ação de re-renderização.
 
 Datas: `createdAt` é criação; `scheduledFor` é agendamento; nunca faça fallback para `assignedAt`.
+# Closure 06.1 — verificação de produto
+
+Verificado em `/operacoes`: colunas Criado/Data do agendamento, seção Datas no drawer e OS real com
+assinatura. O PDF usa Noto Sans incorporada e preserva português. Não comparar preview de modelo com
+PDF real; para emissão use sempre `operationId + WORK_ORDER`.

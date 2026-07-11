@@ -378,3 +378,8 @@ Nenhuma rota nova foi criada.
 - `/operator/services/:id`: agendamento destacado e criação apresentada como contexto secundário.
 - `/operator/agenda`: Operations sem `scheduledFor` ficam em “Não agendado”.
 - `/reports`: “Visualizar modelo” usa template; preview real usa Operation e tipo documental explícito.
+# Closure 06.1
+
+- `/operacoes`: rota ativa inspecionada em runtime; tabela e drawer aprovados.
+- Drawer da OS em `/operacoes`: preview real integral, sem clipping por drawer pai.
+- `/operator`: mantém `scheduledFor` como data operacional; nenhuma rota paralela criada.

@@ -2107,3 +2107,9 @@ Notifications:
 - `DOCUMENT_STALE` (409) exige re-render explícito; não ofereça o binário antigo como atual.
 - Exiba `createdAt` como “Criado” e `scheduledFor` como “Data do agendamento”. Não use `assignedAt`
   como data de serviço. Para `scheduledFor: null`, exiba “Não agendado”.
+# Closure 06.1 — evidência runtime
+
+Contrato observado: `createdAt` e `scheduledFor`. Use `scheduledFor` diretamente para agendamento.
+O preview real `operationId + WORK_ORDER` e o PDF atual compartilham a ordem semântica dos
+componentes. Em `DOCUMENT_STALE`, mostre “Documento desatualizado — gerar novamente”, execute render
+explícito e só então habilite o download atual.

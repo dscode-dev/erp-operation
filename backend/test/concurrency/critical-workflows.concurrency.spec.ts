@@ -61,9 +61,15 @@ function services(): {
     inventory,
     financial: new FinancialService(prisma as never, lifecycle),
     procurement: new ProcurementService(prisma as never, inventory, lifecycle),
-    assignments: new AssignmentsService(prisma as never, lifecycle, maintenance),
+    assignments: new AssignmentsService(prisma as never, lifecycle, maintenance, {
+      notifyAssignmentAssignedTx: jest.fn(),
+      notifyAssignmentStartedTx: jest.fn(),
+      notifyAssignmentCompletedTx: jest.fn(),
+    } as never),
     pricing: new PricingService(prisma as never),
-    budgets: new BudgetsService(prisma as never, new PricingService(prisma as never), lifecycle),
+    budgets: new BudgetsService(prisma as never, new PricingService(prisma as never), lifecycle, {
+      notifyBudgetDecisionTx: jest.fn(),
+    } as never),
   };
 }
 

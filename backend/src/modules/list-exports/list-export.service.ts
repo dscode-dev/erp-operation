@@ -167,7 +167,7 @@ export class ListExportService {
     });
   }
 
-  private tablePdf<T>(input: {
+  private async tablePdf<T>(input: {
     title: string;
     filenamePrefix: string;
     filterSummary: string;
@@ -175,7 +175,7 @@ export class ListExportService {
     organization: { legalName: string; tradeName: string; cnpj: string; email: string; phone: string; city: string; state: string; primaryColor: string; secondaryColor: string };
     columns: TableColumn<T>[];
     rows: T[];
-  }): PdfExportResult {
+  }): Promise<PdfExportResult> {
     const org = input.organization;
     const pages: RenderedPage[] = [];
     let current = this.newPage(1, input.title, input.filterSummary, input.total);
@@ -250,7 +250,7 @@ export class ListExportService {
       },
       pages,
     };
-    const pdf = this.pdf.create(rendered);
+    const pdf = await this.pdf.create(rendered);
     return {
       buffer: pdf.buffer,
       filename: `${input.filenamePrefix}-${new Date().toISOString().slice(0, 10)}.pdf`,

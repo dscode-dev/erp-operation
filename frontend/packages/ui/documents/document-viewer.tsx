@@ -48,6 +48,7 @@ export function DocumentViewer({
   const [error, setError] = useState<string | null>(null);
   const [rendering, setRendering] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [stale, setStale] = useState(false);
   const [page, setPage] = useState(0);
   const [zoom, setZoom] = useState(0.88);
   const [tick, setTick] = useState(0);
@@ -55,6 +56,7 @@ export function DocumentViewer({
   useEffect(() => {
     setDocumentId("documentId" in source ? source.documentId ?? null : null);
     setRendered(null);
+    setStale(false);
     setPage(0);
   }, [source]);
 
@@ -111,6 +113,7 @@ export function DocumentViewer({
           : null;
       if (!result) throw new Error("Documento sem origem de renderização.");
       setRendered(result);
+      setStale(false);
       setDocumentId(result.id);
       onRendered?.(result);
       setTick((value) => value + 1);
@@ -136,7 +139,12 @@ export function DocumentViewer({
       const file = await documentsApi.downloadDocument(id);
       downloadBase64(file);
     } catch (err) {
-      setError(err instanceof ApiClientError || err instanceof Error ? err.message : "Falha ao baixar documento.");
+      if (err instanceof ApiClientError && err.code === "DOCUMENT_STALE") {
+        setStale(true);
+        setError("Documento desatualizado — gere novamente antes de baixar.");
+      } else {
+        setError(err instanceof ApiClientError || err instanceof Error ? err.message : "Falha ao baixar documento.");
+      }
     } finally {
       setDownloading(false);
     }
@@ -242,11 +250,11 @@ export function DocumentViewer({
           {canRender && (
             <button type="button" onClick={render} disabled={rendering} className={primaryButtonCls}>
               {rendering ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
-              Renderizar documento atual
+              {stale ? "Gerar novamente" : "Renderizar documento atual"}
             </button>
           )}
           {canDownload && (
-            <button type="button" onClick={download} disabled={downloading} className={secondaryButtonCls}>
+            <button type="button" onClick={download} disabled={downloading || stale} className={secondaryButtonCls}>
               {downloading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
               Download PDF
             </button>

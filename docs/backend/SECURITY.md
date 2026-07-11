@@ -1,5 +1,14 @@
 # Security
 
+## Product Backlog Closure 06.1 — font and runtime verification security
+
+- Noto Sans é empacotada como dependência interna OFL; nenhum endpoint expõe o arquivo de fonte.
+- A fixture runtime exige opt-in, `NODE_ENV != production` e host DB local/container local.
+- Senha é aleatória e gravada apenas em `/private/tmp` para a sessão de navegador.
+- Evidências versionáveis contêm somente IDs abreviados, booleans, timestamps e hashes.
+- Base64 de assinatura/PDF não entra em audit, lifecycle, render metadata ou documentação.
+- Stale detection foi validada antes do acesso ao binário antigo.
+
 ## Product Backlog Closure 06 — stale PDF and signature integrity
 
 - PDFs persistidos possuem SHA-256 da semântica do blueprint em `renderMetadata`.
