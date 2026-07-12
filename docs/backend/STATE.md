@@ -1,7 +1,19 @@
 # Backend State
 
+## Product Backlog Closure 07 — Central de Relatórios
+
+- Os workflows WORK_ORDER, TECHNICAL_REPORT, TECHNICAL_OPINION, PMOC e RECEIPT continuam baseados em Operation e no Document Engine oficial; nenhum renderer/contexto paralelo foi criado.
+- Builders especializados agora usam objetivo/diagnóstico (`reportedIssue`), análise/medições/dados de recebimento (`serviceDescription`) e conclusão/pendências (`observations`).
+- PMOC criado pela Central vincula a Operation a uma MaintenanceExecution oficial.
+- Render runtime dos cinco tipos gerou PDFs válidos e todos apareceram em `GET /documents`.
+- Sem migration e sem endpoint backend novo.
+
 ## DC-01.2 — paridade visual, QR real e assinatura técnica
 
+- Refinamento posterior: cabeçalho PDF alinhado ao Preview, espaçamento vertical ampliado e quebra
+  preferencial da WORK_ORDER após Equipamento.
+- `FIXED` agora exclui categoricamente assinaturas de execução, mesmo diante de flags residuais no
+  template; checklist concluído recebe marca gráfica visível no PDF.
 - `QrCodeComponent` passou a carregar a imagem PNG gerada a partir do `Equipment.qrCode` oficial;
   o PDF e o Preview consomem o mesmo componente do Blueprint.
 - `DocumentAssetResolver` é a única camada que gera e resolve o QR; Builder e Renderer não acessam

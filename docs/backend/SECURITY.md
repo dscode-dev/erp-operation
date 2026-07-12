@@ -1,7 +1,19 @@
 # Security
 
+## Product Backlog Closure 07 — segurança dos workflows
+
+- navegação aplica `canReports`; backend mantém JWT, RoleGuard e restrição OWNER para RECEIPT;
+- relacionamentos são validados pelos serviços oficiais;
+- fotos e assinatura coletada usam validadores binários e limites existentes;
+- templates/assinaturas inválidos falham de forma controlada;
+- nenhum `storageKey`, path, token ou URL pública é exposto;
+- stale detection permanece obrigatória;
+- a fixture AppSec de Assignment passou a criar sua própria Organization, removendo dependência de ordem entre suítes.
+
 ## DC-01.2 — QR e assinatura técnica
 
+- `FIXED` tem precedência sobre flags legadas de execução, evitando exposição acidental de artefato
+  coletado ou de campo de assinatura não solicitado;
 - o QR é gerado somente de payload persistido em `Equipment.qrCode`, limitado a 500 caracteres;
 - geração usa PNG, margem segura e correção de erro; nenhum path ou storage key é exposto;
 - o QR não concede autorização: o lookup e o equipamento continuam protegidos por JWT/RBAC;

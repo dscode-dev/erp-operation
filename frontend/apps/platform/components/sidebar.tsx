@@ -6,7 +6,6 @@ import { useState } from "react";
 import {
   LayoutDashboard,
   Calendar,
-  Briefcase,
   ClipboardCheck,
   Users,
   Wrench,
@@ -61,13 +60,8 @@ const groups: NavGroup[] = [
       { label: "Clientes", href: "/clientes", icon: Users },
       { label: "Equipamentos", href: "/equipamentos", icon: Wrench },
       { label: "Produtos", href: "/produtos", icon: Package },
+      { label: "Modelos de Relatórios", href: "/report-templates", icon: BarChart3, permission: "canReports" },
       //{ label: "Fornecedores", href: "/produtos?tab=suppliers", icon: Briefcase, roles: ["OWNER", "MANAGER"] },
-    ],
-  },
-  {
-    label: "Financeiro",
-    items: [
-      { label: "Financeiro", href: "/financial", icon: Wallet, permission: "canFinancial" },
     ],
   },
   {
@@ -79,7 +73,8 @@ const groups: NavGroup[] = [
   {
     label: "Gestão",
     items: [
-      { label: "Relatórios", href: "/reports", icon: BarChart3, permission: "canReports" },
+      { label: "Central de Relatórios", href: "/reports", icon: BarChart3, permission: "canReports" },
+      { label: "Financeiro", href: "/financial", icon: Wallet, permission: "canFinancial" },
       { label: "Orçamentos", href: "/budgets", icon: ReceiptText, roles: ["OWNER", "MANAGER"] },
       { label: "Usuários", href: "/usuarios", icon: Shield, roles: ["OWNER", "MANAGER", "VIEWER"] },
     ],

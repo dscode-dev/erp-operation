@@ -43,7 +43,8 @@ export class DocumentRendererService {
     const x = DOCUMENT_PAGE.marginLeft;
     const width = this.layout.contentWidth();
 
-    for (const section of blueprint.sections) {
+    for (const [sectionIndex, section] of blueprint.sections.entries()) {
+      if (sectionIndex > 0) y -= 10;
       const sectionHeader = this.sectionHeader(section.title, blueprint.metadata.organization.primaryColor);
       const firstBlockHeight = section.components[0] ? (this.blocks(section.components[0], width)[0]?.height ?? 0) : 0;
       if (this.layout.shouldBreak(y, sectionHeader.height + firstBlockHeight)) {
@@ -73,7 +74,12 @@ export class DocumentRendererService {
           y -= block.height;
         }
       }
-      y -= 8;
+      y -= 10;
+      if (section.pageBreakAfter && sectionIndex < blueprint.sections.length - 1) {
+        current = this.newPage(blueprint, pages.length + 1);
+        pages.push(current);
+        y = this.layout.contentTop();
+      }
     }
 
     if (pages.length > DOCUMENT_MAX_PAGES) {
@@ -214,11 +220,13 @@ export class DocumentRendererService {
       component,
       height: item.note ? 30 : 18,
       draw: (x, y, width) => [
-        { type: 'rect', x, y: y - 12, width: 9, height: 9 },
+        { type: 'rect', x, y: y - 12, width: 9, height: 9, strokeColor: item.done ? '#0f766e' : '#94a3b8' },
         ...(item.done
           ? [
-              { type: 'line' as const, x1: x + 2, y1: y - 8, x2: x + 4, y2: y - 11 },
-              { type: 'line' as const, x1: x + 4, y1: y - 11, x2: x + 8, y2: y - 3 },
+              { type: 'line' as const, x1: x + 1.5, y1: y - 7, x2: x + 4, y2: y - 10, color: '#0f766e' },
+              { type: 'line' as const, x1: x + 1.5, y1: y - 6.5, x2: x + 4, y2: y - 9.5, color: '#0f766e' },
+              { type: 'line' as const, x1: x + 4, y1: y - 10, x2: x + 8.5, y2: y - 3, color: '#0f766e' },
+              { type: 'line' as const, x1: x + 4, y1: y - 9.5, x2: x + 8.5, y2: y - 2.5, color: '#0f766e' },
             ]
           : []),
         {
@@ -465,7 +473,8 @@ export class DocumentRendererService {
 
   private newPage(blueprint: DocumentBlueprint, pageNumber: number): RenderedPage {
     const logo = blueprint.header.logo;
-    const headerTextX = DOCUMENT_PAGE.marginLeft + (logo ? 82 : 0);
+    const headerTextX = DOCUMENT_PAGE.marginLeft + (logo ? 78 : 0);
+    const organizationX = DOCUMENT_PAGE.width - DOCUMENT_PAGE.marginRight - 150;
     return {
       pageNumber,
       elements: [
@@ -507,39 +516,47 @@ export class DocumentRendererService {
         {
           type: 'text',
           x: headerTextX,
-          y: DOCUMENT_PAGE.height - 34,
-          text: blueprint.header.organizationName,
-          size: 11,
-          bold: true,
-        },
-        {
-          type: 'text',
-          x: headerTextX,
-          y: DOCUMENT_PAGE.height - 50,
+          y: DOCUMENT_PAGE.height - 35,
           text: blueprint.header.title,
           size: 16,
           bold: true,
         },
         {
           type: 'text',
-          x: DOCUMENT_PAGE.width - 190,
-          y: DOCUMENT_PAGE.height - 66,
+          x: headerTextX,
+          y: DOCUMENT_PAGE.height - 50,
+          text: blueprint.header.subtitle ?? blueprint.header.documentNumber,
+          size: 8,
+          color: '#64748b',
+        },
+        {
+          type: 'text',
+          x: headerTextX,
+          y: DOCUMENT_PAGE.height - 63,
           text: blueprint.header.documentNumber,
-          size: 10,
+          size: 8,
           bold: true,
         },
         {
           type: 'text',
-          x: DOCUMENT_PAGE.width - 260,
-          y: DOCUMENT_PAGE.height - 30,
+          x: organizationX,
+          y: DOCUMENT_PAGE.height - 32,
+          text: blueprint.header.organizationName,
+          size: 9,
+          bold: true,
+        },
+        {
+          type: 'text',
+          x: organizationX,
+          y: DOCUMENT_PAGE.height - 45,
           text: blueprint.metadata.organization.address,
           size: 7,
         },
         {
           type: 'text',
-          x: DOCUMENT_PAGE.width - 260,
-          y: DOCUMENT_PAGE.height - 42,
-          text: `${blueprint.metadata.organization.phone} · ${blueprint.metadata.organization.email}${blueprint.metadata.organization.website ? ` · ${blueprint.metadata.organization.website}` : ''}`,
+          x: organizationX,
+          y: DOCUMENT_PAGE.height - 57,
+          text: `${blueprint.metadata.organization.phone} · ${blueprint.metadata.organization.email}`,
           size: 7,
         },
         {

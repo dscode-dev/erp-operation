@@ -1,6 +1,16 @@
 # API Contracts
 
+## Product Backlog Closure 07 — workflows documentais
+
+Não foram criados contratos HTTP novos. A Central orquestra `POST/PATCH /operations`, endpoints de MaintenanceExecution para PMOC, configuração por tipo, preview/render/download e `GET /documents`.
+
+Semântica reutilizada: `reportedIssue` representa objetivo/diagnóstico/referência; `serviceDescription` representa atividades/análise/medições/dados do recebimento; `observations` representa observações/conclusão/pendências. DTOs e limites existentes permanecem inalterados.
+
 ## DC-01.2 — Blueprint visual e QR real
+
+`DocumentSection.pageBreakAfter` é um campo aditivo usado pela WORK_ORDER para indicar a quebra
+preferencial após Equipamento. Em `SignatureMode.FIXED`, o componente contém exclusivamente as
+assinaturas institucionais configuradas; flags de execução não acrescentam placeholders.
 
 Os endpoints existentes de preview/render/download não mudaram. Em `WORK_ORDER`, o componente
 `qrCode` agora inclui `image: { mimeType: "image/png", contentBase64, fileSize }`, além de `label` e

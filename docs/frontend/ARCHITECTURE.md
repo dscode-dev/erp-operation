@@ -1,6 +1,15 @@
 # ARCHITECTURE — Frontend
 
+## Product Backlog Closure 07
+
+`ReportWorkflowDrawer → Operation/MaintenanceExecution → configuração por tipo → DocumentViewer → Preview/Render/Download → GET /documents`.
+
+O wizard apenas orquestra domínios oficiais. Não possui renderer, PDF engine, template local, política local de assinatura ou repositório próprio.
+
 ## DC-01.2
+
+Orientações de paginação permanecem no Blueprint/LayoutEngine; o frontend não introduz regras
+específicas para a Ordem de Serviço.
 
 `DocumentVisualStyle` é um contrato aditivo do Blueprint e não uma folha de estilo documental
 paralela. O Viewer traduz os mesmos tokens e componentes consumidos pelo Renderer PDF. QR e

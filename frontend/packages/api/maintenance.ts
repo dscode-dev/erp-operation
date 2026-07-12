@@ -49,3 +49,17 @@ export function listMaintenanceExecutions(
   const { signal, ...query } = params ?? {};
   return api.get<Paginated<MaintenanceExecution>>(`/maintenance-plans/${planId}/executions`, { query, signal });
 }
+
+export function createMaintenanceExecution(
+  planId: string,
+  payload: { scheduledAt?: string; notes?: string | null },
+): Promise<MaintenanceExecution> {
+  return api.post<MaintenanceExecution>(`/maintenance-plans/${planId}/executions`, payload);
+}
+
+export function updateMaintenanceExecution(
+  id: string,
+  payload: Partial<Pick<MaintenanceExecution, "operationId" | "scheduledAt" | "executedAt" | "status" | "notes">>,
+): Promise<MaintenanceExecution> {
+  return api.patch<MaintenanceExecution>(`/maintenance-executions/${id}`, payload);
+}

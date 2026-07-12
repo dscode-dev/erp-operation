@@ -1,5 +1,14 @@
 # ROUTES — Frontend
 
+## Product Backlog Closure 07
+
+- `/reports`: Central de Relatórios.
+- `/report-templates`: Modelos de Relatórios, sem emissão.
+- `/reports/visita`: redirect para `/reports`.
+- `/documentos`: inalterado.
+- `/financial`: mesma página, agrupada em Gestão.
+- `/settings`: seção Documentos removida.
+
 ## DC-01.2
 
 Sem novas rotas. `/operacoes` e `/documentos` continuam abrindo o mesmo `DocumentViewer`; Preview,

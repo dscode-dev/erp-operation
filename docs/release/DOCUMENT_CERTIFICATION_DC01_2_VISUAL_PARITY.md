@@ -9,6 +9,17 @@ A Ordem de Serviço usa um único `DocumentBlueprint` para Preview e PDF. O QR a
 real gerada do payload persistido do equipamento. A política `HYBRID` entrega a assinatura técnica
 exata configurada no template e a assinatura coletada na execução.
 
+## Refinamento de layout
+
+- cabeçalho do PDF reorganizado no mesmo padrão do Preview: logo, título/subtítulo/número à esquerda
+  e organização/contato à direita;
+- margens verticais entre seções ampliadas;
+- primeira página da WORK_ORDER limitada preferencialmente a Identificação, Cliente e Equipamento;
+- conteúdo subsequente continua fluindo pelo LayoutEngine e abre páginas adicionais quando preciso;
+- checklist concluído possui marca de check gráfica no PDF;
+- modo `FIXED` foi verificado em runtime com uma única assinatura institucional e nenhuma assinatura
+  coletada ou placeholder adicional.
+
 ## Inspeção e decisões
 
 | Tema | Antes | Decisão certificada |

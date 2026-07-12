@@ -20,6 +20,7 @@ const username = 'runtimeclosure061';
 const password = `Rt!${randomBytes(18).toString('base64url')}`;
 const signatureBase64 = visibleSignaturePng().toString('base64');
 const scheduledFor = '2026-07-15T13:30:00.000Z';
+const signatureMode = process.env.ORBIT_RUNTIME_SIGNATURE_MODE === 'FIXED' ? 'FIXED' : 'HYBRID';
 
 function visibleSignaturePng() {
   const width = 320;
@@ -149,7 +150,15 @@ try {
   }
   await api(`/organization/templates/${workOrderTemplate.id}`, {
     method: 'PATCH', headers: authorization,
-    body: JSON.stringify({ requiresSignature: true, signatureMode: 'HYBRID', signatureId: institutionalSignature.id, institutionalSignatureIds: [institutionalSignature.id], executionSignatureClient: true }),
+    body: JSON.stringify({
+      requiresSignature: true,
+      signatureMode,
+      signatureId: institutionalSignature.id,
+      institutionalSignatureIds: [institutionalSignature.id],
+      executionSignatureClient: signatureMode === 'HYBRID',
+      executionSignatureTechnician: false,
+      executionSignatureOperator: false,
+    }),
   });
   await upload('/organization/assets', { type: 'LOGO' }, Buffer.from(signatureBase64, 'base64'), 'runtime-logo.png', authorization);
   const customers = await api('/customers?page=1&limit=1', { headers: authorization });
@@ -268,6 +277,7 @@ try {
     qrPayload: equipment.qrCode,
     qrLookupResolvedEquipment: equipmentFromQr.id === equipment.id,
     institutionalSignatureId: institutionalSignature.id,
+    signatureMode,
     institutionalSignaturePresent: Boolean(signature?.signatures?.some((item) => item.id === institutionalSignature.id && item.image)),
     executionSignaturePresent: Boolean(signature?.signatures?.some((item) => item.role === 'collected' && item.image)),
     signaturePersisted: Boolean(reloaded.signatureData),

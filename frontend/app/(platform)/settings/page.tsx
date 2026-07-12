@@ -13,18 +13,14 @@ import { AsyncBoundary } from "@erp/ui/states";
 import { useAuth, applyBranding } from "@erp/ui/auth/auth-provider";
 import {
   organizationApi,
-  documentsApi,
   signaturesApi,
   useQuery,
   ApiClientError,
   type BrandAssetType,
-  type DocumentConfiguration,
-  type DocumentTemplate,
   type Organization,
   type OrganizationSettings,
   type Signature,
 } from "@erp/api";
-import { DOCUMENT_KIND_LABEL } from "@erp/types";
 
 export default function SettingsPage() {
   const { hasRole } = useAuth();
@@ -32,8 +28,6 @@ export default function SettingsPage() {
 
   const org = useQuery<Organization>((signal) => organizationApi.getOrganization({ signal }), []);
   const settings = useQuery<OrganizationSettings>((signal) => organizationApi.getOrganizationSettings({ signal }), []);
-  const templates = useQuery<DocumentTemplate[]>((signal) => organizationApi.listTemplates({ signal }), []);
-  const documentConfig = useQuery<DocumentConfiguration[]>((signal) => documentsApi.listConfiguration({ signal }), []);
   const signatures = useQuery((signal) => signaturesApi.listSignatures({ limit: 100, signal }), []);
 
   return (
@@ -41,7 +35,7 @@ export default function SettingsPage() {
       <PageHeader
         eyebrow="Sistema"
         title="Configurações"
-        description="Identidade visual, dados da organização, parâmetros e modelos de documento."
+        description="Identidade visual, dados da organização e parâmetros gerais. Modelos documentais ficam em Cadastros."
         actions={!canEdit ? <StatusChip tone="info">Somente leitura</StatusChip> : undefined}
       />
 
@@ -53,14 +47,6 @@ export default function SettingsPage() {
 
       <AsyncBoundary loading={settings.loading} error={settings.error} data={settings.data} onRetry={settings.refetch} skeleton={<SkeletonCard />}>
         {(data) => <SettingsSection settings={data} canEdit={canEdit} onSaved={settings.refetch} />}
-      </AsyncBoundary>
-
-      <AsyncBoundary loading={templates.loading} error={templates.error} data={templates.data} onRetry={templates.refetch} skeleton={<SkeletonCard />}>
-        {(data) => <TemplatesSection templates={data} />}
-      </AsyncBoundary>
-
-      <AsyncBoundary loading={documentConfig.loading} error={documentConfig.error} data={documentConfig.data} onRetry={documentConfig.refetch} skeleton={<SkeletonCard />}>
-        {(data) => <DocumentConfigurationSection configurations={data} />}
       </AsyncBoundary>
 
       <AsyncBoundary loading={signatures.loading} error={signatures.error} data={signatures.data} onRetry={signatures.refetch} skeleton={<SkeletonCard />}>
@@ -248,33 +234,6 @@ function SettingsSection({ settings, canEdit, onSaved }: { settings: Organizatio
   );
 }
 
-/* ---------- Templates ---------- */
-
-function TemplatesSection({ templates }: { templates: DocumentTemplate[] }) {
-  return (
-    <SectionCard title="Modelos de documento" icon={FileText} description="Editor de modelos será disponibilizado em sprint futura.">
-      {templates.length === 0 ? (
-        <p className="text-sm text-[var(--color-muted-foreground)]">Nenhum modelo cadastrado.</p>
-      ) : (
-        <ul className="divide-y divide-[var(--color-border)] -my-1">
-          {templates.map((t) => (
-            <li key={t.id} className="flex items-center gap-3 py-2.5">
-              <FileText className="h-4 w-4 text-[var(--color-muted-foreground)]" />
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-medium truncate">{t.name}</div>
-                <div className="text-caption">{DOCUMENT_KIND_LABEL[t.type]}</div>
-              </div>
-              {t.isDefault && <StatusChip tone="primary">Padrão</StatusChip>}
-              {t.isSystem && <StatusChip tone="neutral">Sistema</StatusChip>}
-              <StatusChip tone={t.requiresSignature ? "info" : "neutral"}>{signatureModeLabel(t.signatureMode)}</StatusChip>
-            </li>
-          ))}
-        </ul>
-      )}
-    </SectionCard>
-  );
-}
-
 function RowText({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-start justify-between gap-4">
@@ -282,16 +241,6 @@ function RowText({ label, value }: { label: string; value: string }) {
       <dd className="text-right">{value}</dd>
     </div>
   );
-}
-
-function signatureModeLabel(mode: DocumentTemplate["signatureMode"]): string {
-  const labels: Record<DocumentTemplate["signatureMode"], string> = {
-    NONE: "Sem assinatura",
-    FIXED: "Assinatura fixa",
-    COLLECTED: "Coletada",
-    HYBRID: "Híbrida",
-  };
-  return labels[mode];
 }
 
 function SmallAction({
@@ -320,33 +269,6 @@ function SmallAction({
     >
       {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Icon className="h-3.5 w-3.5" />} {label}
     </button>
-  );
-}
-
-function DocumentConfigurationSection({ configurations }: { configurations: DocumentConfiguration[] }) {
-  return (
-    <SectionCard title="Documentos" icon={FileText} description="Configuração real consumida de /documents/configuration. Layout visual ainda não é editável.">
-      <div className="grid gap-3 md:grid-cols-2">
-        {configurations.map((config) => (
-          <div key={config.type} className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] p-3">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h3 className="text-sm font-semibold">{DOCUMENT_KIND_LABEL[config.type]}</h3>
-                <p className="text-caption">{config.templates.length} template(s) ativo(s)</p>
-              </div>
-              {config.defaultTemplate && <StatusChip tone="primary">Padrão</StatusChip>}
-            </div>
-            <dl className="mt-3 grid gap-2 text-sm">
-              <RowText label="Template padrão" value={config.defaultTemplate?.name ?? "—"} />
-              <RowText label="Assinatura" value={config.defaultTemplate ? signatureModeLabel(config.defaultTemplate.signatureMode) : "—"} />
-              <RowText label="Obrigatória" value={config.defaultTemplate?.requiresSignature ? "Sim" : "Não"} />
-              <RowText label="Assinatura fixa" value={config.defaultTemplate?.signature?.name ?? "—"} />
-              <RowText label="Componentes" value="Header · Footer · Sections · Signature placeholder" />
-            </dl>
-          </div>
-        ))}
-      </div>
-    </SectionCard>
   );
 }
 

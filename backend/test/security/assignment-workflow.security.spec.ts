@@ -1,6 +1,6 @@
 import { AssignmentEventType, AssignmentStatus, Role } from '@prisma/client';
 import { ERROR_CODES } from '../../src/shared/constants/error-codes.constants';
-import { createOperation, prisma } from '../integration/helpers';
+import { createOperation, createOrganization, prisma } from '../integration/helpers';
 import {
   authPatch,
   authPost,
@@ -27,6 +27,7 @@ describe('AppSec Assignment workflow abuse', () => {
 
   beforeEach(async () => {
     await resetSecurityState();
+    await createOrganization();
     owner = await createSecurityActor(Role.OWNER, 'assign-owner');
     operatorA = await createSecurityActor(Role.OPERATOR, 'assign-opa');
     operatorB = await createSecurityActor(Role.OPERATOR, 'assign-opb');

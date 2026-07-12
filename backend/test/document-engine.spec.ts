@@ -299,6 +299,26 @@ describe('DocumentEngine foundation', () => {
     expect(opinionSectionIds).not.toEqual(reportSectionIds);
   });
 
+  it.each([
+    [DocumentTemplateType.WORK_ORDER, 'work-order-identification'],
+    [DocumentTemplateType.TECHNICAL_REPORT, 'visit-objective'],
+    [DocumentTemplateType.TECHNICAL_OPINION, 'technical-opinion-findings'],
+    [DocumentTemplateType.PMOC, 'pmoc-compliance-context'],
+    [DocumentTemplateType.RECEIPT, 'receipt-reference'],
+  ])('builds and renders the official report-center workflow %s', async (type, expectedSection) => {
+    const context = operationContext(type);
+    const operation = context.operation as Record<string, unknown>;
+    operation.reportedIssue = 'Objetivo, diagnóstico ou referência oficial';
+    operation.serviceDescription = 'Análise, medição ou valor recebido oficial';
+    operation.observations = 'Conclusão e observações persistidas';
+    const built = (new DocumentBuilderService({} as never) as unknown as { buildFromContext: (ctx: unknown) => DocumentBlueprint }).buildFromContext(context);
+    const rendered = renderer().render(built);
+    const pdf = await new PdfEngineService().create(rendered);
+    expect(built.sections.map((section) => section.id)).toContain(expectedSection);
+    expect(rendered.blueprint).toBe(built);
+    expect(pdf.buffer.subarray(0, 5).toString('latin1')).toBe('%PDF-');
+  });
+
   it('certifies Work Order semantic order and keeps the same Blueprint for preview and PDF render', async () => {
     const context = operationContext(DocumentTemplateType.WORK_ORDER);
     const operation = context.operation as Record<string, unknown>;
@@ -312,12 +332,16 @@ describe('DocumentEngine foundation', () => {
       'work-order-identification', 'work-order-customer', 'equipment', 'work-order-reported-issue',
       'work-order-services', 'checklist-checklist-da-execucao', 'observations-observacoes-e-resultado-operacional',
     ]);
+    expect(workOrder.sections.find((section) => section.id === 'equipment')?.pageBreakAfter).toBe(true);
     const rendered = renderer().render(workOrder);
     const pdf = await new PdfEngineService().create(rendered);
     expect(rendered.blueprint).toBe(workOrder);
     expect(rendered.pages[0]?.elements.some((element) => element.type === 'image')).toBe(true);
     const checklistPage = rendered.pages.find((page) => page.elements.some((element) => element.type === 'text' && element.text === 'Checklist da execução'));
     expect(checklistPage?.elements.some((element) => element.type === 'text' && element.text.includes('Inspeção visual'))).toBe(true);
+    expect(checklistPage?.elements.filter((element) => element.type === 'line' && element.color === '#0f766e')).toHaveLength(4);
+    expect(rendered.pages[0]?.elements.some((element) => element.type === 'text' && element.text === 'Defeito ou solicitação informada')).toBe(false);
+    expect(rendered.pages[1]?.elements.some((element) => element.type === 'text' && element.text === 'Defeito ou solicitação informada')).toBe(true);
     expect(pdf.buffer.subarray(0, 5).toString('latin1')).toBe('%PDF-');
     expect(JSON.stringify(workOrder)).toContain('temperatura elevada — equipamento');
   });
@@ -391,9 +415,10 @@ describe('DocumentEngine foundation', () => {
   it('resolves the exact institutional signature configured by the WORK_ORDER template', async () => {
     const base = operationContext(DocumentTemplateType.WORK_ORDER);
     const operation = base.operation as Record<string, unknown>;
-    operation.signatureData = null;
+    operation.signatureData = `data:image/png;base64,${ONE_PIXEL_PNG}`;
+    operation.signedAt = new Date();
     const institutional = { id: '7db71471-0cf4-4414-8d06-83eb9c1917c1', name: 'Responsável Técnica', title: 'Engenheira Mecânica', professionalCouncil: 'CREA-PE 123', department: 'Engenharia', imageStorageKey: 'signatures/technical.png', mimeType: 'image/png', fileSize: 68, active: true, deletedAt: null };
-    const configuration = { ...base.configuration, defaultTemplate: { id: 'template', organizationId: 'organization', type: 'WORK_ORDER', name: 'OS', headerContent: '', footerContent: '', observations: '', isDefault: true, isSystem: true, isActive: true, requiresSignature: true, signatureMode: 'FIXED', signatureId: institutional.id, executionSignatureClient: false, executionSignatureTechnician: false, executionSignatureOperator: false, createdAt: new Date(), updatedAt: new Date(), signature: institutional, institutionalSignatures: [{ position: 0, signature: institutional }] } };
+    const configuration = { ...base.configuration, defaultTemplate: { id: 'template', organizationId: 'organization', type: 'WORK_ORDER', name: 'OS', headerContent: '', footerContent: '', observations: '', isDefault: true, isSystem: true, isActive: true, requiresSignature: true, signatureMode: 'FIXED', signatureId: institutional.id, executionSignatureClient: true, executionSignatureTechnician: true, executionSignatureOperator: true, createdAt: new Date(), updatedAt: new Date(), signature: institutional, institutionalSignatures: [{ position: 0, signature: institutional }] } };
     const context = new DocumentContextService(
       { operation: { findUnique: jest.fn().mockResolvedValue(operation) }, brandAsset: { findFirst: jest.fn().mockResolvedValue(null) } } as never,
       { getConfigurationForType: jest.fn().mockResolvedValue(configuration) } as never,
@@ -403,7 +428,9 @@ describe('DocumentEngine foundation', () => {
     const built = (new DocumentBuilderService({} as never) as unknown as { buildFromContext: (ctx: unknown) => DocumentBlueprint }).buildFromContext(created);
     const component = built.sections.flatMap((section) => section.components).find((item) => item.kind === 'signature');
     expect(created.signature.institutionalSignatures[0]?.id).toBe(institutional.id);
+    expect(created.signature.executionSignatures).toHaveLength(0);
     expect(component && 'signatures' in component ? component.signatures[0] : null).toMatchObject({ id: institutional.id, label: 'Responsável técnico', name: institutional.name });
+    expect(component && 'signatures' in component ? component.signatures : []).toHaveLength(1);
   });
 
   it('hydrates persisted operation photos into image blueprint components', async () => {

@@ -1,6 +1,14 @@
 # Frontend Integration
 
+## Product Backlog Closure 07 — Central de Relatórios
+
+Use `/reports` como orquestrador dos workflows e `/report-templates` somente para modelos. Antes do preview, consulte a configuração por tipo; o backend continua sendo a autoridade para template, branding e assinatura. Após render, atualize `GET /documents`: o `OperationDocument` já estará no repositório. Para PMOC, vincule a Operation a uma MaintenanceExecution. RECEIPT mantém acesso exclusivo de OWNER.
+
 ## DC-01.2 — QR e paridade da Work Order
+
+Em modo `FIXED`, não espere itens `collected`: apenas as assinaturas institucionais configuradas são
+retornadas. `pageBreakAfter` é uma orientação de paginação do Blueprint, não uma nova regra de
+negócio.
 
 O frontend deve renderizar `qrCode.image` recebido no Blueprint e nunca fabricar QR a partir do
 texto. Para navegação/scanner, envie `qrCode.value` ao lookup oficial. `DocumentViewer` usa os tokens

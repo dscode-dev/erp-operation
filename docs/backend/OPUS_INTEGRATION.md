@@ -1,5 +1,13 @@
 # OPUS Frontend Integration
 
+## Product Backlog Closure 07
+
+- `/reports`: Central de Relatórios e workflows reais.
+- `/report-templates`: modelos, sem emissão.
+- `/documentos`: repositório preservado.
+- O wizard usa Operation, MaintenanceExecution para PMOC, configuração por tipo e o DocumentViewer oficial.
+- Tipos: WORK_ORDER, TECHNICAL_REPORT, TECHNICAL_OPINION, PMOC e RECEIPT; BUDGET permanece em `/budgets`.
+
 ## Product Backlog Closure 05 — Reports and signature consistency
 
 Use somente `DocumentViewer` para modelo, preview real, renderização e download.

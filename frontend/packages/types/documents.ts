@@ -115,6 +115,7 @@ export type DocumentBlueprint = {
     id: string;
     title: string;
     critical?: boolean;
+    pageBreakAfter?: boolean;
     components: DocumentComponent[];
   }>;
 };

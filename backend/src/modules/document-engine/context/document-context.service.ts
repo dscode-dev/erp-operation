@@ -418,14 +418,17 @@ export class DocumentContextService {
   ): Promise<DocumentSignatureContext> {
     const mode = template?.signatureMode ?? SignatureMode.NONE;
     const executionSignature = this.resolveExecutionSignature(operation);
+    const acceptsExecutionSignatures = mode !== SignatureMode.FIXED;
     const clientEnabled = Boolean(
-      template?.executionSignatureClient || mode === SignatureMode.COLLECTED || mode === SignatureMode.HYBRID ||
-      (mode === SignatureMode.NONE && executionSignature),
+      acceptsExecutionSignatures && (
+        template?.executionSignatureClient || mode === SignatureMode.COLLECTED || mode === SignatureMode.HYBRID ||
+        (mode === SignatureMode.NONE && executionSignature)
+      ),
     );
     const executionSignatures: DocumentSignatureContext['executionSignatures'] = [
       ...(clientEnabled ? [{ role: 'client' as const, label: 'Assinatura do cliente/responsável', name: null, title: null, signedAt: operation?.signedAt?.toISOString() ?? null, caption: executionSignature ? 'Assinatura coletada na execução' : 'Espaço reservado para assinatura do cliente', image: executionSignature?.image ?? null }] : []),
-      ...(template?.executionSignatureTechnician ? [{ role: 'technician' as const, label: 'Assinatura do técnico', name: operation?.operator?.name ?? null, title: operation?.operator?.jobTitle ?? null, signedAt: null, caption: 'Espaço reservado para assinatura do técnico', image: null }] : []),
-      ...(template?.executionSignatureOperator ? [{ role: 'operator' as const, label: 'Assinatura do operador', name: operation?.operator?.name ?? null, title: operation?.operator?.jobTitle ?? null, signedAt: null, caption: 'Espaço reservado para assinatura do operador', image: null }] : []),
+      ...(acceptsExecutionSignatures && template?.executionSignatureTechnician ? [{ role: 'technician' as const, label: 'Assinatura do técnico', name: operation?.operator?.name ?? null, title: operation?.operator?.jobTitle ?? null, signedAt: null, caption: 'Espaço reservado para assinatura do técnico', image: null }] : []),
+      ...(acceptsExecutionSignatures && template?.executionSignatureOperator ? [{ role: 'operator' as const, label: 'Assinatura do operador', name: operation?.operator?.name ?? null, title: operation?.operator?.jobTitle ?? null, signedAt: null, caption: 'Espaço reservado para assinatura do operador', image: null }] : []),
     ];
     const executionSignatureApplies = executionSignatures.length > 0;
     const effectiveMode = executionSignatureApplies

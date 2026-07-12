@@ -1,7 +1,20 @@
 # COMPONENTS — Frontend
 
+## Product Backlog Closure 07
+
+| Componente | Responsabilidade |
+|---|---|
+| `ReportCenterPage` | dashboard, filtros, histórico e workflows |
+| `ReportWorkflowDrawer` | criação/edição: Origem → Conteúdo → Evidências → Preview |
+| `OriginStep` | Operation, cliente, equipamento, responsável e PMOC |
+| `ContentStep` | campos semânticos por tipo |
+| `EvidenceStep` | checklist, fotos e `SignaturePad` |
+| `DocumentViewer` | único preview/render/download |
+
 ## DC-01.2
 
+- `DocumentViewer` continua sendo o único consumidor frontend; a quebra preferencial é entregue pelo
+  Blueprint e aplicada pelo Renderer PDF oficial.
 - `DocumentViewer`: passou a consumir `blueprint.visualStyle`, renderizar `QrCodeComponent.image`,
   respeitar larguras de tabela e representar checklist/assinaturas com semântica equivalente ao PDF.
 - Nenhum componente específico de Work Order ou renderer alternativo foi adicionado.

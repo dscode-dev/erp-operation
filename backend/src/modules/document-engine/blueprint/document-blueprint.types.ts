@@ -162,6 +162,7 @@ export interface DocumentSection {
   id: string;
   title: string;
   critical?: boolean;
+  pageBreakAfter?: boolean;
   components: DocumentBlueprintComponent[];
 }
 

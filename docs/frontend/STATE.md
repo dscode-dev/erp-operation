@@ -1,7 +1,18 @@
 # STATE — Frontend
 
+## Product Backlog Closure 07 — Central de Relatórios
+
+- `/reports` virou a Central oficial com dashboard, histórico, filtros e wizard em quatro etapas.
+- documentos com origem Operation podem reabrir o wizard para edição dos dados e novo render.
+- `/report-templates` recebeu a biblioteca exclusivamente administrativa.
+- `/reports/visita` redireciona para a Central; o fluxo duplicado foi removido.
+- Financeiro foi movido para Gestão; Documentos permaneceu em Operação.
+- Configurações não replica mais Templates/Document Configuration.
+- Browser real confirmou menus, cinco cards, wizard e separação de responsabilidades.
+
 ## DC-01.2 — Preview/PDF parity
 
+- o contrato reconhece a quebra preferencial de seção após Equipamento, preservando compatibilidade;
 - `DocumentViewer` renderiza a imagem QR oficial do Blueprint, sem placeholder textual.
 - tokens visuais do Blueprint alinham Preview e PDF para cores, tipografia e espaçamento.
 - metadados, larguras de tabela, checklist e assinaturas foram aproximados do Renderer oficial.

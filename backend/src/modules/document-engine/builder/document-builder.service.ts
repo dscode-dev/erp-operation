@@ -347,7 +347,7 @@ export class DocumentBuilderService {
           ['Endereço', address ? this.address(address) : '—'],
         ])],
       },
-      operation.equipment ? this.equipmentSection(context) : null,
+      operation.equipment ? { ...this.equipmentSection(context), pageBreakAfter: true } : null,
       {
         id: 'work-order-reported-issue', title: 'Defeito ou solicitação informada',
         components: [{ id: 'work-order-reported-issue-text', kind: 'observation', text: this.clean(operation.reportedIssue || 'Não informado.'), keepTogether: true }],
@@ -368,6 +368,12 @@ export class DocumentBuilderService {
     const { operation } = context;
     const sections: DocumentSection[] = [
       {
+        id: 'visit-objective',
+        title: 'Objetivo da visita',
+        critical: true,
+        components: [{ id: 'visit-objective-text', kind: 'observation', text: this.clean(operation.reportedIssue || 'Objetivo não informado.'), keepTogether: true }],
+      },
+      {
         id: 'visit-timing',
         title: 'Dados da visita',
         critical: true,
@@ -382,6 +388,7 @@ export class DocumentBuilderService {
         ],
       },
       this.checklistSection(operation, 'Atividades verificadas'),
+      ...(operation.serviceDescription ? [{ id: 'visit-services', title: 'Serviços e atividades', components: [{ id: 'visit-services-text', kind: 'paragraph' as const, text: this.clean(operation.serviceDescription), keepTogether: true }] }] : []),
       this.materialsSection(operation),
       this.observationSection(operation, 'Diagnóstico e observações da visita'),
     ].filter((section): section is DocumentSection => Boolean(section));
@@ -451,12 +458,12 @@ export class DocumentBuilderService {
       },
       {
         id: 'technical-opinion-findings',
-        title: 'Constatações técnicas',
+        title: 'Diagnóstico',
         components: [
           {
             id: 'technical-opinion-findings-text',
             kind: 'observation',
-            text: this.clean(operation.observations || 'Sem observações técnicas estruturadas registradas na Operation.'),
+            text: this.clean(operation.reportedIssue || 'Diagnóstico técnico não registrado.'),
             keepTogether: true,
           },
         ],
@@ -470,7 +477,7 @@ export class DocumentBuilderService {
           {
             id: 'technical-opinion-analysis-text',
             kind: 'paragraph',
-            text: this.clean('Análise baseada exclusivamente nos dados registrados na Operation, checklist, materiais e evidências anexadas. A V1 não gera conclusões regulatórias automáticas.'),
+            text: this.clean(operation.serviceDescription || 'Análise baseada nos dados registrados na Operation, checklist, materiais e evidências anexadas.'),
             keepTogether: true,
           },
         ],
@@ -483,7 +490,7 @@ export class DocumentBuilderService {
           {
             id: 'technical-opinion-conclusion-text',
             kind: 'observation',
-            text: this.clean(operation.status === 'COMPLETED' ? 'Atendimento concluído conforme registros operacionais disponíveis.' : `Operation em status ${operation.status}; conclusão técnica definitiva não registrada.`),
+            text: this.clean(operation.observations || (operation.status === 'COMPLETED' ? 'Atendimento concluído conforme registros operacionais disponíveis.' : `Operation em status ${operation.status}; conclusão técnica definitiva não registrada.`)),
             keepTogether: true,
           },
         ],
@@ -513,8 +520,9 @@ export class DocumentBuilderService {
       },
       this.maintenanceSection(operation),
       this.pmocEnvironmentsSection(operation),
+      ...(operation.serviceDescription ? [{ id: 'pmoc-measurements', title: 'Medições', components: [{ id: 'pmoc-measurements-text', kind: 'observation' as const, text: this.clean(operation.serviceDescription), keepTogether: true }] }] : []),
       this.checklistSection(operation, 'Execução PMOC registrada'),
-      this.observationSection(operation, 'Observações PMOC'),
+      this.observationSection(operation, 'Pendências e conclusão'),
     ].filter((section): section is DocumentSection => Boolean(section));
     return sections;
   }
@@ -534,6 +542,17 @@ export class DocumentBuilderService {
             ['Concluído em', this.date(operation.completedAt)],
             ['Assinado em', this.date(operation.signedAt)],
             ['Status', operation.status],
+          ]),
+        ],
+      },
+      {
+        id: 'receipt-reference',
+        title: 'Referência e recebimento',
+        critical: true,
+        components: [
+          this.metadata('receipt-reference-metadata', [
+            ['Referência', operation.reportedIssue ?? '—'],
+            ['Detalhes do recebimento', operation.serviceDescription ?? '—'],
           ]),
         ],
       },
