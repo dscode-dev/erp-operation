@@ -1,5 +1,11 @@
 # ROUTES — Frontend
 
+## DC-01.2
+
+Sem novas rotas. `/operacoes` e `/documentos` continuam abrindo o mesmo `DocumentViewer`; Preview,
+render e download permanecem no Document Engine. O QR exibido na OS é o payload oficial do
+equipamento e o scanner continua resolvendo-o pela API existente.
+
 ## DC-01
 
 `/operacoes`, `/operator/atendimento` e `/documentos` preservam o fluxo Operation → WORK_ORDER →

@@ -1,5 +1,15 @@
 # Frontend Integration
 
+## DC-01.2 — QR e paridade da Work Order
+
+O frontend deve renderizar `qrCode.image` recebido no Blueprint e nunca fabricar QR a partir do
+texto. Para navegação/scanner, envie `qrCode.value` ao lookup oficial. `DocumentViewer` usa os tokens
+de `visualStyle` quando presentes e mantém defaults compatíveis para documentos históricos.
+
+Em template `HYBRID`, `signature.signatures` pode conter simultaneamente itens `institutional` e
+`collected`. Exiba na ordem entregue; não procure assinaturas, não reconstrua políticas e não leia
+`storageKey`.
+
 ## DC-01 — Work Order
 
 Ao criar/encerrar uma Operation, envie separadamente `reportedIssue`, `serviceDescription` e

@@ -1,5 +1,17 @@
 # API Contracts
 
+## DC-01.2 — Blueprint visual e QR real
+
+Os endpoints existentes de preview/render/download não mudaram. Em `WORK_ORDER`, o componente
+`qrCode` agora inclui `image: { mimeType: "image/png", contentBase64, fileSize }`, além de `label` e
+`value`. `value` permanece o payload oficial de `Equipment.qrCode`, resolvível por
+`GET /equipments/lookup/:qrCode`.
+
+O Blueprint pode retornar `visualStyle` com tokens de cor, tipografia e espaçamento. O campo é
+aditivo e retrocompatível. `signature.signatures[]` continua retornando somente a imagem resolvida e
+metadados públicos; a assinatura institucional configurada preserva `name`, `title`,
+`professionalCouncil` e `department` no texto do componente.
+
 ## DC-01 — campos da Work Order
 
 `POST /operations` e `PATCH /operations/:id` aceitam `reportedIssue?: string` (até 10.000) e

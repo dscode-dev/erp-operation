@@ -1,5 +1,12 @@
 # ARCHITECTURE — Frontend
 
+## DC-01.2
+
+`DocumentVisualStyle` é um contrato aditivo do Blueprint e não uma folha de estilo documental
+paralela. O Viewer traduz os mesmos tokens e componentes consumidos pelo Renderer PDF. QR e
+assinaturas chegam como assets resolvidos pelo backend; o frontend não acessa Storage, não gera QR
+e não interpreta a política do template.
+
 ## DC-01
 
 A especialização visual/semântica da OS reside no DocumentBuilder. O frontend apenas captura campos

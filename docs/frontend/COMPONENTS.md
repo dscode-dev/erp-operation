@@ -1,5 +1,11 @@
 # COMPONENTS — Frontend
 
+## DC-01.2
+
+- `DocumentViewer`: passou a consumir `blueprint.visualStyle`, renderizar `QrCodeComponent.image`,
+  respeitar larguras de tabela e representar checklist/assinaturas com semântica equivalente ao PDF.
+- Nenhum componente específico de Work Order ou renderer alternativo foi adicionado.
+
 ## DC-01
 
 - `OperationCreationDrawer`: campos semânticos de defeito, serviços e observações.

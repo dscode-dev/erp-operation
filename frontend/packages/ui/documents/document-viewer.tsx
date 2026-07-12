@@ -306,9 +306,10 @@ function Toolbar({
 }
 
 function DocumentPage({ blueprint, sections, page, total }: { blueprint: DocumentBlueprint; sections: DocumentBlueprint["sections"]; page: number; total: number }) {
+  const visual = blueprint.visualStyle;
   return (
-    <article className="mx-auto min-h-[1060px] w-[780px] bg-white text-slate-950 shadow-[var(--shadow-card)]">
-      <div className="h-2 bg-[var(--color-primary)]" />
+    <article className="mx-auto min-h-[1060px] w-[780px] bg-white text-slate-950 shadow-[var(--shadow-card)]" style={{ backgroundColor: visual?.colors.background, color: visual?.colors.text }}>
+      <div className="h-2" style={{ backgroundColor: visual?.colors.primary ?? "var(--color-primary)" }} />
       <div className="p-10">
         <header className="flex items-start justify-between gap-6 border-b border-slate-200 pb-5">
           <div className="flex items-start gap-4">
@@ -335,10 +336,10 @@ function DocumentPage({ blueprint, sections, page, total }: { blueprint: Documen
         <div className="mt-7 space-y-7">
           {sections.map((section) => (
             <section key={section.id}>
-              <h2 className="border-b border-slate-200 pb-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--color-primary)]">
+              <h2 className="border-b pb-1.5 text-xs font-semibold uppercase tracking-[0.12em]" style={{ color: visual?.colors.primary, borderColor: visual?.colors.border }}>
                 {section.title}
               </h2>
-              <div className="mt-3 space-y-3">{section.components.map((component) => <ComponentPreview key={component.id} component={component} />)}</div>
+              <div className="mt-3 space-y-3">{section.components.map((component) => <ComponentPreview key={component.id} component={component} visual={visual} />)}</div>
             </section>
           ))}
         </div>
@@ -351,10 +352,10 @@ function DocumentPage({ blueprint, sections, page, total }: { blueprint: Documen
   );
 }
 
-function ComponentPreview({ component }: { component: DocumentComponent }) {
+function ComponentPreview({ component, visual }: { component: DocumentComponent; visual?: DocumentBlueprint["visualStyle"] }) {
   if (component.kind === "metadata") {
     return (
-      <dl className="grid grid-cols-2 gap-x-8 gap-y-2 rounded-md border border-slate-200 bg-slate-50 p-4">
+      <dl className="grid grid-cols-2 gap-x-8 gap-y-2 rounded-md border p-4" style={{ borderColor: visual?.colors.border, backgroundColor: visual?.colors.surface }}>
         {component.items.map((item) => (
           <div key={`${component.id}-${item.label}`}>
             <dt className="text-[10px] uppercase tracking-wider text-slate-400">{item.label}</dt>
@@ -369,7 +370,7 @@ function ComponentPreview({ component }: { component: DocumentComponent }) {
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b text-left text-[10px] uppercase tracking-wider text-slate-400">
-            {component.columns.map((col) => <th key={col.key} className="py-2">{col.label}</th>)}
+            {component.columns.map((col) => <th key={col.key} className="py-2" style={{ width: col.width ? `${col.width * 100}%` : undefined }}>{col.label}</th>)}
           </tr>
         </thead>
         <tbody>
@@ -383,20 +384,24 @@ function ComponentPreview({ component }: { component: DocumentComponent }) {
     );
   }
   if (component.kind === "checklist") {
-    return <ul className="space-y-1 text-sm">{component.items.map((item, i) => <li key={i}>☐ {item.label}{item.note ? ` · ${item.note}` : ""}</li>)}</ul>;
+    return <ul className="space-y-2 text-sm">{component.items.map((item, i) => <li key={i} className="flex gap-2"><span className="font-mono">{item.done ? "☑" : "☐"}</span><span>{i + 1}. {item.label}{item.note ? <small className="block text-slate-500">{item.note}</small> : null}</span></li>)}</ul>;
   }
   if (component.kind === "list") {
     return <ul className="list-disc space-y-1 pl-5 text-sm">{component.items.map((item) => <li key={item}>{item}</li>)}</ul>;
   }
   if (component.kind === "qrCode") {
-    return <div className="rounded-md border border-dashed border-slate-300 p-4 text-sm"><strong>{component.label}</strong><br /><span className="font-mono text-xs">{component.value}</span></div>;
+    return <div className="flex items-center gap-4 rounded-md border border-slate-200 bg-slate-50 p-4 text-sm">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={`data:${component.image.mimeType};base64,${component.image.contentBase64}`} alt={component.label} className="h-32 w-32 shrink-0 bg-white object-contain [image-rendering:pixelated]" />
+      <div><strong className="block text-slate-900">{component.label}</strong><span className="mt-1 block font-mono text-[11px] text-slate-500">{component.value}</span><span className="mt-2 block text-xs text-slate-500">Escaneie para abrir o equipamento no fluxo oficial Orbit.</span></div>
+    </div>;
   }
   if (component.kind === "signaturePlaceholder") {
     return <div className="mt-10 border-t border-slate-400 pt-2 text-center text-sm">{component.label} · {component.strategy}</div>;
   }
   if (component.kind === "signature") {
     return (
-      <div className="grid gap-4 rounded-md border border-slate-200 p-4 sm:grid-cols-2">
+      <div className="grid gap-4 rounded-md border border-slate-200 p-4">
         {component.signatures.map((signature) => (
           <div key={signature.id} className="text-center">
             {signature.image ? (

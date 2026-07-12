@@ -9,6 +9,9 @@ import { DocumentContextService } from '../src/modules/document-engine/context/d
 import { OperationsService } from '../src/modules/operations/operations.service';
 import { DocumentEngineService } from '../src/modules/document-engine/document-engine.service';
 import type { RenderedDocument } from '../src/modules/document-engine/renderer/document-renderer.types';
+import { DocumentAssetResolver } from '../src/modules/document-engine/assets/document-asset-resolver.service';
+import { PNG } from 'pngjs';
+import { BinaryBitmap, HybridBinarizer, QRCodeReader, RGBLuminanceSource } from '@zxing/library';
 
 const ONE_PIXEL_PNG =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=';
@@ -105,6 +108,28 @@ describe('DocumentEngine foundation', () => {
     expect(result.pageCount).toBe(rendered.pages.length);
     expect(result.buffer.subarray(0, 5).toString('latin1')).toBe('%PDF-');
     expect(result.buffer.toString('latin1')).toContain('/Type /Page');
+  });
+
+  it('generates a scannable equipment QR and preserves the same image in Blueprint and PDF', async () => {
+    const payload = 'equipment:7de712a5-692a-481f-b080-189e518628c0';
+    const asset = await new DocumentAssetResolver({} as never).generateQrCode(payload);
+    const png = PNG.sync.read(Buffer.from(asset.contentBase64, 'base64'));
+    const luminance = new Uint8ClampedArray(png.width * png.height);
+    for (let index = 0; index < luminance.length; index += 1) {
+      const offset = index * 4;
+      luminance[index] = Math.round((png.data[offset] + 2 * png.data[offset + 1] + png.data[offset + 2]) / 4);
+    }
+    const source = new RGBLuminanceSource(luminance, png.width, png.height);
+    const decoded = new QRCodeReader().decode(new BinaryBitmap(new HybridBinarizer(source))).getText();
+    expect(decoded).toBe(payload);
+    const doc = blueprint(1);
+    doc.sections.push({ id: 'qr', title: 'QR', components: [{ id: 'equipment-qr', kind: 'qrCode', label: 'QR do equipamento', value: payload, image: { mimeType: 'image/png', fileSize: asset.fileSize, contentBase64: asset.contentBase64 } }] });
+    const rendered = renderer().render(doc);
+    const pdf = await new PdfEngineService().create(rendered);
+    const qr = doc.sections.at(-1)?.components[0];
+    expect(qr?.kind === 'qrCode' ? qr.image.contentBase64 : null).toBe(asset.contentBase64);
+    expect(rendered.pages.flatMap((page) => page.elements).some((element) => element.type === 'image' && element.contentBase64 === asset.contentBase64)).toBe(true);
+    expect(pdf.buffer.toString('latin1')).toContain('/Subtype /Image');
   });
 
   it('embeds a Unicode font without stripping Portuguese text and punctuation', async () => {
@@ -346,7 +371,7 @@ describe('DocumentEngine foundation', () => {
           },
         }),
       } as never,
-      {} as never,
+      { generateQrCode: jest.fn().mockResolvedValue({ storageKey: 'generated:qr', mimeType: 'image/png', fileSize: 68, contentBase64: ONE_PIXEL_PNG }) } as never,
     );
 
     const created = await context.create('operation-id', DocumentTemplateType.WORK_ORDER);
@@ -361,6 +386,24 @@ describe('DocumentEngine foundation', () => {
     expect(created.signature.collectedSignature?.image?.contentBase64).toBe(ONE_PIXEL_PNG);
     expect(signature).toBeDefined();
     expect(signature && 'signatures' in signature ? signature.signatures[0]?.image?.contentBase64 : null).toBe(ONE_PIXEL_PNG);
+  });
+
+  it('resolves the exact institutional signature configured by the WORK_ORDER template', async () => {
+    const base = operationContext(DocumentTemplateType.WORK_ORDER);
+    const operation = base.operation as Record<string, unknown>;
+    operation.signatureData = null;
+    const institutional = { id: '7db71471-0cf4-4414-8d06-83eb9c1917c1', name: 'Responsável Técnica', title: 'Engenheira Mecânica', professionalCouncil: 'CREA-PE 123', department: 'Engenharia', imageStorageKey: 'signatures/technical.png', mimeType: 'image/png', fileSize: 68, active: true, deletedAt: null };
+    const configuration = { ...base.configuration, defaultTemplate: { id: 'template', organizationId: 'organization', type: 'WORK_ORDER', name: 'OS', headerContent: '', footerContent: '', observations: '', isDefault: true, isSystem: true, isActive: true, requiresSignature: true, signatureMode: 'FIXED', signatureId: institutional.id, executionSignatureClient: false, executionSignatureTechnician: false, executionSignatureOperator: false, createdAt: new Date(), updatedAt: new Date(), signature: institutional, institutionalSignatures: [{ position: 0, signature: institutional }] } };
+    const context = new DocumentContextService(
+      { operation: { findUnique: jest.fn().mockResolvedValue(operation) }, brandAsset: { findFirst: jest.fn().mockResolvedValue(null) } } as never,
+      { getConfigurationForType: jest.fn().mockResolvedValue(configuration) } as never,
+      { generateQrCode: jest.fn().mockResolvedValue((base.assets as { qrCode: unknown }).qrCode), resolveSignature: jest.fn().mockResolvedValue({ storageKey: institutional.imageStorageKey, mimeType: 'image/png', fileSize: 68, contentBase64: ONE_PIXEL_PNG }) } as never,
+    );
+    const created = await context.create('operation', DocumentTemplateType.WORK_ORDER);
+    const built = (new DocumentBuilderService({} as never) as unknown as { buildFromContext: (ctx: unknown) => DocumentBlueprint }).buildFromContext(created);
+    const component = built.sections.flatMap((section) => section.components).find((item) => item.kind === 'signature');
+    expect(created.signature.institutionalSignatures[0]?.id).toBe(institutional.id);
+    expect(component && 'signatures' in component ? component.signatures[0] : null).toMatchObject({ id: institutional.id, label: 'Responsável técnico', name: institutional.name });
   });
 
   it('hydrates persisted operation photos into image blueprint components', async () => {
@@ -411,6 +454,7 @@ describe('DocumentEngine foundation', () => {
           fileSize: Buffer.from(ONE_PIXEL_PNG, 'base64').length,
           contentBase64: ONE_PIXEL_PNG,
         }),
+        generateQrCode: jest.fn().mockResolvedValue({ storageKey: 'generated:qr', mimeType: 'image/png', fileSize: 68, contentBase64: ONE_PIXEL_PNG }),
       } as never,
     );
 
@@ -587,7 +631,7 @@ function operationContext(type: DocumentTemplateType): Record<string, unknown> &
     },
     template: null,
     signature: { requiresSignature: false, signatureMode: 'NONE', signatureId: null, fixedSignature: null, institutionalSignatures: [], collectedSignature: null, executionSignatures: [] },
-    assets: { signature: null, logo: null, watermark: null, qrCode: null, images: [] },
+    assets: { signature: null, logo: null, watermark: null, qrCode: { storageKey: 'generated:qr', mimeType: 'image/png', fileSize: 68, contentBase64: ONE_PIXEL_PNG }, images: [] },
     operation: {
       id: '7db71471-0cf4-4414-8d06-83eb9c1917c9',
       number: 42,

@@ -34,7 +34,7 @@ export type DocumentComponent =
       image?: { mimeType: string; fileSize: number; contentBase64: string } | null;
       keepTogether?: boolean;
     }
-  | { id: string; kind: "qrCode"; label: string; value: string; keepTogether?: boolean }
+  | { id: string; kind: "qrCode"; label: string; value: string; image: { mimeType: "image/png"; fileSize: number; contentBase64: string }; keepTogether?: boolean }
   | {
       id: string;
       kind: "checklist";
@@ -106,6 +106,11 @@ export type DocumentBlueprint = {
     logo?: { mimeType: string; fileSize: number; contentBase64: string } | null;
   };
   footer: { content: string; generatedAt: string };
+  visualStyle?: {
+    colors: { primary: string; text: string; muted: string; border: string; surface: string; background: string };
+    typography: { title: number; section: number; body: number; label: number; caption: number };
+    spacing: { section: number; component: number; cardPadding: number };
+  };
   sections: Array<{
     id: string;
     title: string;

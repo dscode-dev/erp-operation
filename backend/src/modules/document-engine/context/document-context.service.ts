@@ -261,7 +261,7 @@ export class DocumentContextService {
 
     const template = configuration.defaultTemplate;
     const signature = await this.resolveSignature(template, operation);
-    const [images, logo] = await Promise.all([
+    const [images, logo, qrCode] = await Promise.all([
       Promise.all(operation.photos.map((photo) =>
         this.assets.resolveDocumentImage(photo.storageKey, {
           mimeType: photo.mimeType,
@@ -269,6 +269,7 @@ export class DocumentContextService {
         }),
       )),
       this.resolveLatestBrandAsset(configuration.organization.id, BrandAssetType.LOGO),
+      operation.equipment?.qrCode ? this.assets.generateQrCode(operation.equipment.qrCode) : Promise.resolve(null),
     ]);
 
     return {
@@ -281,7 +282,7 @@ export class DocumentContextService {
         signature: signature.fixedSignature?.image ?? null,
         logo,
         watermark: null,
-        qrCode: null,
+        qrCode,
         images,
       },
     };
@@ -417,8 +418,10 @@ export class DocumentContextService {
   ): Promise<DocumentSignatureContext> {
     const mode = template?.signatureMode ?? SignatureMode.NONE;
     const executionSignature = this.resolveExecutionSignature(operation);
-    const hasExplicitExecutionPolicy = Boolean(template && (template.executionSignatureClient || template.executionSignatureTechnician || template.executionSignatureOperator));
-    const clientEnabled = template?.executionSignatureClient || (!hasExplicitExecutionPolicy && Boolean(executionSignature));
+    const clientEnabled = Boolean(
+      template?.executionSignatureClient || mode === SignatureMode.COLLECTED || mode === SignatureMode.HYBRID ||
+      (mode === SignatureMode.NONE && executionSignature),
+    );
     const executionSignatures: DocumentSignatureContext['executionSignatures'] = [
       ...(clientEnabled ? [{ role: 'client' as const, label: 'Assinatura do cliente/responsável', name: null, title: null, signedAt: operation?.signedAt?.toISOString() ?? null, caption: executionSignature ? 'Assinatura coletada na execução' : 'Espaço reservado para assinatura do cliente', image: executionSignature?.image ?? null }] : []),
       ...(template?.executionSignatureTechnician ? [{ role: 'technician' as const, label: 'Assinatura do técnico', name: operation?.operator?.name ?? null, title: operation?.operator?.jobTitle ?? null, signedAt: null, caption: 'Espaço reservado para assinatura do técnico', image: null }] : []),

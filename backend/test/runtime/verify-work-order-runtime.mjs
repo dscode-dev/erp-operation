@@ -89,6 +89,16 @@ async function api(path, init = {}) {
   return body.data;
 }
 
+async function upload(path, fields, bytes, filename, authorization) {
+  const form = new FormData();
+  Object.entries(fields).forEach(([key, value]) => form.append(key, value));
+  form.append('file', new Blob([bytes], { type: 'image/png' }), filename);
+  const response = await fetch(`${apiBase}${path}`, { method: 'POST', headers: authorization, body: form });
+  const body = await response.json();
+  if (!response.ok || !body.success) throw new Error(`POST ${path} failed: ${response.status} ${JSON.stringify(body.error)}`);
+  return body.data;
+}
+
 try {
   const passwordHash = await argon2.hash(password, {
     type: argon2.argon2id,
@@ -123,12 +133,34 @@ try {
     body: JSON.stringify({ email, password }),
   });
   const authorization = { authorization: `Bearer ${login.accessToken}` };
+  const templates = await api('/organization/templates', { headers: authorization });
+  const workOrderTemplate = templates.find((template) => template.type === 'WORK_ORDER' && template.isDefault) ?? templates.find((template) => template.type === 'WORK_ORDER');
+  if (!workOrderTemplate) throw new Error('Active WORK_ORDER template was not found.');
+  const signaturePage = await api('/signatures?page=1&limit=100&search=Runtime', { headers: authorization });
+  let institutionalSignature = signaturePage.items.find((item) => item.name === 'Responsável Técnico Runtime');
+  if (!institutionalSignature) {
+    institutionalSignature = await api('/signatures', {
+      method: 'POST', headers: authorization,
+      body: JSON.stringify({ name: 'Responsável Técnico Runtime', title: 'Engenheiro Mecânico', professionalCouncil: 'CREA-PE 123456', department: 'Engenharia', active: true }),
+    });
+  }
+  if (!institutionalSignature.hasImage) {
+    institutionalSignature = await upload(`/signatures/${institutionalSignature.id}/upload`, {}, Buffer.from(signatureBase64, 'base64'), 'responsavel-tecnico.png', authorization);
+  }
+  await api(`/organization/templates/${workOrderTemplate.id}`, {
+    method: 'PATCH', headers: authorization,
+    body: JSON.stringify({ requiresSignature: true, signatureMode: 'HYBRID', signatureId: institutionalSignature.id, institutionalSignatureIds: [institutionalSignature.id], executionSignatureClient: true }),
+  });
+  await upload('/organization/assets', { type: 'LOGO' }, Buffer.from(signatureBase64, 'base64'), 'runtime-logo.png', authorization);
   const customers = await api('/customers?page=1&limit=1', { headers: authorization });
   const customer = customers.items[0];
   if (!customer) throw new Error('Local runtime database has no Customer fixture.');
   const customerDetail = await api(`/customers/${customer.id}`, { headers: authorization });
   const equipmentPage = await api(`/equipments?page=1&limit=1&customerId=${customer.id}`, { headers: authorization });
   const equipment = equipmentPage.items[0] ?? null;
+  if (!equipment) throw new Error('Local runtime database has no Equipment fixture with official QR.');
+  const equipmentFromQr = await api(`/equipments/lookup/${encodeURIComponent(equipment.qrCode)}`, { headers: authorization });
+  if (equipmentFromQr.id !== equipment.id) throw new Error('Official equipment QR payload did not resolve the expected Equipment.');
   const operation = await api('/operations', {
     method: 'POST',
     headers: authorization,
@@ -151,6 +183,37 @@ try {
       signatureData: `data:image/png;base64,${signatureBase64}`,
       signedAt: '2026-07-15T14:38:00.000Z',
     }),
+  });
+  let inventory = await api('/inventory?page=1&limit=1', { headers: authorization });
+  if (!inventory.items[0]) {
+    const products = await api('/products?page=1&limit=100&search=ORBIT-DC012', { headers: authorization });
+    let product = products.items.find((item) => item.sku === 'ORBIT-DC012');
+    if (!product) {
+      product = await api('/products', {
+        method: 'POST', headers: authorization,
+        body: JSON.stringify({
+          sku: 'ORBIT-DC012',
+          internalCode: 'DC012-MATERIAL',
+          name: 'Fluido refrigerante técnico',
+          unit: 'KG',
+          category: 'Refrigeração',
+          technicalDescription: 'Material local destinado exclusivamente à certificação runtime da Ordem de Serviço.',
+        }),
+      });
+    }
+    inventory = await api(`/inventory?page=1&limit=1&productId=${product.id}`, { headers: authorization });
+  }
+  const inventoryItem = inventory.items[0];
+  if (!inventoryItem?.productId) throw new Error('Could not resolve an InventoryItem for the runtime Work Order material.');
+  if (Number(inventoryItem.availableQuantity) < 0.001) {
+    await api('/inventory/movements', {
+      method: 'POST', headers: authorization,
+      body: JSON.stringify({ inventoryItemId: inventoryItem.id, quantity: 1, type: 'IN', reason: 'Entrada local para certificação DC-01.2' }),
+    });
+  }
+  await api(`/operations/${operation.id}/materials`, {
+    method: 'POST', headers: authorization,
+    body: JSON.stringify({ productId: inventoryItem.productId, inventoryItemId: inventoryItem.id, quantity: 0.001, notes: 'Material runtime DC-01.2' }),
   });
   let reloaded = await api(`/operations/${operation.id}`, { headers: authorization });
   let preview = await api(`/documents/operations/${operation.id}/WORK_ORDER/preview`, { headers: authorization });
@@ -199,7 +262,14 @@ try {
     sectionIds: preview.sections.map((section) => section.id),
     reportedIssuePresent: JSON.stringify(preview).includes('temperatura elevada'),
     serviceDescriptionPresent: JSON.stringify(preview).includes('Recarga de fluido refrigerante'),
+    materialPresent: JSON.stringify(preview).includes('Fluido refrigerante técnico'),
     organizationLogoPresent: Boolean(preview.header.logo),
+    qrImagePresent: Boolean(preview.sections.flatMap((section) => section.components).find((component) => component.kind === 'qrCode')?.image?.contentBase64),
+    qrPayload: equipment.qrCode,
+    qrLookupResolvedEquipment: equipmentFromQr.id === equipment.id,
+    institutionalSignatureId: institutionalSignature.id,
+    institutionalSignaturePresent: Boolean(signature?.signatures?.some((item) => item.id === institutionalSignature.id && item.image)),
+    executionSignaturePresent: Boolean(signature?.signatures?.some((item) => item.role === 'collected' && item.image)),
     signaturePersisted: Boolean(reloaded.signatureData),
     signedAt: reloaded.signedAt,
     signatureComponentPresent: Boolean(signature),

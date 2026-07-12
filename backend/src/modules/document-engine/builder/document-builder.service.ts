@@ -15,6 +15,7 @@ import type {
   DocumentBlueprint,
   DocumentBlueprintComponent,
   DocumentSection,
+  DocumentVisualStyle,
 } from '../blueprint/document-blueprint.types';
 import {
   DocumentContextService,
@@ -112,6 +113,7 @@ export class DocumentBuilderService {
         content: this.clean(`${organization.tradeName || organization.legalName} · ${this.organizationAddress(organization)} · ${organization.phone} · ${organization.email}${organization.website ? ` · ${organization.website}` : ''} · ${document.number} · Blueprint v1.0`),
         generatedAt,
       },
+      visualStyle: this.visualStyle(organization.primaryColor),
       sections,
     };
   }
@@ -163,6 +165,7 @@ export class DocumentBuilderService {
         content: this.clean(template.footerContent || `Modelo gerado por ${organization.tradeName}`),
         generatedAt,
       },
+      visualStyle: this.visualStyle(organization.primaryColor),
       sections,
     };
   }
@@ -216,6 +219,7 @@ export class DocumentBuilderService {
         content: this.clean(context.template?.footerContent || `Gerado por ${organization.tradeName} · ${organization.email}`),
         generatedAt,
       },
+      visualStyle: this.visualStyle(organization.primaryColor),
       sections,
     };
   }
@@ -307,7 +311,7 @@ export class DocumentBuilderService {
       },
     ];
 
-    if (operation.equipment) sections.push(this.equipmentSection(operation));
+    if (operation.equipment) sections.push(this.equipmentSection(context));
     return sections;
   }
 
@@ -343,7 +347,7 @@ export class DocumentBuilderService {
           ['Endereço', address ? this.address(address) : '—'],
         ])],
       },
-      operation.equipment ? this.equipmentSection(operation) : null,
+      operation.equipment ? this.equipmentSection(context) : null,
       {
         id: 'work-order-reported-issue', title: 'Defeito ou solicitação informada',
         components: [{ id: 'work-order-reported-issue-text', kind: 'observation', text: this.clean(operation.reportedIssue || 'Não informado.'), keepTogether: true }],
@@ -585,10 +589,15 @@ export class DocumentBuilderService {
     return sections;
   }
 
-  private equipmentSection(operation: DocumentContext['operation']): DocumentSection {
+  private equipmentSection(context: DocumentContext): DocumentSection {
+    const { operation } = context;
     const equipment = operation.equipment;
     if (!equipment) {
       throw new ApplicationException(ERROR_CODES.DOCUMENT_RENDER_FAILED, 'Equipment section requested without equipment', HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+    const qrCode = context.assets.qrCode;
+    if (!qrCode) {
+      throw new ApplicationException(ERROR_CODES.DOCUMENT_RENDER_FAILED, 'Equipment QR image could not be resolved', HttpStatus.CONFLICT);
     }
     return {
       id: 'equipment',
@@ -609,6 +618,7 @@ export class DocumentBuilderService {
           kind: 'qrCode',
           label: 'QR do equipamento',
           value: equipment.qrCode,
+          image: { mimeType: 'image/png', fileSize: qrCode.fileSize, contentBase64: qrCode.contentBase64 },
           keepTogether: true,
         },
       ],
@@ -1019,11 +1029,11 @@ export class DocumentBuilderService {
       signatures.push({
         id: institutional.id,
         role: 'fixed',
-        label: 'Assinatura institucional',
+        label: 'Responsável técnico',
         name: this.clean(institutional.name),
         title: this.clean([institutional.title, institutional.professionalCouncil, institutional.department].filter(Boolean).join(' · ')),
         signedAt: null,
-        caption: 'Assinatura institucional cadastrada',
+        caption: 'Responsável técnico',
         image: {
           mimeType: institutional.image.mimeType,
           fileSize: institutional.image.fileSize,
@@ -1120,6 +1130,14 @@ export class DocumentBuilderService {
       `${organization.city}/${organization.state}`,
       organization.zipCode ? `CEP ${organization.zipCode}` : null,
     ].filter(Boolean).join(' · '));
+  }
+
+  private visualStyle(primary: string): DocumentVisualStyle {
+    return {
+      colors: { primary, text: '#0f172a', muted: '#64748b', border: '#e2e8f0', surface: '#f8fafc', background: '#ffffff' },
+      typography: { title: 16, section: 13, body: 10, label: 9, caption: 8 },
+      spacing: { section: 8, component: 12, cardPadding: 8 },
+    };
   }
 
   private lines(value: string | null): string[] {

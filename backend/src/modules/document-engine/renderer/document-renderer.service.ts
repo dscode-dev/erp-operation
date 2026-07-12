@@ -124,23 +124,28 @@ export class DocumentRendererService {
   }
 
   private metadataBlock(component: MetadataComponent): LayoutBlock {
-    const height = 10 + component.items.length * LINE_HEIGHT;
+    const rows = Math.ceil(component.items.length / 2);
+    const height = 14 + rows * 32;
     return {
       component,
       height,
       draw: (x, y, width): RenderedElement[] => {
         const elements: RenderedElement[] = [{ type: 'rect', x, y: y - height + 4, width, height, fillColor: '#f8fafc', strokeColor: '#e2e8f0' }];
         component.items.forEach((item, index) => {
-          const lineY = y - 13 - index * LINE_HEIGHT;
+          const column = index % 2;
+          const row = Math.floor(index / 2);
+          const itemX = x + 10 + column * (width / 2);
+          const labelY = y - 12 - row * 32;
           elements.push({
             type: 'text',
-            x: x + 8,
-            y: lineY,
-            text: `${item.label}:`,
-            size: 9,
+            x: itemX,
+            y: labelY,
+            text: item.label.toUpperCase(),
+            size: 7,
             bold: true,
+            color: '#64748b',
           });
-          elements.push({ type: 'text', x: x + 120, y: lineY, text: item.value, size: 9 });
+          elements.push({ type: 'text', x: itemX, y: labelY - 13, text: item.value, size: 9, color: '#0f172a' });
         });
         return elements;
       },
@@ -348,19 +353,20 @@ export class DocumentRendererService {
   }
 
   private qrBlock(component: QrCodeComponent): LayoutBlock {
-    const height = 78;
+    const height = 112;
     return {
       component,
       height,
-      draw: (x, y) => [
-        { type: 'rect', x, y: y - 66, width: 62, height: 62 },
-        { type: 'text', x: x + 74, y: y - 14, text: component.label, size: 10, bold: true },
-        { type: 'text', x: x + 74, y: y - 30, text: component.value, size: 8 },
+      draw: (x, y, width) => [
+        { type: 'rect', x, y: y - 100, width, height: 104, fillColor: '#f8fafc', strokeColor: '#e2e8f0' },
+        { type: 'image', x: x + 8, y: y - 92, width: 88, height: 88, mimeType: component.image.mimeType, contentBase64: component.image.contentBase64 },
+        { type: 'text', x: x + 112, y: y - 22, text: component.label, size: 10, bold: true },
+        { type: 'text', x: x + 112, y: y - 40, text: component.value, size: 8 },
         {
           type: 'text',
-          x: x + 74,
-          y: y - 46,
-          text: 'QR Code lógico preparado no Blueprint.',
+          x: x + 112,
+          y: y - 56,
+          text: 'Escaneie para abrir o equipamento no fluxo oficial Orbit.',
           size: 8,
         },
       ],

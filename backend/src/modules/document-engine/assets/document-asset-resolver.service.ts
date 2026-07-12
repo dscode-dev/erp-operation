@@ -1,5 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
+// qrcode publishes a CommonJS entry point; import assignment keeps runtime interop deterministic.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+import QRCode = require('qrcode');
 import { DOCUMENT_STORAGE_PREFIX } from '../../../shared/constants/document-engine.constants';
 import { SIGNATURE_STORAGE_PREFIX } from '../../../shared/constants/signatures.constants';
 import {
@@ -79,6 +82,21 @@ export class DocumentAssetResolver {
   async resolveQrCode(storageKey: string, metadata: { mimeType: string; fileSize: number }): Promise<ResolvedAsset> {
     const stored = await this.storage.get(storageKey);
     return { storageKey, mimeType: metadata.mimeType, fileSize: metadata.fileSize, contentBase64: stored.content.toString('base64') };
+  }
+
+  async generateQrCode(payload: string): Promise<ResolvedAsset> {
+    const normalized = payload.trim();
+    if (!normalized || normalized.length > 500) throw new Error('Invalid QR payload');
+    const content = await QRCode.toBuffer(normalized, {
+      type: 'png', errorCorrectionLevel: 'M', margin: 4, width: 320,
+      color: { dark: '#0f172a', light: '#ffffff' },
+    });
+    return {
+      storageKey: `generated:equipment-qr:${normalized}`,
+      mimeType: 'image/png',
+      fileSize: content.length,
+      contentBase64: content.toString('base64'),
+    };
   }
 
   async resolveDocumentImage(storageKey: string, metadata: { mimeType: string; fileSize: number }): Promise<ResolvedAsset> {

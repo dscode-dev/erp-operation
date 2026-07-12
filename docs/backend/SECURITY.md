@@ -1,5 +1,16 @@
 # Security
 
+## DC-01.2 — QR e assinatura técnica
+
+- o QR é gerado somente de payload persistido em `Equipment.qrCode`, limitado a 500 caracteres;
+- geração usa PNG, margem segura e correção de erro; nenhum path ou storage key é exposto;
+- o QR não concede autorização: o lookup e o equipamento continuam protegidos por JWT/RBAC;
+- assinatura institucional é resolvida pela relação exata do template e deve estar ativa e possuir
+  imagem válida; ausência gera erro controlado;
+- assinatura coletada mantém validação MIME/magic bytes/limite já existente;
+- Builder recebe assets prontos pelo Context e não realiza consultas adicionais;
+- o teste runtime é bloqueado em produção e aceita apenas banco local explicitamente habilitado.
+
 ## DC-01 — Work Order
 
 - novos textos possuem limites de DTO e passam pela sanitização do Builder;

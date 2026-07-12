@@ -1,5 +1,13 @@
 # STATE — Frontend
 
+## DC-01.2 — Preview/PDF parity
+
+- `DocumentViewer` renderiza a imagem QR oficial do Blueprint, sem placeholder textual.
+- tokens visuais do Blueprint alinham Preview e PDF para cores, tipografia e espaçamento.
+- metadados, larguras de tabela, checklist e assinaturas foram aproximados do Renderer oficial.
+- runtime real confirmou QR, assinatura técnica configurada e assinatura coletada no Preview 3/3.
+- nenhuma rota ou fluxo documental paralelo foi criado.
+
 ## DC-01 — Work Order
 
 - criação de Operation coleta defeito, serviços e observações separadamente;

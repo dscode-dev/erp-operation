@@ -1,5 +1,18 @@
 # Backend State
 
+## DC-01.2 — paridade visual, QR real e assinatura técnica
+
+- `QrCodeComponent` passou a carregar a imagem PNG gerada a partir do `Equipment.qrCode` oficial;
+  o PDF e o Preview consomem o mesmo componente do Blueprint.
+- `DocumentAssetResolver` é a única camada que gera e resolve o QR; Builder e Renderer não acessam
+  Storage nem banco.
+- O Blueprint publica tokens visuais compartilhados; Viewer e PDF alinham cores, tipografia,
+  superfícies, metadados, tabelas, checklist e assinaturas.
+- `HYBRID` combina a assinatura institucional exata configurada no template com a assinatura
+  coletada da execução, incluindo nome, cargo, conselho e departamento.
+- Runtime local real confirmou equipamento via lookup do payload, material consumido, QR rasterizado
+  decodificável, duas assinaturas e PDF válido. Nenhuma migration foi criada.
+
 ## DC-01 — certificação da Ordem de Serviço
 
 - WORK_ORDER agora segue identificação → cliente → equipamento → defeito → serviços → checklist →

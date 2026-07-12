@@ -101,6 +101,13 @@ export interface QrCodeComponent extends BlueprintBaseComponent {
   kind: 'qrCode';
   label: string;
   value: string;
+  image: { mimeType: 'image/png'; fileSize: number; contentBase64: string };
+}
+
+export interface DocumentVisualStyle {
+  colors: { primary: string; text: string; muted: string; border: string; surface: string; background: string };
+  typography: { title: number; section: number; body: number; label: number; caption: number };
+  spacing: { section: number; component: number; cardPadding: number };
 }
 
 export interface ChecklistComponent extends BlueprintBaseComponent {
@@ -163,5 +170,6 @@ export interface DocumentBlueprint {
   metadata: DocumentMetadata;
   header: DocumentHeader;
   footer: DocumentFooter;
+  visualStyle?: DocumentVisualStyle;
   sections: DocumentSection[];
 }

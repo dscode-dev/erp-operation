@@ -70,15 +70,18 @@ try {
   await screenshot('/private/tmp/orbit-operation-drawer-06-1.png');
   await evaluate("(() => { const button = [...document.querySelectorAll('button')].find((item) => item.innerText.includes('OS-') && item.innerText.includes('Ordem de Serviço')); button?.scrollIntoView({ block: 'center' }); button?.click(); })()");
   await sleep(5000);
+  const qrPreviewVisible = await evaluate("Boolean([...document.querySelectorAll('article img')].find((img) => img.alt === 'QR do equipamento' && img.getBoundingClientRect().height > 0))");
+  await screenshot('/private/tmp/orbit-work-order-preview-qr-dc01-2.png');
   const nextViewerPage = "(() => { const label = [...document.querySelectorAll('span')].find((item) => /^Página \\d+ \\/ \\d+$/.test(item.innerText)); const group = label?.parentElement; group?.querySelectorAll('button')?.[1]?.click(); })()";
-  await evaluate(nextViewerPage);
-  await sleep(500);
-  await evaluate(nextViewerPage);
-  await sleep(1000);
+  const pageLabel = await evaluate("[...document.querySelectorAll('span')].find((item) => /^Página \\d+ \\/ \\d+$/.test(item.innerText))?.innerText ?? 'Página 1 / 1'");
+  const totalPages = Number(pageLabel.split('/')[1]?.trim() ?? 1);
+  for (let page = 1; page < totalPages; page += 1) { await evaluate(nextViewerPage); await sleep(400); }
   const previewText = await evaluate('document.body.innerText');
-  const previewSignatureVisible = await evaluate("Boolean([...document.querySelectorAll('article img')].find((img) => img.src.startsWith('data:image/') && img.getBoundingClientRect().height > 0))");
+  const institutionalSignatureVisible = await evaluate("document.body.innerText.includes('Responsável Técnico Runtime') && document.body.innerText.includes('CREA-PE 123456') && Boolean([...document.querySelectorAll('article img')].find((img) => img.alt === 'Responsável técnico' && img.getBoundingClientRect().height > 0))");
+  const executionSignatureVisible = await evaluate("Boolean([...document.querySelectorAll('article img')].find((img) => img.alt === 'Assinatura do cliente/responsável' && img.getBoundingClientRect().height > 0))");
+  const previewSignatureVisible = institutionalSignatureVisible && executionSignatureVisible;
   const viewerDebug = await evaluate("({ pageLabels: [...document.querySelectorAll('span')].map((item) => item.innerText).filter((text) => text?.startsWith('Página ')), chevrons: document.querySelectorAll('svg.lucide-chevron-right').length, articleImages: [...document.querySelectorAll('article img')].map((img) => ({ alt: img.alt, height: img.getBoundingClientRect().height })) })");
-  await screenshot('/private/tmp/orbit-work-order-preview-06-1.png');
+  await screenshot('/private/tmp/orbit-work-order-preview-signatures-dc01-2.png');
 
   const expectedScheduled = '15/07 · 10:30';
   const result = {
@@ -96,6 +99,9 @@ try {
     realPreviewLabelVisible: previewText.includes('Pré-visualização com dados reais da operação.'),
     workOrderPreviewVisible: previewText.includes('Ordem de Serviço'),
     previewSignatureVisible,
+    qrPreviewVisible,
+    institutionalSignatureVisible,
+    executionSignatureVisible,
     viewerDebug,
   };
   await writeFile('/private/tmp/orbit-runtime-ui-06-1-evidence.json', JSON.stringify(result, null, 2));
