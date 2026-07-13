@@ -1,5 +1,7 @@
 import { Transform } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  IsArray,
   IsBoolean,
   IsEmail,
   IsHexColor,
@@ -23,6 +25,17 @@ function lowercase(value: unknown): unknown {
   return typeof value === 'string' ? value.trim().toLowerCase() : value;
 }
 
+function normalizedStringArray(value: unknown): unknown {
+  if (!Array.isArray(value)) {
+    return value;
+  }
+
+  return value
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+}
+
 export class UpdateOrganizationDto {
   @IsOptional()
   @Transform(({ value }) => trim(value))
@@ -43,6 +56,12 @@ export class UpdateOrganizationDto {
   cnpj?: string;
 
   @IsOptional()
+  @Transform(({ value }) => trim(value))
+  @IsString()
+  @MaxLength(30)
+  stateRegistration?: string;
+
+  @IsOptional()
   @Transform(({ value }) => lowercase(value))
   @IsEmail()
   @MaxLength(254)
@@ -54,14 +73,33 @@ export class UpdateOrganizationDto {
   @MaxLength(30)
   phone?: string;
 
-  @IsOptional() @Transform(({ value }) => lowercase(value)) @IsUrl({ require_protocol: true }) @MaxLength(255)
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(5)
+  @Transform(({ value }) => normalizedStringArray(value))
+  @IsString({ each: true })
+  @MaxLength(30, { each: true })
+  phoneNumbers?: string[];
+
+  @IsOptional()
+  @Transform(({ value }) => lowercase(value))
+  @IsUrl({ require_protocol: true })
+  @MaxLength(255)
   website?: string;
 
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(10) zipCode?: string;
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(180) street?: string;
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(20) number?: string;
-  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(120) complement?: string;
-  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(120) district?: string;
+  @IsOptional()
+  @Transform(({ value }) => trim(value))
+  @IsString()
+  @MaxLength(120)
+  complement?: string;
+  @IsOptional()
+  @Transform(({ value }) => trim(value))
+  @IsString()
+  @MaxLength(120)
+  district?: string;
 
   @IsOptional()
   @Transform(({ value }) => trim(value))

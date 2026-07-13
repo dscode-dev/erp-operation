@@ -8,7 +8,7 @@
  * Note: this is the real `operations` domain. The legacy `operationsApi`
  * (operations.ts) only serves commercial demo snapshots and is unrelated.
  */
-import { api } from "./client";
+import { api } from './client';
 import type {
   CreateOperationPayload,
   OperationDetail,
@@ -17,7 +17,7 @@ import type {
   OperationStatus,
   OperationType,
   Paginated,
-} from "@erp/types";
+} from '@erp/types';
 
 export type OperationPhotoContent = {
   id: string;
@@ -40,7 +40,7 @@ export function listOperations(params?: {
   signal?: AbortSignal;
 }): Promise<Paginated<OperationSummary>> {
   const { signal, ...query } = params ?? {};
-  return api.get<Paginated<OperationSummary>>("/operations", { query, signal });
+  return api.get<Paginated<OperationSummary>>('/operations', { query, signal });
 }
 
 export function exportOperationsPdf(params?: {
@@ -53,28 +53,55 @@ export function exportOperationsPdf(params?: {
   signal?: AbortSignal;
 }): Promise<{ blob: Blob; filename: string | null }> {
   const { signal, ...query } = params ?? {};
-  return api.blob("/operations/export", { query, signal });
+  return api.blob('/operations/export', { query, signal });
 }
 
 export function getOperationStats(opts?: { signal?: AbortSignal }): Promise<OperationStats> {
-  return api.get<OperationStats>("/operations/stats", opts);
+  return api.get<OperationStats>('/operations/stats', opts);
 }
 
-export function getOperation(id: string, opts?: { signal?: AbortSignal }): Promise<OperationDetail> {
+export function getOperation(
+  id: string,
+  opts?: { signal?: AbortSignal },
+): Promise<OperationDetail> {
   return api.get<OperationDetail>(`/operations/${id}`, opts);
 }
 
 export function createOperation(payload: CreateOperationPayload): Promise<OperationDetail> {
-  return api.post<OperationDetail>("/operations", payload);
+  return api.post<OperationDetail>('/operations', payload);
 }
 
 export function updateOperation(
   id: string,
-  payload: Partial<Pick<CreateOperationPayload, "status" | "startedAt" | "completedAt" | "checklist" | "observations" | "reportedIssue" | "serviceDescription" | "technicalDiagnosis" | "technicalRecommendations" | "signatureData" | "signedAt" | "photos">>,
+  payload: Partial<
+    Pick<
+      CreateOperationPayload,
+      | 'status'
+      | 'startedAt'
+      | 'completedAt'
+      | 'checklist'
+      | 'observations'
+      | 'reportedIssue'
+      | 'serviceDescription'
+      | 'technicalDiagnosis'
+      | 'technicalRecommendations'
+      | 'referenceMonth'
+      | 'referenceYear'
+      | 'maintenanceType'
+      | 'maintenanceChecklist'
+      | 'inspectedEquipments'
+      | 'signatureData'
+      | 'signedAt'
+      | 'photos'
+    >
+  >,
 ): Promise<OperationDetail> {
   return api.patch<OperationDetail>(`/operations/${id}`, payload);
 }
 
-export function getOperationPhoto(photoId: string, opts?: { signal?: AbortSignal }): Promise<OperationPhotoContent> {
+export function getOperationPhoto(
+  photoId: string,
+  opts?: { signal?: AbortSignal },
+): Promise<OperationPhotoContent> {
   return api.get<OperationPhotoContent>(`/operations/photos/${photoId}`, opts);
 }

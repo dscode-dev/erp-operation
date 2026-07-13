@@ -40,7 +40,20 @@ const CONFIG_TEMPLATE_SELECT = {
     orderBy: { position: 'asc' as const },
     select: {
       position: true,
-      signature: { select: { id: true, name: true, title: true, professionalCouncil: true, department: true, imageStorageKey: true, mimeType: true, fileSize: true, active: true, deletedAt: true } },
+      signature: {
+        select: {
+          id: true,
+          name: true,
+          title: true,
+          professionalCouncil: true,
+          department: true,
+          imageStorageKey: true,
+          mimeType: true,
+          fileSize: true,
+          active: true,
+          deletedAt: true,
+        },
+      },
     },
   },
 } satisfies Prisma.DocumentTemplateSelect;
@@ -50,8 +63,10 @@ const CONFIG_ORGANIZATION_SELECT = {
   legalName: true,
   tradeName: true,
   cnpj: true,
+  stateRegistration: true,
   email: true,
   phone: true,
+  phoneNumbers: true,
   website: true,
   zipCode: true,
   street: true,
@@ -95,8 +110,14 @@ export class DocumentConfigurationService {
 
   async getConfigurationForType(type: DocumentTemplateType): Promise<DocumentConfiguration> {
     const [organization, settings, templates] = await Promise.all([
-      this.prisma.organization.findFirst({ orderBy: { createdAt: 'asc' }, select: CONFIG_ORGANIZATION_SELECT }),
-      this.prisma.organizationSettings.findFirst({ orderBy: { createdAt: 'asc' }, select: CONFIG_SETTINGS_SELECT }),
+      this.prisma.organization.findFirst({
+        orderBy: { createdAt: 'asc' },
+        select: CONFIG_ORGANIZATION_SELECT,
+      }),
+      this.prisma.organizationSettings.findFirst({
+        orderBy: { createdAt: 'asc' },
+        select: CONFIG_SETTINGS_SELECT,
+      }),
       this.prisma.documentTemplate.findMany({
         where: { type, isActive: true },
         select: CONFIG_TEMPLATE_SELECT,

@@ -1285,12 +1285,12 @@ Financial é o único domínio autorizado a representar dinheiro operacional no 
 
 RBAC:
 
-| Recurso | OWNER | MANAGER | OPERATOR | VIEWER |
-| ------- | ----- | ------- | -------- | ------ |
-| Contas financeiras | Total | Total | Não | Não |
-| Categorias financeiras | Total | Total | Não | Não |
-| Lançamentos financeiros | Total | Total | Não | Não |
-| Dashboard financeiro | Sim | Sim | Não | Não |
+| Recurso                 | OWNER | MANAGER | OPERATOR | VIEWER |
+| ----------------------- | ----- | ------- | -------- | ------ |
+| Contas financeiras      | Total | Total   | Não      | Não    |
+| Categorias financeiras  | Total | Total   | Não      | Não    |
+| Lançamentos financeiros | Total | Total   | Não      | Não    |
+| Dashboard financeiro    | Sim   | Sim     | Não      | Não    |
 
 Proteções:
 
@@ -1333,11 +1333,11 @@ Eventos auditados:
 
 RBAC:
 
-| Recurso | OWNER | MANAGER | OPERATOR | VIEWER |
-| ------- | ----- | ------- | -------- | ------ |
-| Pedidos de compra | Total | Total | Não | Não |
-| Itens de compra | Total | Total | Não | Não |
-| Recebimentos | Total | Total | Não | Não |
+| Recurso           | OWNER | MANAGER | OPERATOR | VIEWER |
+| ----------------- | ----- | ------- | -------- | ------ |
+| Pedidos de compra | Total | Total   | Não      | Não    |
+| Itens de compra   | Total | Total   | Não      | Não    |
+| Recebimentos      | Total | Total   | Não      | Não    |
 
 Proteções:
 
@@ -1498,13 +1498,13 @@ Autenticação:
 
 RBAC verificado por teste HTTP:
 
-| Domínio | OWNER | MANAGER | OPERATOR | VIEWER |
-| ------- | ----- | ------- | -------- | ------ |
-| Financial | Sim | Sim | Não | Não |
-| Pricing | Sim | Sim leitura | Não | Não |
-| Budgets | Sim | Sim | Não | Não |
-| Procurement | Sim | Sim | Não | Não |
-| Organization assets upload | Sim | Não | Não | Não |
+| Domínio                    | OWNER | MANAGER     | OPERATOR | VIEWER |
+| -------------------------- | ----- | ----------- | -------- | ------ |
+| Financial                  | Sim   | Sim         | Não      | Não    |
+| Pricing                    | Sim   | Sim leitura | Não      | Não    |
+| Budgets                    | Sim   | Sim         | Não      | Não    |
+| Procurement                | Sim   | Sim         | Não      | Não    |
+| Organization assets upload | Sim   | Não         | Não      | Não    |
 
 Confidencialidade comercial:
 
@@ -1681,6 +1681,7 @@ Open RC blockers:
 
 - TLS/proxy behavior, external CI, external rollback, external DB+storage restore and external
   bootstrap flow still require real environment evidence before RC promotion.
+
 ## Product Backlog Closure 02 — Document AppSec review
 
 Garantias preservadas:
@@ -1761,3 +1762,17 @@ Notifications:
 - `eventKey` único previne duplicidade em retries;
 - `actionUrl` é gerada pelo servidor e restrita a rotas internas;
 - não há endpoint público para criação de notificações.
+
+## DC02B — integridade documental
+
+- competência é validada por DTO, serviço e constraints PostgreSQL;
+- tipo de manutenção é enum e checklists possuem limites de coleção/texto;
+- equipamentos inspecionados exigem UUID único, estado ativo e vínculo com o cliente da Operation;
+- snapshots são resolvidos no backend, impedindo mass assignment de marca/modelo/capacidade;
+- substituição de checklist/equipamentos ocorre transacionalmente;
+- Corporate Header usa Organization validada e assets do `DocumentAssetResolver`; Builder/Renderer
+  não acessam Storage ou Prisma;
+- RBAC e limites de Blueprint, tabela, páginas, PDF e memória foram preservados.
+
+AppSec dedicado: 12 suites / 38 testes aprovados, além dos gates PostgreSQL de integração e
+concorrência.

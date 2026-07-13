@@ -330,11 +330,12 @@ export class DocumentRendererService {
   private tableBlocks(component: TableComponent): LayoutBlock[] {
     const headerHeight = 18;
     const rowHeight = 17;
-    const rowsPerBlock = this.layout.rowsPerTableBlock(headerHeight, rowHeight);
+    const blockPadding = 6;
+    const rowsPerBlock = this.layout.rowsPerTableBlock(headerHeight + blockPadding, rowHeight);
     const chunks = component.rows.length > 0 ? this.chunk(component.rows, rowsPerBlock) : [[]];
     return chunks.map((rows) => ({
       component,
-      height: headerHeight + Math.max(1, rows.length) * rowHeight + 6,
+      height: headerHeight + Math.max(1, rows.length) * rowHeight + blockPadding,
       draw: (x, y, width) =>
         this.tableElements(component, rows, x, y, width, headerHeight, rowHeight),
     }));
@@ -574,9 +575,10 @@ export class DocumentRendererService {
   }
 
   private newPage(blueprint: DocumentBlueprint, pageNumber: number): RenderedPage {
-    const logo = blueprint.header.logo;
+    const corporate = blueprint.header.corporate;
+    const logo = corporate?.logo ?? blueprint.header.logo;
     const headerTextX = DOCUMENT_PAGE.marginLeft + (logo ? 78 : 0);
-    const organizationX = DOCUMENT_PAGE.width - DOCUMENT_PAGE.marginRight - 150;
+    const organizationX = DOCUMENT_PAGE.width - DOCUMENT_PAGE.marginRight - 220;
     const headerContentBottom = DOCUMENT_PAGE.height - DOCUMENT_PAGE.headerHeight;
     const headerContentTop = DOCUMENT_PAGE.height - HEADER_ACCENT_HEIGHT;
     const logoY =
@@ -645,28 +647,7 @@ export class DocumentRendererService {
           size: 8,
           bold: true,
         },
-        {
-          type: 'text',
-          x: organizationX,
-          y: DOCUMENT_PAGE.height - 32,
-          text: blueprint.header.organizationName,
-          size: 9,
-          bold: true,
-        },
-        {
-          type: 'text',
-          x: organizationX,
-          y: DOCUMENT_PAGE.height - 45,
-          text: blueprint.metadata.organization.address,
-          size: 7,
-        },
-        {
-          type: 'text',
-          x: organizationX,
-          y: DOCUMENT_PAGE.height - 57,
-          text: `${blueprint.metadata.organization.phone} · ${blueprint.metadata.organization.email}`,
-          size: 7,
-        },
+        ...this.corporateHeaderElements(blueprint, organizationX),
         {
           type: 'line',
           x1: DOCUMENT_PAGE.marginLeft,
@@ -697,6 +678,63 @@ export class DocumentRendererService {
         },
       ],
     };
+  }
+
+  private corporateHeaderElements(blueprint: DocumentBlueprint, x: number): RenderedElement[] {
+    const corporate = blueprint.header.corporate;
+    if (!corporate) {
+      return [
+        {
+          type: 'text',
+          x,
+          y: DOCUMENT_PAGE.height - 32,
+          text: blueprint.header.organizationName,
+          size: 9,
+          bold: true,
+        },
+        {
+          type: 'text',
+          x,
+          y: DOCUMENT_PAGE.height - 45,
+          text: blueprint.metadata.organization.address,
+          size: 7,
+        },
+        {
+          type: 'text',
+          x,
+          y: DOCUMENT_PAGE.height - 57,
+          text: `${blueprint.metadata.organization.phone} · ${blueprint.metadata.organization.email}`,
+          size: 7,
+        },
+      ];
+    }
+
+    const documents = [
+      corporate.cnpj ? `CNPJ ${corporate.cnpj}` : null,
+      corporate.stateRegistration ? `IE ${corporate.stateRegistration}` : null,
+    ]
+      .filter(Boolean)
+      .join(' · ');
+    const contacts = [...corporate.phoneNumbers, corporate.email].filter(Boolean).join(' · ');
+    const lines = [
+      { text: corporate.tradeName || corporate.legalName, size: 9, bold: true },
+      ...(corporate.tradeName && corporate.legalName !== corporate.tradeName
+        ? [{ text: corporate.legalName, size: 7, bold: false }]
+        : []),
+      { text: documents, size: 7, bold: false },
+      { text: corporate.fullAddress, size: 7, bold: false },
+      { text: contacts, size: 7, bold: false },
+      { text: corporate.website, size: 7, bold: false },
+    ].filter((line) => line.text);
+
+    return lines.slice(0, 7).map((line, index) => ({
+      type: 'text',
+      x,
+      y: DOCUMENT_PAGE.height - 29 - index * 11,
+      text: line.text,
+      size: line.size,
+      bold: line.bold,
+    }));
   }
 
   private wrap(text: string, width: number, fontSize: number): string[] {

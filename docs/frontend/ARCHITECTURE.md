@@ -359,26 +359,26 @@ frontend/
 
 ### Aliases (tsconfig `paths`)
 
-| Alias | Aponta para | Conteúdo |
-|---|---|---|
-| `@erp/types` | `packages/types` | tipos da API e de documentos |
-| `@erp/api` | `packages/api` | cliente HTTP, módulos de domínio, `useQuery` |
-| `@erp/utils` | `packages/utils` | helpers puros e hooks |
-| `@erp/ui/*` | `packages/ui` | DS, primitivos, `auth/*`, `documents/*`, `theme/*` |
-| `@platform/*` | `apps/platform` | componentes/utilitários da Platform |
-| `@operator/*` | `apps/operator` | componentes/shell do Operator |
-| `@/*` | `frontend/` | apenas route shells em `app/` |
+| Alias         | Aponta para      | Conteúdo                                           |
+| ------------- | ---------------- | -------------------------------------------------- |
+| `@erp/types`  | `packages/types` | tipos da API e de documentos                       |
+| `@erp/api`    | `packages/api`   | cliente HTTP, módulos de domínio, `useQuery`       |
+| `@erp/utils`  | `packages/utils` | helpers puros e hooks                              |
+| `@erp/ui/*`   | `packages/ui`    | DS, primitivos, `auth/*`, `documents/*`, `theme/*` |
+| `@platform/*` | `apps/platform`  | componentes/utilitários da Platform                |
+| `@operator/*` | `apps/operator`  | componentes/shell do Operator                      |
+| `@/*`         | `frontend/`      | apenas route shells em `app/`                      |
 
 Regra de dependência: `app → apps/* → packages/*`. `packages/*` nunca importa
 `apps/*`; `apps/platform` e `apps/operator` nunca importam um ao outro.
 
 ## Responsabilidades
 
-| Platform (gestão) | Operator (campo) |
-|---|---|
+| Platform (gestão)                                                                             | Operator (campo)                                                                          |
+| --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
 | Dashboard, Clientes, Equipamentos, Usuários, Financeiro, Relatórios, Configurações, Templates | Agenda, Atendimentos, OS, Checklist, Fotos, Assinatura, consulta de Clientes/Equipamentos |
-| Visualizar, gerenciar, aprovar, editar, baixar documentos, acompanhar indicadores | Executar serviço, capturar dados, fotografar, coletar assinatura, enviar |
-| Desktop-first | Mobile-first, uma mão, poucos toques |
+| Visualizar, gerenciar, aprovar, editar, baixar documentos, acompanhar indicadores             | Executar serviço, capturar dados, fotografar, coletar assinatura, enviar                  |
+| Desktop-first                                                                                 | Mobile-first, uma mão, poucos toques                                                      |
 
 **Documentos:** preview estruturado, renderização e download são responsabilidade do backend.
 Platform administra a Central Documental e configurações; Operator apenas consulta documentos reais
@@ -394,7 +394,7 @@ Cada app tem **sua própria sessão**, nunca compartilhada:
   `scope="operator"` conforme o pathname; o provider chama `setSessionScope`
   antes de qualquer acesso a token.
 - Telas de login/troca de senha são compartilhadas (`packages/ui/auth/
-  {login-screen,change-password-screen}`) com `variant` por app; cada uma roda
+{login-screen,change-password-screen}`) com `variant` por app; cada uma roda
   sob o provider escopado correspondente.
 - `RequireAuth` deriva os caminhos de login/troca a partir do escopo
   (`/login` vs `/operator/login`).
@@ -647,12 +647,12 @@ Performance:
 - lint sem warnings reduz ruído de certificação;
 - bundle da home aparece maior no relatório do Next e deve ser investigado com bundle analyzer na Sprint 21 antes de qualquer refator especulativo.
 
-
 ## Sprint 20.5 — AppSec Closure Architecture
 
 Asset Lifecycle é tratado como API pública sanitizada. Componentes devem renderizar a timeline usando `event.timeline` e `event.timeline.references`, sem interpretar metadata bruto nem usar chaves de storage.
 
 Fluxos com `URL.createObjectURL` devem manter ciclo de vida explícito: revogar URL ao remover o item, substituir preview ou desmontar o componente. O fluxo de Visita Técnica já segue essa regra.
+
 ## Sprint 22 — production readiness architecture
 
 Frontend production configuration:
@@ -817,12 +817,14 @@ Domain transition → NotificationsService inside transaction → Notification r
 
 No WebSocket/realtime infra was added. V1 refresh uses shell load, focus/visibility and 60s polling
 while visible.
+
 # Closure 06 — document source consistency
 
 O frontend distingue três fontes: template preview, Operation preview e documento persistido. Para
 Work Order, a fonte real é sempre `operationId + WORK_ORDER`. A API bloqueia download obsoleto; o
 cliente apresenta o erro e exige render explícito depois de mutations. Datas operacionais não são
 normalizadas para um campo genérico: `createdAt` e `scheduledFor` permanecem conceitos distintos.
+
 # Closure 06.1 — runtime UI and nested overlays
 
 Drawers são portais para `document.body`; isso impede que transforms de um drawer pai criem um novo
@@ -831,3 +833,12 @@ largura solicitada mesmo quando aberto a partir de OperationDetailDrawer ou Time
 
 O script `test/runtime/verify-operations-ui.mjs` valida opt-in a rota ativa, contrato visível, drawer
 e assinatura no preview sem introduzir uma suíte/browser como dependência de produção.
+
+## DC02B — Corporate Header e persistência
+
+`DocumentViewer` continua sendo projeção do Blueprint. O Builder monta o Corporate Header com dados
+de Organization já carregados pelo DocumentContext; o frontend não consulta assets nem recompõe a
+identidade corporativa.
+
+O workflow persiste primeiro os dados documentais na Operation e só então solicita Preview. Assim,
+regenerações não dependem de estado React ou de campos técnicos que mudem depois da emissão.

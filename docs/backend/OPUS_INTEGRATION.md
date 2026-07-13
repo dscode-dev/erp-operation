@@ -7,13 +7,13 @@ Apresentação documental: não mostrar `blueprint.version` no relatório. Rende
 
 `OperationDetail` agora inclui `technicalDiagnosis` e `technicalRecommendations`. A Central coleta:
 
-| Campo UI | Campo API |
-|---|---|
-| Objetivo da visita | `reportedIssue` |
-| Diagnóstico/situação | `technicalDiagnosis` |
-| Atividades executadas | `serviceDescription` |
+| Campo UI               | Campo API                  |
+| ---------------------- | -------------------------- |
+| Objetivo da visita     | `reportedIssue`            |
+| Diagnóstico/situação   | `technicalDiagnosis`       |
+| Atividades executadas  | `serviceDescription`       |
 | Recomendações técnicas | `technicalRecommendations` |
-| Observações finais | `observations` |
+| Observações finais     | `observations`             |
 
 Use somente `DocumentViewer` + endpoints oficiais de `TECHNICAL_REPORT`. O Blueprint entrega
 parágrafos/listas, QR, fotos e assinaturas já resolvidos. Não interpretar SignatureMode, não gerar QR
@@ -33,12 +33,12 @@ Use somente `DocumentViewer` para modelo, preview real, renderização e downloa
 
 Matriz de preview:
 
-| Ação UI | Endpoint | Dados reais? | Assinatura de execução? |
-|---|---|---:|---:|
-| Visualizar modelo | `GET /documents/templates/:templateId/preview` | Não | Não |
-| Preview com Operation | `GET /documents/operations/:operationId/:type/preview` | Sim | Sim, quando aplicável |
-| Renderizar documento | `POST /documents/operations/:operationId/:type/render` | Sim | Sim, quando aplicável |
-| Download | `GET /documents/:documentId/download` | Sim | Sim, mesmo blueprint renderizado |
+| Ação UI               | Endpoint                                               | Dados reais? |          Assinatura de execução? |
+| --------------------- | ------------------------------------------------------ | -----------: | -------------------------------: |
+| Visualizar modelo     | `GET /documents/templates/:templateId/preview`         |          Não |                              Não |
+| Preview com Operation | `GET /documents/operations/:operationId/:type/preview` |          Sim |            Sim, quando aplicável |
+| Renderizar documento  | `POST /documents/operations/:operationId/:type/render` |          Sim |            Sim, quando aplicável |
+| Download              | `GET /documents/:documentId/download`                  |          Sim | Sim, mesmo blueprint renderizado |
 
 Tipos que aceitam assinatura coletada da Operation:
 
@@ -75,11 +75,11 @@ integrados.
 
 Novos endpoints técnicos:
 
-| Endpoint | Uso |
-|---|---|
-| `GET /health/live` | liveness de processo |
-| `GET /health/ready` | readiness com DB/storage |
-| `GET /metrics` | Prometheus text/plain para infraestrutura, não para UI |
+| Endpoint            | Uso                                                    |
+| ------------------- | ------------------------------------------------------ |
+| `GET /health/live`  | liveness de processo                                   |
+| `GET /health/ready` | readiness com DB/storage                               |
+| `GET /metrics`      | Prometheus text/plain para infraestrutura, não para UI |
 
 Baseline medido localmente com fixture de performance:
 
@@ -1385,9 +1385,7 @@ await api.post('/budgets', {
   title: 'Troca de componentes',
   expirationDate: '2026-07-17T00:00:00.000Z',
   status: 'PENDING',
-  items: [
-    { productId, quantity: 2, description: 'Filtro G4' },
-  ],
+  items: [{ productId, quantity: 2, description: 'Filtro G4' }],
 });
 ```
 
@@ -1646,6 +1644,7 @@ Asset Lifecycle is now a sanitized public timeline API:
 
 The closure suite verifies Document Engine, Signatures, Maintenance, PMOC, Asset Lifecycle,
 Inventory, Procurement, audit metadata, rate limit and IDOR/BOLA boundaries against the real backend.
+
 ## Sprint 22 — production readiness notes for Opus
 
 No business endpoint was added or removed.
@@ -1687,6 +1686,7 @@ Frontend lockfile supply-chain status:
 
 - `postcss` advisory remediated through targeted override;
 - `npm audit --json` reports 0 vulnerabilities after the Sprint 22.5 change.
+
 ## Product Backlog Closure 02 — Opus integration notes
 
 Para implementar UX de relatórios:
@@ -1752,6 +1752,7 @@ Frontend deve usar:
 - `PATCH /notifications/:id/read` e `/notifications/read-all` para estados reais.
 
 Não usar storage keys, AuditLog, notificações locais fake ou URLs externas.
+
 # Closure 06 — instruções para Work Order
 
 Para OS, use somente `operationId + WORK_ORDER`. `templateId` é preview estrutural e
@@ -1760,8 +1761,20 @@ checklist, observação, foto, material ou estado, recarregue a Operation e rend
 Download com HTTP 409/`DOCUMENT_STALE` deve mostrar ação de re-renderização.
 
 Datas: `createdAt` é criação; `scheduledFor` é agendamento; nunca faça fallback para `assignedAt`.
+
 # Closure 06.1 — verificação de produto
 
 Verificado em `/operacoes`: colunas Criado/Data do agendamento, seção Datas no drawer e OS real com
 assinatura. O PDF usa Noto Sans incorporada e preserva português. Não comparar preview de modelo com
 PDF real; para emissão use sempre `operationId + WORK_ORDER`.
+
+## DC02B — contrato pronto para UI
+
+- Organization: `stateRegistration?: string`, `phoneNumbers: string[]`.
+- Operation detail: `referenceMonth`, `referenceYear`, `maintenanceType`,
+  `maintenanceChecklistItems[]`, `inspectedEquipments[]`.
+- Create/Patch usa `maintenanceChecklist[]` e `inspectedEquipments[]` conforme `API_CONTRACTS.md`.
+- O seletor sempre usa `/equipments?customerId=<selecionado>`.
+- O frontend não envia marca/modelo/capacidade; o backend é a autoridade dos snapshots.
+- Preview/PDF usam o mesmo Blueprint; `header.corporate` contém a identificação renderizável.
+- Campos novos são opcionais; não use fallback fake.

@@ -72,17 +72,17 @@ Nenhuma rota nova foi criada.
 
 Build de produção em 6 de julho de 2026:
 
-| Rota | First Load JS |
-|---|---:|
-| `/` | 325 kB |
-| `/budgets` | 336 kB |
-| `/produtos` | 330 kB |
-| `/equipamentos` | 449 kB |
-| `/financial` | 325 kB |
-| `/purchase-orders` | 324 kB |
-| `/operator` | 144 kB |
-| `/operator/services/[id]` | 144 kB |
-| `/operator/atendimento` | 153 kB |
+| Rota                      | First Load JS |
+| ------------------------- | ------------: |
+| `/`                       |        325 kB |
+| `/budgets`                |        336 kB |
+| `/produtos`               |        330 kB |
+| `/equipamentos`           |        449 kB |
+| `/financial`              |        325 kB |
+| `/purchase-orders`        |        324 kB |
+| `/operator`               |        144 kB |
+| `/operator/services/[id]` |        144 kB |
+| `/operator/atendimento`   |        153 kB |
 
 Regras de rota:
 
@@ -284,11 +284,11 @@ Menu Platform:
 
 Sessão escopo `operator`. Três zonas sob `app/operator/`:
 
-| Zona | Layout | Rotas |
-|---|---|---|
-| Público | `operator/layout.tsx` (mínimo) | `/operator/login`, `/operator/trocar-senha` |
+| Zona                 | Layout                                                          | Rotas                                                                                                                                                                                                                       |
+| -------------------- | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Público              | `operator/layout.tsx` (mínimo)                                  | `/operator/login`, `/operator/trocar-senha`                                                                                                                                                                                 |
 | Shell (nav inferior) | `operator/(shell)/layout.tsx` (`RequireAuth` + `OperatorShell`) | `/operator` (Home), `/operator/agenda`, `/operator/services` (+`/[id]`), `/operator/clientes` (+`/[id]`), `/operator/equipamentos` (+`/[id]`), `/operator/qr`, `/operator/documents`, `/operator/sync`, `/operator/profile` |
-| Full-screen | `operator/(full)/layout.tsx` (`RequireAuth`, sem nav) | `/operator/atendimento` (Wizard) |
+| Full-screen          | `operator/(full)/layout.tsx` (`RequireAuth`, sem nav)           | `/operator/atendimento` (Wizard)                                                                                                                                                                                            |
 
 Navegação inferior: Início · Agenda · Atendimentos · Clientes · Perfil.
 
@@ -315,10 +315,10 @@ Navegação inferior: Início · Agenda · Atendimentos · Clientes · Perfil.
 
 `erp.empresa.com.br` → Platform · `operator.empresa.com.br` → Operator · ambos consomem `api.empresa.com.br`.
 
-
 ## Sprint 20.5 — Route Security Notes
 
 Nenhuma rota frontend nova foi criada. Rotas que exibem Asset Lifecycle devem consumir apenas payload público sanitizado e não devem montar URLs a partir de storage keys. A rota de visita técnica corrigiu cleanup de object URLs para previews locais.
+
 ## Sprint 22 — release smoke routes
 
 The official frontend smoke runner validates these routes against a production build:
@@ -406,14 +406,22 @@ Nenhuma rota nova foi criada.
 - shell Platform: sino abre Notification Center real;
 - Operator home/header: sino usa notificações reais;
 - action URLs de notificação navegam apenas para rotas existentes como `/operacoes` e `/budgets`.
+
 # Closure 06
 
 - `/operacoes`: colunas Criado e Data do agendamento; drawer com datas e assinatura da OS.
 - `/operator/services/:id`: agendamento destacado e criação apresentada como contexto secundário.
 - `/operator/agenda`: Operations sem `scheduledFor` ficam em “Não agendado”.
 - `/reports`: “Visualizar modelo” usa template; preview real usa Operation e tipo documental explícito.
+
 # Closure 06.1
 
 - `/operacoes`: rota ativa inspecionada em runtime; tabela e drawer aprovados.
 - Drawer da OS em `/operacoes`: preview real integral, sem clipping por drawer pai.
 - `/operator`: mantém `scheduledFor` como data operacional; nenhuma rota paralela criada.
+
+## DC02B
+
+- `/reports`: workflow do Relatório de Visita Técnica com competência, manutenção, checklists e
+  equipamentos filtrados pelo cliente; Preview/Render/Download oficiais.
+- `/settings`: inscrição estadual e telefones alimentam o Corporate Header de todos os documentos.

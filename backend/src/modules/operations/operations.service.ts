@@ -47,6 +47,13 @@ const OPERATION_INCLUDE = {
     orderBy: { createdAt: 'asc' as const },
     select: { id: true, caption: true, mimeType: true, fileSize: true, createdAt: true },
   },
+  maintenanceChecklistItems: {
+    orderBy: [{ maintenanceType: 'asc' as const }, { position: 'asc' as const }],
+  },
+  inspectedEquipments: {
+    orderBy: { position: 'asc' as const },
+    include: { equipment: { select: { id: true, name: true, type: true } } },
+  },
   documents: { orderBy: { createdAt: 'asc' as const } },
 } satisfies Prisma.OperationInclude;
 
@@ -63,6 +70,16 @@ type OperationAssignment = {
   operatorId: string;
   delegated: boolean;
   ignoredOperatorId?: string;
+};
+type InspectedEquipmentSnapshot = {
+  equipmentId: string;
+  position: number;
+  sector: string;
+  brandSnapshot: string | null;
+  modelSnapshot: string | null;
+  capacitySnapshot: string | null;
+  tagSnapshot: string | null;
+  serialSnapshot: string | null;
 };
 
 @Injectable()
@@ -129,6 +146,11 @@ export class OperationsService {
     context: OperationAuditContext,
   ): Promise<unknown> {
     await this.validateRelations(dto.customerId, dto.addressId, dto.equipmentId);
+    this.validateReferencePeriod(dto.referenceMonth, dto.referenceYear);
+    const inspectedEquipments = await this.resolveInspectedEquipments(
+      dto.customerId,
+      dto.inspectedEquipments,
+    );
     const photos = (dto.photos ?? []).map((p) => this.decodePhoto(p));
     if (photos.length > MAX_OPERATION_PHOTOS) {
       throw new ApplicationException(
@@ -160,6 +182,19 @@ export class OperationsService {
           serviceDescription: dto.serviceDescription ?? null,
           technicalDiagnosis: dto.technicalDiagnosis ?? null,
           technicalRecommendations: dto.technicalRecommendations ?? null,
+          referenceMonth: dto.referenceMonth ?? null,
+          referenceYear: dto.referenceYear ?? null,
+          maintenanceType: dto.maintenanceType ?? null,
+          maintenanceChecklistItems: {
+            create: (dto.maintenanceChecklist ?? []).map((item, position) => ({
+              maintenanceType: item.maintenanceType,
+              description: item.description,
+              executed: item.executed,
+              observations: item.observations ?? null,
+              position,
+            })),
+          },
+          inspectedEquipments: { create: inspectedEquipments },
           signatureData,
           signedAt: signatureData ? (dto.signedAt ? new Date(dto.signedAt) : new Date()) : null,
         },
@@ -252,7 +287,24 @@ export class OperationsService {
     actor: AuthenticatedUser,
     context: OperationAuditContext,
   ): Promise<unknown> {
-    await this.operationOrThrow(id);
+    const existing = await this.prisma.operation.findUnique({
+      where: { id },
+      select: { id: true, customerId: true, referenceMonth: true, referenceYear: true },
+    });
+    if (!existing)
+      throw new ApplicationException(
+        ERROR_CODES.OPERATION_NOT_FOUND,
+        'Operation was not found',
+        HttpStatus.NOT_FOUND,
+      );
+    this.validateReferencePeriod(
+      dto.referenceMonth ?? existing.referenceMonth ?? undefined,
+      dto.referenceYear ?? existing.referenceYear ?? undefined,
+    );
+    const inspectedEquipments =
+      dto.inspectedEquipments === undefined
+        ? null
+        : await this.resolveInspectedEquipments(existing.customerId, dto.inspectedEquipments);
     const photos = (dto.photos ?? []).map((p) => this.decodePhoto(p));
     if (photos.length > MAX_OPERATION_PHOTOS) {
       throw new ApplicationException(
@@ -272,12 +324,46 @@ export class OperationsService {
           ...(dto.checklist ? { checklist: this.normalizeChecklist(dto.checklist) } : {}),
           ...(dto.observations !== undefined ? { observations: dto.observations } : {}),
           ...(dto.reportedIssue !== undefined ? { reportedIssue: dto.reportedIssue } : {}),
-          ...(dto.serviceDescription !== undefined ? { serviceDescription: dto.serviceDescription } : {}),
-          ...(dto.technicalDiagnosis !== undefined ? { technicalDiagnosis: dto.technicalDiagnosis } : {}),
-          ...(dto.technicalRecommendations !== undefined ? { technicalRecommendations: dto.technicalRecommendations } : {}),
-          ...(signatureData ? { signatureData, signedAt: dto.signedAt ? new Date(dto.signedAt) : new Date() } : {}),
+          ...(dto.serviceDescription !== undefined
+            ? { serviceDescription: dto.serviceDescription }
+            : {}),
+          ...(dto.technicalDiagnosis !== undefined
+            ? { technicalDiagnosis: dto.technicalDiagnosis }
+            : {}),
+          ...(dto.technicalRecommendations !== undefined
+            ? { technicalRecommendations: dto.technicalRecommendations }
+            : {}),
+          ...(dto.referenceMonth !== undefined ? { referenceMonth: dto.referenceMonth } : {}),
+          ...(dto.referenceYear !== undefined ? { referenceYear: dto.referenceYear } : {}),
+          ...(dto.maintenanceType !== undefined ? { maintenanceType: dto.maintenanceType } : {}),
+          ...(signatureData
+            ? { signatureData, signedAt: dto.signedAt ? new Date(dto.signedAt) : new Date() }
+            : {}),
         },
       });
+      if (dto.maintenanceChecklist !== undefined) {
+        await tx.operationMaintenanceChecklistItem.deleteMany({ where: { operationId: id } });
+        if (dto.maintenanceChecklist.length > 0) {
+          await tx.operationMaintenanceChecklistItem.createMany({
+            data: dto.maintenanceChecklist.map((item, position) => ({
+              operationId: id,
+              maintenanceType: item.maintenanceType,
+              description: item.description,
+              executed: item.executed,
+              observations: item.observations ?? null,
+              position,
+            })),
+          });
+        }
+      }
+      if (inspectedEquipments !== null) {
+        await tx.operationInspectedEquipment.deleteMany({ where: { operationId: id } });
+        if (inspectedEquipments.length > 0) {
+          await tx.operationInspectedEquipment.createMany({
+            data: inspectedEquipments.map((item) => ({ operationId: id, ...item })),
+          });
+        }
+      }
       await tx.auditLog.create({
         data: this.audit(
           OPERATION_AUDIT_ACTIONS.OPERATION_UPDATED,
@@ -338,6 +424,63 @@ export class OperationsService {
       done: item.done,
       note: item.note ?? null,
     }));
+  }
+
+  private validateReferencePeriod(month?: number, year?: number): void {
+    if ((month === undefined) !== (year === undefined)) {
+      throw new ApplicationException(
+        ERROR_CODES.OPERATION_REFERENCE_PERIOD_INVALID,
+        'Reference month and year must be provided together',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
+  private async resolveInspectedEquipments(
+    customerId: string,
+    items?: Array<{ equipmentId: string; sector: string }>,
+  ): Promise<InspectedEquipmentSnapshot[]> {
+    if (!items?.length) return [];
+    const uniqueIds = [...new Set(items.map((item) => item.equipmentId))];
+    if (uniqueIds.length !== items.length) {
+      throw new ApplicationException(
+        ERROR_CODES.OPERATION_EQUIPMENT_INVALID,
+        'Inspected equipment cannot be duplicated',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const equipments = await this.prisma.equipment.findMany({
+      where: { id: { in: uniqueIds }, customerId, isActive: true, disabledAt: null },
+      select: {
+        id: true,
+        manufacturer: true,
+        model: true,
+        capacity: true,
+        tag: true,
+        serialNumber: true,
+      },
+    });
+    const byId = new Map(equipments.map((equipment) => [equipment.id, equipment]));
+    if (byId.size !== uniqueIds.length) {
+      throw new ApplicationException(
+        ERROR_CODES.OPERATION_EQUIPMENT_INVALID,
+        'Every inspected equipment must be active and belong to the Operation customer',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    return items.map((item, position) => {
+      const equipment = byId.get(item.equipmentId)!;
+      return {
+        equipmentId: item.equipmentId,
+        position,
+        sector: item.sector,
+        brandSnapshot: equipment.manufacturer,
+        modelSnapshot: equipment.model,
+        capacitySnapshot: equipment.capacity,
+        tagSnapshot: equipment.tag,
+        serialSnapshot: equipment.serialNumber,
+      };
+    });
   }
 
   private decodePhoto(input: OperationPhotoInputDto): DecodedPhoto {
@@ -409,10 +552,17 @@ export class OperationsService {
 
   private isValidSignatureBinary(buffer: Buffer, mimeType: string): boolean {
     if (mimeType === 'image/png') {
-      return buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+      return buffer
+        .subarray(0, 8)
+        .equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
     }
     if (mimeType === 'image/jpeg') {
-      return buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[buffer.length - 2] === 0xff && buffer[buffer.length - 1] === 0xd9;
+      return (
+        buffer[0] === 0xff &&
+        buffer[1] === 0xd8 &&
+        buffer[buffer.length - 2] === 0xff &&
+        buffer[buffer.length - 1] === 0xd9
+      );
     }
     return false;
   }

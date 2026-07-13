@@ -221,6 +221,20 @@ Status: Concluída ✅ — 1 de julho de 2026. Next.js 15 · App Router · TypeS
 Validação:
 
 - `npm run build` passou.
+
+## Document Certification DC02B
+
+Status: concluída em 13 de julho de 2026.
+
+- `/reports` persiste competência, tipo de manutenção, checklists estruturados e equipamentos
+  inspecionados para `TECHNICAL_REPORT`;
+- equipamentos disponíveis são carregados pelo cliente selecionado;
+- Configurações permite inscrição estadual e telefones adicionais;
+- `DocumentViewer` renderiza o Corporate Header do Blueprint com fallback retrocompatível;
+- Preview, render e download permanecem no Document Engine;
+- lint passou com um warning preexistente e build de 39 rotas passou.
+- Chrome headless confirmou o documento runtime na Central de Relatórios e cinco páginas/miniaturas
+  no `DocumentViewer`.
 - `npm run lint` passou com warnings pré-existentes de `<img>` e export anônimo.
 
 ## Frontend Sprint 8 — Inventory, Materials & Pricing Integration
@@ -662,7 +676,6 @@ Decisões:
 - Suppliers continua dentro de `/produtos?tab=suppliers`; a aba já possui fluxo completo e rota própria geraria duplicação neste momento.
 - `<img>` permanece em BrandLogo e renderizadores documentais/base64 onde o optimizer do Next não é adequado.
 - Frontend ainda não possui test runner configurado; item movido para certificação.
-
 
 ## Sprint 20.5 — Frontend AppSec Closure
 

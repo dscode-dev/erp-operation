@@ -76,6 +76,15 @@ enum OperationStatus {
   CANCELED
 }
 
+enum OperationMaintenanceType {
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  SEMIANNUAL
+  ANNUAL
+  CORRECTIVE
+}
+
 enum OperationDocumentStatus {
   DRAFT
   READY
@@ -373,8 +382,10 @@ model Organization {
   legalName           String                @map("legal_name") @db.VarChar(180)
   tradeName           String                @map("trade_name") @db.VarChar(120)
   cnpj                String                @db.VarChar(18)
+  stateRegistration   String?               @map("state_registration") @db.VarChar(30)
   email               String                @db.VarChar(254)
   phone               String                @db.VarChar(30)
+  phoneNumbers        String[]              @default([]) @map("phone_numbers")
   website             String?               @db.VarChar(255)
   zipCode             String?               @map("zip_code") @db.VarChar(10)
   street              String?               @db.VarChar(180)
@@ -652,41 +663,42 @@ model CustomerAttachment {
 }
 
 model Equipment {
-  id                 String                     @id @default(uuid()) @db.Uuid
-  customerId         String                     @map("customer_id") @db.Uuid
-  addressId          String?                    @map("address_id") @db.Uuid
-  parentEquipmentId  String?                    @map("parent_equipment_id") @db.Uuid
-  type               EquipmentType
-  status             EquipmentStatus            @default(ACTIVE)
-  name               String                     @db.VarChar(180)
-  tag                String?                    @db.VarChar(80)
-  manufacturer       String?                    @db.VarChar(120)
-  model              String?                    @db.VarChar(120)
-  serialNumber       String?                    @map("serial_number") @db.VarChar(120)
-  capacity           String?                    @db.VarChar(80)
-  voltage            String?                    @db.VarChar(40)
-  installationDate   DateTime?                  @map("installation_date") @db.Date
-  warrantyExpiration DateTime?                  @map("warranty_expiration") @db.Date
-  observations       String?                    @db.Text
-  qrToken            String                     @unique @default(uuid()) @map("qr_token") @db.Uuid
-  qrCode             String                     @unique @map("qr_code") @db.VarChar(100)
-  isActive           Boolean                    @default(true) @map("is_active")
-  disabledAt         DateTime?                  @map("disabled_at") @db.Timestamptz(3)
-  createdAt          DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt          DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(3)
-  customer           Customer                   @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  address            CustomerAddress?           @relation(fields: [addressId], references: [id], onDelete: SetNull)
-  parent             Equipment?                 @relation("EquipmentHierarchy", fields: [parentEquipmentId], references: [id], onDelete: SetNull)
-  children           Equipment[]                @relation("EquipmentHierarchy")
-  attachments        EquipmentAttachment[]
-  metrics            EquipmentMetric[]
-  operations         Operation[]
-  lifecycleEvents    AssetLifecycleEvent[]
-  maintenancePlans   MaintenancePlan[]
-  pmocPrimaryPlans   PmocPlan[]
-  pmocLinks          PmocPlanEquipment[]
-  pmocEnvironments   PmocEnvironmentEquipment[]
-  budgets            Budget[]
+  id                   String                        @id @default(uuid()) @db.Uuid
+  customerId           String                        @map("customer_id") @db.Uuid
+  addressId            String?                       @map("address_id") @db.Uuid
+  parentEquipmentId    String?                       @map("parent_equipment_id") @db.Uuid
+  type                 EquipmentType
+  status               EquipmentStatus               @default(ACTIVE)
+  name                 String                        @db.VarChar(180)
+  tag                  String?                       @db.VarChar(80)
+  manufacturer         String?                       @db.VarChar(120)
+  model                String?                       @db.VarChar(120)
+  serialNumber         String?                       @map("serial_number") @db.VarChar(120)
+  capacity             String?                       @db.VarChar(80)
+  voltage              String?                       @db.VarChar(40)
+  installationDate     DateTime?                     @map("installation_date") @db.Date
+  warrantyExpiration   DateTime?                     @map("warranty_expiration") @db.Date
+  observations         String?                       @db.Text
+  qrToken              String                        @unique @default(uuid()) @map("qr_token") @db.Uuid
+  qrCode               String                        @unique @map("qr_code") @db.VarChar(100)
+  isActive             Boolean                       @default(true) @map("is_active")
+  disabledAt           DateTime?                     @map("disabled_at") @db.Timestamptz(3)
+  createdAt            DateTime                      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime                      @updatedAt @map("updated_at") @db.Timestamptz(3)
+  customer             Customer                      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  address              CustomerAddress?              @relation(fields: [addressId], references: [id], onDelete: SetNull)
+  parent               Equipment?                    @relation("EquipmentHierarchy", fields: [parentEquipmentId], references: [id], onDelete: SetNull)
+  children             Equipment[]                   @relation("EquipmentHierarchy")
+  attachments          EquipmentAttachment[]
+  metrics              EquipmentMetric[]
+  operations           Operation[]
+  lifecycleEvents      AssetLifecycleEvent[]
+  maintenancePlans     MaintenancePlan[]
+  pmocPrimaryPlans     PmocPlan[]
+  pmocLinks            PmocPlanEquipment[]
+  pmocEnvironments     PmocEnvironmentEquipment[]
+  operationInspections OperationInspectedEquipment[]
+  budgets              Budget[]
 
   @@index([customerId, status])
   @@index([addressId])
@@ -731,46 +743,88 @@ model EquipmentMetric {
 /// reused by every produced document (OS, PMOC, Laudo, Relatório, Orçamento,
 /// Recibo). Each Work Order goes through exactly one Operation.
 model Operation {
-  id                       String                @id @default(uuid()) @db.Uuid
-  number                   Int                   @unique @default(autoincrement())
-  customerId               String                @map("customer_id") @db.Uuid
-  addressId                String?               @map("address_id") @db.Uuid
-  equipmentId              String?               @map("equipment_id") @db.Uuid
-  operatorId               String                @map("operator_id") @db.Uuid
-  type                     OperationType
-  status                   OperationStatus       @default(DRAFT)
-  scheduledFor             DateTime?             @map("scheduled_for") @db.Timestamptz(3)
-  startedAt                DateTime?             @map("started_at") @db.Timestamptz(3)
-  completedAt              DateTime?             @map("completed_at") @db.Timestamptz(3)
-  checklist                Json                  @default("[]")
-  observations             String?               @db.Text
-  reportedIssue            String?               @map("reported_issue") @db.Text
-  serviceDescription       String?               @map("service_description") @db.Text
-  technicalDiagnosis       String?               @map("technical_diagnosis") @db.Text
-  technicalRecommendations String?               @map("technical_recommendations") @db.Text
-  signatureData            String?               @map("signature_data") @db.Text
-  signedAt                 DateTime?             @map("signed_at") @db.Timestamptz(3)
-  createdAt                DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt                DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
-  customer                 Customer              @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  address                  CustomerAddress?      @relation(fields: [addressId], references: [id], onDelete: SetNull)
-  equipment                Equipment?            @relation(fields: [equipmentId], references: [id], onDelete: SetNull)
-  operator                 User                  @relation(fields: [operatorId], references: [id], onDelete: Restrict)
-  photos                   OperationPhoto[]
-  documents                OperationDocument[]
-  assignment               Assignment?
-  assignmentHistory        AssignmentHistory[]
-  lifecycleEvents          AssetLifecycleEvent[]
-  maintenanceExecution     MaintenanceExecution?
-  parts                    OperationPart[]
-  stockMovements           StockMovement[]
-  budgets                  Budget[]
+  id                        String                              @id @default(uuid()) @db.Uuid
+  number                    Int                                 @unique @default(autoincrement())
+  customerId                String                              @map("customer_id") @db.Uuid
+  addressId                 String?                             @map("address_id") @db.Uuid
+  equipmentId               String?                             @map("equipment_id") @db.Uuid
+  operatorId                String                              @map("operator_id") @db.Uuid
+  type                      OperationType
+  status                    OperationStatus                     @default(DRAFT)
+  scheduledFor              DateTime?                           @map("scheduled_for") @db.Timestamptz(3)
+  startedAt                 DateTime?                           @map("started_at") @db.Timestamptz(3)
+  completedAt               DateTime?                           @map("completed_at") @db.Timestamptz(3)
+  checklist                 Json                                @default("[]")
+  observations              String?                             @db.Text
+  reportedIssue             String?                             @map("reported_issue") @db.Text
+  serviceDescription        String?                             @map("service_description") @db.Text
+  technicalDiagnosis        String?                             @map("technical_diagnosis") @db.Text
+  technicalRecommendations  String?                             @map("technical_recommendations") @db.Text
+  referenceMonth            Int?                                @map("reference_month") @db.SmallInt
+  referenceYear             Int?                                @map("reference_year") @db.SmallInt
+  maintenanceType           OperationMaintenanceType?           @map("maintenance_type")
+  signatureData             String?                             @map("signature_data") @db.Text
+  signedAt                  DateTime?                           @map("signed_at") @db.Timestamptz(3)
+  createdAt                 DateTime                            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                 DateTime                            @updatedAt @map("updated_at") @db.Timestamptz(3)
+  customer                  Customer                            @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  address                   CustomerAddress?                    @relation(fields: [addressId], references: [id], onDelete: SetNull)
+  equipment                 Equipment?                          @relation(fields: [equipmentId], references: [id], onDelete: SetNull)
+  operator                  User                                @relation(fields: [operatorId], references: [id], onDelete: Restrict)
+  photos                    OperationPhoto[]
+  documents                 OperationDocument[]
+  assignment                Assignment?
+  assignmentHistory         AssignmentHistory[]
+  lifecycleEvents           AssetLifecycleEvent[]
+  maintenanceExecution      MaintenanceExecution?
+  parts                     OperationPart[]
+  stockMovements            StockMovement[]
+  budgets                   Budget[]
+  maintenanceChecklistItems OperationMaintenanceChecklistItem[]
+  inspectedEquipments       OperationInspectedEquipment[]
 
   @@index([customerId, createdAt])
   @@index([equipmentId, createdAt])
   @@index([operatorId, createdAt])
   @@index([status, createdAt])
   @@map("operations")
+}
+
+model OperationMaintenanceChecklistItem {
+  id              String                   @id @default(uuid()) @db.Uuid
+  operationId     String                   @map("operation_id") @db.Uuid
+  maintenanceType OperationMaintenanceType @map("maintenance_type")
+  description     String                   @db.VarChar(500)
+  executed        Boolean                  @default(false)
+  observations    String?                  @db.Text
+  position        Int
+  createdAt       DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
+  operation       Operation                @relation(fields: [operationId], references: [id], onDelete: Cascade)
+
+  @@unique([operationId, maintenanceType, position], map: "op_maintenance_checklist_type_position_uq")
+  @@index([operationId, maintenanceType], map: "op_maintenance_checklist_type_idx")
+  @@map("operation_maintenance_checklist_items")
+}
+
+model OperationInspectedEquipment {
+  id               String    @id @default(uuid()) @db.Uuid
+  operationId      String    @map("operation_id") @db.Uuid
+  equipmentId      String    @map("equipment_id") @db.Uuid
+  position         Int
+  sector           String    @db.VarChar(160)
+  brandSnapshot    String?   @map("brand_snapshot") @db.VarChar(120)
+  modelSnapshot    String?   @map("model_snapshot") @db.VarChar(120)
+  capacitySnapshot String?   @map("capacity_snapshot") @db.VarChar(80)
+  tagSnapshot      String?   @map("tag_snapshot") @db.VarChar(80)
+  serialSnapshot   String?   @map("serial_snapshot") @db.VarChar(120)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  operation        Operation @relation(fields: [operationId], references: [id], onDelete: Cascade)
+  equipment        Equipment @relation(fields: [equipmentId], references: [id], onDelete: Restrict)
+
+  @@unique([operationId, equipmentId], map: "op_inspected_equipment_operation_equipment_uq")
+  @@unique([operationId, position], map: "op_inspected_equipment_operation_position_uq")
+  @@index([equipmentId], map: "op_inspected_equipment_equipment_idx")
+  @@map("operation_inspected_equipments")
 }
 
 model Assignment {

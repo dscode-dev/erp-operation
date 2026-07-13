@@ -37,7 +37,7 @@ export type PaginatedTimeline<T> = Paginated<T> & {
 
 /* ============ Auth / Roles ============ */
 
-export type Role = "OWNER" | "MANAGER" | "OPERATOR" | "VIEWER";
+export type Role = 'OWNER' | 'MANAGER' | 'OPERATOR' | 'VIEWER';
 
 export type AuthTokens = {
   accessToken: string;
@@ -49,7 +49,7 @@ export type LoginPayload = { email: string; password: string };
 
 /* ============ Users / Team ============ */
 
-export type UserTheme = "SYSTEM" | "LIGHT" | "DARK";
+export type UserTheme = 'SYSTEM' | 'LIGHT' | 'DARK';
 
 export type UserPermissions = {
   canFinancial: boolean;
@@ -150,16 +150,16 @@ export type AvatarMeta = {
 /* ============ Notifications ============ */
 
 export type NotificationType =
-  | "ASSIGNMENT_ASSIGNED"
-  | "ASSIGNMENT_REASSIGNED"
-  | "ASSIGNMENT_OVERDUE"
-  | "OPERATION_STARTED"
-  | "OPERATION_COMPLETED"
-  | "BUDGET_APPROVED"
-  | "BUDGET_REJECTED";
+  | 'ASSIGNMENT_ASSIGNED'
+  | 'ASSIGNMENT_REASSIGNED'
+  | 'ASSIGNMENT_OVERDUE'
+  | 'OPERATION_STARTED'
+  | 'OPERATION_COMPLETED'
+  | 'BUDGET_APPROVED'
+  | 'BUDGET_REJECTED';
 
-export type NotificationSeverity = "INFO" | "SUCCESS" | "WARNING" | "DANGER";
-export type NotificationEntityType = "ASSIGNMENT" | "OPERATION" | "BUDGET" | "MAINTENANCE" | "PMOC";
+export type NotificationSeverity = 'INFO' | 'SUCCESS' | 'WARNING' | 'DANGER';
+export type NotificationEntityType = 'ASSIGNMENT' | 'OPERATION' | 'BUDGET' | 'MAINTENANCE' | 'PMOC';
 
 export type NotificationItem = {
   id: string;
@@ -176,27 +176,29 @@ export type NotificationItem = {
 
 /* ============ Organization ============ */
 
-export type BrandAssetType = "LOGO" | "HEADER" | "FOOTER";
+export type BrandAssetType = 'LOGO' | 'HEADER' | 'FOOTER';
 
 export type DocumentTemplateType =
-  | "BUDGET"
-  | "QUOTE"
-  | "WORK_ORDER"
-  | "RECEIPT"
-  | "REPORT"
-  | "TECHNICAL_REPORT"
-  | "TECHNICAL_OPINION"
-  | "PMOC";
+  | 'BUDGET'
+  | 'QUOTE'
+  | 'WORK_ORDER'
+  | 'RECEIPT'
+  | 'REPORT'
+  | 'TECHNICAL_REPORT'
+  | 'TECHNICAL_OPINION'
+  | 'PMOC';
 
-export type SignatureMode = "NONE" | "FIXED" | "COLLECTED" | "HYBRID";
+export type SignatureMode = 'NONE' | 'FIXED' | 'COLLECTED' | 'HYBRID';
 
 export type Organization = {
   id: string;
   legalName: string;
   tradeName: string;
   cnpj: string;
+  stateRegistration: string | null;
   email: string;
   phone: string;
+  phoneNumbers: string[];
   website: string | null;
   zipCode: string | null;
   street: string | null;
@@ -270,9 +272,21 @@ export type DocumentConfiguration = {
   type: DocumentTemplateType;
   organization: Pick<
     Organization,
-    "id" | "legalName" | "tradeName" | "cnpj" | "email" | "phone" | "city" | "state" | "primaryColor" | "secondaryColor"
+    | 'id'
+    | 'legalName'
+    | 'tradeName'
+    | 'cnpj'
+    | 'email'
+    | 'phone'
+    | 'city'
+    | 'state'
+    | 'primaryColor'
+    | 'secondaryColor'
   >;
-  settings: Pick<OrganizationSettings, "id" | "language" | "timezone" | "currency" | "documentPrefix">;
+  settings: Pick<
+    OrganizationSettings,
+    'id' | 'language' | 'timezone' | 'currency' | 'documentPrefix'
+  >;
   defaultTemplate: (DocumentTemplate & { signature?: Signature | null }) | null;
   templates: Array<DocumentTemplate & { signature?: Signature | null }>;
 };
@@ -301,8 +315,10 @@ export type UpdateOrganizationPayload = Partial<{
   legalName: string;
   tradeName: string;
   cnpj: string;
+  stateRegistration: string;
   email: string;
   phone: string;
+  phoneNumbers: string[];
   website: string;
   zipCode: string;
   street: string;
@@ -344,7 +360,7 @@ export type UpdateDocumentTemplatePayload = Partial<CreateDocumentTemplatePayloa
 
 /* ============ Customers ============ */
 
-export type CustomerType = "PERSON" | "COMPANY";
+export type CustomerType = 'PERSON' | 'COMPANY';
 
 export type CustomerCounts = { addresses: number; contacts: number; attachments: number };
 
@@ -427,17 +443,17 @@ export type CreateCustomerPayload = {
 /* ============ Equipments ============ */
 
 export type EquipmentType =
-  | "SPLIT"
-  | "CHILLER"
-  | "CONDENSER"
-  | "EVAPORATOR"
-  | "AIR_HANDLER"
-  | "SOLAR_INVERTER"
-  | "ELECTRICAL_PANEL"
-  | "GENERATOR"
-  | "OTHER";
+  | 'SPLIT'
+  | 'CHILLER'
+  | 'CONDENSER'
+  | 'EVAPORATOR'
+  | 'AIR_HANDLER'
+  | 'SOLAR_INVERTER'
+  | 'ELECTRICAL_PANEL'
+  | 'GENERATOR'
+  | 'OTHER';
 
-export type EquipmentStatus = "ACTIVE" | "MAINTENANCE" | "INACTIVE" | "RETIRED";
+export type EquipmentStatus = 'ACTIVE' | 'MAINTENANCE' | 'INACTIVE' | 'RETIRED';
 
 export type EquipmentCounts = { children: number; attachments: number; metrics: number };
 
@@ -450,6 +466,7 @@ export type EquipmentSummary = {
   manufacturer: string | null;
   model: string | null;
   serialNumber: string | null;
+  capacity: string | null;
   customer: { id: string; name: string } | null;
   address: { id: string; name: string | null; city: string | null } | null;
   _count?: EquipmentCounts;
@@ -500,28 +517,28 @@ export type EquipmentStats = {
 /* ============ Asset Lifecycle ============ */
 
 export type AssetLifecycleEventType =
-  | "INSTALLATION"
-  | "INSPECTION"
-  | "PREVENTIVE"
-  | "CORRECTIVE"
-  | "MAINTENANCE"
-  | "ASSIGNMENT_CREATED"
-  | "ASSIGNMENT_REASSIGNED"
-  | "ASSIGNMENT_ACCEPTED"
-  | "ASSIGNMENT_STARTED"
-  | "ASSIGNMENT_COMPLETED"
-  | "BUDGET_APPROVED"
-  | "BUDGET_REJECTED"
-  | "DOCUMENT_RENDERED"
-  | "PMOC_CREATED"
-  | "PMOC_UPDATED"
-  | "PMOC_COMPLETED"
-  | "PMOC_EXPIRED"
-  | "PART_REPLACEMENT"
-  | "WARRANTY"
-  | "DOCUMENT"
-  | "NOTE"
-  | "CUSTOM";
+  | 'INSTALLATION'
+  | 'INSPECTION'
+  | 'PREVENTIVE'
+  | 'CORRECTIVE'
+  | 'MAINTENANCE'
+  | 'ASSIGNMENT_CREATED'
+  | 'ASSIGNMENT_REASSIGNED'
+  | 'ASSIGNMENT_ACCEPTED'
+  | 'ASSIGNMENT_STARTED'
+  | 'ASSIGNMENT_COMPLETED'
+  | 'BUDGET_APPROVED'
+  | 'BUDGET_REJECTED'
+  | 'DOCUMENT_RENDERED'
+  | 'PMOC_CREATED'
+  | 'PMOC_UPDATED'
+  | 'PMOC_COMPLETED'
+  | 'PMOC_EXPIRED'
+  | 'PART_REPLACEMENT'
+  | 'WARRANTY'
+  | 'DOCUMENT'
+  | 'NOTE'
+  | 'CUSTOM';
 
 export type AssetLifecycleAttachment = {
   id: string;
@@ -549,7 +566,13 @@ export type AssetLifecycleTimelineItem = {
   documentId: string | null;
   equipmentId: string;
   references: {
-    equipment: { id: string; name: string; tag: string | null; type: string; status: string } | null;
+    equipment: {
+      id: string;
+      name: string;
+      tag: string | null;
+      type: string;
+      status: string;
+    } | null;
     customer: { id: string; name: string; tradeName: string | null } | null;
     operation: { id: string; number: number; type: string; status: string } | null;
     document: {
@@ -637,11 +660,38 @@ export type CreateEquipmentPayload = {
 
 /* ============ Operations (central operational domain) ============ */
 
-export type OperationType = "PREVENTIVA" | "CORRETIVA" | "INSTALACAO" | "PROJETO";
-export type OperationStatus = "DRAFT" | "IN_PROGRESS" | "COMPLETED" | "CANCELED";
-export type OperationDocumentStatus = "DRAFT" | "READY" | "VALIDATED" | "SENT";
+export type OperationType = 'PREVENTIVA' | 'CORRETIVA' | 'INSTALACAO' | 'PROJETO';
+export type OperationStatus = 'DRAFT' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELED';
+export type OperationMaintenanceType =
+  | 'WEEKLY'
+  | 'MONTHLY'
+  | 'QUARTERLY'
+  | 'SEMIANNUAL'
+  | 'ANNUAL'
+  | 'CORRECTIVE';
+export type OperationDocumentStatus = 'DRAFT' | 'READY' | 'VALIDATED' | 'SENT';
 
 export type OperationChecklistItem = { label: string; done: boolean; note?: string | null };
+export type OperationMaintenanceChecklistItem = {
+  id?: string;
+  maintenanceType: OperationMaintenanceType;
+  description: string;
+  executed: boolean;
+  observations?: string | null;
+  position?: number;
+};
+export type OperationInspectedEquipment = {
+  id?: string;
+  equipmentId: string;
+  sector: string;
+  position?: number;
+  brandSnapshot?: string | null;
+  modelSnapshot?: string | null;
+  capacitySnapshot?: string | null;
+  tagSnapshot?: string | null;
+  serialSnapshot?: string | null;
+  equipment?: { id: string; name: string; type: EquipmentType };
+};
 
 export type OperationDocument = {
   id: string;
@@ -684,7 +734,7 @@ export type OperationSummary = {
   _count?: { photos: number; documents: number };
 };
 
-export type OperationDetail = Omit<OperationSummary, "equipment"> & {
+export type OperationDetail = Omit<OperationSummary, 'equipment'> & {
   address: CustomerAddress | null;
   equipment: { id: string; name: string; tag: string | null; type: EquipmentType } | null;
   checklist: OperationChecklistItem[];
@@ -693,6 +743,11 @@ export type OperationDetail = Omit<OperationSummary, "equipment"> & {
   serviceDescription: string | null;
   technicalDiagnosis: string | null;
   technicalRecommendations: string | null;
+  referenceMonth: number | null;
+  referenceYear: number | null;
+  maintenanceType: OperationMaintenanceType | null;
+  maintenanceChecklistItems: OperationMaintenanceChecklistItem[];
+  inspectedEquipments: OperationInspectedEquipment[];
   signatureData: string | null;
   signedAt: string | null;
   photos: OperationPhoto[];
@@ -721,6 +776,11 @@ export type CreateOperationPayload = {
   serviceDescription?: string | null;
   technicalDiagnosis?: string | null;
   technicalRecommendations?: string | null;
+  referenceMonth?: number | null;
+  referenceYear?: number | null;
+  maintenanceType?: OperationMaintenanceType | null;
+  maintenanceChecklist?: OperationMaintenanceChecklistItem[];
+  inspectedEquipments?: Array<{ equipmentId: string; sector: string }>;
   signatureData?: string | null;
   signedAt?: string | null;
   photos?: { dataUrl: string; caption?: string | null }[];
@@ -729,28 +789,28 @@ export type CreateOperationPayload = {
 /* ============ Assignments (operator workflow) ============ */
 
 export type AssignmentStatus =
-  | "ASSIGNED"
-  | "ACCEPTED"
-  | "STARTED"
-  | "PAUSED"
-  | "COMPLETED"
-  | "CANCELED"
-  | "REJECTED";
+  | 'ASSIGNED'
+  | 'ACCEPTED'
+  | 'STARTED'
+  | 'PAUSED'
+  | 'COMPLETED'
+  | 'CANCELED'
+  | 'REJECTED';
 
 export type AssignmentEventType =
-  | "ASSIGNED"
-  | "REASSIGNED"
-  | "ACCEPTED"
-  | "STARTED"
-  | "PAUSED"
-  | "RESUMED"
-  | "REJECTED"
-  | "COMPLETED"
-  | "CANCELED";
+  | 'ASSIGNED'
+  | 'REASSIGNED'
+  | 'ACCEPTED'
+  | 'STARTED'
+  | 'PAUSED'
+  | 'RESUMED'
+  | 'REJECTED'
+  | 'COMPLETED'
+  | 'CANCELED';
 
-export type AssignmentUser = Pick<TeamUser, "id" | "name" | "username" | "role">;
+export type AssignmentUser = Pick<TeamUser, 'id' | 'name' | 'username' | 'role'>;
 
-export type AssignmentOperation = Omit<OperationDetail, "photos"> & {
+export type AssignmentOperation = Omit<OperationDetail, 'photos'> & {
   photos?: OperationPhoto[];
 };
 
@@ -796,10 +856,15 @@ export type CreateAssignmentPayload = {
 
 /* ============ Maintenance Planning / PMOC ============ */
 
-export type MaintenancePlanType = "PREVENTIVE" | "INSPECTION" | "WARRANTY" | "CUSTOM";
-export type MaintenancePriority = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
-export type MaintenanceExecutionStatus = "PLANNED" | "LINKED" | "COMPLETED" | "CANCELED";
-export type PmocComplianceStatus = "COMPLIANT" | "WARNING" | "OVERDUE" | "NON_COMPLIANT" | "IN_PROGRESS";
+export type MaintenancePlanType = 'PREVENTIVE' | 'INSPECTION' | 'WARRANTY' | 'CUSTOM';
+export type MaintenancePriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+export type MaintenanceExecutionStatus = 'PLANNED' | 'LINKED' | 'COMPLETED' | 'CANCELED';
+export type PmocComplianceStatus =
+  | 'COMPLIANT'
+  | 'WARNING'
+  | 'OVERDUE'
+  | 'NON_COMPLIANT'
+  | 'IN_PROGRESS';
 
 export type MaintenancePlan = {
   id: string;
@@ -816,8 +881,8 @@ export type MaintenancePlan = {
   createdBy: string;
   createdAt: string;
   updatedAt: string;
-  equipment?: Pick<EquipmentSummary, "id" | "name" | "tag" | "type" | "status"> & {
-    customer?: Pick<Customer, "id" | "name" | "tradeName"> | null;
+  equipment?: Pick<EquipmentSummary, 'id' | 'name' | 'tag' | 'type' | 'status'> & {
+    customer?: Pick<Customer, 'id' | 'name' | 'tradeName'> | null;
   };
 };
 
@@ -831,7 +896,7 @@ export type MaintenanceExecution = {
   notes: string | null;
   createdAt: string;
   plan?: MaintenancePlan;
-  operation?: Pick<OperationSummary, "id" | "number" | "type" | "status"> | null;
+  operation?: Pick<OperationSummary, 'id' | 'number' | 'type' | 'status'> | null;
 };
 
 export type MaintenanceStats = {
@@ -858,8 +923,8 @@ export type PmocPlan = {
   observations: string | null;
   createdAt: string;
   updatedAt: string;
-  customer?: Pick<Customer, "id" | "name" | "tradeName">;
-  equipment?: Pick<EquipmentSummary, "id" | "name" | "tag" | "type" | "status">;
+  customer?: Pick<Customer, 'id' | 'name' | 'tradeName'>;
+  equipment?: Pick<EquipmentSummary, 'id' | 'name' | 'tag' | 'type' | 'status'>;
   maintenancePlan?: MaintenancePlan & { executions?: MaintenanceExecution[] };
   compliance: {
     status: PmocComplianceStatus;
@@ -950,7 +1015,7 @@ export type InventoryUpdatePayload = Partial<{
   isActive: boolean;
 }>;
 
-export type StockMovementType = "IN" | "OUT" | "ADJUSTMENT" | "TRANSFER" | "CONSUMPTION" | "RETURN";
+export type StockMovementType = 'IN' | 'OUT' | 'ADJUSTMENT' | 'TRANSFER' | 'CONSUMPTION' | 'RETURN';
 
 export type StockMovement = {
   id: string;
@@ -963,7 +1028,12 @@ export type StockMovement = {
   occurredAt: string;
   createdAt: string;
   inventoryItem?: InventoryItem;
-  operation?: { id: string; number: number; equipmentId: string | null; customerId: string | null } | null;
+  operation?: {
+    id: string;
+    number: number;
+    equipmentId: string | null;
+    customerId: string | null;
+  } | null;
   user?: { id: string; name: string; email?: string };
 };
 
@@ -983,9 +1053,19 @@ export type InventoryStats = {
   productsWithoutStock: number;
   consumptionMovementsLast30Days: number;
   consumptionByPeriod: unknown;
-  consumptionByEquipment: Array<{ equipment?: { id: string; name: string } | null; quantity: string | number }>;
-  consumptionByCustomer: Array<{ customer?: { id: string; name: string; tradeName?: string | null } | null; quantity: string | number }>;
-  productsMostUsed: Array<{ product: Pick<Product, "id" | "name" | "sku">; quantity: string | number; occurrences: number }>;
+  consumptionByEquipment: Array<{
+    equipment?: { id: string; name: string } | null;
+    quantity: string | number;
+  }>;
+  consumptionByCustomer: Array<{
+    customer?: { id: string; name: string; tradeName?: string | null } | null;
+    quantity: string | number;
+  }>;
+  productsMostUsed: Array<{
+    product: Pick<Product, 'id' | 'name' | 'sku'>;
+    quantity: string | number;
+    occurrences: number;
+  }>;
 };
 
 export type Supplier = {
@@ -1105,12 +1185,18 @@ export type PricingStats = {
 
 /* ============ Financial ============ */
 
-export type FinancialAccountType = "CASH" | "BANK" | "CREDIT_CARD" | "DIGITAL_WALLET" | "OTHER";
-export type FinancialCategoryType = "INCOME" | "EXPENSE" | "TRANSFER";
-export type FinancialEntryType = "RECEIVABLE" | "PAYABLE" | "TRANSFER";
-export type FinancialEntryStatus = "PENDING" | "PAID" | "CANCELED" | "OVERDUE";
-export type FinancialEntryOrigin = "MANUAL" | "BUDGET" | "PURCHASE" | "OPERATION" | "PMOC" | "OTHER";
-export type FinancialHistoryAction = "CREATED" | "UPDATED" | "PAID" | "CANCELED" | "RESTORED";
+export type FinancialAccountType = 'CASH' | 'BANK' | 'CREDIT_CARD' | 'DIGITAL_WALLET' | 'OTHER';
+export type FinancialCategoryType = 'INCOME' | 'EXPENSE' | 'TRANSFER';
+export type FinancialEntryType = 'RECEIVABLE' | 'PAYABLE' | 'TRANSFER';
+export type FinancialEntryStatus = 'PENDING' | 'PAID' | 'CANCELED' | 'OVERDUE';
+export type FinancialEntryOrigin =
+  | 'MANUAL'
+  | 'BUDGET'
+  | 'PURCHASE'
+  | 'OPERATION'
+  | 'PMOC'
+  | 'OTHER';
+export type FinancialHistoryAction = 'CREATED' | 'UPDATED' | 'PAID' | 'CANCELED' | 'RESTORED';
 
 export type FinancialAccount = {
   id: string;
@@ -1154,9 +1240,9 @@ export type FinancialEntry = {
   createdBy: string;
   createdAt: string;
   updatedAt: string;
-  account?: Pick<FinancialAccount, "id" | "name" | "type" | "currentBalance">;
-  category?: Pick<FinancialCategory, "id" | "name" | "type" | "color" | "icon">;
-  creator?: Pick<TeamUser, "id" | "name" | "email" | "username">;
+  account?: Pick<FinancialAccount, 'id' | 'name' | 'type' | 'currentBalance'>;
+  category?: Pick<FinancialCategory, 'id' | 'name' | 'type' | 'color' | 'icon'>;
+  creator?: Pick<TeamUser, 'id' | 'name' | 'email' | 'username'>;
 };
 
 export type FinancialHistory = {
@@ -1168,7 +1254,7 @@ export type FinancialHistory = {
   newStatus: FinancialEntryStatus;
   metadata: Record<string, unknown>;
   createdAt: string;
-  actor?: Pick<TeamUser, "id" | "name" | "email" | "username">;
+  actor?: Pick<TeamUser, 'id' | 'name' | 'email' | 'username'>;
 };
 
 export type FinancialStats = {
@@ -1179,7 +1265,12 @@ export type FinancialStats = {
   currentBalance: string | number;
   income: string | number;
   expenses: string | number;
-  monthlyFlow: Array<{ month: string; income: string | number; expenses: string | number; balance: string | number }>;
+  monthlyFlow: Array<{
+    month: string;
+    income: string | number;
+    expenses: string | number;
+    balance: string | number;
+  }>;
 };
 
 export type FinancialAccountPayload = Partial<{
@@ -1214,8 +1305,14 @@ export type FinancialEntryPayload = Partial<{
 
 /* ============ Procurement / Purchasing ============ */
 
-export type PurchaseOrderStatus = "DRAFT" | "SENT" | "PARTIALLY_RECEIVED" | "RECEIVED" | "CANCELED";
-export type PurchaseHistoryAction = "CREATED" | "UPDATED" | "SENT" | "PARTIALLY_RECEIVED" | "RECEIVED" | "CANCELED";
+export type PurchaseOrderStatus = 'DRAFT' | 'SENT' | 'PARTIALLY_RECEIVED' | 'RECEIVED' | 'CANCELED';
+export type PurchaseHistoryAction =
+  | 'CREATED'
+  | 'UPDATED'
+  | 'SENT'
+  | 'PARTIALLY_RECEIVED'
+  | 'RECEIVED'
+  | 'CANCELED';
 
 export type PurchaseOrderItem = {
   id: string;
@@ -1228,7 +1325,7 @@ export type PurchaseOrderItem = {
   receivedQuantity: string | number;
   createdAt: string;
   updatedAt: string;
-  product?: Pick<Product, "id" | "name" | "sku" | "unit" | "brand" | "model">;
+  product?: Pick<Product, 'id' | 'name' | 'sku' | 'unit' | 'brand' | 'model'>;
 };
 
 export type PurchaseReceipt = {
@@ -1239,7 +1336,7 @@ export type PurchaseReceipt = {
   notes: string | null;
   metadata: Record<string, unknown>;
   createdAt: string;
-  receiver?: Pick<TeamUser, "id" | "name" | "email" | "username">;
+  receiver?: Pick<TeamUser, 'id' | 'name' | 'email' | 'username'>;
 };
 
 export type PurchaseOrder = {
@@ -1253,8 +1350,8 @@ export type PurchaseOrder = {
   createdBy: string;
   createdAt: string;
   updatedAt: string;
-  supplier?: Pick<Supplier, "id" | "legalName" | "tradeName" | "document">;
-  creator?: Pick<TeamUser, "id" | "name" | "email" | "username">;
+  supplier?: Pick<Supplier, 'id' | 'legalName' | 'tradeName' | 'document'>;
+  creator?: Pick<TeamUser, 'id' | 'name' | 'email' | 'username'>;
   items: PurchaseOrderItem[];
   receipts: PurchaseReceipt[];
 };
@@ -1268,7 +1365,7 @@ export type PurchaseHistory = {
   newStatus: PurchaseOrderStatus;
   metadata: Record<string, unknown>;
   createdAt: string;
-  actor?: Pick<TeamUser, "id" | "name" | "email" | "username">;
+  actor?: Pick<TeamUser, 'id' | 'name' | 'email' | 'username'>;
 };
 
 export type PurchaseOrderStats = {
@@ -1302,20 +1399,20 @@ export type PurchaseReceiptPayload = {
 
 /* ============ Budget ============ */
 
-export type BudgetStatus = "DRAFT" | "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED" | "CANCELED";
+export type BudgetStatus = 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'EXPIRED' | 'CANCELED';
 
 export type BudgetHistoryAction =
-  | "CREATED"
-  | "UPDATED"
-  | "SUBMITTED"
-  | "APPROVED"
-  | "REJECTED"
-  | "EXPIRED"
-  | "CANCELED"
-  | "DOCUMENT_RENDERED"
-  | "ITEM_ADDED"
-  | "ITEM_UPDATED"
-  | "ITEM_REMOVED";
+  | 'CREATED'
+  | 'UPDATED'
+  | 'SUBMITTED'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'EXPIRED'
+  | 'CANCELED'
+  | 'DOCUMENT_RENDERED'
+  | 'ITEM_ADDED'
+  | 'ITEM_UPDATED'
+  | 'ITEM_REMOVED';
 
 export type BudgetItem = {
   id: string;
@@ -1339,7 +1436,7 @@ export type BudgetApproval = {
   status: BudgetStatus;
   observation: string | null;
   createdAt: string;
-  actor?: Pick<TeamUser, "id" | "name" | "email" | "username">;
+  actor?: Pick<TeamUser, 'id' | 'name' | 'email' | 'username'>;
 };
 
 export type Budget = {
@@ -1365,11 +1462,18 @@ export type Budget = {
   canceledAt: string | null;
   createdAt: string;
   updatedAt: string;
-  customer?: Pick<Customer, "id" | "name" | "tradeName" | "email" | "phone">;
+  customer?: Pick<Customer, 'id' | 'name' | 'tradeName' | 'email' | 'phone'>;
   customerAddress?: CustomerAddress | null;
-  equipment?: Pick<EquipmentSummary, "id" | "name" | "tag" | "type" | "status"> | null;
-  operation?: { id: string; number: number; type: OperationType; status: OperationStatus; equipmentId: string | null; customerId: string };
-  creator?: Pick<TeamUser, "id" | "name" | "email" | "username" | "role">;
+  equipment?: Pick<EquipmentSummary, 'id' | 'name' | 'tag' | 'type' | 'status'> | null;
+  operation?: {
+    id: string;
+    number: number;
+    type: OperationType;
+    status: OperationStatus;
+    equipmentId: string | null;
+    customerId: string;
+  };
+  creator?: Pick<TeamUser, 'id' | 'name' | 'email' | 'username' | 'role'>;
   document?: OperationDocument | null;
   items: BudgetItem[];
   approvals: BudgetApproval[];
@@ -1384,7 +1488,7 @@ export type BudgetHistory = {
   newStatus: BudgetStatus;
   metadata: Record<string, unknown>;
   createdAt: string;
-  actor?: Pick<TeamUser, "id" | "name" | "email" | "username">;
+  actor?: Pick<TeamUser, 'id' | 'name' | 'email' | 'username'>;
 };
 
 export type BudgetStats = {
@@ -1413,13 +1517,13 @@ export type BudgetPayload = {
   additional?: number;
   expirationDate: string;
   observations?: string | null;
-  status?: Extract<BudgetStatus, "DRAFT" | "PENDING">;
+  status?: Extract<BudgetStatus, 'DRAFT' | 'PENDING'>;
   items: BudgetItemPayload[];
 };
 
 /* ============ Demo bridge (dashboard / schedule / finance) ============ */
 
-export type DemoScheduleState = "OVERDUE" | "IN_PROGRESS" | "SCHEDULED" | "DONE";
+export type DemoScheduleState = 'OVERDUE' | 'IN_PROGRESS' | 'SCHEDULED' | 'DONE';
 
 export type DemoScheduleItem = {
   id: string;
@@ -1436,7 +1540,7 @@ export type DemoScheduleItem = {
 };
 
 export type DemoDataset = {
-  "demo.dashboard.v1": {
+  'demo.dashboard.v1': {
     generatedAt: string;
     counters: {
       atendimentosHoje: number;
@@ -1445,13 +1549,13 @@ export type DemoDataset = {
       servicosEmAndamento: number;
     };
   };
-  "demo.schedule.v1": {
+  'demo.schedule.v1': {
     generatedAt: string;
     items: DemoScheduleItem[];
   };
-  "demo.finance.v1": {
+  'demo.finance.v1': {
     generatedAt: string;
-    currency: "BRL";
+    currency: 'BRL';
     summary: {
       entradas: number;
       saidas: number;
@@ -1460,32 +1564,32 @@ export type DemoDataset = {
     };
     entries: Array<{
       id: string;
-      kind: "ENTRY" | "EXPENSE";
+      kind: 'ENTRY' | 'EXPENSE';
       description: string;
       amount: number;
     }>;
   };
   /** Commercial-demo snapshots (no production domain yet). */
-  "demo.orders.v1": {
+  'demo.orders.v1': {
     generatedAt: string;
     items: DemoOrder[];
   };
-  "demo.products.v1": {
+  'demo.products.v1': {
     generatedAt: string;
     items: DemoProduct[];
   };
-  "demo.documents.v1": {
+  'demo.documents.v1': {
     generatedAt: string;
     items: DemoDocument[];
   };
-  "demo.services.v1": {
+  'demo.services.v1': {
     generatedAt: string;
     items: DemoService[];
   };
 };
 
-export type DemoOrderStatus = "OVERDUE" | "IN_PROGRESS" | "SCHEDULED" | "DONE";
-export type DemoOrderType = "PREVENTIVA" | "CORRETIVA" | "INSTALACAO" | "PROJETO";
+export type DemoOrderStatus = 'OVERDUE' | 'IN_PROGRESS' | 'SCHEDULED' | 'DONE';
+export type DemoOrderType = 'PREVENTIVA' | 'CORRETIVA' | 'INSTALACAO' | 'PROJETO';
 
 export type DemoOrder = {
   id: string;
@@ -1499,7 +1603,7 @@ export type DemoOrder = {
   status: DemoOrderStatus;
 };
 
-export type DemoProductStatus = "ok" | "low" | "out";
+export type DemoProductStatus = 'ok' | 'low' | 'out';
 
 export type DemoProduct = {
   id: string;
@@ -1513,7 +1617,7 @@ export type DemoProduct = {
   status: DemoProductStatus;
 };
 
-export type DemoDocumentStatus = "DRAFT" | "READY" | "VALIDATED" | "SENT";
+export type DemoDocumentStatus = 'DRAFT' | 'READY' | 'VALIDATED' | 'SENT';
 
 export type DemoDocument = {
   id: string;
@@ -1528,8 +1632,8 @@ export type DemoDocument = {
   value: number;
 };
 
-export type DemoServiceStatus = "SCHEDULED" | "IN_PROGRESS" | "DONE";
-export type DemoTimelineKind = "INSTALL" | "MAINTENANCE" | "VISIT" | "DOCUMENT" | "NOTE";
+export type DemoServiceStatus = 'SCHEDULED' | 'IN_PROGRESS' | 'DONE';
+export type DemoTimelineKind = 'INSTALL' | 'MAINTENANCE' | 'VISIT' | 'DOCUMENT' | 'NOTE';
 
 export type DemoServiceEvent = { at: string; kind: DemoTimelineKind; label: string };
 
@@ -1545,4 +1649,4 @@ export type DemoService = {
   history: DemoServiceEvent[];
 };
 
-export * from "./documents";
+export * from './documents';

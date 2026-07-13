@@ -32,10 +32,13 @@ export interface DocumentMetadata {
     legalName: string;
     tradeName: string;
     cnpj: string;
+    stateRegistration?: string;
     email: string;
     phone: string;
+    phoneNumbers?: string[];
     website: string;
     address: string;
+    zipCode?: string;
     city: string;
     state: string;
     primaryColor: string;
@@ -48,6 +51,22 @@ export interface DocumentHeader {
   subtitle?: string;
   organizationName: string;
   documentNumber: string;
+  logo?: { mimeType: string; fileSize: number; contentBase64: string } | null;
+  corporate?: CorporateDocumentHeader;
+}
+
+export interface CorporateDocumentHeader {
+  legalName: string;
+  tradeName: string;
+  cnpj: string;
+  stateRegistration: string;
+  fullAddress: string;
+  city: string;
+  state: string;
+  zipCode: string;
+  phoneNumbers: string[];
+  email: string;
+  website: string;
   logo?: { mimeType: string; fileSize: number; contentBase64: string } | null;
 }
 
@@ -105,7 +124,14 @@ export interface QrCodeComponent extends BlueprintBaseComponent {
 }
 
 export interface DocumentVisualStyle {
-  colors: { primary: string; text: string; muted: string; border: string; surface: string; background: string };
+  colors: {
+    primary: string;
+    text: string;
+    muted: string;
+    border: string;
+    surface: string;
+    background: string;
+  };
   typography: { title: number; section: number; body: number; label: number; caption: number };
   spacing: { section: number; component: number; cardPadding: number };
 }

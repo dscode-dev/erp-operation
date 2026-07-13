@@ -192,15 +192,15 @@ carga e observabilidade para a reta final da V1.
 
 Budgets oficiais para baseline local/staging:
 
-| Área | Budget V1 |
-|---|---:|
-| Health/readiness | p95 ≤ 100 ms |
-| Listagens paginadas críticas | p95 ≤ 300 ms |
-| Mutations transacionais críticas | p95 ≤ 500 ms |
-| Document preview/render simples | p95 ≤ 800 ms |
-| Dashboard executivo atual | p95 ≤ 1.200 ms por fan-out completo local |
-| Error rate em carga controlada | 0% para cenários felizes |
-| Deadlocks PostgreSQL | 0 |
+| Área                             |                                 Budget V1 |
+| -------------------------------- | ----------------------------------------: |
+| Health/readiness                 |                              p95 ≤ 100 ms |
+| Listagens paginadas críticas     |                              p95 ≤ 300 ms |
+| Mutations transacionais críticas |                              p95 ≤ 500 ms |
+| Document preview/render simples  |                              p95 ≤ 800 ms |
+| Dashboard executivo atual        | p95 ≤ 1.200 ms por fan-out completo local |
+| Error rate em carga controlada   |                  0% para cenários felizes |
+| Deadlocks PostgreSQL             |                                         0 |
 
 ### Tooling criado
 
@@ -216,16 +216,16 @@ Budgets oficiais para baseline local/staging:
 
 Baseline local em `orbit_perf_test`, fixture `tiny`, API local, 2 VUs, 8 segundos por cenário:
 
-| Cenário | Requests | p95 | Error rate |
-|---|---:|---:|---:|
-| Dashboard executivo | 1.564 | 181.06 ms | 0 |
-| Operations/Assignments dispatch | 332 | 36.62 ms | 0 |
-| Inventory consumption | 396 | 58.39 ms | 0 |
-| Procurement receipt | 360 | 117.54 ms | 0 |
-| Financial settlement | 450 | 45.32 ms | 0 |
-| Budget lifecycle | 402 | 31.30 ms | 0 |
-| Document Engine preview/render/download | 300 | 104.04 ms | 0 |
-| Operator read path | 420 | 28.31 ms | 0 |
+| Cenário                                 | Requests |       p95 | Error rate |
+| --------------------------------------- | -------: | --------: | ---------: |
+| Dashboard executivo                     |    1.564 | 181.06 ms |          0 |
+| Operations/Assignments dispatch         |      332 |  36.62 ms |          0 |
+| Inventory consumption                   |      396 |  58.39 ms |          0 |
+| Procurement receipt                     |      360 | 117.54 ms |          0 |
+| Financial settlement                    |      450 |  45.32 ms |          0 |
+| Budget lifecycle                        |      402 |  31.30 ms |          0 |
+| Document Engine preview/render/download |      300 | 104.04 ms |          0 |
+| Operator read path                      |      420 |  28.31 ms |          0 |
 
 ### Correções aplicadas por medição
 
@@ -529,7 +529,7 @@ Endpoints criados:
 | Method | Path                                                      | Access                           |
 | ------ | --------------------------------------------------------- | -------------------------------- |
 | GET    | `/api/v1/documents/operations/:operationId/:type/preview` | OWNER, MANAGER, OPERATOR, VIEWER |
-| GET    | `/api/v1/documents/templates/:templateId/preview`          | OWNER, MANAGER, OPERATOR, VIEWER |
+| GET    | `/api/v1/documents/templates/:templateId/preview`         | OWNER, MANAGER, OPERATOR, VIEWER |
 | POST   | `/api/v1/documents/operations/:operationId/:type/render`  | OWNER, MANAGER, OPERATOR         |
 | GET    | `/api/v1/documents/:documentId/preview`                   | OWNER, MANAGER, OPERATOR, VIEWER |
 | POST   | `/api/v1/documents/:documentId/render`                    | OWNER, MANAGER, OPERATOR         |
@@ -1362,26 +1362,26 @@ Product Backlog Closure 01.1:
 
 Endpoints adicionados:
 
-| Method | Path                                      | Access                           |
-| ------ | ----------------------------------------- | -------------------------------- |
-| GET    | `/api/v1/products`                        | OWNER, MANAGER, OPERATOR, VIEWER |
-| GET    | `/api/v1/products/:id`                    | OWNER, MANAGER, OPERATOR, VIEWER |
-| POST   | `/api/v1/products`                        | OWNER, MANAGER                   |
-| PATCH  | `/api/v1/products/:id`                    | OWNER, MANAGER                   |
-| DELETE | `/api/v1/products/:id`                    | OWNER, MANAGER                   |
-| GET    | `/api/v1/inventory`                       | OWNER, MANAGER, OPERATOR, VIEWER |
-| GET    | `/api/v1/inventory/:id`                   | OWNER, MANAGER, OPERATOR, VIEWER |
-| PATCH  | `/api/v1/inventory/:id`                   | OWNER, MANAGER                   |
-| GET    | `/api/v1/inventory/stats`                 | OWNER, MANAGER, OPERATOR, VIEWER |
-| POST   | `/api/v1/inventory/movements`             | OWNER, MANAGER, OPERATOR         |
-| GET    | `/api/v1/inventory/movements`             | OWNER, MANAGER, OPERATOR, VIEWER |
-| GET    | `/api/v1/suppliers`                       | OWNER, MANAGER                   |
-| POST   | `/api/v1/suppliers`                       | OWNER, MANAGER                   |
-| PATCH  | `/api/v1/suppliers/:id`                   | OWNER, MANAGER                   |
-| DELETE | `/api/v1/suppliers/:id`                   | OWNER, MANAGER                   |
-| GET    | `/api/v1/operations/:id/materials`         | OWNER, MANAGER, OPERATOR, VIEWER |
-| POST   | `/api/v1/operations/:id/materials`         | OWNER, MANAGER, OPERATOR         |
-| DELETE | `/api/v1/operations/:id/materials/:id`     | OWNER, MANAGER                   |
+| Method | Path                                   | Access                           |
+| ------ | -------------------------------------- | -------------------------------- |
+| GET    | `/api/v1/products`                     | OWNER, MANAGER, OPERATOR, VIEWER |
+| GET    | `/api/v1/products/:id`                 | OWNER, MANAGER, OPERATOR, VIEWER |
+| POST   | `/api/v1/products`                     | OWNER, MANAGER                   |
+| PATCH  | `/api/v1/products/:id`                 | OWNER, MANAGER                   |
+| DELETE | `/api/v1/products/:id`                 | OWNER, MANAGER                   |
+| GET    | `/api/v1/inventory`                    | OWNER, MANAGER, OPERATOR, VIEWER |
+| GET    | `/api/v1/inventory/:id`                | OWNER, MANAGER, OPERATOR, VIEWER |
+| PATCH  | `/api/v1/inventory/:id`                | OWNER, MANAGER                   |
+| GET    | `/api/v1/inventory/stats`              | OWNER, MANAGER, OPERATOR, VIEWER |
+| POST   | `/api/v1/inventory/movements`          | OWNER, MANAGER, OPERATOR         |
+| GET    | `/api/v1/inventory/movements`          | OWNER, MANAGER, OPERATOR, VIEWER |
+| GET    | `/api/v1/suppliers`                    | OWNER, MANAGER                   |
+| POST   | `/api/v1/suppliers`                    | OWNER, MANAGER                   |
+| PATCH  | `/api/v1/suppliers/:id`                | OWNER, MANAGER                   |
+| DELETE | `/api/v1/suppliers/:id`                | OWNER, MANAGER                   |
+| GET    | `/api/v1/operations/:id/materials`     | OWNER, MANAGER, OPERATOR, VIEWER |
+| POST   | `/api/v1/operations/:id/materials`     | OWNER, MANAGER, OPERATOR         |
+| DELETE | `/api/v1/operations/:id/materials/:id` | OWNER, MANAGER                   |
 
 Auditoria:
 
@@ -1507,7 +1507,7 @@ Correções implementadas:
   `assignedTo`, protegendo operador antigo contra corrida após reatribuição.
 - Budgets: approve/reject/cancel usam transação `Serializable` e transição condicional por status.
 - Pricing: criação/revisão de preço usam transação `Serializable` para o par validação de overlap
-  + gravação.
+  - gravação.
 - Document Engine: renderização oficial usa proteção contra stale metadata write via
   `updatedAt`; se outro render vencer a corrida, o PDF recém-criado é removido e o cliente recebe
   conflito controlado para retry.
@@ -1714,10 +1714,10 @@ Schema:
 
 Endpoints adicionados:
 
-| Method | Path | Access |
-| ------ | ---- | ------ |
-| POST | `/api/v1/budgets/:id/render` | OWNER, MANAGER |
-| GET | `/api/v1/budgets/:id/download` | OWNER, MANAGER |
+| Method | Path                           | Access         |
+| ------ | ------------------------------ | -------------- |
+| POST   | `/api/v1/budgets/:id/render`   | OWNER, MANAGER |
+| GET    | `/api/v1/budgets/:id/download` | OWNER, MANAGER |
 
 Decisões:
 
@@ -1833,24 +1833,24 @@ Migration criada:
 
 Endpoints adicionados:
 
-| Method | Path | Access |
-| ------ | ---- | ------ |
-| GET | `/api/v1/financial/accounts` | OWNER, MANAGER |
-| POST | `/api/v1/financial/accounts` | OWNER, MANAGER |
-| PATCH | `/api/v1/financial/accounts/:id` | OWNER, MANAGER |
-| DELETE | `/api/v1/financial/accounts/:id` | OWNER, MANAGER |
-| GET | `/api/v1/financial/categories` | OWNER, MANAGER |
-| POST | `/api/v1/financial/categories` | OWNER, MANAGER |
-| PATCH | `/api/v1/financial/categories/:id` | OWNER, MANAGER |
-| DELETE | `/api/v1/financial/categories/:id` | OWNER, MANAGER |
-| GET | `/api/v1/financial/entries` | OWNER, MANAGER |
-| GET | `/api/v1/financial/entries/:id` | OWNER, MANAGER |
-| POST | `/api/v1/financial/entries` | OWNER, MANAGER |
-| PATCH | `/api/v1/financial/entries/:id` | OWNER, MANAGER |
-| PATCH | `/api/v1/financial/entries/:id/pay` | OWNER, MANAGER |
-| PATCH | `/api/v1/financial/entries/:id/cancel` | OWNER, MANAGER |
-| GET | `/api/v1/financial/stats` | OWNER, MANAGER |
-| GET | `/api/v1/financial/history/:id` | OWNER, MANAGER |
+| Method | Path                                   | Access         |
+| ------ | -------------------------------------- | -------------- |
+| GET    | `/api/v1/financial/accounts`           | OWNER, MANAGER |
+| POST   | `/api/v1/financial/accounts`           | OWNER, MANAGER |
+| PATCH  | `/api/v1/financial/accounts/:id`       | OWNER, MANAGER |
+| DELETE | `/api/v1/financial/accounts/:id`       | OWNER, MANAGER |
+| GET    | `/api/v1/financial/categories`         | OWNER, MANAGER |
+| POST   | `/api/v1/financial/categories`         | OWNER, MANAGER |
+| PATCH  | `/api/v1/financial/categories/:id`     | OWNER, MANAGER |
+| DELETE | `/api/v1/financial/categories/:id`     | OWNER, MANAGER |
+| GET    | `/api/v1/financial/entries`            | OWNER, MANAGER |
+| GET    | `/api/v1/financial/entries/:id`        | OWNER, MANAGER |
+| POST   | `/api/v1/financial/entries`            | OWNER, MANAGER |
+| PATCH  | `/api/v1/financial/entries/:id`        | OWNER, MANAGER |
+| PATCH  | `/api/v1/financial/entries/:id/pay`    | OWNER, MANAGER |
+| PATCH  | `/api/v1/financial/entries/:id/cancel` | OWNER, MANAGER |
+| GET    | `/api/v1/financial/stats`              | OWNER, MANAGER |
+| GET    | `/api/v1/financial/history/:id`        | OWNER, MANAGER |
 
 Decisões:
 
@@ -1924,22 +1924,22 @@ Migration criada:
 
 Endpoints adicionados:
 
-| Method | Path |
-| ------ | ---- |
-| GET | `/api/v1/purchase-orders` |
-| GET | `/api/v1/purchase-orders/:id` |
-| POST | `/api/v1/purchase-orders` |
-| PATCH | `/api/v1/purchase-orders/:id` |
-| PATCH | `/api/v1/purchase-orders/:id/send` |
-| PATCH | `/api/v1/purchase-orders/:id/cancel` |
-| GET | `/api/v1/purchase-orders/:id/items` |
-| POST | `/api/v1/purchase-orders/:id/items` |
-| PATCH | `/api/v1/purchase-order-items/:id` |
-| DELETE | `/api/v1/purchase-order-items/:id` |
-| GET | `/api/v1/purchase-orders/:id/receipts` |
-| POST | `/api/v1/purchase-orders/:id/receipts` |
-| GET | `/api/v1/purchase-orders/stats` |
-| GET | `/api/v1/purchase-orders/history/:id` |
+| Method | Path                                   |
+| ------ | -------------------------------------- |
+| GET    | `/api/v1/purchase-orders`              |
+| GET    | `/api/v1/purchase-orders/:id`          |
+| POST   | `/api/v1/purchase-orders`              |
+| PATCH  | `/api/v1/purchase-orders/:id`          |
+| PATCH  | `/api/v1/purchase-orders/:id/send`     |
+| PATCH  | `/api/v1/purchase-orders/:id/cancel`   |
+| GET    | `/api/v1/purchase-orders/:id/items`    |
+| POST   | `/api/v1/purchase-orders/:id/items`    |
+| PATCH  | `/api/v1/purchase-order-items/:id`     |
+| DELETE | `/api/v1/purchase-order-items/:id`     |
+| GET    | `/api/v1/purchase-orders/:id/receipts` |
+| POST   | `/api/v1/purchase-orders/:id/receipts` |
+| GET    | `/api/v1/purchase-orders/stats`        |
+| GET    | `/api/v1/purchase-orders/history/:id`  |
 
 Integrações:
 
@@ -2032,18 +2032,18 @@ Integrações:
 
 Endpoints adicionados:
 
-| Method | Path | Access |
-| ------ | ---- | ------ |
-| GET | `/api/v1/budgets` | OWNER, MANAGER |
-| GET | `/api/v1/budgets/:id` | OWNER, MANAGER |
-| GET | `/api/v1/operations/:id/budgets` | OWNER, MANAGER |
-| POST | `/api/v1/budgets` | OWNER, MANAGER |
-| PATCH | `/api/v1/budgets/:id` | OWNER, MANAGER |
-| PATCH | `/api/v1/budgets/:id/approve` | OWNER, MANAGER |
-| PATCH | `/api/v1/budgets/:id/reject` | OWNER, MANAGER |
-| DELETE | `/api/v1/budgets/:id` | OWNER, MANAGER |
-| GET | `/api/v1/budgets/stats` | OWNER, MANAGER |
-| GET | `/api/v1/budgets/history/:id` | OWNER, MANAGER |
+| Method | Path                             | Access         |
+| ------ | -------------------------------- | -------------- |
+| GET    | `/api/v1/budgets`                | OWNER, MANAGER |
+| GET    | `/api/v1/budgets/:id`            | OWNER, MANAGER |
+| GET    | `/api/v1/operations/:id/budgets` | OWNER, MANAGER |
+| POST   | `/api/v1/budgets`                | OWNER, MANAGER |
+| PATCH  | `/api/v1/budgets/:id`            | OWNER, MANAGER |
+| PATCH  | `/api/v1/budgets/:id/approve`    | OWNER, MANAGER |
+| PATCH  | `/api/v1/budgets/:id/reject`     | OWNER, MANAGER |
+| DELETE | `/api/v1/budgets/:id`            | OWNER, MANAGER |
+| GET    | `/api/v1/budgets/stats`          | OWNER, MANAGER |
+| GET    | `/api/v1/budgets/history/:id`    | OWNER, MANAGER |
 
 AppSec:
 
@@ -2112,15 +2112,15 @@ Decisões arquiteturais:
 
 Endpoints adicionados:
 
-| Method | Path                                  | Access         |
-| ------ | ------------------------------------- | -------------- |
-| GET    | `/api/v1/pricing/stats`               | OWNER, MANAGER |
-| GET    | `/api/v1/pricing`                     | OWNER, MANAGER |
-| GET    | `/api/v1/pricing/:id`                 | OWNER, MANAGER |
-| GET    | `/api/v1/products/:id/pricing`        | OWNER, MANAGER |
-| POST   | `/api/v1/products/:id/pricing`        | OWNER          |
-| PATCH  | `/api/v1/pricing/:id`                 | OWNER          |
-| GET    | `/api/v1/pricing/history/:productId`  | OWNER, MANAGER |
+| Method | Path                                 | Access         |
+| ------ | ------------------------------------ | -------------- |
+| GET    | `/api/v1/pricing/stats`              | OWNER, MANAGER |
+| GET    | `/api/v1/pricing`                    | OWNER, MANAGER |
+| GET    | `/api/v1/pricing/:id`                | OWNER, MANAGER |
+| GET    | `/api/v1/products/:id/pricing`       | OWNER, MANAGER |
+| POST   | `/api/v1/products/:id/pricing`       | OWNER          |
+| PATCH  | `/api/v1/pricing/:id`                | OWNER          |
+| GET    | `/api/v1/pricing/history/:productId` | OWNER, MANAGER |
 
 Auditoria:
 
@@ -2233,18 +2233,18 @@ Histórico:
 
 Endpoints adicionados:
 
-| Method | Path                                      | Access |
-| ------ | ----------------------------------------- | ------ |
-| GET    | `/api/v1/assignments`                     | OWNER, MANAGER, OPERATOR, VIEWER |
-| GET    | `/api/v1/assignments/my`                  | OWNER, MANAGER, OPERATOR |
-| GET    | `/api/v1/assignments/:id`                 | OWNER, MANAGER, OPERATOR, VIEWER |
-| GET    | `/api/v1/assignments/history/:operationId`| OWNER, MANAGER, OPERATOR, VIEWER |
-| POST   | `/api/v1/assignments`                     | OWNER, MANAGER |
-| PATCH  | `/api/v1/assignments/:id/reassign`        | OWNER, MANAGER |
-| PATCH  | `/api/v1/assignments/:id/accept`          | OWNER, MANAGER, OPERATOR |
-| PATCH  | `/api/v1/assignments/:id/reject`          | OWNER, MANAGER, OPERATOR |
-| PATCH  | `/api/v1/assignments/:id/start`           | OWNER, MANAGER, OPERATOR |
-| PATCH  | `/api/v1/assignments/:id/complete`        | OWNER, MANAGER, OPERATOR |
+| Method | Path                                       | Access                           |
+| ------ | ------------------------------------------ | -------------------------------- |
+| GET    | `/api/v1/assignments`                      | OWNER, MANAGER, OPERATOR, VIEWER |
+| GET    | `/api/v1/assignments/my`                   | OWNER, MANAGER, OPERATOR         |
+| GET    | `/api/v1/assignments/:id`                  | OWNER, MANAGER, OPERATOR, VIEWER |
+| GET    | `/api/v1/assignments/history/:operationId` | OWNER, MANAGER, OPERATOR, VIEWER |
+| POST   | `/api/v1/assignments`                      | OWNER, MANAGER                   |
+| PATCH  | `/api/v1/assignments/:id/reassign`         | OWNER, MANAGER                   |
+| PATCH  | `/api/v1/assignments/:id/accept`           | OWNER, MANAGER, OPERATOR         |
+| PATCH  | `/api/v1/assignments/:id/reject`           | OWNER, MANAGER, OPERATOR         |
+| PATCH  | `/api/v1/assignments/:id/start`            | OWNER, MANAGER, OPERATOR         |
+| PATCH  | `/api/v1/assignments/:id/complete`         | OWNER, MANAGER, OPERATOR         |
 
 AppSec:
 
@@ -2401,6 +2401,26 @@ Veredito:
 
 - `ORBIT_RELEASE_CANDIDATE_NOT_READY`.
 
+## Document Certification DC02B — Technical Visit Completion
+
+Status: concluída em 13 de julho de 2026.
+
+- migration `20260713173000_document_dc02b_contracts`;
+- Organization evoluída com inscrição estadual e telefones adicionais;
+- Operation evoluída com competência, tipo de manutenção, checklist estruturado e equipamentos
+  inspecionados com snapshots;
+- Corporate Header único aplicado a todos os contextos documentais oficiais;
+- `TECHNICAL_REPORT` recebeu competência, checklists tipados e tabela paginada
+  `ITEM/SETOR/MARCA/MODELO/CAPACIDADE`;
+- novos campos opcionais preservam operações históricas;
+- Preview, PDF, QR, fotos, assinaturas, Storage e catálogo permanecem no Document Engine oficial.
+
+Validação: unit 17/65, integration 2/8, concurrency 2/24, security 12/38, builds backend/frontend e
+runtime real Preview → Render → PDF → Download → `/documentos` aprovados. O PDF runtime possui cinco
+páginas; paginação longa foi testada com 75 equipamentos.
+
+Detalhes: `docs/release/DOCUMENT_CERTIFICATION_DC02B_TECHNICAL_VISIT_FINAL.md`.
+
 ## Product Backlog Closure 04 — Avatar Crop, Identity Sync e Notification Center
 
 Status: implementada em 10 de julho de 2026.
@@ -2522,8 +2542,7 @@ Motivo:
 
 ## Sprint 22.5 — External Release Candidate Closure
 
-Status: executada em 10 de julho de 2026 como closure sprint dos bloqueadores externos da Sprint
-22.
+Status: executada em 10 de julho de 2026 como closure sprint dos bloqueadores externos da Sprint 22.
 
 Decisões oficiais V1:
 

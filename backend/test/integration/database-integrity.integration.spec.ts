@@ -1,7 +1,8 @@
-import { BudgetStatus } from '@prisma/client';
+import { BudgetStatus, OperationMaintenanceType } from '@prisma/client';
 import {
   createActor,
   createBudgetFixture,
+  createOperation,
   createOrganization,
   createPricingFixture,
   createProductWithInventory,
@@ -23,7 +24,10 @@ describe('database integrity constraints with real PostgreSQL', () => {
     const actor = await createActor();
     const first = await createBudgetFixture(actor);
     const budget = await prisma.budget.findUniqueOrThrow({ where: { id: first.budgetId } });
-    await prisma.budget.update({ where: { id: first.budgetId }, data: { status: BudgetStatus.APPROVED } });
+    await prisma.budget.update({
+      where: { id: first.budgetId },
+      data: { status: BudgetStatus.APPROVED },
+    });
 
     await expect(
       prisma.budget.create({
@@ -128,5 +132,58 @@ describe('database integrity constraints with real PostgreSQL', () => {
 
     await expect(prisma.financialAccount.count()).resolves.toBe(0);
     await expect(prisma.auditLog.count({ where: { action: 'ROLLBACK_TEST' } })).resolves.toBe(0);
+  });
+
+  it('persists the technical report reference period, typed checklist and equipment snapshot', async () => {
+    const actor = await createActor();
+    const operation = await createOperation(actor);
+
+    await prisma.operation.update({
+      where: { id: operation.id },
+      data: {
+        referenceMonth: 6,
+        referenceYear: 2026,
+        maintenanceType: OperationMaintenanceType.SEMIANNUAL,
+        maintenanceChecklistItems: {
+          create: {
+            maintenanceType: OperationMaintenanceType.SEMIANNUAL,
+            description: 'Higienizar filtros e verificar drenagem',
+            executed: true,
+            observations: 'Executado durante a visita',
+            position: 0,
+          },
+        },
+        inspectedEquipments: {
+          create: {
+            equipmentId: operation.equipmentId,
+            position: 0,
+            sector: 'Recepção',
+            brandSnapshot: 'Orbit HVAC',
+            modelSnapshot: 'Split 12000',
+            capacitySnapshot: '12.000 BTU/h',
+          },
+        },
+      },
+    });
+
+    const persisted = await prisma.operation.findUniqueOrThrow({
+      where: { id: operation.id },
+      include: { maintenanceChecklistItems: true, inspectedEquipments: true },
+    });
+    expect(persisted).toMatchObject({
+      referenceMonth: 6,
+      referenceYear: 2026,
+      maintenanceType: OperationMaintenanceType.SEMIANNUAL,
+    });
+    expect(persisted.maintenanceChecklistItems).toHaveLength(1);
+    expect(persisted.inspectedEquipments[0]).toMatchObject({
+      sector: 'Recepção',
+      brandSnapshot: 'Orbit HVAC',
+      capacitySnapshot: '12.000 BTU/h',
+    });
+
+    await expect(
+      prisma.$executeRaw`UPDATE "operations" SET "reference_year" = NULL WHERE "id" = ${operation.id}::uuid`,
+    ).rejects.toThrow();
   });
 });

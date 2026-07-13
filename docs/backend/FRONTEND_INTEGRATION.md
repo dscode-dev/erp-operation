@@ -99,7 +99,7 @@ Fluxo frontend oficial:
 6. abrir `DocumentViewer` com:
 
 ```tsx
-<DocumentViewer source={{ operationId, type: "TECHNICAL_REPORT" }} />
+<DocumentViewer source={{ operationId, type: 'TECHNICAL_REPORT' }} />
 ```
 
 Após salvar, fotos e assinatura entram no `DocumentContext` e aparecem no preview real e no PDF
@@ -124,12 +124,12 @@ alterado na Sprint 21.
 
 ### Performance budgets relevantes para UI
 
-| Fluxo | Budget V1 |
-|---|---:|
-| Listagens paginadas | p95 backend ≤ 300 ms |
-| Mutations críticas | p95 backend ≤ 500 ms |
+| Fluxo                              |            Budget V1 |
+| ---------------------------------- | -------------------: |
+| Listagens paginadas                | p95 backend ≤ 300 ms |
+| Mutations críticas                 | p95 backend ≤ 500 ms |
 | Preview simples do Document Engine | p95 backend ≤ 800 ms |
-| Dashboard atual em fan-out | p95 local ≤ 1.200 ms |
+| Dashboard atual em fan-out         | p95 local ≤ 1.200 ms |
 
 ### Orientações de integração
 
@@ -2058,6 +2058,7 @@ Production integration assumptions:
 - each white-label customer deployment must point to its own isolated API/database/storage scope.
 
 External HTTPS smoke remains required before RC promotion.
+
 ## Product Backlog Closure 02 — Reports and Documents
 
 Responsabilidade de produto:
@@ -2159,6 +2160,7 @@ Notifications:
 - todas lidas: `PATCH /notifications/read-all`;
 - `actionUrl` deve ser tratado como rota interna e usado apenas se iniciar com `/`;
 - refresh V1: load no shell, focus/visibility e polling moderado de 60s quando visível.
+
 # Closure 06 — OS real, stale render e datas
 
 - Modelo: `DocumentViewer source={{ templateId }}`; ação “Visualizar modelo”; nunca é documento real.
@@ -2169,9 +2171,21 @@ Notifications:
 - `DOCUMENT_STALE` (409) exige re-render explícito; não ofereça o binário antigo como atual.
 - Exiba `createdAt` como “Criado” e `scheduledFor` como “Data do agendamento”. Não use `assignedAt`
   como data de serviço. Para `scheduledFor: null`, exiba “Não agendado”.
+
 # Closure 06.1 — evidência runtime
 
 Contrato observado: `createdAt` e `scheduledFor`. Use `scheduledFor` diretamente para agendamento.
 O preview real `operationId + WORK_ORDER` e o PDF atual compartilham a ordem semântica dos
 componentes. Em `DOCUMENT_STALE`, mostre “Documento desatualizado — gerar novamente”, execute render
 explícito e só então habilite o download atual.
+
+## DC02B — Relatório de Visita Técnica
+
+No workflow `/reports`: carregue equipamentos por `GET /equipments?customerId=...`; persista
+`referenceMonth`, `referenceYear`, `maintenanceType`, `maintenanceChecklist[]` e
+`inspectedEquipments[]` na Operation; depois solicite o Preview oficial. Envie somente `equipmentId` e
+`sector`: os snapshots da tabela são responsabilidade do backend.
+
+O `DocumentViewer` deve consumir `header.corporate`; não monte cabeçalho ou tabela no browser. Campos
+novos podem ser nulos/vazios em operações antigas. Os modos suportados são `WEEKLY`, `MONTHLY`,
+`QUARTERLY`, `SEMIANNUAL`, `ANNUAL` e `CORRECTIVE`.

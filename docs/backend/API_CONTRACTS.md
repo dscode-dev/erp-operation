@@ -180,9 +180,7 @@ Payload adicional opcional:
 ```json
 {
   "observations": "Serviço executado conforme checklist.",
-  "checklist": [
-    { "label": "Teste de funcionamento", "done": true, "note": "Operação normal" }
-  ],
+  "checklist": [{ "label": "Teste de funcionamento", "done": true, "note": "Operação normal" }],
   "signatureData": "data:image/png;base64,...",
   "signedAt": "2026-07-10T12:00:00.000Z",
   "photos": [
@@ -254,10 +252,10 @@ Sprint 14.5 consolidou a semântica de paginação para todas as listagens pagin
 
 Query params padrão:
 
-| Param | Type | Default | Notes |
-| ----- | ---- | ------- | ----- |
-| `page` | number | `1` | inteiro positivo, mínimo `1` |
-| `limit` | number | `20` | inteiro positivo, máximo definido pelo DTO do módulo, normalmente `100` |
+| Param   | Type   | Default | Notes                                                                   |
+| ------- | ------ | ------- | ----------------------------------------------------------------------- |
+| `page`  | number | `1`     | inteiro positivo, mínimo `1`                                            |
+| `limit` | number | `20`    | inteiro positivo, máximo definido pelo DTO do módulo, normalmente `100` |
 
 Response padrão:
 
@@ -1783,14 +1781,14 @@ Operation. Ao criar uma Operation, o backend gera automaticamente um
 `OperationDocument` do tipo `WORK_ORDER` em `DRAFT`, com número derivado do número
 sequencial da operação (`OS-000001`).
 
-| Método | Rota                          | Roles                         | Descrição                                                                                  |
-| ------ | ----------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------ |
-| GET    | `/operations`                 | OWNER/MANAGER/OPERATOR/VIEWER | Lista paginada. Filtros: `page,limit,search,customerId,equipmentId,operatorId,type,status` |
-| GET    | `/operations/stats`           | OWNER/MANAGER/OPERATOR/VIEWER | `{ total, byStatus }`                                                                      |
-| GET    | `/operations/:id`             | OWNER/MANAGER/OPERATOR/VIEWER | Detalhe (customer, address, equipment, operator, checklist, photos, documents, signature)  |
-| GET    | `/operations/photos/:photoId` | OWNER/MANAGER/OPERATOR/VIEWER | Foto em base64 (`{ mimeType, contentBase64, ... }`)                                        |
+| Método | Rota                          | Roles                         | Descrição                                                                                                  |
+| ------ | ----------------------------- | ----------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| GET    | `/operations`                 | OWNER/MANAGER/OPERATOR/VIEWER | Lista paginada. Filtros: `page,limit,search,customerId,equipmentId,operatorId,type,status`                 |
+| GET    | `/operations/stats`           | OWNER/MANAGER/OPERATOR/VIEWER | `{ total, byStatus }`                                                                                      |
+| GET    | `/operations/:id`             | OWNER/MANAGER/OPERATOR/VIEWER | Detalhe (customer, address, equipment, operator, checklist, photos, documents, signature)                  |
+| GET    | `/operations/photos/:photoId` | OWNER/MANAGER/OPERATOR/VIEWER | Foto em base64 (`{ mimeType, contentBase64, ... }`)                                                        |
 | POST   | `/operations`                 | OWNER/MANAGER/OPERATOR        | Cria a Operation + OS rascunho. OWNER/MANAGER podem delegar via `operatorId`; OPERATOR sempre cria para si |
-| PATCH  | `/operations/:id`             | OWNER/MANAGER/OPERATOR        | Atualiza status/datas/checklist/observações                                                |
+| PATCH  | `/operations/:id`             | OWNER/MANAGER/OPERATOR        | Atualiza status/datas/checklist/observações                                                                |
 
 `POST /operations` (body):
 
@@ -3341,19 +3339,19 @@ Soft delete do material e criação de `StockMovement(RETURN)`.
 
 Erros:
 
-| HTTP | Code                         | Condition                                      |
-| ---- | ---------------------------- | ---------------------------------------------- |
-| 400  | `VALIDATION_ERROR`           | Payload/query inválido                         |
-| 400  | `INVENTORY_NEGATIVE_STOCK`   | Movimentação deixaria saldo negativo           |
-| 400  | `INVENTORY_PRODUCT_MISMATCH` | InventoryItem não pertence ao produto enviado  |
-| 401  | `AUTH_TOKEN_INVALID`         | Token ausente/inválido                         |
-| 403  | `AUTH_FORBIDDEN`             | Papel sem permissão                            |
-| 404  | `PRODUCT_NOT_FOUND`          | Produto inexistente                            |
-| 404  | `SUPPLIER_NOT_FOUND`         | Fornecedor inexistente                         |
-| 404  | `INVENTORY_ITEM_NOT_FOUND`   | Item de inventário inexistente                 |
-| 404  | `OPERATION_NOT_FOUND`        | Operation inexistente                          |
-| 409  | `PRODUCT_CONFLICT`           | SKU/código já cadastrado                       |
-| 409  | `SUPPLIER_CONFLICT`          | Documento de fornecedor já cadastrado          |
+| HTTP | Code                         | Condition                                     |
+| ---- | ---------------------------- | --------------------------------------------- |
+| 400  | `VALIDATION_ERROR`           | Payload/query inválido                        |
+| 400  | `INVENTORY_NEGATIVE_STOCK`   | Movimentação deixaria saldo negativo          |
+| 400  | `INVENTORY_PRODUCT_MISMATCH` | InventoryItem não pertence ao produto enviado |
+| 401  | `AUTH_TOKEN_INVALID`         | Token ausente/inválido                        |
+| 403  | `AUTH_FORBIDDEN`             | Papel sem permissão                           |
+| 404  | `PRODUCT_NOT_FOUND`          | Produto inexistente                           |
+| 404  | `SUPPLIER_NOT_FOUND`         | Fornecedor inexistente                        |
+| 404  | `INVENTORY_ITEM_NOT_FOUND`   | Item de inventário inexistente                |
+| 404  | `OPERATION_NOT_FOUND`        | Operation inexistente                         |
+| 409  | `PRODUCT_CONFLICT`           | SKU/código já cadastrado                      |
+| 409  | `SUPPLIER_CONFLICT`          | Documento de fornecedor já cadastrado         |
 
 Nota Product↔Supplier:
 
@@ -3536,16 +3534,16 @@ Response 200: evolução paginada de preços do produto, ordenada por `validFrom
 
 Erros:
 
-| HTTP | Code                     | Condition                              |
-| ---- | ------------------------ | -------------------------------------- |
-| 400  | `VALIDATION_ERROR`       | Payload/query inválido                 |
-| 400  | `PRICING_INVALID_MARGIN` | Preço/margem comercial inconsistente   |
-| 400  | `PRICING_INVALID_PERIOD` | Vigência inválida                      |
-| 401  | `AUTH_TOKEN_INVALID`     | Token ausente/inválido                 |
-| 403  | `AUTH_FORBIDDEN`         | Papel sem permissão                    |
-| 404  | `PRODUCT_NOT_FOUND`      | Produto inexistente/inativo            |
-| 404  | `PRICING_NOT_FOUND`      | Registro/preço vigente inexistente     |
-| 409  | `PRICING_OVERLAP`        | Vigência sobreposta a preço ativo      |
+| HTTP | Code                     | Condition                            |
+| ---- | ------------------------ | ------------------------------------ |
+| 400  | `VALIDATION_ERROR`       | Payload/query inválido               |
+| 400  | `PRICING_INVALID_MARGIN` | Preço/margem comercial inconsistente |
+| 400  | `PRICING_INVALID_PERIOD` | Vigência inválida                    |
+| 401  | `AUTH_TOKEN_INVALID`     | Token ausente/inválido               |
+| 403  | `AUTH_FORBIDDEN`         | Papel sem permissão                  |
+| 404  | `PRODUCT_NOT_FOUND`      | Produto inexistente/inativo          |
+| 404  | `PRICING_NOT_FOUND`      | Registro/preço vigente inexistente   |
+| 409  | `PRICING_OVERLAP`        | Vigência sobreposta a preço ativo    |
 
 Eventos de auditoria:
 
@@ -3562,18 +3560,18 @@ paralela: controla responsável, aceite, início, conclusão e histórico operac
 
 Endpoints:
 
-| Método | Rota                                | Roles                         | Descrição |
-| ------ | ----------------------------------- | ----------------------------- | --------- |
+| Método | Rota                                | Roles                         | Descrição                                                  |
+| ------ | ----------------------------------- | ----------------------------- | ---------------------------------------------------------- |
 | GET    | `/assignments`                      | OWNER/MANAGER/OPERATOR/VIEWER | Lista paginada. OPERATOR vê apenas as próprias Assignments |
-| GET    | `/assignments/my`                   | OWNER/MANAGER/OPERATOR        | Fila do usuário autenticado |
-| GET    | `/assignments/:id`                  | OWNER/MANAGER/OPERATOR/VIEWER | Detalhe da Assignment |
-| GET    | `/assignments/history/:operationId` | OWNER/MANAGER/OPERATOR/VIEWER | Histórico imutável da Operation |
-| POST   | `/assignments`                      | OWNER/MANAGER                 | Cria Assignment para Operation existente |
-| PATCH  | `/assignments/:id/reassign`         | OWNER/MANAGER                 | Reatribui responsável |
-| PATCH  | `/assignments/:id/accept`           | OWNER/MANAGER/OPERATOR        | Operador responsável aceita |
-| PATCH  | `/assignments/:id/reject`           | OWNER/MANAGER/OPERATOR        | Operador responsável recusa |
-| PATCH  | `/assignments/:id/start`            | OWNER/MANAGER/OPERATOR        | Inicia execução após aceite |
-| PATCH  | `/assignments/:id/complete`         | OWNER/MANAGER/OPERATOR        | Conclui execução após início |
+| GET    | `/assignments/my`                   | OWNER/MANAGER/OPERATOR        | Fila do usuário autenticado                                |
+| GET    | `/assignments/:id`                  | OWNER/MANAGER/OPERATOR/VIEWER | Detalhe da Assignment                                      |
+| GET    | `/assignments/history/:operationId` | OWNER/MANAGER/OPERATOR/VIEWER | Histórico imutável da Operation                            |
+| POST   | `/assignments`                      | OWNER/MANAGER                 | Cria Assignment para Operation existente                   |
+| PATCH  | `/assignments/:id/reassign`         | OWNER/MANAGER                 | Reatribui responsável                                      |
+| PATCH  | `/assignments/:id/accept`           | OWNER/MANAGER/OPERATOR        | Operador responsável aceita                                |
+| PATCH  | `/assignments/:id/reject`           | OWNER/MANAGER/OPERATOR        | Operador responsável recusa                                |
+| PATCH  | `/assignments/:id/start`            | OWNER/MANAGER/OPERATOR        | Inicia execução após aceite                                |
+| PATCH  | `/assignments/:id/complete`         | OWNER/MANAGER/OPERATOR        | Conclui execução após início                               |
 
 Query listagem: `page`, `limit`, `operationId`, `assignedTo`, `customerId`, `equipmentId`, `status`.
 
@@ -3611,14 +3609,14 @@ Regras:
 
 Erros:
 
-| HTTP | Code                            | Condition |
-| ---- | ------------------------------- | --------- |
-| 400  | `VALIDATION_ERROR`              | Payload/query inválido |
-| 400  | `OPERATION_OPERATOR_INVALID`    | Operador inválido/inativo/sem perfil operacional |
+| HTTP | Code                            | Condition                                             |
+| ---- | ------------------------------- | ----------------------------------------------------- |
+| 400  | `VALIDATION_ERROR`              | Payload/query inválido                                |
+| 400  | `OPERATION_OPERATOR_INVALID`    | Operador inválido/inativo/sem perfil operacional      |
 | 403  | `ASSIGNMENT_OPERATOR_FORBIDDEN` | Operador tentando agir em Assignment de outro usuário |
-| 404  | `ASSIGNMENT_NOT_FOUND`          | Assignment inexistente |
-| 404  | `OPERATION_NOT_FOUND`           | Operation inexistente |
-| 409  | `ASSIGNMENT_INVALID_TRANSITION` | Estado atual não permite transição |
+| 404  | `ASSIGNMENT_NOT_FOUND`          | Assignment inexistente                                |
+| 404  | `OPERATION_NOT_FOUND`           | Operation inexistente                                 |
+| 409  | `ASSIGNMENT_INVALID_TRANSITION` | Estado atual não permite transição                    |
 
 Migration: `20260701170000_assignment_domain`.
 
@@ -3691,9 +3689,7 @@ Payload:
   "expirationDate": "2026-07-17T00:00:00.000Z",
   "observations": "Condições comerciais",
   "status": "PENDING",
-  "items": [
-    { "productId": "uuid", "description": "Filtro G4", "quantity": 2 }
-  ]
+  "items": [{ "productId": "uuid", "description": "Filtro G4", "quantity": 2 }]
 }
 ```
 
@@ -3723,9 +3719,7 @@ Payload parcial:
 {
   "title": "Troca de componentes revisada",
   "discount": 25,
-  "items": [
-    { "productId": "uuid", "quantity": 3 }
-  ]
+  "items": [{ "productId": "uuid", "quantity": 3 }]
 }
 ```
 
@@ -3785,23 +3779,23 @@ Retorna histórico imutável paginado do orçamento.
 
 Erros:
 
-| HTTP | Code | Condition |
-| ---- | ---- | --------- |
-| 400 | `VALIDATION_ERROR` | Payload/query inválido ou total negativo |
-| 400 | `BUDGET_INVALID_RELATIONSHIP` | Customer/address/equipment/operation inconsistentes |
-| 400 | `BUDGET_ITEM_REQUIRED` | Orçamento sem itens |
-| 400 | `BUDGET_INVALID_STATUS` | Status inválido para criação/alteração/decisão |
-| 401 | `UNAUTHORIZED` | Token ausente/inválido |
-| 403 | `FORBIDDEN` | Papel sem permissão |
-| 404 | `BUDGET_NOT_FOUND` | Budget inexistente |
-| 404 | `CUSTOMER_NOT_FOUND` | Cliente inexistente/inativo |
-| 404 | `EQUIPMENT_NOT_FOUND` | Equipamento inexistente/inativo |
-| 404 | `OPERATION_NOT_FOUND` | Operation inexistente |
-| 404 | `PRODUCT_NOT_FOUND` | Produto inexistente/inativo |
-| 404 | `PRICING_NOT_FOUND` | Produto sem preço vigente |
-| 409 | `BUDGET_APPROVED_IMMUTABLE` | Tentativa de alterar orçamento aprovado |
-| 409 | `BUDGET_EXPIRED` | Tentativa de aprovar orçamento vencido |
-| 409 | `BUDGET_MULTIPLE_APPROVAL` | Já existe Budget aprovado para a Operation |
+| HTTP | Code                          | Condition                                           |
+| ---- | ----------------------------- | --------------------------------------------------- |
+| 400  | `VALIDATION_ERROR`            | Payload/query inválido ou total negativo            |
+| 400  | `BUDGET_INVALID_RELATIONSHIP` | Customer/address/equipment/operation inconsistentes |
+| 400  | `BUDGET_ITEM_REQUIRED`        | Orçamento sem itens                                 |
+| 400  | `BUDGET_INVALID_STATUS`       | Status inválido para criação/alteração/decisão      |
+| 401  | `UNAUTHORIZED`                | Token ausente/inválido                              |
+| 403  | `FORBIDDEN`                   | Papel sem permissão                                 |
+| 404  | `BUDGET_NOT_FOUND`            | Budget inexistente                                  |
+| 404  | `CUSTOMER_NOT_FOUND`          | Cliente inexistente/inativo                         |
+| 404  | `EQUIPMENT_NOT_FOUND`         | Equipamento inexistente/inativo                     |
+| 404  | `OPERATION_NOT_FOUND`         | Operation inexistente                               |
+| 404  | `PRODUCT_NOT_FOUND`           | Produto inexistente/inativo                         |
+| 404  | `PRICING_NOT_FOUND`           | Produto sem preço vigente                           |
+| 409  | `BUDGET_APPROVED_IMMUTABLE`   | Tentativa de alterar orçamento aprovado             |
+| 409  | `BUDGET_EXPIRED`              | Tentativa de aprovar orçamento vencido              |
+| 409  | `BUDGET_MULTIPLE_APPROVAL`    | Já existe Budget aprovado para a Operation          |
 
 Eventos de auditoria:
 
@@ -3892,14 +3886,14 @@ Response 200:
 
 Erros adicionais:
 
-| HTTP | Code | Condition |
-| ---- | ---- | --------- |
-| 403 | `DOCUMENT_FORBIDDEN_TYPE` | Papel sem permissão para documento comercial |
-| 404 | `BUDGET_NOT_FOUND` | Budget inexistente |
-| 404 | `DOCUMENT_NOT_FOUND` | Download solicitado antes da emissão |
-| 409 | `BUDGET_INVALID_STATUS` | Budget cancelado ou rejeitado |
-| 409 | `DOCUMENT_DOWNLOAD_NOT_READY` | Documento existe, mas ainda não possui PDF pronto |
-| 500 | `DOCUMENT_RENDER_FAILED` | Falha segura no render/PDF |
+| HTTP | Code                          | Condition                                         |
+| ---- | ----------------------------- | ------------------------------------------------- |
+| 403  | `DOCUMENT_FORBIDDEN_TYPE`     | Papel sem permissão para documento comercial      |
+| 404  | `BUDGET_NOT_FOUND`            | Budget inexistente                                |
+| 404  | `DOCUMENT_NOT_FOUND`          | Download solicitado antes da emissão              |
+| 409  | `BUDGET_INVALID_STATUS`       | Budget cancelado ou rejeitado                     |
+| 409  | `DOCUMENT_DOWNLOAD_NOT_READY` | Documento existe, mas ainda não possui PDF pronto |
+| 500  | `DOCUMENT_RENDER_FAILED`      | Falha segura no render/PDF                        |
 
 Migration: `20260702120000_budget_document_emission`.
 
@@ -4096,15 +4090,15 @@ Histórico imutável paginado de um lançamento.
 
 Erros:
 
-| HTTP | Code | Condition |
-| ---- | ---- | --------- |
-| 400 | `FINANCIAL_INVALID_RELATIONSHIP` | Categoria não corresponde ao tipo do lançamento |
-| 400 | `VALIDATION_ERROR` | Payload/query inválido |
-| 403 | `FORBIDDEN` | Papel sem permissão financeira |
-| 404 | `FINANCIAL_ACCOUNT_NOT_FOUND` | Conta inexistente/inativa |
-| 404 | `FINANCIAL_CATEGORY_NOT_FOUND` | Categoria inexistente/inativa |
-| 404 | `FINANCIAL_ENTRY_NOT_FOUND` | Lançamento inexistente |
-| 409 | `FINANCIAL_ENTRY_INVALID_STATE` | Transição inválida |
+| HTTP | Code                             | Condition                                       |
+| ---- | -------------------------------- | ----------------------------------------------- |
+| 400  | `FINANCIAL_INVALID_RELATIONSHIP` | Categoria não corresponde ao tipo do lançamento |
+| 400  | `VALIDATION_ERROR`               | Payload/query inválido                          |
+| 403  | `FORBIDDEN`                      | Papel sem permissão financeira                  |
+| 404  | `FINANCIAL_ACCOUNT_NOT_FOUND`    | Conta inexistente/inativa                       |
+| 404  | `FINANCIAL_CATEGORY_NOT_FOUND`   | Categoria inexistente/inativa                   |
+| 404  | `FINANCIAL_ENTRY_NOT_FOUND`      | Lançamento inexistente                          |
+| 409  | `FINANCIAL_ENTRY_INVALID_STATE`  | Transição inválida                              |
 
 Migration: `20260702160000_financial_core`.
 
@@ -4116,7 +4110,13 @@ Domínio oficial de compras da V1. Todos os endpoints exigem `OWNER` ou `MANAGER
 
 ```ts
 type PurchaseOrderStatus = 'DRAFT' | 'SENT' | 'PARTIALLY_RECEIVED' | 'RECEIVED' | 'CANCELED';
-type PurchaseHistoryAction = 'CREATED' | 'UPDATED' | 'SENT' | 'PARTIALLY_RECEIVED' | 'RECEIVED' | 'CANCELED';
+type PurchaseHistoryAction =
+  | 'CREATED'
+  | 'UPDATED'
+  | 'SENT'
+  | 'PARTIALLY_RECEIVED'
+  | 'RECEIVED'
+  | 'CANCELED';
 ```
 
 ### GET `/api/v1/purchase-orders`
@@ -4185,9 +4185,7 @@ Lista recebimentos do pedido.
 {
   "receivedAt": "2026-07-02T12:00:00.000Z",
   "notes": "Recebimento parcial",
-  "items": [
-    { "itemId": "uuid", "quantity": 4 }
-  ]
+  "items": [{ "itemId": "uuid", "quantity": 4 }]
 }
 ```
 
@@ -4210,16 +4208,16 @@ Histórico imutável paginado.
 
 Erros:
 
-| HTTP | Code | Condition |
-| ---- | ---- | --------- |
-| 400 | `VALIDATION_ERROR` | Payload/query inválido |
-| 403 | `FORBIDDEN` | Papel sem permissão |
-| 404 | `PURCHASE_ORDER_NOT_FOUND` | Pedido inexistente |
-| 404 | `PURCHASE_ITEM_NOT_FOUND` | Item inexistente |
-| 404 | `SUPPLIER_NOT_FOUND` | Fornecedor inexistente/inativo |
-| 404 | `PRODUCT_NOT_FOUND` | Produto inexistente/inativo |
-| 409 | `PURCHASE_INVALID_STATE` | Transição inválida |
-| 409 | `PURCHASE_INVALID_RECEIPT` | Quantidade recebida excede compra |
+| HTTP | Code                       | Condition                         |
+| ---- | -------------------------- | --------------------------------- |
+| 400  | `VALIDATION_ERROR`         | Payload/query inválido            |
+| 403  | `FORBIDDEN`                | Papel sem permissão               |
+| 404  | `PURCHASE_ORDER_NOT_FOUND` | Pedido inexistente                |
+| 404  | `PURCHASE_ITEM_NOT_FOUND`  | Item inexistente                  |
+| 404  | `SUPPLIER_NOT_FOUND`       | Fornecedor inexistente/inativo    |
+| 404  | `PRODUCT_NOT_FOUND`        | Produto inexistente/inativo       |
+| 409  | `PURCHASE_INVALID_STATE`   | Transição inválida                |
+| 409  | `PURCHASE_INVALID_RECEIPT` | Quantidade recebida excede compra |
 
 Migration: `20260702180000_procurement_domain`.
 
@@ -4244,9 +4242,9 @@ Behavior:
 
 Conflict:
 
-| HTTP | Code | Condition |
-| ---- | ---- | --------- |
-| 409 | `FINANCIAL_ENTRY_INVALID_STATE` | Duplicate payment, stale payment, paid entry cancellation, or payment/cancel race |
+| HTTP | Code                            | Condition                                                                         |
+| ---- | ------------------------------- | --------------------------------------------------------------------------------- |
+| 409  | `FINANCIAL_ENTRY_INVALID_STATE` | Duplicate payment, stale payment, paid entry cancellation, or payment/cancel race |
 
 ### Inventory and Operation Materials
 
@@ -4264,10 +4262,10 @@ Behavior:
 
 Conflict:
 
-| HTTP | Code | Condition |
-| ---- | ---- | --------- |
-| 409 | `INVENTORY_NEGATIVE_STOCK` | Movement would make current/available stock negative |
-| 409 | `NOT_FOUND` | Operation material was already removed |
+| HTTP | Code                       | Condition                                            |
+| ---- | -------------------------- | ---------------------------------------------------- |
+| 409  | `INVENTORY_NEGATIVE_STOCK` | Movement would make current/available stock negative |
+| 409  | `NOT_FOUND`                | Operation material was already removed               |
 
 ### Procurement
 
@@ -4283,10 +4281,10 @@ Behavior:
 
 Conflict:
 
-| HTTP | Code | Condition |
-| ---- | ---- | --------- |
-| 409 | `PURCHASE_INVALID_RECEIPT` | Quantity exceeds remaining purchase quantity or concurrent receipt conflict |
-| 409 | `PURCHASE_INVALID_STATE` | Order state changed while receiving |
+| HTTP | Code                       | Condition                                                                   |
+| ---- | -------------------------- | --------------------------------------------------------------------------- |
+| 409  | `PURCHASE_INVALID_RECEIPT` | Quantity exceeds remaining purchase quantity or concurrent receipt conflict |
+| 409  | `PURCHASE_INVALID_STATE`   | Order state changed while receiving                                         |
 
 ### Assignments
 
@@ -4306,9 +4304,9 @@ Behavior:
 
 Conflict:
 
-| HTTP | Code | Condition |
-| ---- | ---- | --------- |
-| 409 | `ASSIGNMENT_INVALID_TRANSITION` | Duplicate, stale, or invalid Assignment transition |
+| HTTP | Code                            | Condition                                          |
+| ---- | ------------------------------- | -------------------------------------------------- |
+| 409  | `ASSIGNMENT_INVALID_TRANSITION` | Duplicate, stale, or invalid Assignment transition |
 
 ### Budgets
 
@@ -4326,10 +4324,10 @@ Behavior:
 
 Conflict:
 
-| HTTP | Code | Condition |
-| ---- | ---- | --------- |
-| 409 | `BUDGET_INVALID_STATUS` | Duplicate/stale approval, rejection or cancellation |
-| 409 | `BUDGET_MULTIPLE_APPROVAL` | Another Budget is already approved for the Operation |
+| HTTP | Code                       | Condition                                            |
+| ---- | -------------------------- | ---------------------------------------------------- |
+| 409  | `BUDGET_INVALID_STATUS`    | Duplicate/stale approval, rejection or cancellation  |
+| 409  | `BUDGET_MULTIPLE_APPROVAL` | Another Budget is already approved for the Operation |
 
 ### Pricing
 
@@ -4345,9 +4343,9 @@ Behavior:
 
 Conflict:
 
-| HTTP | Code | Condition |
-| ---- | ---- | --------- |
-| 409 | `PRICING_OVERLAP` | Active pricing range overlaps another active range or revision race |
+| HTTP | Code              | Condition                                                           |
+| ---- | ----------------- | ------------------------------------------------------------------- |
+| 409  | `PRICING_OVERLAP` | Active pricing range overlaps another active range or revision race |
 
 ### Document Engine
 
@@ -4364,9 +4362,9 @@ Behavior:
 
 Conflict:
 
-| HTTP | Code | Condition |
-| ---- | ---- | --------- |
-| 409 | `DOCUMENT_RENDER_FAILED` | Document changed while rendering; refresh and retry |
+| HTTP | Code                     | Condition                                           |
+| ---- | ------------------------ | --------------------------------------------------- |
+| 409  | `DOCUMENT_RENDER_FAILED` | Document changed while rendering; refresh and retry |
 
 ## Sprint 19.5 — verified PostgreSQL behavior
 
@@ -4517,6 +4515,7 @@ Operational decision:
 - Production storage contract is local/block persistent storage via `STORAGE_PROVIDER=local`,
   `STORAGE_DRIVER=local` and absolute mounted `STORAGE_PATH`.
 - Object storage is not an API/runtime contract certified for V1.
+
 ## Product Backlog Closure 02 — Document Engine contracts
 
 Nenhum contrato HTTP novo foi criado.
@@ -4652,3 +4651,50 @@ Marca como lida apenas notificação do usuário autenticado. Cross-user retorna
 ```json
 { "success": true, "data": { "updated": 3 } }
 ```
+
+## DC02B — Corporate Header e dados documentais da Operation
+
+`GET/PATCH /api/v1/organization` inclui/aceita de forma aditiva:
+
+```json
+{
+  "stateRegistration": "0321418-40",
+  "phoneNumbers": ["+55 81 3030-0000", "+55 81 99999-0000"]
+}
+```
+
+`phoneNumbers` aceita até cinco strings de 30 caracteres. Somente OWNER altera; MANAGER lê.
+
+`POST /api/v1/operations` e `PATCH /api/v1/operations/:id` aceitam opcionalmente:
+
+```json
+{
+  "referenceMonth": 6,
+  "referenceYear": 2026,
+  "maintenanceType": "SEMIANNUAL",
+  "maintenanceChecklist": [
+    {
+      "maintenanceType": "WEEKLY",
+      "description": "Inspecionar as condições operacionais",
+      "executed": true,
+      "observations": "Condição confirmada"
+    }
+  ],
+  "inspectedEquipments": [
+    {
+      "equipmentId": "7de712a5-692a-481f-b080-189e518628c0",
+      "sector": "Recepção"
+    }
+  ]
+}
+```
+
+Enum: `WEEKLY`, `MONTHLY`, `QUARTERLY`, `SEMIANNUAL`, `ANNUAL`, `CORRECTIVE`.
+
+Regras: mês 1–12 e ano 2000–2200 devem existir juntos; checklist tem máximo 400 itens;
+`inspectedEquipments` tem máximo 100 UUIDs únicos, ativos e do mesmo cliente. O backend cria snapshots
+de marca/modelo/capacidade/tag/série. Respostas detalhadas retornam `maintenanceChecklistItems` e
+`inspectedEquipments` ordenados. Erros: `OPERATION_EQUIPMENT_INVALID` e
+`OPERATION_REFERENCE_PERIOD_INVALID`.
+
+Endpoints do Document Engine não mudaram; o Preview inclui as novas seções quando os dados existem.

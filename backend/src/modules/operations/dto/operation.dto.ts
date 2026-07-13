@@ -1,7 +1,8 @@
-import { OperationStatus, OperationType } from '@prisma/client';
+import { OperationMaintenanceType, OperationStatus, OperationType } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
 import {
   IsArray,
+  ArrayMaxSize,
   IsBoolean,
   IsDateString,
   IsEnum,
@@ -40,6 +41,22 @@ export class OperationPhotoInputDto {
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(255) caption?: string;
 }
 
+export class OperationMaintenanceChecklistItemDto {
+  @IsEnum(OperationMaintenanceType) maintenanceType!: OperationMaintenanceType;
+  @Transform(({ value }) => trim(value)) @IsString() @MaxLength(500) description!: string;
+  @IsBoolean() executed!: boolean;
+  @IsOptional()
+  @Transform(({ value }) => trim(value))
+  @IsString()
+  @MaxLength(2000)
+  observations?: string;
+}
+
+export class OperationInspectedEquipmentDto {
+  @IsUUID('4') equipmentId!: string;
+  @Transform(({ value }) => trim(value)) @IsString() @MaxLength(160) sector!: string;
+}
+
 export class CreateOperationDto {
   @IsUUID('4') customerId!: string;
   @IsOptional() @IsUUID('4') addressId?: string;
@@ -50,6 +67,21 @@ export class CreateOperationDto {
   @IsOptional() @IsDateString() scheduledFor?: string;
   @IsOptional() @IsDateString() startedAt?: string;
   @IsOptional() @IsDateString() completedAt?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(12) referenceMonth?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(2000) @Max(2200) referenceYear?: number;
+  @IsOptional() @IsEnum(OperationMaintenanceType) maintenanceType?: OperationMaintenanceType;
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(400)
+  @ValidateNested({ each: true })
+  @Type(() => OperationMaintenanceChecklistItemDto)
+  maintenanceChecklist?: OperationMaintenanceChecklistItemDto[];
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(100)
+  @ValidateNested({ each: true })
+  @Type(() => OperationInspectedEquipmentDto)
+  inspectedEquipments?: OperationInspectedEquipmentDto[];
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
@@ -60,10 +92,26 @@ export class CreateOperationDto {
   @IsString()
   @MaxLength(5000)
   observations?: string;
-  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(10000) reportedIssue?: string;
-  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(20000) serviceDescription?: string;
-  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(20000) technicalDiagnosis?: string;
-  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(20000) technicalRecommendations?: string;
+  @IsOptional()
+  @Transform(({ value }) => trim(value))
+  @IsString()
+  @MaxLength(10000)
+  reportedIssue?: string;
+  @IsOptional()
+  @Transform(({ value }) => trim(value))
+  @IsString()
+  @MaxLength(20000)
+  serviceDescription?: string;
+  @IsOptional()
+  @Transform(({ value }) => trim(value))
+  @IsString()
+  @MaxLength(20000)
+  technicalDiagnosis?: string;
+  @IsOptional()
+  @Transform(({ value }) => trim(value))
+  @IsString()
+  @MaxLength(20000)
+  technicalRecommendations?: string;
   @IsOptional() @IsString() @MaxLength(2_000_000) signatureData?: string;
   @IsOptional() @IsDateString() signedAt?: string;
   @IsOptional()
@@ -77,6 +125,21 @@ export class UpdateOperationDto {
   @IsOptional() @IsEnum(OperationStatus) status?: OperationStatus;
   @IsOptional() @IsDateString() startedAt?: string;
   @IsOptional() @IsDateString() completedAt?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(12) referenceMonth?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(2000) @Max(2200) referenceYear?: number;
+  @IsOptional() @IsEnum(OperationMaintenanceType) maintenanceType?: OperationMaintenanceType;
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(400)
+  @ValidateNested({ each: true })
+  @Type(() => OperationMaintenanceChecklistItemDto)
+  maintenanceChecklist?: OperationMaintenanceChecklistItemDto[];
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(100)
+  @ValidateNested({ each: true })
+  @Type(() => OperationInspectedEquipmentDto)
+  inspectedEquipments?: OperationInspectedEquipmentDto[];
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
@@ -87,10 +150,26 @@ export class UpdateOperationDto {
   @IsString()
   @MaxLength(5000)
   observations?: string;
-  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(10000) reportedIssue?: string;
-  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(20000) serviceDescription?: string;
-  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(20000) technicalDiagnosis?: string;
-  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(20000) technicalRecommendations?: string;
+  @IsOptional()
+  @Transform(({ value }) => trim(value))
+  @IsString()
+  @MaxLength(10000)
+  reportedIssue?: string;
+  @IsOptional()
+  @Transform(({ value }) => trim(value))
+  @IsString()
+  @MaxLength(20000)
+  serviceDescription?: string;
+  @IsOptional()
+  @Transform(({ value }) => trim(value))
+  @IsString()
+  @MaxLength(20000)
+  technicalDiagnosis?: string;
+  @IsOptional()
+  @Transform(({ value }) => trim(value))
+  @IsString()
+  @MaxLength(20000)
+  technicalRecommendations?: string;
   @IsOptional() @IsString() @MaxLength(2_000_000) signatureData?: string;
   @IsOptional() @IsDateString() signedAt?: string;
   @IsOptional()

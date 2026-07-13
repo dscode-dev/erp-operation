@@ -38,8 +38,10 @@ const ORGANIZATION_SELECT = {
   legalName: true,
   tradeName: true,
   cnpj: true,
+  stateRegistration: true,
   email: true,
   phone: true,
+  phoneNumbers: true,
   website: true,
   zipCode: true,
   street: true,
@@ -225,8 +227,13 @@ export class OrganizationService {
         signatureId: dto.signatureId ?? requestedInstitutionalIds[0],
       });
       const institutionalSignatureIds = await this.resolveInstitutionalSignatureIds(
-        signatureConfig.signatureMode === SignatureMode.FIXED || signatureConfig.signatureMode === SignatureMode.HYBRID
-          ? (requestedInstitutionalIds.length > 0 ? requestedInstitutionalIds : signatureConfig.signatureId ? [signatureConfig.signatureId] : [])
+        signatureConfig.signatureMode === SignatureMode.FIXED ||
+          signatureConfig.signatureMode === SignatureMode.HYBRID
+          ? requestedInstitutionalIds.length > 0
+            ? requestedInstitutionalIds
+            : signatureConfig.signatureId
+              ? [signatureConfig.signatureId]
+              : []
           : [],
       );
       const created = await transaction.documentTemplate.create({
@@ -244,7 +251,10 @@ export class OrganizationService {
           executionSignatureTechnician: dto.executionSignatureTechnician ?? false,
           executionSignatureOperator: dto.executionSignatureOperator ?? false,
           institutionalSignatures: {
-            create: institutionalSignatureIds.map((signatureId, position) => ({ signatureId, position })),
+            create: institutionalSignatureIds.map((signatureId, position) => ({
+              signatureId,
+              position,
+            })),
           },
           isSystem: false,
         },
@@ -281,20 +291,25 @@ export class OrganizationService {
       }
       const nextMode = dto.signatureMode ?? existing.signatureMode;
       const requestedInstitutionalIds = dto.institutionalSignatureIds;
-      const primarySignatureId = nextMode === SignatureMode.FIXED || nextMode === SignatureMode.HYBRID
-        ? (dto.signatureId !== undefined ? dto.signatureId : requestedInstitutionalIds?.[0] ?? existing.signatureId)
-        : null;
+      const primarySignatureId =
+        nextMode === SignatureMode.FIXED || nextMode === SignatureMode.HYBRID
+          ? dto.signatureId !== undefined
+            ? dto.signatureId
+            : (requestedInstitutionalIds?.[0] ?? existing.signatureId)
+          : null;
       const signatureConfig = await this.resolveSignatureConfig({
         requiresSignature: dto.requiresSignature ?? existing.requiresSignature,
         signatureMode: nextMode,
         signatureId: primarySignatureId,
       });
-      const effectiveRequestedIds = nextMode === SignatureMode.FIXED || nextMode === SignatureMode.HYBRID
-        ? requestedInstitutionalIds
-        : [];
-      const institutionalSignatureIds = effectiveRequestedIds === undefined
-        ? null
-        : await this.resolveInstitutionalSignatureIds(effectiveRequestedIds);
+      const effectiveRequestedIds =
+        nextMode === SignatureMode.FIXED || nextMode === SignatureMode.HYBRID
+          ? requestedInstitutionalIds
+          : [];
+      const institutionalSignatureIds =
+        effectiveRequestedIds === undefined
+          ? null
+          : await this.resolveInstitutionalSignatureIds(effectiveRequestedIds);
       const { institutionalSignatureIds: _institutionalSignatureIds, ...templateData } = dto;
       void _institutionalSignatureIds;
       const updated = await transaction.documentTemplate.update({
@@ -302,13 +317,18 @@ export class OrganizationService {
         data: {
           ...templateData,
           ...signatureConfig,
-          ...(institutionalSignatureIds === null ? {} : {
-            institutionalSignatures: {
-              deleteMany: {},
-              create: institutionalSignatureIds.map((signatureId, position) => ({ signatureId, position })),
-            },
-            signatureId: institutionalSignatureIds[0] ?? signatureConfig.signatureId,
-          }),
+          ...(institutionalSignatureIds === null
+            ? {}
+            : {
+                institutionalSignatures: {
+                  deleteMany: {},
+                  create: institutionalSignatureIds.map((signatureId, position) => ({
+                    signatureId,
+                    position,
+                  })),
+                },
+                signatureId: institutionalSignatureIds[0] ?? signatureConfig.signatureId,
+              }),
         },
         select: TEMPLATE_SELECT,
       });
@@ -540,7 +560,10 @@ export class OrganizationService {
       where: { id: { in: ids }, active: true, deletedAt: null },
       select: { id: true, imageStorageKey: true },
     });
-    if (signatures.length !== ids.length || signatures.some((signature) => !signature.imageStorageKey)) {
+    if (
+      signatures.length !== ids.length ||
+      signatures.some((signature) => !signature.imageStorageKey)
+    ) {
       throw new ApplicationException(
         ERROR_CODES.SIGNATURE_NOT_FOUND,
         'Every institutional signature must exist, be active and have an uploaded image',
@@ -623,12 +646,7 @@ export class OrganizationService {
       );
     }
     if (mimeType === 'image/jpeg') {
-      return (
-        buffer.length >= 3 &&
-        buffer[0] === 0xff &&
-        buffer[1] === 0xd8 &&
-        buffer[2] === 0xff
-      );
+      return buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
     }
     if (mimeType === 'image/svg+xml') {
       return this.hasSafeSvgPayload(buffer);

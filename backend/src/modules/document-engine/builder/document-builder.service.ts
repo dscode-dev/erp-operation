@@ -22,10 +22,13 @@ import {
   type BudgetContext,
   type DocumentBuildContext,
   type DocumentContext,
+  type DocumentContextOperation,
   type TemplatePreviewContext,
 } from '../context/document-context.service';
 
 type ChecklistItem = { label: string; done: boolean; note: string | null };
+type BuilderOrganization = DocumentContext['configuration']['organization'];
+type BuilderLogo = DocumentContext['assets']['logo'];
 
 @Injectable()
 export class DocumentBuilderService {
@@ -94,32 +97,30 @@ export class DocumentBuilderService {
           legalName: this.clean(organization.legalName),
           tradeName: this.clean(organization.tradeName),
           cnpj: this.clean(organization.cnpj),
+          stateRegistration: this.clean(organization.stateRegistration ?? ''),
           email: this.clean(organization.email),
           phone: this.clean(organization.phone),
+          phoneNumbers: this.organizationPhones(organization),
           website: this.clean(organization.website ?? ''),
           address: this.organizationAddress(organization),
+          zipCode: this.clean(organization.zipCode ?? ''),
           city: this.clean(organization.city),
           state: this.clean(organization.state),
           primaryColor: organization.primaryColor,
           secondaryColor: organization.secondaryColor,
         },
       },
-      header: {
-        title: this.titleFor(type),
-        subtitle: `Operação ${String(operation.number).padStart(6, '0')}`,
-        organizationName: this.clean(organization.tradeName || organization.legalName),
-        documentNumber: document.number,
-        logo: context.assets.logo
-          ? {
-              mimeType: context.assets.logo.mimeType,
-              fileSize: context.assets.logo.fileSize,
-              contentBase64: context.assets.logo.contentBase64,
-            }
-          : null,
-      },
+      header: this.documentHeader(
+        organization,
+        context.assets.logo,
+        this.titleFor(type),
+        document.number,
+        `Operação ${String(operation.number).padStart(6, '0')}`,
+      ),
       footer: {
         content: this.clean(
-          `${organization.tradeName || organization.legalName} · ${this.organizationAddress(organization)} · ${organization.phone} · ${organization.email}${organization.website ? ` · ${organization.website}` : ''} · ${document.number}`,
+          context.template?.footerContent ||
+            `${organization.tradeName || organization.legalName} · ${document.number}`,
         ),
         generatedAt,
       },
@@ -154,29 +155,26 @@ export class DocumentBuilderService {
           legalName: this.clean(organization.legalName),
           tradeName: this.clean(organization.tradeName),
           cnpj: this.clean(organization.cnpj),
+          stateRegistration: this.clean(organization.stateRegistration ?? ''),
           email: this.clean(organization.email),
           phone: this.clean(organization.phone),
+          phoneNumbers: this.organizationPhones(organization),
           website: this.clean(organization.website ?? ''),
           address: this.organizationAddress(organization),
+          zipCode: this.clean(organization.zipCode ?? ''),
           city: this.clean(organization.city),
           state: this.clean(organization.state),
           primaryColor: organization.primaryColor,
           secondaryColor: organization.secondaryColor,
         },
       },
-      header: {
-        title: this.clean(template.name || this.titleFor(template.type)),
-        subtitle: 'Pré-visualização de modelo',
-        organizationName: this.clean(organization.tradeName || organization.legalName),
-        documentNumber: placeholders.documentNumber,
-        logo: context.assets.logo
-          ? {
-              mimeType: context.assets.logo.mimeType,
-              fileSize: context.assets.logo.fileSize,
-              contentBase64: context.assets.logo.contentBase64,
-            }
-          : null,
-      },
+      header: this.documentHeader(
+        organization,
+        context.assets.logo,
+        this.clean(template.name || this.titleFor(template.type)),
+        placeholders.documentNumber,
+        'Pré-visualização de modelo',
+      ),
       footer: {
         content: this.clean(
           template.footerContent || `Modelo gerado por ${organization.tradeName}`,
@@ -218,31 +216,28 @@ export class DocumentBuilderService {
           legalName: this.clean(organization.legalName),
           tradeName: this.clean(organization.tradeName),
           cnpj: this.clean(organization.cnpj),
+          stateRegistration: this.clean(organization.stateRegistration ?? ''),
           email: this.clean(organization.email),
           phone: this.clean(organization.phone),
+          phoneNumbers: this.organizationPhones(organization),
           website: this.clean(organization.website ?? ''),
           address: this.organizationAddress(organization),
+          zipCode: this.clean(organization.zipCode ?? ''),
           city: this.clean(organization.city),
           state: this.clean(organization.state),
           primaryColor: organization.primaryColor,
           secondaryColor: organization.secondaryColor,
         },
       },
-      header: {
-        title: 'Orçamento',
-        subtitle: budget.operation
+      header: this.documentHeader(
+        organization,
+        context.assets.logo,
+        'Orçamento',
+        number,
+        budget.operation
           ? `Operação ${String(budget.operation.number).padStart(6, '0')}`
           : budget.title,
-        organizationName: this.clean(organization.tradeName || organization.legalName),
-        documentNumber: number,
-        logo: context.assets.logo
-          ? {
-              mimeType: context.assets.logo.mimeType,
-              fileSize: context.assets.logo.fileSize,
-              contentBase64: context.assets.logo.contentBase64,
-            }
-          : null,
-      },
+      ),
       footer: {
         content: this.clean(
           context.template?.footerContent ||
@@ -494,6 +489,33 @@ export class DocumentBuilderService {
           ]),
         ],
       },
+      ...(operation.referenceMonth && operation.referenceYear
+        ? [
+            {
+              id: 'technical-report-reference-period',
+              title: 'Período de referência',
+              critical: true,
+              components: [
+                this.metadata('technical-report-reference-period-metadata', [
+                  [
+                    'Mês e ano de referência',
+                    this.referencePeriod(operation.referenceMonth, operation.referenceYear),
+                  ],
+                  [
+                    'Tipo de manutenção',
+                    operation.maintenanceType
+                      ? this.maintenanceTypeLabel(operation.maintenanceType)
+                      : '—',
+                  ],
+                ]),
+              ],
+            },
+          ]
+        : []),
+      ...this.maintenanceChecklistSections(operation),
+      ...((operation.inspectedEquipments?.length ?? 0) > 0
+        ? [this.inspectedEquipmentSection(operation)]
+        : []),
       ...(operation.equipment ? this.technicalReportEquipmentSections(context) : []),
       {
         id: 'visit-objective',
@@ -875,6 +897,80 @@ export class DocumentBuilderService {
     };
   }
 
+  private maintenanceChecklistSections(operation: DocumentContextOperation): DocumentSection[] {
+    const groups = new Map<string, typeof operation.maintenanceChecklistItems>();
+    for (const item of operation.maintenanceChecklistItems ?? []) {
+      const current = groups.get(item.maintenanceType) ?? [];
+      current.push(item);
+      groups.set(item.maintenanceType, current);
+    }
+    return [...groups.entries()].map(([type, items]) => ({
+      id: `maintenance-checklist-${type.toLowerCase()}`,
+      title: `Checklist de manutenção — ${this.maintenanceTypeLabel(type)}`,
+      components: [
+        {
+          id: `maintenance-checklist-${type.toLowerCase()}-items`,
+          kind: 'checklist',
+          items: items.map((item) => ({
+            label: this.clean(item.description),
+            done: item.executed,
+            note: item.observations ? this.clean(item.observations) : null,
+          })),
+        },
+      ],
+    }));
+  }
+
+  private inspectedEquipmentSection(operation: DocumentContextOperation): DocumentSection {
+    return {
+      id: 'technical-report-inspected-equipments',
+      title: 'Equipamentos inspecionados',
+      components: [
+        {
+          id: 'technical-report-inspected-equipments-table',
+          kind: 'table',
+          columns: [
+            { key: 'item', label: 'ITEM', width: 0.1 },
+            { key: 'sector', label: 'SETOR', width: 0.34 },
+            { key: 'brand', label: 'MARCA', width: 0.19 },
+            { key: 'model', label: 'MODELO', width: 0.19 },
+            { key: 'capacity', label: 'CAPACIDADE', width: 0.18 },
+          ],
+          rows: (operation.inspectedEquipments ?? []).map((item, index) => ({
+            item: String(index + 1).padStart(2, '0'),
+            sector: this.clean(item.sector),
+            brand: this.clean(item.brandSnapshot ?? '—'),
+            model: this.clean(item.modelSnapshot ?? '—'),
+            capacity: this.clean(item.capacitySnapshot ?? '—'),
+          })),
+        },
+      ],
+    };
+  }
+
+  private referencePeriod(month: number, year: number): string {
+    const date = new Date(Date.UTC(year, month - 1, 1));
+    const label = new Intl.DateTimeFormat('pt-BR', {
+      month: 'long',
+      year: 'numeric',
+      timeZone: 'UTC',
+    }).format(date);
+    return label.charAt(0).toUpperCase() + label.slice(1);
+  }
+
+  private maintenanceTypeLabel(type: string): string {
+    return (
+      {
+        WEEKLY: 'Semanal',
+        MONTHLY: 'Mensal',
+        QUARTERLY: 'Trimestral',
+        SEMIANNUAL: 'Semestral',
+        ANNUAL: 'Anual',
+        CORRECTIVE: 'Corretiva',
+      }[type] ?? type
+    );
+  }
+
   private observationSection(
     operation: DocumentContext['operation'],
     title: string,
@@ -1123,6 +1219,61 @@ export class DocumentBuilderService {
         ],
       },
     ];
+
+    if (template.type === DocumentTemplateType.TECHNICAL_REPORT) {
+      sections.push(
+        {
+          id: 'template-reference-period',
+          title: 'Período de referência e manutenção',
+          components: [
+            this.metadata('template-reference-period-metadata', [
+              ['Mês e ano de referência', 'Junho de 2026'],
+              ['Tipo de manutenção', 'Semestral'],
+            ]),
+          ],
+        },
+        {
+          id: 'template-maintenance-checklist',
+          title: 'Checklist de manutenção',
+          components: [
+            {
+              id: 'template-maintenance-checklist-items',
+              kind: 'checklist',
+              items: [
+                { label: 'Atividade prevista no plano', done: true, note: null },
+                { label: 'Atividade pendente', done: false, note: 'Observação opcional' },
+              ],
+            },
+          ],
+        },
+        {
+          id: 'template-inspected-equipments',
+          title: 'Equipamentos inspecionados',
+          components: [
+            {
+              id: 'template-inspected-equipments-table',
+              kind: 'table',
+              columns: [
+                { key: 'item', label: 'ITEM', width: 0.1 },
+                { key: 'sector', label: 'SETOR', width: 0.34 },
+                { key: 'brand', label: 'MARCA', width: 0.19 },
+                { key: 'model', label: 'MODELO', width: 0.19 },
+                { key: 'capacity', label: 'CAPACIDADE', width: 0.18 },
+              ],
+              rows: [
+                {
+                  item: '01',
+                  sector: 'Ambiente',
+                  brand: 'Marca',
+                  model: 'Modelo',
+                  capacity: 'Capacidade',
+                },
+              ],
+            },
+          ],
+        },
+      );
+    }
 
     const signature = this.signatureComponent(context);
     if (signature) {
@@ -1405,6 +1556,49 @@ export class DocumentBuilderService {
         .filter(Boolean)
         .join(' · '),
     );
+  }
+
+  private organizationPhones(organization: BuilderOrganization): string[] {
+    return [...new Set([organization.phone, ...(organization.phoneNumbers ?? [])])]
+      .map((phone) => this.clean(phone))
+      .filter(Boolean);
+  }
+
+  private documentHeader(
+    organization: BuilderOrganization,
+    logo: BuilderLogo,
+    title: string,
+    documentNumber: string,
+    subtitle?: string,
+  ): DocumentBlueprint['header'] {
+    const resolvedLogo = logo
+      ? {
+          mimeType: logo.mimeType,
+          fileSize: logo.fileSize,
+          contentBase64: logo.contentBase64,
+        }
+      : null;
+    return {
+      title: this.clean(title),
+      subtitle: subtitle ? this.clean(subtitle) : undefined,
+      organizationName: this.clean(organization.tradeName || organization.legalName),
+      documentNumber: this.clean(documentNumber),
+      logo: resolvedLogo,
+      corporate: {
+        legalName: this.clean(organization.legalName),
+        tradeName: this.clean(organization.tradeName),
+        cnpj: this.clean(organization.cnpj),
+        stateRegistration: this.clean(organization.stateRegistration ?? ''),
+        fullAddress: this.organizationAddress(organization),
+        city: this.clean(organization.city),
+        state: this.clean(organization.state),
+        zipCode: this.clean(organization.zipCode ?? ''),
+        phoneNumbers: this.organizationPhones(organization),
+        email: this.clean(organization.email),
+        website: this.clean(organization.website ?? ''),
+        logo: resolvedLogo,
+      },
+    };
   }
 
   private visualStyle(primary: string): DocumentVisualStyle {

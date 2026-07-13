@@ -12,6 +12,7 @@ import type { RenderedDocument } from '../src/modules/document-engine/renderer/d
 import { DocumentAssetResolver } from '../src/modules/document-engine/assets/document-asset-resolver.service';
 import { PNG } from 'pngjs';
 import { BinaryBitmap, HybridBinarizer, QRCodeReader, RGBLuminanceSource } from '@zxing/library';
+import { DOCUMENT_PAGE } from '../src/shared/constants/document-engine.constants';
 
 const ONE_PIXEL_PNG =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=';
@@ -371,6 +372,91 @@ describe('DocumentEngine foundation', () => {
     expect(opinionSectionIds).not.toEqual(reportSectionIds);
   });
 
+  it('certifies DC02B corporate header, maintenance contract and long inspected-equipment pagination', () => {
+    const context = operationContext(DocumentTemplateType.TECHNICAL_REPORT);
+    const operation = context.operation as Record<string, unknown>;
+    operation.referenceMonth = 6;
+    operation.referenceYear = 2026;
+    operation.maintenanceType = 'SEMIANNUAL';
+    operation.maintenanceChecklistItems = [
+      {
+        id: 'weekly-1',
+        maintenanceType: 'WEEKLY',
+        description: 'Limpeza de filtro de ar',
+        executed: true,
+        observations: null,
+        position: 0,
+      },
+      {
+        id: 'semiannual-1',
+        maintenanceType: 'SEMIANNUAL',
+        description: 'Limpeza total dos trocadores de calor',
+        executed: true,
+        observations: 'Produto não corrosivo',
+        position: 0,
+      },
+    ];
+    operation.inspectedEquipments = Array.from({ length: 75 }, (_, index) => ({
+      id: `inspection-${index}`,
+      equipmentId: `equipment-${index}`,
+      position: index,
+      sector: `Setor ${index + 1}`,
+      brandSnapshot: index % 2 === 0 ? 'Electrolux' : 'TCL',
+      modelSnapshot: 'Split',
+      capacitySnapshot: `${12 + (index % 3) * 6}.000 BTU`,
+      tagSnapshot: `EQ-${index + 1}`,
+      serialSnapshot: `SN-${index + 1}`,
+      equipment: { id: `equipment-${index}`, name: `Split ${index + 1}`, type: 'SPLIT' },
+    }));
+    (context.assets as Record<string, unknown>).logo = {
+      storageKey: 'organization/logo.png',
+      mimeType: 'image/png',
+      fileSize: 68,
+      contentBase64: ONE_PIXEL_PNG,
+    };
+
+    const built = (
+      new DocumentBuilderService({} as never) as unknown as {
+        buildFromContext: (ctx: unknown) => DocumentBlueprint;
+      }
+    ).buildFromContext(context);
+    const sectionIds = built.sections.map((section) => section.id);
+    expect(sectionIds).toEqual(
+      expect.arrayContaining([
+        'technical-report-reference-period',
+        'maintenance-checklist-weekly',
+        'maintenance-checklist-semiannual',
+        'technical-report-inspected-equipments',
+      ]),
+    );
+    expect(built.header.corporate).toMatchObject({
+      legalName: 'ERP Operation LTDA',
+      tradeName: 'Orbit',
+      cnpj: '00.000.000/0001-00',
+      stateRegistration: '0321418-40',
+      zipCode: '50000-000',
+      phoneNumbers: ['+55 81 99999-9999', '+55 81 98888-7777'],
+    });
+    const table = built.sections
+      .find((section) => section.id === 'technical-report-inspected-equipments')
+      ?.components.find((component) => component.kind === 'table');
+    expect(table?.kind === 'table' ? table.columns.map((column) => column.label) : []).toEqual([
+      'ITEM',
+      'SETOR',
+      'MARCA',
+      'MODELO',
+      'CAPACIDADE',
+    ]);
+    expect(table?.kind === 'table' ? table.rows : []).toHaveLength(75);
+    const rendered = renderer().render(built);
+    expect(rendered.pages.length).toBeGreaterThan(3);
+    expect(
+      rendered.pages
+        .flatMap((page) => page.elements)
+        .some((element) => element.type === 'text' && element.text.includes('IE 0321418-40')),
+    ).toBe(true);
+  });
+
   it.each([
     [DocumentTemplateType.WORK_ORDER, 'work-order-identification'],
     [DocumentTemplateType.TECHNICAL_REPORT, 'visit-objective'],
@@ -391,6 +477,11 @@ describe('DocumentEngine foundation', () => {
     const rendered = renderer().render(built);
     const pdf = await new PdfEngineService().create(rendered);
     expect(built.sections.map((section) => section.id)).toContain(expectedSection);
+    expect(built.header.corporate).toMatchObject({
+      legalName: 'ERP Operation LTDA',
+      tradeName: 'Orbit',
+      cnpj: '00.000.000/0001-00',
+    });
     expect(rendered.blueprint).toBe(built);
     expect(pdf.buffer.subarray(0, 5).toString('latin1')).toBe('%PDF-');
   });
@@ -616,7 +707,10 @@ describe('DocumentEngine foundation', () => {
     const headerLogo = rendered.pages[0]?.elements.find(
       (element) => element.type === 'image' && element.width === 68 && element.height === 42,
     );
-    expect(headerLogo?.type === 'image' ? headerLogo.y : null).toBeCloseTo(780.89, 1);
+    expect(headerLogo?.type === 'image' ? headerLogo.y : null).toBeCloseTo(
+      DOCUMENT_PAGE.height - DOCUMENT_PAGE.headerHeight + (DOCUMENT_PAGE.headerHeight - 8 - 42) / 2,
+      1,
+    );
     const checklistPage = rendered.pages.find((page) =>
       page.elements.some(
         (element) => element.type === 'text' && element.text === 'Checklist da execução',
@@ -700,14 +794,12 @@ describe('DocumentEngine foundation', () => {
         }),
       } as never,
       {
-        generateQrCode: jest
-          .fn()
-          .mockResolvedValue({
-            storageKey: 'generated:qr',
-            mimeType: 'image/png',
-            fileSize: 68,
-            contentBase64: ONE_PIXEL_PNG,
-          }),
+        generateQrCode: jest.fn().mockResolvedValue({
+          storageKey: 'generated:qr',
+          mimeType: 'image/png',
+          fileSize: 68,
+          contentBase64: ONE_PIXEL_PNG,
+        }),
       } as never,
     );
 
@@ -779,14 +871,12 @@ describe('DocumentEngine foundation', () => {
       { getConfigurationForType: jest.fn().mockResolvedValue(configuration) } as never,
       {
         generateQrCode: jest.fn().mockResolvedValue((base.assets as { qrCode: unknown }).qrCode),
-        resolveSignature: jest
-          .fn()
-          .mockResolvedValue({
-            storageKey: institutional.imageStorageKey,
-            mimeType: 'image/png',
-            fileSize: 68,
-            contentBase64: ONE_PIXEL_PNG,
-          }),
+        resolveSignature: jest.fn().mockResolvedValue({
+          storageKey: institutional.imageStorageKey,
+          mimeType: 'image/png',
+          fileSize: 68,
+          contentBase64: ONE_PIXEL_PNG,
+        }),
       } as never,
     );
     const created = await context.create('operation', DocumentTemplateType.WORK_ORDER);
@@ -860,14 +950,12 @@ describe('DocumentEngine foundation', () => {
           fileSize: Buffer.from(ONE_PIXEL_PNG, 'base64').length,
           contentBase64: ONE_PIXEL_PNG,
         }),
-        generateQrCode: jest
-          .fn()
-          .mockResolvedValue({
-            storageKey: 'generated:qr',
-            mimeType: 'image/png',
-            fileSize: 68,
-            contentBase64: ONE_PIXEL_PNG,
-          }),
+        generateQrCode: jest.fn().mockResolvedValue({
+          storageKey: 'generated:qr',
+          mimeType: 'image/png',
+          fileSize: 68,
+          contentBase64: ONE_PIXEL_PNG,
+        }),
       } as never,
     );
 
@@ -1106,8 +1194,10 @@ function operationContext(
         legalName: 'ERP Operation LTDA',
         tradeName: 'Orbit',
         cnpj: '00.000.000/0001-00',
+        stateRegistration: '0321418-40',
         email: 'contato@orbit.local',
         phone: '+55 81 99999-9999',
+        phoneNumbers: ['+55 81 99999-9999', '+55 81 98888-7777'],
         website: 'https://orbit.local',
         zipCode: '50000-000',
         street: 'Rua Orbit',
@@ -1156,6 +1246,13 @@ function operationContext(
       observations: 'Equipamento inspecionado e operando conforme registros do atendimento.',
       reportedIssue: null,
       serviceDescription: null,
+      technicalDiagnosis: null,
+      technicalRecommendations: null,
+      referenceMonth: null,
+      referenceYear: null,
+      maintenanceType: null,
+      maintenanceChecklistItems: [],
+      inspectedEquipments: [],
       customer: {
         name: 'Hospital Santa Clara',
         tradeName: 'Hospital Santa Clara',

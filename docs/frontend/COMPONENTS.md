@@ -2,30 +2,30 @@
 
 ## Refinamento documental
 
-| Componente | Alteração |
-|---|---|
+| Componente       | Alteração                                                                |
+| ---------------- | ------------------------------------------------------------------------ |
 | `DocumentViewer` | logo alinhada verticalmente ao texto; rodapé limitado a `footer.content` |
 
 ## DC-02
 
-| Componente | Alteração |
-|---|---|
-| `ReportWorkflowDrawer` / `ContentStep` | captura objetivo, diagnóstico, atividades, recomendações e observações do relatório técnico |
-| `DocumentViewer` | pagina o Blueprint por capacidade, peso de componente e `pageBreakAfter`; permanece viewer único |
+| Componente                             | Alteração                                                                                        |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `ReportWorkflowDrawer` / `ContentStep` | captura objetivo, diagnóstico, atividades, recomendações e observações do relatório técnico      |
+| `DocumentViewer`                       | pagina o Blueprint por capacidade, peso de componente e `pageBreakAfter`; permanece viewer único |
 
 O frontend apenas persiste dados da Operation e representa componentes recebidos. Checklist,
 foto, QR e assinatura nunca são montados fora do Blueprint.
 
 ## Product Backlog Closure 07
 
-| Componente | Responsabilidade |
-|---|---|
-| `ReportCenterPage` | dashboard, filtros, histórico e workflows |
+| Componente             | Responsabilidade                                         |
+| ---------------------- | -------------------------------------------------------- |
+| `ReportCenterPage`     | dashboard, filtros, histórico e workflows                |
 | `ReportWorkflowDrawer` | criação/edição: Origem → Conteúdo → Evidências → Preview |
-| `OriginStep` | Operation, cliente, equipamento, responsável e PMOC |
-| `ContentStep` | campos semânticos por tipo |
-| `EvidenceStep` | checklist, fotos e `SignaturePad` |
-| `DocumentViewer` | único preview/render/download |
+| `OriginStep`           | Operation, cliente, equipamento, responsável e PMOC      |
+| `ContentStep`          | campos semânticos por tipo                               |
+| `EvidenceStep`         | checklist, fotos e `SignaturePad`                        |
+| `DocumentViewer`       | único preview/render/download                            |
 
 ## DC-01.2
 
@@ -50,20 +50,20 @@ foto, QR e assinatura nunca são montados fora do Blueprint.
 
 ## Product Backlog Closure 05 — Reports and DocumentViewer
 
-| Item | Local | Uso |
-|---|---|---|
-| `TemplateModelCard` refinado | `app/(platform)/reports/page.tsx` | Card compacto para biblioteca de modelos, com badges suaves e ações discretas |
-| `TemplatePreviewDrawer` | `app/(platform)/reports/page.tsx` | Explica preview estrutural vs preview com Operation real |
-| `DocumentViewer` | `packages/ui/documents/document-viewer.tsx` | Continua sendo o único viewer para modelo, dados reais, render e download |
+| Item                         | Local                                       | Uso                                                                           |
+| ---------------------------- | ------------------------------------------- | ----------------------------------------------------------------------------- |
+| `TemplateModelCard` refinado | `app/(platform)/reports/page.tsx`           | Card compacto para biblioteca de modelos, com badges suaves e ações discretas |
+| `TemplatePreviewDrawer`      | `app/(platform)/reports/page.tsx`           | Explica preview estrutural vs preview com Operation real                      |
+| `DocumentViewer`             | `packages/ui/documents/document-viewer.tsx` | Continua sendo o único viewer para modelo, dados reais, render e download     |
 
 Regra: assinatura coletada deve ser renderizada apenas quando vier no `SignatureComponent` do
 blueprint oficial. Não interpretar `Operation.signatureData` diretamente no frontend.
 
 ## Product Backlog Closure 05.1 — Visit Report workflow
 
-| Item | Local | Uso |
-|---|---|---|
-| Visit evidence workflow | `app/(platform)/reports/visita/page.tsx` | Seleciona Operation real, salva checklist/observações/fotos/assinatura e abre DocumentViewer |
+| Item                             | Local                                       | Uso                                                                                            |
+| -------------------------------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Visit evidence workflow          | `app/(platform)/reports/visita/page.tsx`    | Seleciona Operation real, salva checklist/observações/fotos/assinatura e abre DocumentViewer   |
 | `DocumentViewer` image component | `packages/ui/documents/document-viewer.tsx` | Renderiza evidência fotográfica quando `component.kind === "image"` e `component.image` existe |
 
 Regra: fotos selecionadas viram data URL apenas para envio imediato ao backend. O documento nunca
@@ -71,12 +71,12 @@ usa object URL ou blob local como fonte persistente.
 
 ## Sprint 23 — Product workflow closure
 
-| Item | Local | Uso |
-|---|---|---|
-| Operator Assignment Detail enriquecido | `app/operator/(shell)/services/[id]/page.tsx` | Detalhe de campo com contexto, checklist, materiais oficiais, documentos oficiais e timeline da Assignment |
-| `OperatorMaterialPanel` | `app/operator/(shell)/services/[id]/page.tsx` | Registro de material no Operator usando `POST /operations/:id/materials` |
-| `DocumentViewer` no Operator detail | `app/operator/(shell)/services/[id]/page.tsx` | Visualização/render/download por Document Engine oficial |
-| Versão do Blueprint no `DocumentViewer` | `packages/ui/documents/document-viewer.tsx` | Remove label placeholder e exibe a versão real do Blueprint |
+| Item                                    | Local                                         | Uso                                                                                                        |
+| --------------------------------------- | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Operator Assignment Detail enriquecido  | `app/operator/(shell)/services/[id]/page.tsx` | Detalhe de campo com contexto, checklist, materiais oficiais, documentos oficiais e timeline da Assignment |
+| `OperatorMaterialPanel`                 | `app/operator/(shell)/services/[id]/page.tsx` | Registro de material no Operator usando `POST /operations/:id/materials`                                   |
+| `DocumentViewer` no Operator detail     | `app/operator/(shell)/services/[id]/page.tsx` | Visualização/render/download por Document Engine oficial                                                   |
+| Versão do Blueprint no `DocumentViewer` | `packages/ui/documents/document-viewer.tsx`   | Remove label placeholder e exibe a versão real do Blueprint                                                |
 
 Regra Sprint 23: nenhum card de workflow do Operator deve prometer uma ação crítica sem levar a uma
 ação real ou a um estado claramente documentado. Materiais e documentos já usam backend oficial;
@@ -88,26 +88,26 @@ Nenhum componente novo foi criado.
 
 Componentes cujo uso continua obrigatório para manter a performance V1:
 
-| Item | Local | Regra |
-|---|---|---|
-| `Pagination` | `apps/platform/components/pagination.tsx` | Todas as listagens devem preservar `page`, `limit`, filtros e ordenação |
-| `DocumentViewer` | `packages/ui/documents/document-viewer.tsx` | Preview/render/download sempre via backend; sem preview local |
-| `AssetTimeline` | `packages/ui/assets/asset-timeline.tsx` | Timeline sempre via Asset Lifecycle; sem montagem local |
-| Drawers de detalhe | `apps/platform/components/*drawer*.tsx` | Devem cancelar/refazer requests obsoletas ao trocar entidade/filtro |
+| Item               | Local                                       | Regra                                                                   |
+| ------------------ | ------------------------------------------- | ----------------------------------------------------------------------- |
+| `Pagination`       | `apps/platform/components/pagination.tsx`   | Todas as listagens devem preservar `page`, `limit`, filtros e ordenação |
+| `DocumentViewer`   | `packages/ui/documents/document-viewer.tsx` | Preview/render/download sempre via backend; sem preview local           |
+| `AssetTimeline`    | `packages/ui/assets/asset-timeline.tsx`     | Timeline sempre via Asset Lifecycle; sem montagem local                 |
+| Drawers de detalhe | `apps/platform/components/*drawer*.tsx`     | Devem cancelar/refazer requests obsoletas ao trocar entidade/filtro     |
 
 Build Sprint 21 identificou `/equipamentos`, `/budgets` e `/produtos` como rotas candidatas a
 lazy-load interno de drawers/grids pesados em Sprint 22/Post-V1 Optimization.
 
 ## Frontend Sprint 9 — Navigation UX & Creation Flows
 
-| Item | Local | Uso |
-|---|---|---|
-| `CustomerSelect` | `apps/platform/components/entity-select.tsx` | Seleção reutilizável de cliente |
-| `CustomerAddressSelect` | `apps/platform/components/entity-select.tsx` | Endereço do cliente selecionado |
-| `EquipmentSelect` | `apps/platform/components/entity-select.tsx` | Equipamentos filtrados por cliente |
-| `UserSelect` | `apps/platform/components/entity-select.tsx` | Seleção visual de responsável |
-| `DateTimePicker` | `apps/platform/components/entity-select.tsx` | Data/hora para agendamento |
-| `ServiceTypeSelect` | `apps/platform/components/entity-select.tsx` | Tipo oficial da Operation |
+| Item                      | Local                                                    | Uso                                                            |
+| ------------------------- | -------------------------------------------------------- | -------------------------------------------------------------- |
+| `CustomerSelect`          | `apps/platform/components/entity-select.tsx`             | Seleção reutilizável de cliente                                |
+| `CustomerAddressSelect`   | `apps/platform/components/entity-select.tsx`             | Endereço do cliente selecionado                                |
+| `EquipmentSelect`         | `apps/platform/components/entity-select.tsx`             | Equipamentos filtrados por cliente                             |
+| `UserSelect`              | `apps/platform/components/entity-select.tsx`             | Seleção visual de responsável                                  |
+| `DateTimePicker`          | `apps/platform/components/entity-select.tsx`             | Data/hora para agendamento                                     |
+| `ServiceTypeSelect`       | `apps/platform/components/entity-select.tsx`             | Tipo oficial da Operation                                      |
 | `OperationCreationDrawer` | `apps/platform/components/operation-creation-drawer.tsx` | Drawer/wizard reutilizado por Agenda, Operações, Serviços e OS |
 
 Decisão: esses componentes ficam em `apps/platform/components` porque são fluxos específicos da
@@ -116,15 +116,15 @@ Platform. Se o Operator ou outro app precisar deles no futuro, podem ser promovi
 
 ## Frontend Sprint 8 — Inventory, Materials & Pricing
 
-| Item | Local | Uso |
-|---|---|---|
-| `inventoryApi` | `packages/api/inventory.ts` | Products, Inventory Items, Stock Movements, Suppliers e Operation Materials |
-| `pricingApi` | `packages/api/pricing.ts` | Pricing, preço vigente, stats e histórico |
-| Tipos Inventory/Pricing | `packages/types/index.ts` | Contratos reais das Sprints 12/13 do backend |
-| Central real de produtos | `app/(platform)/produtos/page.tsx` | Abas Catálogo, Estoque, Fornecedores, Preços e Movimentos |
-| `ProductFormDrawer` real | `apps/platform/components/product-form-drawer.tsx` | Criação/edição de produto via `/products` |
-| Materiais na Operation | `apps/platform/components/operation-detail-drawer.tsx` | Seção **Materiais utilizados** via `/operations/:id/materials` |
-| Dashboard Inventory/Pricing | `app/(platform)/page.tsx` | Widgets reais de estoque, pricing e movimentações |
+| Item                        | Local                                                  | Uso                                                                         |
+| --------------------------- | ------------------------------------------------------ | --------------------------------------------------------------------------- |
+| `inventoryApi`              | `packages/api/inventory.ts`                            | Products, Inventory Items, Stock Movements, Suppliers e Operation Materials |
+| `pricingApi`                | `packages/api/pricing.ts`                              | Pricing, preço vigente, stats e histórico                                   |
+| Tipos Inventory/Pricing     | `packages/types/index.ts`                              | Contratos reais das Sprints 12/13 do backend                                |
+| Central real de produtos    | `app/(platform)/produtos/page.tsx`                     | Abas Catálogo, Estoque, Fornecedores, Preços e Movimentos                   |
+| `ProductFormDrawer` real    | `apps/platform/components/product-form-drawer.tsx`     | Criação/edição de produto via `/products`                                   |
+| Materiais na Operation      | `apps/platform/components/operation-detail-drawer.tsx` | Seção **Materiais utilizados** via `/operations/:id/materials`              |
+| Dashboard Inventory/Pricing | `app/(platform)/page.tsx`                              | Widgets reais de estoque, pricing e movimentações                           |
 
 Regras:
 
@@ -136,23 +136,23 @@ Regras:
 
 ## Backlog — Document Template Preview
 
-| Item | Local | Uso |
-|---|---|---|
-| `documentsApi.previewTemplateDocument` | `packages/api/documents.ts` | Consome `GET /documents/templates/:templateId/preview` |
-| `DocumentViewer` com `templateId` | `packages/ui/documents/document-viewer.tsx` | Preview oficial de modelo sem Operation |
-| `/reports` integrado | `app/(platform)/reports/page.tsx` | Drawer de modelo usa `DocumentViewer source={{ templateId }}` |
+| Item                                   | Local                                       | Uso                                                           |
+| -------------------------------------- | ------------------------------------------- | ------------------------------------------------------------- |
+| `documentsApi.previewTemplateDocument` | `packages/api/documents.ts`                 | Consome `GET /documents/templates/:templateId/preview`        |
+| `DocumentViewer` com `templateId`      | `packages/ui/documents/document-viewer.tsx` | Preview oficial de modelo sem Operation                       |
+| `/reports` integrado                   | `app/(platform)/reports/page.tsx`           | Drawer de modelo usa `DocumentViewer source={{ templateId }}` |
 
 Regra: previews de modelos não usam `DocumentPaper`, não criam Operation, não consultam Demo Dataset e não possuem fallback local.
 
 ## Backlog — Paginação Global + Modelos de Relatórios
 
-| Item | Local | Uso |
-|---|---|---|
-| `Pagination` atualizado | `apps/platform/components/pagination.tsx` | Paginação padrão da Platform com page size, primeira/anterior/próxima/última e totais |
-| `TemplateFormDrawer` reutilizado | `apps/platform/components/template-form-drawer.tsx` | Criar/configurar modelos, incluindo assinatura obrigatória, modo e assinatura fixa |
-| `DocumentViewer` reutilizado | `packages/ui/documents/document-viewer.tsx` | Preview oficial dos modelos por `templateId`; sem `DocumentPaper` local na página de Relatórios |
-| `ConfirmDialog` reutilizado | `packages/ui/confirm-dialog.tsx` | Confirmação de exclusão de modelo |
-| Cards de modelo | `app/(platform)/reports/page.tsx` | Biblioteca de Modelos de Documentos com badges, hover e ações discretas |
+| Item                             | Local                                               | Uso                                                                                             |
+| -------------------------------- | --------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `Pagination` atualizado          | `apps/platform/components/pagination.tsx`           | Paginação padrão da Platform com page size, primeira/anterior/próxima/última e totais           |
+| `TemplateFormDrawer` reutilizado | `apps/platform/components/template-form-drawer.tsx` | Criar/configurar modelos, incluindo assinatura obrigatória, modo e assinatura fixa              |
+| `DocumentViewer` reutilizado     | `packages/ui/documents/document-viewer.tsx`         | Preview oficial dos modelos por `templateId`; sem `DocumentPaper` local na página de Relatórios |
+| `ConfirmDialog` reutilizado      | `packages/ui/confirm-dialog.tsx`                    | Confirmação de exclusão de modelo                                                               |
+| Cards de modelo                  | `app/(platform)/reports/page.tsx`                   | Biblioteca de Modelos de Documentos com badges, hover e ações discretas                         |
 
 Listagens padronizadas com `Pagination`:
 
@@ -170,13 +170,13 @@ Regra: filtros e ordenação não são perdidos ao mudar página ou tamanho da p
 
 ## Sprint 7 — Asset Lifecycle Integration
 
-| Item | Local | Uso |
-|---|---|---|
-| `AssetTimeline` | `packages/ui/assets/asset-timeline.tsx` | Timeline oficial do ativo, renderizada a partir do `TimelineAssembler` do backend |
-| `assetLifecycleApi` | `packages/api/asset-lifecycle.ts` | Listagem, detalhe e estatísticas de Asset Lifecycle |
-| `AssetLifecycle*` types | `packages/types/index.ts` | Contratos de evento, timeline, stats e filtros |
-| `OperationDetailDrawer` integrado | `apps/platform/components/operation-detail-drawer.tsx` | Timeline da operação via Asset Lifecycle |
-| `DocumentViewer` integrado | `packages/ui/documents/document-viewer.tsx` | Aberto diretamente por eventos `DOCUMENT` |
+| Item                              | Local                                                  | Uso                                                                               |
+| --------------------------------- | ------------------------------------------------------ | --------------------------------------------------------------------------------- |
+| `AssetTimeline`                   | `packages/ui/assets/asset-timeline.tsx`                | Timeline oficial do ativo, renderizada a partir do `TimelineAssembler` do backend |
+| `assetLifecycleApi`               | `packages/api/asset-lifecycle.ts`                      | Listagem, detalhe e estatísticas de Asset Lifecycle                               |
+| `AssetLifecycle*` types           | `packages/types/index.ts`                              | Contratos de evento, timeline, stats e filtros                                    |
+| `OperationDetailDrawer` integrado | `apps/platform/components/operation-detail-drawer.tsx` | Timeline da operação via Asset Lifecycle                                          |
+| `DocumentViewer` integrado        | `packages/ui/documents/document-viewer.tsx`            | Aberto diretamente por eventos `DOCUMENT`                                         |
 
 Removidos na Sprint 7:
 
@@ -190,15 +190,15 @@ Regra visual: o frontend usa `event.timeline.icon`, `color`, `title`, `subtitle`
 
 ## Sprint 6 — Document Center & Configuration
 
-| Item | Local | Uso |
-|---|---|---|
-| `DocumentViewer` | `packages/ui/documents/document-viewer.tsx` | Viewer único do Document Engine: preview oficial, páginas, miniaturas, zoom, render e download |
-| `documentsApi` | `packages/api/documents.ts` | Preview/render/download/configuração de documentos |
-| `signaturesApi` | `packages/api/signatures.ts` | CRUD/upload/download de assinaturas |
-| `TemplateFormDrawer` atualizado | `apps/platform/components/template-form-drawer.tsx` | Configura assinatura obrigatória, modo e assinatura fixa |
-| Central Documental real | `app/(platform)/documentos/page.tsx` | Lista `OperationDocument` via `/operations`; abre `DocumentViewer` |
-| Operator Documentos real | `app/operator/(shell)/documents/page.tsx` | Lista documentos por cliente selecionado via `/operations` |
-| Configurações → Documentos/Assinaturas | `app/(platform)/settings/page.tsx` | Consome `/documents/configuration` e `/signatures` |
+| Item                                   | Local                                               | Uso                                                                                            |
+| -------------------------------------- | --------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `DocumentViewer`                       | `packages/ui/documents/document-viewer.tsx`         | Viewer único do Document Engine: preview oficial, páginas, miniaturas, zoom, render e download |
+| `documentsApi`                         | `packages/api/documents.ts`                         | Preview/render/download/configuração de documentos                                             |
+| `signaturesApi`                        | `packages/api/signatures.ts`                        | CRUD/upload/download de assinaturas                                                            |
+| `TemplateFormDrawer` atualizado        | `apps/platform/components/template-form-drawer.tsx` | Configura assinatura obrigatória, modo e assinatura fixa                                       |
+| Central Documental real                | `app/(platform)/documentos/page.tsx`                | Lista `OperationDocument` via `/operations`; abre `DocumentViewer`                             |
+| Operator Documentos real               | `app/operator/(shell)/documents/page.tsx`           | Lista documentos por cliente selecionado via `/operations`                                     |
+| Configurações → Documentos/Assinaturas | `app/(platform)/settings/page.tsx`                  | Consome `/documents/configuration` e `/signatures`                                             |
 
 Removidos na Sprint 6:
 
@@ -221,26 +221,27 @@ Pacotes compartilhados (`@erp/*`) + apps (`@platform/*`, `@operator/*`). Ver `AR
 Primitivos (Sprint 2): `status-pill`, `status-chip`, `skeletons`, `empty-state`, `empty-illustration`, `states`, `drawer`, `drawer-tabs`, `confirm-dialog`, `search-input`, `filter-bar`, `section-card`, `metric-card`. `auth/*` (provider scope-aware, gate, require-auth, login/change-password screens). `theme/*`, `base/*`.
 
 ### Novos na Sprint 3
-| Componente | Arquivo | Uso |
-|---|---|---|
-| `Stepper` | `wizard/stepper.tsx` | progresso segmentado |
-| `WizardProgressHeader` | `wizard/progress-header.tsx` | header sticky (etapa X/N) |
-| `WizardFooter` | `wizard/step-footer.tsx` | controles voltar/continuar/enviar |
-| `PhotoInput` | `photo-input.tsx` | captura multi-foto (preview/remover/reordenar) |
-| `SignaturePad` | `documents/signature-pad.tsx` | **refinado**: desfazer/limpar/confirmar/indicador |
-| `applyBranding` | `auth/auth-provider.tsx` | aplica cores da empresa ao tema (export) |
+
+| Componente             | Arquivo                       | Uso                                               |
+| ---------------------- | ----------------------------- | ------------------------------------------------- |
+| `Stepper`              | `wizard/stepper.tsx`          | progresso segmentado                              |
+| `WizardProgressHeader` | `wizard/progress-header.tsx`  | header sticky (etapa X/N)                         |
+| `WizardFooter`         | `wizard/step-footer.tsx`      | controles voltar/continuar/enviar                 |
+| `PhotoInput`           | `photo-input.tsx`             | captura multi-foto (preview/remover/reordenar)    |
+| `SignaturePad`         | `documents/signature-pad.tsx` | **refinado**: desfazer/limpar/confirmar/indicador |
+| `applyBranding`        | `auth/auth-provider.tsx`      | aplica cores da empresa ao tema (export)          |
 
 ## Operator — `@operator/*` (`apps/operator`)
 
-| Item | Arquivo |
-|---|---|
-| `OperatorShell` | `shell/operator-shell.tsx` (brand bar + bottom nav) |
-| `OperatorBottomNav` | `components/bottom-nav.tsx` (Início/Agenda/Atend./Clientes/Perfil) |
-| `OperatorHome` | `features/home/operator-home.tsx` |
-| `AtendimentoWizard` | `features/atendimento/atendimento-wizard.tsx` (10 etapas + pickers) |
-| Config/serviços | `lib/service-types.ts` (tipos + checklists HVAC) |
-| Outbox offline | `lib/offline-queue.ts` (fila local + status + flush placeholder) |
-| Submissão | `lib/atendimento.ts` (`AtendimentoDraft`, `submitAtendimento` → outbox) |
+| Item                | Arquivo                                                                 |
+| ------------------- | ----------------------------------------------------------------------- |
+| `OperatorShell`     | `shell/operator-shell.tsx` (brand bar + bottom nav)                     |
+| `OperatorBottomNav` | `components/bottom-nav.tsx` (Início/Agenda/Atend./Clientes/Perfil)      |
+| `OperatorHome`      | `features/home/operator-home.tsx`                                       |
+| `AtendimentoWizard` | `features/atendimento/atendimento-wizard.tsx` (10 etapas + pickers)     |
+| Config/serviços     | `lib/service-types.ts` (tipos + checklists HVAC)                        |
+| Outbox offline      | `lib/offline-queue.ts` (fila local + status + flush placeholder)        |
+| Submissão           | `lib/atendimento.ts` (`AtendimentoDraft`, `submitAtendimento` → outbox) |
 
 Componentes herdados: `service-card`, `schedule-card`, `quick-action`, `operator-header`.
 
@@ -250,22 +251,22 @@ Inalterado em estrutura; ajustes: Financeiro (métricas + grid de alturas iguais
 
 ## Sprint 4 — novos
 
-| Item | Local | Uso |
-|---|---|---|
-| `useInstallPrompt` / `InstallButton` | `@erp/ui/pwa` | instalação do PWA (Chromium + fallback iOS) |
-| `QrFoundation` (atualizado) | `@platform/components/qr-foundation` | QR + copiar código + baixar PNG |
-| `operationsApi` (`getOrders`/`getProducts`) | `@erp/api/operations` | snapshots demo de OS e Produtos |
-| `app/manifest.ts` + `public/icons/operator-icon.svg` | `app/` | manifest PWA + ícone |
+| Item                                                 | Local                                | Uso                                         |
+| ---------------------------------------------------- | ------------------------------------ | ------------------------------------------- |
+| `useInstallPrompt` / `InstallButton`                 | `@erp/ui/pwa`                        | instalação do PWA (Chromium + fallback iOS) |
+| `QrFoundation` (atualizado)                          | `@platform/components/qr-foundation` | QR + copiar código + baixar PNG             |
+| `operationsApi` (`getOrders`/`getProducts`)          | `@erp/api/operations`                | snapshots demo de OS e Produtos             |
+| `app/manifest.ts` + `public/icons/operator-icon.svg` | `app/`                               | manifest PWA + ícone                        |
 
 Telas demo: `/documentos` (DocumentViewer + RBAC), `/demo-ready` (apresentação), Ordens/Produtos (Demo Dataset), QR do operador (`/operator/qr`).
 
 ## Sprint 5 — novos
 
-| Item | Local | Uso |
-|---|---|---|
-| `BrandLogo` | `@erp/ui/brand` | logo do cliente (login/sidebar/operator) |
-| `Timeline` / `TimelineEvent` | `@erp/ui/timeline` | histórico (Serviço/Cliente/Equipamento) |
-| `operationsApi.getServices` | `@erp/api/operations` | snapshot `demo.services.v1` |
+| Item                         | Local                 | Uso                                      |
+| ---------------------------- | --------------------- | ---------------------------------------- |
+| `BrandLogo`                  | `@erp/ui/brand`       | logo do cliente (login/sidebar/operator) |
+| `Timeline` / `TimelineEvent` | `@erp/ui/timeline`    | histórico (Serviço/Cliente/Equipamento)  |
+| `operationsApi.getServices`  | `@erp/api/operations` | snapshot `demo.services.v1`              |
 
 Telas: `/reports` (central documental), `/servicos` (histórico timeline), `/operator/{equipamentos,documents,sync}`, `/demo-ready` (roteiro guiado). Docker: `frontend/Dockerfile` + serviço `frontend` no compose.
 
@@ -277,40 +278,40 @@ Telas: `/reports` (central documental), `/servicos` (histórico timeline), `/ope
 
 ## Backlog #001 — Agenda
 
-| Item | Local | Uso |
-|---|---|---|
-| `AgendaEventDrawer` | `@platform/components/agenda-event-drawer` | detalhe lateral do evento + ações RBAC |
-| `financialApi.getScheduleRange(from,to)` | `@erp/api` | schedule por intervalo (navegação do calendário) |
-| `DemoScheduleItem` | `@erp/types` | item de agenda enriquecido (equipment/serviceType/endsAt/notes) |
+| Item                                     | Local                                      | Uso                                                             |
+| ---------------------------------------- | ------------------------------------------ | --------------------------------------------------------------- |
+| `AgendaEventDrawer`                      | `@platform/components/agenda-event-drawer` | detalhe lateral do evento + ações RBAC                          |
+| `financialApi.getScheduleRange(from,to)` | `@erp/api`                                 | schedule por intervalo (navegação do calendário)                |
+| `DemoScheduleItem`                       | `@erp/types`                               | item de agenda enriquecido (equipment/serviceType/endsAt/notes) |
 
 ## Backlog #002 — QR Code
 
-| Item | Local | Uso |
-|---|---|---|
-| `QrScanner` | `@erp/ui/qr-scanner` | leitura real de QR pela câmera (PWA, `@zxing/browser`) |
-| `equipmentsApi.lookupByQr` | `@erp/api` | resolve equipamento por `GET /equipments/lookup/:qrCode` |
+| Item                       | Local                | Uso                                                      |
+| -------------------------- | -------------------- | -------------------------------------------------------- |
+| `QrScanner`                | `@erp/ui/qr-scanner` | leitura real de QR pela câmera (PWA, `@zxing/browser`)   |
+| `equipmentsApi.lookupByQr` | `@erp/api`           | resolve equipamento por `GET /equipments/lookup/:qrCode` |
 
 Biblioteca de QR: `@zxing/browser` + `@zxing/library` (`BrowserQRCodeReader`, somente QR).
 
 ## Backlog #003 — Modelos & Documentos
 
-| Item | Local | Uso |
-|---|---|---|
-| `DocumentPaper` | `@erp/ui/documents/document-paper` | base visual legada/modelos; documentos emitidos usam `DocumentViewer` |
-| `MODEL_BLUEPRINTS` / `buildDocument` | `@erp/ui/documents/model-blueprints` | 7 modelos + montagem do documento |
-| `TemplateFormDrawer` | `@platform/components/template-form-drawer` | criar/editar modelo |
+| Item                                 | Local                                       | Uso                                                                   |
+| ------------------------------------ | ------------------------------------------- | --------------------------------------------------------------------- |
+| `DocumentPaper`                      | `@erp/ui/documents/document-paper`          | base visual legada/modelos; documentos emitidos usam `DocumentViewer` |
+| `MODEL_BLUEPRINTS` / `buildDocument` | `@erp/ui/documents/model-blueprints`        | 7 modelos + montagem do documento                                     |
+| `TemplateFormDrawer`                 | `@platform/components/template-form-drawer` | criar/editar modelo                                                   |
 
 Páginas: `/reports` = Gestão de Modelos; `/documentos` = Central Documental (filtros cumulativos + preview + download).
 
 ## Backlog #004 — Operações
 
-| Item | Local | Uso |
-|---|---|---|
-| `OperationView` | `@erp/ui/operations/operation-view` | renderiza uma Operation pelas seções (Renderers) |
-| `buildOperationSections` | `@erp/ui/operations/operation-sections` | modelo de seções (fundação reutilizável dos documentos) |
-| `OPERATION_*` | `@erp/ui/operations/operation-shared` | labels/tones de operações |
-| `OperationDetailDrawer` | `@platform/components/operation-detail-drawer` | drawer: AssetTimeline + Checklist + Fotos + Observações + Assinatura + Documentos |
-| `operationApi` | `@erp/api/operation` | domínio real `/operations` (≠ `operationsApi` demo) |
+| Item                     | Local                                          | Uso                                                                               |
+| ------------------------ | ---------------------------------------------- | --------------------------------------------------------------------------------- |
+| `OperationView`          | `@erp/ui/operations/operation-view`            | renderiza uma Operation pelas seções (Renderers)                                  |
+| `buildOperationSections` | `@erp/ui/operations/operation-sections`        | modelo de seções (fundação reutilizável dos documentos)                           |
+| `OPERATION_*`            | `@erp/ui/operations/operation-shared`          | labels/tones de operações                                                         |
+| `OperationDetailDrawer`  | `@platform/components/operation-detail-drawer` | drawer: AssetTimeline + Checklist + Fotos + Observações + Assinatura + Documentos |
+| `operationApi`           | `@erp/api/operation`                           | domínio real `/operations` (≠ `operationsApi` demo)                               |
 
 Arquitetura: **OperationForm → Sections → Renderers** — um único modelo de seções
 reutilizado por OS/PMOC/Laudo/Relatório/Visita/Orçamento/Recibo (sem forms
@@ -320,12 +321,12 @@ Operation real e a OS rascunho. Histórico oficial em Equipamento/Cliente vem de
 
 ## Sprint — Assignment Domain + Operator Workflow
 
-| Item | Local | Uso |
-|---|---|---|
-| `AssignmentCard` | `apps/operator/components/assignment-card.tsx` | card mobile-first para fila de campo do Operator |
-| `ASSIGNMENT_STATUS_*` | `packages/ui/assignments/assignment-shared.ts` | labels, status pills e CTA principal por estado |
-| `assignmentsApi` | `packages/api/assignments.ts` | client real do domínio `/assignments` |
-| `AssignmentSection` | `apps/platform/components/operation-detail-drawer.tsx` | seção da Operation com responsável, status, histórico e reatribuição |
+| Item                  | Local                                                  | Uso                                                                  |
+| --------------------- | ------------------------------------------------------ | -------------------------------------------------------------------- |
+| `AssignmentCard`      | `apps/operator/components/assignment-card.tsx`         | card mobile-first para fila de campo do Operator                     |
+| `ASSIGNMENT_STATUS_*` | `packages/ui/assignments/assignment-shared.ts`         | labels, status pills e CTA principal por estado                      |
+| `assignmentsApi`      | `packages/api/assignments.ts`                          | client real do domínio `/assignments`                                |
+| `AssignmentSection`   | `apps/platform/components/operation-detail-drawer.tsx` | seção da Operation com responsável, status, histórico e reatribuição |
 
 Regras:
 
@@ -336,15 +337,15 @@ Regras:
 
 ## Frontend Sprint 10 — Budget Integration
 
-| Item | Local | Uso |
-|---|---|---|
-| `budgetsApi` | `packages/api/budgets.ts` | client tipado para `/budgets`, stats, history e `/operations/:id/budgets` |
-| Central Comercial | `app/(platform)/budgets/page.tsx` | listagem, filtros, paginação, métricas e drawers do domínio Budget |
-| `BudgetDetailDrawer` | `app/(platform)/budgets/page.tsx` | resumo, itens, histórico, aprovação, documento e timeline |
-| `BudgetCreationDrawer` | `app/(platform)/budgets/page.tsx` | criação via backend; usa Product/Pricing e não calcula totais localmente |
-| `OperationBudgetsSection` | `apps/platform/components/operation-detail-drawer.tsx` | orçamentos vinculados à Operation + criação rápida |
-| `DocumentViewer` | `packages/ui/documents/document-viewer.tsx` | visualização/download do documento oficial emitido pelo Budget |
-| `BudgetDocumentPanel` | `app/(platform)/budgets/page.tsx` | emissão, visualização e download oficial do PDF de Budget |
+| Item                      | Local                                                  | Uso                                                                       |
+| ------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------- |
+| `budgetsApi`              | `packages/api/budgets.ts`                              | client tipado para `/budgets`, stats, history e `/operations/:id/budgets` |
+| Central Comercial         | `app/(platform)/budgets/page.tsx`                      | listagem, filtros, paginação, métricas e drawers do domínio Budget        |
+| `BudgetDetailDrawer`      | `app/(platform)/budgets/page.tsx`                      | resumo, itens, histórico, aprovação, documento e timeline                 |
+| `BudgetCreationDrawer`    | `app/(platform)/budgets/page.tsx`                      | criação via backend; usa Product/Pricing e não calcula totais localmente  |
+| `OperationBudgetsSection` | `apps/platform/components/operation-detail-drawer.tsx` | orçamentos vinculados à Operation + criação rápida                        |
+| `DocumentViewer`          | `packages/ui/documents/document-viewer.tsx`            | visualização/download do documento oficial emitido pelo Budget            |
+| `BudgetDocumentPanel`     | `app/(platform)/budgets/page.tsx`                      | emissão, visualização e download oficial do PDF de Budget                 |
 
 Componentes reutilizados:
 
@@ -370,17 +371,17 @@ Notas:
 
 ## Frontend Sprint 11 — Financial & Procurement
 
-| Item | Local | Uso |
-|---|---|---|
-| `financialApi` | `packages/api/financial.ts` | client real para contas, categorias, lançamentos, stats e histórico |
-| `procurementApi` | `packages/api/procurement.ts` | client real para pedidos de compra, itens, recebimentos, stats e histórico |
-| `FinancialEntryDrawer` | `apps/platform/components/financial-drawers.tsx` | criar/editar lançamento, pagar, cancelar e consultar histórico |
-| `FinancialAccountDrawer` | `apps/platform/components/financial-drawers.tsx` | criar/editar/desativar conta financeira |
-| `FinancialCategoryDrawer` | `apps/platform/components/financial-drawers.tsx` | criar/editar/desativar categoria financeira |
-| `PurchaseOrderDrawer` | `apps/platform/components/purchase-order-drawer.tsx` | criar/editar pedido, adicionar itens, enviar, cancelar e registrar recebimentos |
-| `FinancialStatusBadge` / `FinancialTypeBadge` | `apps/platform/components/financial-procurement-badges.tsx` | badges reutilizáveis de lançamentos financeiros |
-| `PurchaseStatusBadge` | `apps/platform/components/financial-procurement-badges.tsx` | badge reutilizável de status de compra |
-| `Pagination` | `apps/platform/components/pagination.tsx` | paginação oficial reutilizada em Financeiro e Compras |
+| Item                                          | Local                                                       | Uso                                                                             |
+| --------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `financialApi`                                | `packages/api/financial.ts`                                 | client real para contas, categorias, lançamentos, stats e histórico             |
+| `procurementApi`                              | `packages/api/procurement.ts`                               | client real para pedidos de compra, itens, recebimentos, stats e histórico      |
+| `FinancialEntryDrawer`                        | `apps/platform/components/financial-drawers.tsx`            | criar/editar lançamento, pagar, cancelar e consultar histórico                  |
+| `FinancialAccountDrawer`                      | `apps/platform/components/financial-drawers.tsx`            | criar/editar/desativar conta financeira                                         |
+| `FinancialCategoryDrawer`                     | `apps/platform/components/financial-drawers.tsx`            | criar/editar/desativar categoria financeira                                     |
+| `PurchaseOrderDrawer`                         | `apps/platform/components/purchase-order-drawer.tsx`        | criar/editar pedido, adicionar itens, enviar, cancelar e registrar recebimentos |
+| `FinancialStatusBadge` / `FinancialTypeBadge` | `apps/platform/components/financial-procurement-badges.tsx` | badges reutilizáveis de lançamentos financeiros                                 |
+| `PurchaseStatusBadge`                         | `apps/platform/components/financial-procurement-badges.tsx` | badge reutilizável de status de compra                                          |
+| `Pagination`                                  | `apps/platform/components/pagination.tsx`                   | paginação oficial reutilizada em Financeiro e Compras                           |
 
 Notas:
 
@@ -392,15 +393,15 @@ Notas:
 
 ## Sprint 17 — Executive Dashboard
 
-| Item | Local | Uso |
-|---|---|---|
-| Executive Dashboard | `app/(platform)/page.tsx` | centro executivo/operacional da Platform |
-| `maintenanceApi` | `packages/api/maintenance.ts` | stats e planos ativos de Maintenance Planning |
-| `pmocApi` | `packages/api/pmoc.ts` | stats e PMOCs ativos/compliance |
-| `MetricCard` | `packages/ui/metric-card.tsx` | cards acionáveis do resumo executivo e snapshots |
-| `DashboardSection` | `apps/platform/components/dashboard-section.tsx` | blocos de hierarquia do dashboard |
-| `ErrorState` / `EmptyState` / `SkeletonCard` | `packages/ui/*` | loading, falha parcial e estados vazios por seção |
-| `PurchaseStatusBadge` | `apps/platform/components/financial-procurement-badges.tsx` | status de pedidos no bloco Estoque e Compras |
+| Item                                         | Local                                                       | Uso                                               |
+| -------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------- |
+| Executive Dashboard                          | `app/(platform)/page.tsx`                                   | centro executivo/operacional da Platform          |
+| `maintenanceApi`                             | `packages/api/maintenance.ts`                               | stats e planos ativos de Maintenance Planning     |
+| `pmocApi`                                    | `packages/api/pmoc.ts`                                      | stats e PMOCs ativos/compliance                   |
+| `MetricCard`                                 | `packages/ui/metric-card.tsx`                               | cards acionáveis do resumo executivo e snapshots  |
+| `DashboardSection`                           | `apps/platform/components/dashboard-section.tsx`            | blocos de hierarquia do dashboard                 |
+| `ErrorState` / `EmptyState` / `SkeletonCard` | `packages/ui/*`                                             | loading, falha parcial e estados vazios por seção |
+| `PurchaseStatusBadge`                        | `apps/platform/components/financial-procurement-badges.tsx` | status de pedidos no bloco Estoque e Compras      |
 
 Componentes internos da home:
 
@@ -437,12 +438,12 @@ Rotas stale:
 
 - páginas legadas que não representam mais fonte oficial usam `redirect()` em vez de `ComingSoonState`.
 
-
 ## Sprint 20.5 — Component Security Notes
 
 - Componentes de timeline não devem exibir `metadata`, `storageKey`, `eventId`, `deletedAt` ou e-mail do performer.
 - Componentes de upload/preview local devem revogar object URLs no cleanup.
 - `AssetTimeline` e consumidores derivados devem preferir `timeline.title`, `timeline.subtitle`, `timeline.description`, `timeline.icon`, `timeline.color`, `timeline.badges` e `timeline.references`.
+
 ## Sprint 22 — production readiness component impact
 
 No UI component was added in this sprint.
@@ -552,14 +553,24 @@ Tipos:
 - `AvatarCropDrawer`: drawer local do perfil para recortar/reposicionar avatar antes de persistir;
 - `PlatformTopbar`: Notification Center real com badge, painel, retry, empty/loading e mark read/all;
 - `OperatorHeader`: sino conectado ao backend com contador e painel compacto.
+
 # Closure 06
 
 - `OperationDetailDrawer`: seção Datas e coleta de assinatura da OS com persistência autoritativa.
 - `DocumentViewer`: identificação de preview de modelo versus dados reais; render explícito atual.
 - `AssignmentCard`: data operacional vem somente de `operation.scheduledFor`.
+
 # Closure 06.1
 
 - `Drawer`: agora usa React portal, permitindo drawers documentais aninhados em largura integral.
 - `DocumentViewer`: verificado com fonte real `operationId + WORK_ORDER`, 3 páginas e assinatura
   visível.
 - `DataTable` ativo em `/operacoes`: confirmou as colunas Criado e Data do agendamento.
+
+## DC02B
+
+- `DocumentViewer`: consome `blueprint.header.corporate` para identificação completa da empresa e
+  mantém fallback para o header legado.
+- `ReportWorkflowDrawer` / `ContentStep`: em `TECHNICAL_REPORT`, coleta competência, enum de
+  manutenção, listas semanal/semestral e equipamentos/setores. Apenas persiste o payload da
+  Operation; não monta PDF ou snapshots.

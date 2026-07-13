@@ -61,14 +61,18 @@ const DOCUMENT_CONTEXT_OPERATION_INCLUDE = {
                 include: {
                   equipments: {
                     include: {
-                      equipment: { select: { id: true, name: true, tag: true, type: true, status: true } },
+                      equipment: {
+                        select: { id: true, name: true, tag: true, type: true, status: true },
+                      },
                     },
                   },
                 },
               },
               equipments: {
                 include: {
-                  equipment: { select: { id: true, name: true, tag: true, type: true, status: true } },
+                  equipment: {
+                    select: { id: true, name: true, tag: true, type: true, status: true },
+                  },
                 },
               },
             },
@@ -81,12 +85,29 @@ const DOCUMENT_CONTEXT_OPERATION_INCLUDE = {
     where: { deletedAt: null },
     orderBy: { createdAt: 'asc' as const },
     include: {
-      product: { select: { id: true, sku: true, name: true, unit: true, brand: true, model: true, category: true } },
+      product: {
+        select: {
+          id: true,
+          sku: true,
+          name: true,
+          unit: true,
+          brand: true,
+          model: true,
+          category: true,
+        },
+      },
       inventoryItem: { select: { id: true, location: true } },
     },
   },
   photos: { orderBy: { createdAt: 'asc' as const } },
   documents: { orderBy: { createdAt: 'asc' as const } },
+  maintenanceChecklistItems: {
+    orderBy: [{ maintenanceType: 'asc' as const }, { position: 'asc' as const }],
+  },
+  inspectedEquipments: {
+    orderBy: { position: 'asc' as const },
+    include: { equipment: { select: { id: true, name: true, type: true } } },
+  },
 } satisfies Prisma.OperationInclude;
 
 const DOCUMENT_CONTEXT_BUDGET_INCLUDE = {
@@ -163,8 +184,12 @@ export interface DocumentSignatureContext {
     image: ResolvedDocumentAsset;
   } | null;
   institutionalSignatures: Array<{
-    id: string; name: string; title: string; professionalCouncil: string | null;
-    department: string | null; image: ResolvedDocumentAsset;
+    id: string;
+    name: string;
+    title: string;
+    professionalCouncil: string | null;
+    department: string | null;
+    image: ResolvedDocumentAsset;
   }>;
   collectedSignature: {
     label: string;
@@ -175,8 +200,12 @@ export interface DocumentSignatureContext {
     image: ResolvedDocumentAsset | null;
   } | null;
   executionSignatures: Array<{
-    role: 'client' | 'technician' | 'operator'; label: string; name: string | null;
-    title: string | null; signedAt: string | null; caption: string | null;
+    role: 'client' | 'technician' | 'operator';
+    label: string;
+    name: string | null;
+    title: string | null;
+    signedAt: string | null;
+    caption: string | null;
     image: ResolvedDocumentAsset | null;
   }>;
 }
@@ -262,14 +291,18 @@ export class DocumentContextService {
     const template = configuration.defaultTemplate;
     const signature = await this.resolveSignature(template, operation);
     const [images, logo, qrCode] = await Promise.all([
-      Promise.all(operation.photos.map((photo) =>
-        this.assets.resolveDocumentImage(photo.storageKey, {
-          mimeType: photo.mimeType,
-          fileSize: photo.fileSize,
-        }),
-      )),
+      Promise.all(
+        operation.photos.map((photo) =>
+          this.assets.resolveDocumentImage(photo.storageKey, {
+            mimeType: photo.mimeType,
+            fileSize: photo.fileSize,
+          }),
+        ),
+      ),
       this.resolveLatestBrandAsset(configuration.organization.id, BrandAssetType.LOGO),
-      operation.equipment?.qrCode ? this.assets.generateQrCode(operation.equipment.qrCode) : Promise.resolve(null),
+      operation.equipment?.qrCode
+        ? this.assets.generateQrCode(operation.equipment.qrCode)
+        : Promise.resolve(null),
     ]);
 
     return {
@@ -325,7 +358,23 @@ export class DocumentContextService {
         },
         institutionalSignatures: {
           orderBy: { position: 'asc' },
-          select: { position: true, signature: { select: { id: true, name: true, title: true, professionalCouncil: true, department: true, imageStorageKey: true, mimeType: true, fileSize: true, active: true, deletedAt: true } } },
+          select: {
+            position: true,
+            signature: {
+              select: {
+                id: true,
+                name: true,
+                title: true,
+                professionalCouncil: true,
+                department: true,
+                imageStorageKey: true,
+                mimeType: true,
+                fileSize: true,
+                active: true,
+                deletedAt: true,
+              },
+            },
+          },
         },
       },
     });
@@ -395,6 +444,10 @@ export class DocumentContextService {
 
     const template = configuration.defaultTemplate;
     const signature = await this.resolveSignature(template, null);
+    const logo = await this.resolveLatestBrandAsset(
+      configuration.organization.id,
+      BrandAssetType.LOGO,
+    );
 
     return {
       kind: 'budget',
@@ -404,7 +457,7 @@ export class DocumentContextService {
       signature,
       assets: {
         signature: signature.fixedSignature?.image ?? null,
-        logo: null,
+        logo,
         watermark: null,
         qrCode: null,
         images: [],
@@ -420,15 +473,54 @@ export class DocumentContextService {
     const executionSignature = this.resolveExecutionSignature(operation);
     const acceptsExecutionSignatures = mode !== SignatureMode.FIXED;
     const clientEnabled = Boolean(
-      acceptsExecutionSignatures && (
-        template?.executionSignatureClient || mode === SignatureMode.COLLECTED || mode === SignatureMode.HYBRID ||
-        (mode === SignatureMode.NONE && executionSignature)
-      ),
+      acceptsExecutionSignatures &&
+      (template?.executionSignatureClient ||
+        mode === SignatureMode.COLLECTED ||
+        mode === SignatureMode.HYBRID ||
+        (mode === SignatureMode.NONE && executionSignature)),
     );
     const executionSignatures: DocumentSignatureContext['executionSignatures'] = [
-      ...(clientEnabled ? [{ role: 'client' as const, label: 'Assinatura do cliente/responsável', name: null, title: null, signedAt: operation?.signedAt?.toISOString() ?? null, caption: executionSignature ? 'Assinatura coletada na execução' : 'Espaço reservado para assinatura do cliente', image: executionSignature?.image ?? null }] : []),
-      ...(acceptsExecutionSignatures && template?.executionSignatureTechnician ? [{ role: 'technician' as const, label: 'Assinatura do técnico', name: operation?.operator?.name ?? null, title: operation?.operator?.jobTitle ?? null, signedAt: null, caption: 'Espaço reservado para assinatura do técnico', image: null }] : []),
-      ...(acceptsExecutionSignatures && template?.executionSignatureOperator ? [{ role: 'operator' as const, label: 'Assinatura do operador', name: operation?.operator?.name ?? null, title: operation?.operator?.jobTitle ?? null, signedAt: null, caption: 'Espaço reservado para assinatura do operador', image: null }] : []),
+      ...(clientEnabled
+        ? [
+            {
+              role: 'client' as const,
+              label: 'Assinatura do cliente/responsável',
+              name: null,
+              title: null,
+              signedAt: operation?.signedAt?.toISOString() ?? null,
+              caption: executionSignature
+                ? 'Assinatura coletada na execução'
+                : 'Espaço reservado para assinatura do cliente',
+              image: executionSignature?.image ?? null,
+            },
+          ]
+        : []),
+      ...(acceptsExecutionSignatures && template?.executionSignatureTechnician
+        ? [
+            {
+              role: 'technician' as const,
+              label: 'Assinatura do técnico',
+              name: operation?.operator?.name ?? null,
+              title: operation?.operator?.jobTitle ?? null,
+              signedAt: null,
+              caption: 'Espaço reservado para assinatura do técnico',
+              image: null,
+            },
+          ]
+        : []),
+      ...(acceptsExecutionSignatures && template?.executionSignatureOperator
+        ? [
+            {
+              role: 'operator' as const,
+              label: 'Assinatura do operador',
+              name: operation?.operator?.name ?? null,
+              title: operation?.operator?.jobTitle ?? null,
+              signedAt: null,
+              caption: 'Espaço reservado para assinatura do operador',
+              image: null,
+            },
+          ]
+        : []),
     ];
     const executionSignatureApplies = executionSignatures.length > 0;
     const effectiveMode = executionSignatureApplies
@@ -439,7 +531,8 @@ export class DocumentContextService {
           : mode
       : mode;
     const requiresSignature = Boolean(
-      (template?.requiresSignature && effectiveMode !== SignatureMode.NONE) || executionSignatureApplies,
+      (template?.requiresSignature && effectiveMode !== SignatureMode.NONE) ||
+      executionSignatureApplies,
     );
     const collectedSignature =
       effectiveMode === SignatureMode.COLLECTED || effectiveMode === SignatureMode.HYBRID
@@ -479,12 +572,12 @@ export class DocumentContextService {
       };
     }
 
-    const configured = template?.institutionalSignatures
-      ?.map((link) => link.signature)
-      .filter((signature) => signature.active && !signature.deletedAt) ?? [];
-    const signatures = configured.length > 0
-      ? configured
-      : template?.signature ? [template.signature] : [];
+    const configured =
+      template?.institutionalSignatures
+        ?.map((link) => link.signature)
+        .filter((signature) => signature.active && !signature.deletedAt) ?? [];
+    const signatures =
+      configured.length > 0 ? configured : template?.signature ? [template.signature] : [];
     if (signatures.length === 0) {
       throw new ApplicationException(
         ERROR_CODES.SIGNATURE_NOT_FOUND,
@@ -499,7 +592,11 @@ export class DocumentContextService {
         HttpStatus.CONFLICT,
       );
     }
-    if (signatures.some((signature) => !signature.imageStorageKey || !signature.mimeType || !signature.fileSize)) {
+    if (
+      signatures.some(
+        (signature) => !signature.imageStorageKey || !signature.mimeType || !signature.fileSize,
+      )
+    ) {
       throw new ApplicationException(
         ERROR_CODES.SIGNATURE_IMAGE_REQUIRED,
         'Configured signature image was not uploaded',
@@ -507,16 +604,19 @@ export class DocumentContextService {
       );
     }
 
-    const institutionalSignatures = await Promise.all(signatures.map(async (signature) => ({
-      id: signature.id,
-      name: signature.name,
-      title: signature.title,
-      professionalCouncil: signature.professionalCouncil ?? null,
-      department: signature.department ?? null,
-      image: await this.assets.resolveSignature(signature.imageStorageKey!, {
-        mimeType: signature.mimeType!, fileSize: signature.fileSize!,
-      }),
-    })));
+    const institutionalSignatures = await Promise.all(
+      signatures.map(async (signature) => ({
+        id: signature.id,
+        name: signature.name,
+        title: signature.title,
+        professionalCouncil: signature.professionalCouncil ?? null,
+        department: signature.department ?? null,
+        image: await this.assets.resolveSignature(signature.imageStorageKey!, {
+          mimeType: signature.mimeType!,
+          fileSize: signature.fileSize!,
+        }),
+      })),
+    );
     const first = institutionalSignatures[0];
 
     return {
@@ -574,10 +674,17 @@ export class DocumentContextService {
   private isValidSignatureBinary(buffer: Buffer, mimeType: string): boolean {
     if (buffer.length === 0 || buffer.length > 2_000_000) return false;
     if (mimeType === 'image/png') {
-      return buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+      return buffer
+        .subarray(0, 8)
+        .equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
     }
     if (mimeType === 'image/jpeg') {
-      return buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[buffer.length - 2] === 0xff && buffer[buffer.length - 1] === 0xd9;
+      return (
+        buffer[0] === 0xff &&
+        buffer[1] === 0xd8 &&
+        buffer[buffer.length - 2] === 0xff &&
+        buffer[buffer.length - 1] === 0xd9
+      );
     }
     return false;
   }
