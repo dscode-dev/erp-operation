@@ -1,5 +1,35 @@
 # API Contracts
 
+## DC-02 — conteúdo técnico da Operation e TECHNICAL_REPORT
+
+`POST /api/v1/operations` e `PATCH /api/v1/operations/:id` aceitam, de forma aditiva:
+
+```json
+{
+  "reportedIssue": "Objetivo da visita (até 10.000 caracteres)",
+  "technicalDiagnosis": "Diagnóstico/situação encontrada (até 20.000 caracteres)",
+  "serviceDescription": "Atividades executadas (até 20.000 caracteres)",
+  "technicalRecommendations": "Recomendações técnicas (até 20.000 caracteres)",
+  "observations": "Observações finais (até 5.000 caracteres)"
+}
+```
+
+Os campos são opcionais, sanitizados e retornados em `OperationDetail`. Texto pode conter múltiplos
+parágrafos e listas iniciadas por `-`, `*`, `•`, `✓`, `✔` ou numeração.
+
+Contratos documentais preservados:
+
+- `GET /documents/operations/:operationId/TECHNICAL_REPORT/preview`;
+- `POST /documents/operations/:operationId/TECHNICAL_REPORT/render`;
+- `GET /documents/:documentId/preview`;
+- `POST /documents/:documentId/render`;
+- `GET /documents/:documentId/download`;
+- `GET /documents?type=TECHNICAL_REPORT`.
+
+O Blueprint pode retornar `pageBreakAfter` em `technical-report-equipment`; é uma orientação aditiva
+para manter a identificação/equipamento na primeira página e iniciar o QR/conteúdo técnico na
+seguinte. Nenhum endpoint ou envelope foi alterado.
+
 ## Product Backlog Closure 07 — workflows documentais
 
 Não foram criados contratos HTTP novos. A Central orquestra `POST/PATCH /operations`, endpoints de MaintenanceExecution para PMOC, configuração por tipo, preview/render/download e `GET /documents`.

@@ -1,5 +1,15 @@
 # COMPONENTS — Frontend
 
+## DC-02
+
+| Componente | Alteração |
+|---|---|
+| `ReportWorkflowDrawer` / `ContentStep` | captura objetivo, diagnóstico, atividades, recomendações e observações do relatório técnico |
+| `DocumentViewer` | pagina o Blueprint por capacidade, peso de componente e `pageBreakAfter`; permanece viewer único |
+
+O frontend apenas persiste dados da Operation e representa componentes recebidos. Checklist,
+foto, QR e assinatura nunca são montados fora do Blueprint.
+
 ## Product Backlog Closure 07
 
 | Componente | Responsabilidade |

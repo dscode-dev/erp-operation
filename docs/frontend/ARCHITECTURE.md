@@ -1,5 +1,20 @@
 # ARCHITECTURE — Frontend
 
+## DC-02
+
+```text
+Central de Relatórios
+→ POST/PATCH Operation (conteúdo técnico)
+→ DocumentViewer
+→ Document Engine Preview/Render/Download
+→ mesmo DocumentBlueprint no Viewer e no PDF
+→ GET /documents
+```
+
+A paginação do Viewer é apenas uma projeção visual dos componentes e das orientações de quebra do
+Blueprint; não contém regra de negócio ou template de `TECHNICAL_REPORT`. A composição semântica
+permanece no Builder e a paginação definitiva no LayoutEngine/Renderer.
+
 ## Product Backlog Closure 07
 
 `ReportWorkflowDrawer → Operation/MaintenanceExecution → configuração por tipo → DocumentViewer → Preview/Render/Download → GET /documents`.

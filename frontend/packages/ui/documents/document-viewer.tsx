@@ -468,18 +468,24 @@ function Meta({ label, value }: { label: string; value: string }) {
 
 function paginate(blueprint: DocumentBlueprint | null): DocumentBlueprint["sections"][] {
   if (!blueprint) return [];
+  const pageCapacity = 14;
   const pages: DocumentBlueprint["sections"][] = [];
   let current: DocumentBlueprint["sections"] = [];
   let weight = 0;
   for (const section of blueprint.sections) {
     const sectionWeight = 1 + section.components.reduce((sum, component) => sum + componentWeight(component), 0);
-    if (current.length > 0 && weight + sectionWeight > 7) {
+    if (current.length > 0 && weight + sectionWeight > pageCapacity) {
       pages.push(current);
       current = [];
       weight = 0;
     }
     current.push(section);
     weight += sectionWeight;
+    if (section.pageBreakAfter) {
+      pages.push(current);
+      current = [];
+      weight = 0;
+    }
   }
   if (current.length) pages.push(current);
   return pages.length ? pages : [[]];
@@ -489,6 +495,11 @@ function componentWeight(component: DocumentComponent): number {
   if (component.kind === "table") return Math.max(2, Math.ceil(component.rows.length / 10));
   if (component.kind === "checklist") return Math.max(1, Math.ceil(component.items.length / 8));
   if (component.kind === "metadata") return Math.max(1, Math.ceil(component.items.length / 8));
+  if (component.kind === "image") return 4;
+  if (component.kind === "signature") return Math.max(4, component.signatures.length * 3);
+  if (component.kind === "signaturePlaceholder") return 3;
+  if (component.kind === "list") return Math.max(1, Math.ceil(component.items.length / 8));
+  if (component.kind === "paragraph" || component.kind === "observation") return Math.max(1, Math.ceil(component.text.length / 600));
   return 1;
 }
 

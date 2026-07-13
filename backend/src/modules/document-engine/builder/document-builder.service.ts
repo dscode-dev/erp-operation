@@ -227,13 +227,14 @@ export class DocumentBuilderService {
   private sections(context: DocumentContext, generatedAt: string, documentNumber: string): DocumentSection[] {
     const sections = context.configuration.type === DocumentTemplateType.WORK_ORDER
       ? this.workOrderSections(context, generatedAt, documentNumber)
-      : this.sharedIdentitySections(context);
+      : context.configuration.type === DocumentTemplateType.TECHNICAL_REPORT
+        ? this.visitReportSections(context, generatedAt, documentNumber)
+        : this.sharedIdentitySections(context);
 
     switch (context.configuration.type) {
       case DocumentTemplateType.WORK_ORDER:
         break;
       case DocumentTemplateType.TECHNICAL_REPORT:
-        sections.push(...this.visitReportSections(context));
         break;
       case DocumentTemplateType.REPORT:
         sections.push(...this.legacyReportSections(context));
@@ -364,35 +365,86 @@ export class DocumentBuilderService {
     ].filter((section): section is DocumentSection => Boolean(section));
   }
 
-  private visitReportSections(context: DocumentContext): DocumentSection[] {
+  private visitReportSections(
+    context: DocumentContext,
+    generatedAt: string,
+    documentNumber: string,
+  ): DocumentSection[] {
     const { operation } = context;
+    const address = operation.address ?? operation.customer.addresses[0] ?? null;
+    const contact = operation.customer.contacts[0] ?? null;
     const sections: DocumentSection[] = [
+      {
+        id: 'technical-report-identification',
+        title: 'Identificação do relatório',
+        critical: true,
+        components: [
+          this.metadata('technical-report-identification-metadata', [
+            ['Número', documentNumber],
+            ['Emissão', this.date(generatedAt)],
+            ['Responsável', operation.assignment?.assignee.name ?? operation.operator.name],
+            ['Função', operation.assignment?.assignee.jobTitle ?? operation.operator.jobTitle ?? '—'],
+            ['Situação', operation.status],
+            ['Referência operacional', `OP-${String(operation.number).padStart(6, '0')}`],
+          ]),
+        ],
+      },
+      {
+        id: 'technical-report-customer',
+        title: 'Cliente',
+        critical: true,
+        components: [
+          this.metadata('technical-report-customer-metadata', [
+            ['Cliente', operation.customer.tradeName ?? operation.customer.name],
+            ['Razão/Nome', operation.customer.name],
+            ['Documento', operation.customer.cnpj ?? operation.customer.cpf ?? '—'],
+            ['Contato', contact ? `${contact.name}${contact.phone ? ` · ${contact.phone}` : ''}` : operation.customer.phone ?? '—'],
+          ]),
+        ],
+      },
+      {
+        id: 'technical-report-location',
+        title: 'Local da visita',
+        critical: true,
+        components: [
+          this.metadata('technical-report-location-metadata', [
+            ['Local', address?.name ?? 'Local principal do cliente'],
+            ['Endereço', address ? this.address(address) : '—'],
+            ['Agendamento', this.date(operation.scheduledFor)],
+            ['Início', this.date(operation.startedAt)],
+            ['Conclusão', this.date(operation.completedAt)],
+            ['Operador em campo', operation.operator.name],
+          ]),
+        ],
+      },
+      ...(operation.equipment ? this.technicalReportEquipmentSections(context) : []),
       {
         id: 'visit-objective',
         title: 'Objetivo da visita',
         critical: true,
-        components: [{ id: 'visit-objective-text', kind: 'observation', text: this.clean(operation.reportedIssue || 'Objetivo não informado.'), keepTogether: true }],
+        components: this.technicalNarrative('visit-objective', operation.reportedIssue, 'Objetivo não informado.'),
       },
       {
-        id: 'visit-timing',
-        title: 'Dados da visita',
+        id: 'visit-diagnosis',
+        title: 'Diagnóstico ou situação encontrada',
         critical: true,
-        components: [
-          this.metadata('visit-timing-metadata', [
-            ['Operador em campo', operation.operator.name],
-            ['Agendamento', this.date(operation.scheduledFor)],
-            ['Chegada/Início', this.date(operation.startedAt)],
-            ['Saída/Conclusão', this.date(operation.completedAt)],
-            ['Assinado em', this.date(operation.signedAt)],
-          ]),
-        ],
+        components: this.technicalNarrative('visit-diagnosis', operation.technicalDiagnosis, 'Diagnóstico técnico não registrado.'),
       },
-      this.checklistSection(operation, 'Atividades verificadas'),
-      ...(operation.serviceDescription ? [{ id: 'visit-services', title: 'Serviços e atividades', components: [{ id: 'visit-services-text', kind: 'paragraph' as const, text: this.clean(operation.serviceDescription), keepTogether: true }] }] : []),
+      {
+        id: 'visit-activities',
+        title: 'Atividades executadas',
+        components: this.technicalNarrative('visit-activities', operation.serviceDescription, 'Atividades executadas não registradas.'),
+      },
+      this.checklistSection(operation, 'Checklist complementar'),
+      {
+        id: 'visit-recommendations',
+        title: 'Recomendações técnicas',
+        components: this.technicalNarrative('visit-recommendations', operation.technicalRecommendations, 'Não foram registradas recomendações técnicas.'),
+      },
       this.materialsSection(operation),
-      this.observationSection(operation, 'Diagnóstico e observações da visita'),
+      ...(operation.photos.length > 0 ? [this.photosSection(context, 'Evidências fotográficas')] : []),
+      this.observationSection(operation, 'Observações finais'),
     ].filter((section): section is DocumentSection => Boolean(section));
-    if (operation.photos.length > 0) sections.push(this.photosSection(context, 'Evidências da visita'));
     return sections;
   }
 
@@ -642,6 +694,24 @@ export class DocumentBuilderService {
         },
       ],
     };
+  }
+
+  private technicalReportEquipmentSections(context: DocumentContext): DocumentSection[] {
+    const equipment = this.equipmentSection(context);
+    return [
+      {
+        id: 'technical-report-equipment',
+        title: 'Equipamento',
+        critical: true,
+        pageBreakAfter: true,
+        components: equipment.components.filter((component) => component.kind === 'metadata'),
+      },
+      {
+        id: 'technical-report-equipment-qr',
+        title: 'Identificação digital do equipamento',
+        components: equipment.components.filter((component) => component.kind === 'qrCode'),
+      },
+    ];
   }
 
   private checklistSection(operation: DocumentContext['operation'], title: string): DocumentSection {
@@ -1157,6 +1227,48 @@ export class DocumentBuilderService {
       typography: { title: 16, section: 13, body: 10, label: 9, caption: 8 },
       spacing: { section: 8, component: 12, cardPadding: 8 },
     };
+  }
+
+  /**
+   * Converts persisted technical prose into Blueprint-native paragraphs and lists.
+   * The renderer remains document-agnostic and receives no TECHNICAL_REPORT rules.
+   */
+  private technicalNarrative(
+    id: string,
+    value: string | null,
+    fallback: string,
+  ): DocumentBlueprintComponent[] {
+    const source = value?.trim() || fallback;
+    const components: DocumentBlueprintComponent[] = [];
+    let list: string[] = [];
+    let sequence = 0;
+    const flushList = (): void => {
+      if (list.length === 0) return;
+      components.push({ id: `${id}-list-${sequence++}`, kind: 'list', items: list });
+      list = [];
+    };
+
+    for (const rawLine of source.split(/\r?\n/)) {
+      const line = rawLine.trim();
+      if (!line) {
+        flushList();
+        continue;
+      }
+      const bullet = line.match(/^(?:[-*•✓✔]|\d+[.)])\s*(.+)$/u);
+      if (bullet) {
+        list.push(this.clean(bullet[1]));
+        continue;
+      }
+      flushList();
+      components.push({
+        id: `${id}-paragraph-${sequence++}`,
+        kind: 'paragraph',
+        text: this.clean(line),
+        keepTogether: true,
+      });
+    }
+    flushList();
+    return components;
   }
 
   private lines(value: string | null): string[] {

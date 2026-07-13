@@ -1,5 +1,21 @@
 # OPUS Frontend Integration
 
+## DC-02 — Technical Report
+
+`OperationDetail` agora inclui `technicalDiagnosis` e `technicalRecommendations`. A Central coleta:
+
+| Campo UI | Campo API |
+|---|---|
+| Objetivo da visita | `reportedIssue` |
+| Diagnóstico/situação | `technicalDiagnosis` |
+| Atividades executadas | `serviceDescription` |
+| Recomendações técnicas | `technicalRecommendations` |
+| Observações finais | `observations` |
+
+Use somente `DocumentViewer` + endpoints oficiais de `TECHNICAL_REPORT`. O Blueprint entrega
+parágrafos/listas, QR, fotos e assinaturas já resolvidos. Não interpretar SignatureMode, não gerar QR
+e não acessar Storage. `GET /documents?type=TECHNICAL_REPORT` confirma a emissão no repositório.
+
 ## Product Backlog Closure 07
 
 - `/reports`: Central de Relatórios e workflows reais.

@@ -293,7 +293,11 @@ describe('DocumentEngine foundation', () => {
 
     expect(report.metadata.documentType).toBe(DocumentTemplateType.TECHNICAL_REPORT);
     expect(opinion.metadata.documentType).toBe(DocumentTemplateType.TECHNICAL_OPINION);
-    expect(reportSectionIds).toContain('visit-timing');
+    expect(reportSectionIds).toContain('technical-report-identification');
+    expect(reportSectionIds).toContain('technical-report-location');
+    expect(reportSectionIds).toContain('visit-diagnosis');
+    expect(reportSectionIds).toContain('visit-activities');
+    expect(reportSectionIds).toContain('visit-recommendations');
     expect(opinionSectionIds).toContain('technical-opinion-object');
     expect(opinionSectionIds).toContain('technical-opinion-conclusion');
     expect(opinionSectionIds).not.toEqual(reportSectionIds);
@@ -317,6 +321,97 @@ describe('DocumentEngine foundation', () => {
     expect(built.sections.map((section) => section.id)).toContain(expectedSection);
     expect(rendered.blueprint).toBe(built);
     expect(pdf.buffer.subarray(0, 5).toString('latin1')).toBe('%PDF-');
+  });
+
+  it('certifies the Technical Visit Report structure and Preview/PDF blueprint parity', async () => {
+    const context = operationContext(DocumentTemplateType.TECHNICAL_REPORT);
+    const operation = context.operation as Record<string, unknown>;
+    operation.reportedIssue = 'Avaliar a perda de rendimento térmico relatada pelo cliente.';
+    operation.technicalDiagnosis = 'Foi identificada obstrução parcial do filtro.\n- Pressão dentro da faixa operacional\n- Dreno com escoamento reduzido';
+    operation.serviceDescription = 'Limpeza técnica do conjunto filtrante.\nHigienização da bandeja e desobstrução do dreno.';
+    operation.technicalRecommendations = '- Repetir inspeção em 30 dias\n- Monitorar corrente do compressor';
+    operation.observations = 'Equipamento liberado em operação, sem ruído anormal após os testes.';
+    operation.parts = [{
+      id: 'part-1', quantity: 1, notes: 'Substituído em campo',
+      product: { id: 'product-1', sku: 'FLT-001', name: 'Filtro lavável', unit: 'UN', brand: 'Orbit', model: 'F1', category: 'Filtro' },
+      inventoryItem: { id: 'inventory-1', location: 'Almoxarifado principal' },
+    }];
+    operation.photos = [{
+      id: 'photo-1', storageKey: 'operations/report/photo.png', caption: 'Evaporadora após higienização',
+      mimeType: 'image/png', fileSize: 68, createdAt: new Date('2026-07-13T12:00:00.000Z'),
+    }];
+    (context.assets as { images: unknown[] }).images = [{ storageKey: 'operations/report/photo.png', mimeType: 'image/png', fileSize: 68, contentBase64: ONE_PIXEL_PNG }];
+    context.signature = {
+      requiresSignature: true,
+      signatureMode: 'HYBRID',
+      signatureId: 'signature-1',
+      fixedSignature: null,
+      institutionalSignatures: [{
+        id: 'signature-1', name: 'Responsável Técnica', title: 'Engenheira Mecânica',
+        professionalCouncil: 'CREA-PE 123456', department: 'Engenharia',
+        image: { storageKey: 'signatures/technical.png', mimeType: 'image/png', fileSize: 68, contentBase64: ONE_PIXEL_PNG },
+      }],
+      collectedSignature: null,
+      executionSignatures: [{
+        role: 'client', label: 'Assinatura do cliente', name: 'Responsável local', title: null,
+        signedAt: '2026-07-13T12:00:00.000Z', caption: 'Coletada durante a visita',
+        image: { storageKey: 'operations/report/client.png', mimeType: 'image/png', fileSize: 68, contentBase64: ONE_PIXEL_PNG },
+      }],
+    };
+
+    const built = (new DocumentBuilderService({} as never) as unknown as {
+      buildFromContext: (ctx: unknown) => DocumentBlueprint;
+    }).buildFromContext(context);
+    const ids = built.sections.map((section) => section.id);
+    expect(ids).toEqual([
+      'technical-report-identification', 'technical-report-customer', 'technical-report-location',
+      'technical-report-equipment', 'technical-report-equipment-qr', 'visit-objective', 'visit-diagnosis', 'visit-activities',
+      'checklist-checklist-complementar', 'visit-recommendations', 'materials-consumed',
+      'photos-evidencias-fotograficas', 'observations-observacoes-finais', 'signature',
+    ]);
+    const diagnosis = built.sections.find((section) => section.id === 'visit-diagnosis');
+    expect(diagnosis?.components.map((component) => component.kind)).toEqual(['paragraph', 'list']);
+    const signature = built.sections.at(-1)?.components[0];
+    expect(signature?.kind === 'signature' ? signature.signatures : []).toHaveLength(2);
+    const rendered = renderer().render(built);
+    const pdf = await new PdfEngineService().create(rendered);
+    expect(rendered.blueprint).toBe(built);
+    expect(rendered.pages.flatMap((page) => page.elements).some((element) => element.type === 'text' && element.text.includes('Avaliar a perda'))).toBe(true);
+    expect(rendered.pages.flatMap((page) => page.elements).filter((element) => element.type === 'image')).toHaveLength(4);
+    expect(pdf.buffer.subarray(0, 5).toString('latin1')).toBe('%PDF-');
+    expect(pdf.pageCount).toBe(rendered.pages.length);
+  });
+
+  it.each([
+    ['NONE', 0],
+    ['FIXED', 1],
+    ['COLLECTED', 1],
+    ['HYBRID', 2],
+  ] as const)('applies TECHNICAL_REPORT signature policy %s without automatic selection', (mode, expectedCount) => {
+    const context = operationContext(DocumentTemplateType.TECHNICAL_REPORT);
+    const institutional = {
+      id: 'signature-fixed', name: 'Responsável Técnica', title: 'Engenheira Mecânica',
+      professionalCouncil: 'CREA-PE 123456', department: 'Engenharia',
+      image: { storageKey: 'signatures/fixed.png', mimeType: 'image/png', fileSize: 68, contentBase64: ONE_PIXEL_PNG },
+    };
+    const collected = {
+      role: 'client' as const, label: 'Assinatura do cliente', name: 'Responsável local', title: null,
+      signedAt: '2026-07-13T12:00:00.000Z', caption: 'Coletada na execução',
+      image: { storageKey: 'operations/report/client.png', mimeType: 'image/png', fileSize: 68, contentBase64: ONE_PIXEL_PNG },
+    };
+    context.signature = {
+      requiresSignature: mode !== 'NONE', signatureMode: mode, signatureId: mode === 'FIXED' || mode === 'HYBRID' ? institutional.id : null,
+      fixedSignature: null,
+      institutionalSignatures: mode === 'FIXED' || mode === 'HYBRID' ? [institutional] : [],
+      collectedSignature: null,
+      executionSignatures: mode === 'COLLECTED' || mode === 'HYBRID' ? [collected] : [],
+    };
+    const built = (new DocumentBuilderService({} as never) as unknown as {
+      buildFromContext: (ctx: unknown) => DocumentBlueprint;
+    }).buildFromContext(context);
+    const signature = built.sections.flatMap((section) => section.components).find((component) => component.kind === 'signature');
+    expect(signature?.kind === 'signature' ? signature.signatures.length : 0).toBe(expectedCount);
+    if (signature?.kind === 'signature') expect(signature.mode).toBe(mode);
   });
 
   it('certifies Work Order semantic order and keeps the same Blueprint for preview and PDF render', async () => {

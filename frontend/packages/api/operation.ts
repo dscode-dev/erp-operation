@@ -70,7 +70,7 @@ export function createOperation(payload: CreateOperationPayload): Promise<Operat
 
 export function updateOperation(
   id: string,
-  payload: Partial<Pick<CreateOperationPayload, "status" | "startedAt" | "completedAt" | "checklist" | "observations" | "reportedIssue" | "serviceDescription" | "signatureData" | "signedAt" | "photos">>,
+  payload: Partial<Pick<CreateOperationPayload, "status" | "startedAt" | "completedAt" | "checklist" | "observations" | "reportedIssue" | "serviceDescription" | "technicalDiagnosis" | "technicalRecommendations" | "signatureData" | "signedAt" | "photos">>,
 ): Promise<OperationDetail> {
   return api.patch<OperationDetail>(`/operations/${id}`, payload);
 }

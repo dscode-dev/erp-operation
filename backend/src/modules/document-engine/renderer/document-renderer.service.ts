@@ -98,9 +98,9 @@ export class DocumentRendererService {
       case 'metadata':
         return [this.metadataBlock(component)];
       case 'paragraph':
-        return [this.paragraphBlock(component, width)];
+        return this.paragraphBlocks(component, width);
       case 'observation':
-        return [this.observationBlock(component, width)];
+        return this.observationBlocks(component, width);
       case 'list':
         return [this.listBlock(component, width)];
       case 'checklist':
@@ -158,13 +158,14 @@ export class DocumentRendererService {
     };
   }
 
-  private paragraphBlock(component: ParagraphComponent, width: number): LayoutBlock {
+  private paragraphBlocks(component: ParagraphComponent, width: number): LayoutBlock[] {
     const lines = this.wrap(component.text, width, 10);
-    return {
+    const linesPerBlock = Math.max(1, Math.floor((this.layout.availableHeight() - 8) / LINE_HEIGHT));
+    return this.chunk(lines, linesPerBlock).map((blockLines) => ({
       component,
-      height: 8 + lines.length * LINE_HEIGHT,
+      height: 8 + blockLines.length * LINE_HEIGHT,
       draw: (x, y) =>
-        lines.map((line, index) => ({
+        blockLines.map((line, index) => ({
           type: 'text',
           x,
           y: y - index * LINE_HEIGHT,
@@ -172,26 +173,29 @@ export class DocumentRendererService {
           size: 10,
           bold: component.emphasis === 'strong',
         })),
-    };
+    }));
   }
 
-  private observationBlock(component: ObservationComponent, width: number): LayoutBlock {
+  private observationBlocks(component: ObservationComponent, width: number): LayoutBlock[] {
     const lines = this.wrap(component.text, width - 16, 10);
-    const height = 18 + lines.length * LINE_HEIGHT;
-    return {
-      component,
-      height,
-      draw: (x, y, blockWidth) => [
-        { type: 'rect', x, y: y - height + 4, width: blockWidth, height, fillColor: '#f8fafc', strokeColor: '#e2e8f0' },
-        ...lines.map((line, index) => ({
-          type: 'text' as const,
-          x: x + 8,
-          y: y - 14 - index * LINE_HEIGHT,
-          text: line,
-          size: 10,
-        })),
-      ],
-    };
+    const linesPerBlock = Math.max(1, Math.floor((this.layout.availableHeight() - 18) / LINE_HEIGHT));
+    return this.chunk(lines, linesPerBlock).map((blockLines) => {
+      const height = 18 + blockLines.length * LINE_HEIGHT;
+      return {
+        component,
+        height,
+        draw: (x, y, blockWidth) => [
+          { type: 'rect' as const, x, y: y - height + 4, width: blockWidth, height, fillColor: '#f8fafc', strokeColor: '#e2e8f0' },
+          ...blockLines.map((line, index) => ({
+            type: 'text' as const,
+            x: x + 8,
+            y: y - 14 - index * LINE_HEIGHT,
+            text: line,
+            size: 10,
+          })),
+        ],
+      };
+    });
   }
 
   private listBlock(component: ListComponent, width: number): LayoutBlock {

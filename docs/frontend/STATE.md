@@ -1,5 +1,15 @@
 # STATE — Frontend
 
+## DC-02 — Relatório de Visita Técnica
+
+- o workflow `TECHNICAL_REPORT` coleta objetivo, diagnóstico, atividades, recomendações e
+  observações finais em campos autoritativos da Operation;
+- `DocumentViewer` continua único e passou a respeitar `pageBreakAfter` e pesos de componentes para
+  paginação coerente com o LayoutEngine;
+- runtime Chrome confirmou `RVT-000015` em `/reports`, Preview com quatro páginas e os mesmos grupos
+  do PDF oficial;
+- não existe preview, PDF, QR ou política de assinatura local.
+
 ## Product Backlog Closure 07 — Central de Relatórios
 
 - `/reports` virou a Central oficial com dashboard, histórico, filtros e wizard em quatro etapas.

@@ -1,5 +1,24 @@
 # Frontend Integration
 
+## DC-02 — Relatório de Visita Técnica
+
+Na Central, persista os cinco campos textuais da Operation separadamente: `reportedIssue`
+(objetivo), `technicalDiagnosis`, `serviceDescription` (atividades), `technicalRecommendations` e
+`observations`. Checklist é complementar e não substitui a narrativa técnica.
+
+Fluxo obrigatório:
+
+1. criar/atualizar a Operation;
+2. abrir `DocumentViewer` com `{ operationId, type: "TECHNICAL_REPORT" }`;
+3. preview oficial;
+4. render oficial;
+5. download pelo `documentId`;
+6. atualizar o catálogo por `GET /documents`.
+
+Não montar seções, QR, fotos ou assinaturas no frontend. `pageBreakAfter` e os componentes do
+Blueprint são a única fonte de composição. O runtime certificado utiliza quatro páginas tanto no
+Viewer quanto no PDF.
+
 ## Product Backlog Closure 07 — Central de Relatórios
 
 Use `/reports` como orquestrador dos workflows e `/report-templates` somente para modelos. Antes do preview, consulte a configuração por tipo; o backend continua sendo a autoridade para template, branding e assinatura. Após render, atualize `GET /documents`: o `OperationDocument` já estará no repositório. Para PMOC, vincule a Operation a uma MaintenanceExecution. RECEIPT mantém acesso exclusivo de OWNER.

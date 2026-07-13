@@ -46,13 +46,13 @@ const REPORT_TYPES: Array<{ type: DocumentKind; title: string; description: stri
 
 type WorkflowForm = {
   operationId: string; customerId: string; addressId: string; equipmentId: string; operatorId: string; pmocId: string;
-  objective: string; observations: string; analysis: string; conclusion: string; reference: string; amount: string; receivedFrom: string;
+  objective: string; diagnosis: string; observations: string; analysis: string; recommendations: string; conclusion: string; reference: string; amount: string; receivedFrom: string;
   checklist: string; signatureData: string | null; photos: Array<{ dataUrl: string; caption: string }>;
 };
 
 const emptyForm: WorkflowForm = {
   operationId: "", customerId: "", addressId: "", equipmentId: "", operatorId: "", pmocId: "",
-  objective: "", observations: "", analysis: "", conclusion: "", reference: "", amount: "", receivedFrom: "",
+  objective: "", diagnosis: "", observations: "", analysis: "", recommendations: "", conclusion: "", reference: "", amount: "", receivedFrom: "",
   checklist: "", signatureData: null, photos: [],
 };
 
@@ -168,7 +168,7 @@ function ReportWorkflowDrawer({ type, initialOperationId, onClose, onRendered }:
     if (!id) { setOperation(null); return; }
     try {
       const detail = await operationApi.getOperation(id); setOperation(detail);
-      setForm((current) => ({ ...current, customerId: detail.customer?.id ?? "", addressId: detail.address?.id ?? "", equipmentId: detail.equipment?.id ?? "", operatorId: detail.operator?.id ?? "", objective: detail.reportedIssue ?? "", observations: detail.observations ?? "", analysis: detail.serviceDescription ?? "", checklist: detail.checklist.map((item) => `${item.done ? "[x]" : "[ ]"} ${item.label}${item.note ? ` | ${item.note}` : ""}`).join("\n") }));
+      setForm((current) => ({ ...current, customerId: detail.customer?.id ?? "", addressId: detail.address?.id ?? "", equipmentId: detail.equipment?.id ?? "", operatorId: detail.operator?.id ?? "", objective: detail.reportedIssue ?? "", diagnosis: detail.technicalDiagnosis ?? "", observations: detail.observations ?? "", analysis: detail.serviceDescription ?? "", recommendations: detail.technicalRecommendations ?? "", checklist: detail.checklist.map((item) => `${item.done ? "[x]" : "[ ]"} ${item.label}${item.note ? ` | ${item.note}` : ""}`).join("\n") }));
     } catch (cause) { setError(message(cause)); }
   }
 
@@ -227,6 +227,7 @@ function ContentStep({ type, form, onSet }: { type: DocumentKind; form: Workflow
   if (type === "WORK_ORDER") return <p className="text-sm text-[var(--color-muted-foreground)]">A Ordem de Serviço utiliza os dados já persistidos na Operation selecionada. Edite a Operation no módulo Operações quando necessário.</p>;
   if (type === "RECEIPT") return <div className="grid gap-4 md:grid-cols-2"><Text label="Referência" value={form.reference} onChange={(value) => onSet("reference", value)} /><Text label="Valor recebido" value={form.amount} onChange={(value) => onSet("amount", value)} inputMode="decimal" /><Text label="Recebido de" value={form.receivedFrom} onChange={(value) => onSet("receivedFrom", value)} /><Area label="Observações" value={form.observations} onChange={(value) => onSet("observations", value)} /></div>;
   if (type === "TECHNICAL_OPINION") return <div className="space-y-4"><Area label="Diagnóstico" value={form.objective} onChange={(value) => onSet("objective", value)} /><Area label="Análise técnica" value={form.analysis} onChange={(value) => onSet("analysis", value)} /><Area label="Conclusão" value={form.conclusion} onChange={(value) => onSet("conclusion", value)} /></div>;
+  if (type === "TECHNICAL_REPORT") return <div className="space-y-4"><Area label="Objetivo da visita" value={form.objective} onChange={(value) => onSet("objective", value)} /><Area label="Diagnóstico ou situação encontrada" value={form.diagnosis} onChange={(value) => onSet("diagnosis", value)} /><Area label="Atividades executadas" value={form.analysis} onChange={(value) => onSet("analysis", value)} /><Area label="Recomendações técnicas" value={form.recommendations} onChange={(value) => onSet("recommendations", value)} /><Area label="Observações finais" value={form.observations} onChange={(value) => onSet("observations", value)} /></div>;
   return <div className="space-y-4"><Area label={type === "PMOC" ? "Medições e objetivo da execução" : "Objetivo da visita"} value={form.objective} onChange={(value) => onSet("objective", value)} /><Area label={type === "PMOC" ? "Pendências e conclusão" : "Observações"} value={form.observations} onChange={(value) => onSet("observations", value)} /></div>;
 }
 
@@ -239,6 +240,7 @@ function contentFor(type: DocumentKind, form: WorkflowForm) {
   const common = { checklist, photos: form.photos, signatureData: form.signatureData, signedAt: form.signatureData ? new Date().toISOString() : undefined };
   if (type === "RECEIPT") return { ...common, reportedIssue: form.reference, serviceDescription: `Valor recebido: R$ ${form.amount || "0,00"}\nRecebido de: ${form.receivedFrom || "Não informado"}`, observations: form.observations };
   if (type === "TECHNICAL_OPINION") return { ...common, reportedIssue: form.objective, serviceDescription: form.analysis, observations: form.conclusion };
+  if (type === "TECHNICAL_REPORT") return { ...common, reportedIssue: form.objective, technicalDiagnosis: form.diagnosis, serviceDescription: form.analysis, technicalRecommendations: form.recommendations, observations: form.observations };
   return { ...common, reportedIssue: form.objective, serviceDescription: type === "PMOC" ? form.objective : undefined, observations: form.observations };
 }
 

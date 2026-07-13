@@ -1,5 +1,11 @@
 # ROUTES — Frontend
 
+## DC-02
+
+Sem rota nova. `/reports` cria/edita a origem `Operation` e abre o `TECHNICAL_REPORT` no
+`DocumentViewer`; `/documentos` exibe a emissão oficial via catálogo. `/reports/visita` permanece
+redirect para `/reports` e não volta a ser fluxo paralelo.
+
 ## Product Backlog Closure 07
 
 - `/reports`: Central de Relatórios.

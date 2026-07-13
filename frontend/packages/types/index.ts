@@ -691,6 +691,8 @@ export type OperationDetail = Omit<OperationSummary, "equipment"> & {
   observations: string | null;
   reportedIssue: string | null;
   serviceDescription: string | null;
+  technicalDiagnosis: string | null;
+  technicalRecommendations: string | null;
   signatureData: string | null;
   signedAt: string | null;
   photos: OperationPhoto[];
@@ -717,6 +719,8 @@ export type CreateOperationPayload = {
   observations?: string | null;
   reportedIssue?: string | null;
   serviceDescription?: string | null;
+  technicalDiagnosis?: string | null;
+  technicalRecommendations?: string | null;
   signatureData?: string | null;
   signedAt?: string | null;
   photos?: { dataUrl: string; caption?: string | null }[];

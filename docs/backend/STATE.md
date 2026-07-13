@@ -1,5 +1,22 @@
 # Backend State
 
+## DC-02 — certificação do Relatório de Visita Técnica
+
+- `TECHNICAL_REPORT` foi certificado sobre o fluxo oficial Context → Builder → Blueprint →
+  LayoutEngine → Renderer → PdfEngine → Storage.
+- Operation recebeu `technicalDiagnosis` e `technicalRecommendations`; `reportedIssue`,
+  `serviceDescription` e `observations` preservam objetivo, atividades e observações finais.
+- Blueprint oficial: identificação, cliente, local, equipamento/QR, objetivo, diagnóstico,
+  atividades, checklist complementar, recomendações, materiais, fotos, observações, relacionados e
+  assinaturas.
+- narrativas reconhecem parágrafos, quebras de linha e listas; blocos textuais longos agora são
+  quebrados genericamente pelo Renderer sem regra específica de relatório.
+- política NONE/FIXED/COLLECTED/HYBRID permanece resolvida no DocumentContext; o Builder não busca
+  assinatura.
+- Preview e PDF runtime do `RVT-000015` apresentaram as mesmas quatro páginas, QR, foto, Unicode e
+  duas assinaturas; registro confirmado em `GET /documents`.
+- migration: `20260713110000_technical_report_certification`.
+
 ## Product Backlog Closure 07 — Central de Relatórios
 
 - Os workflows WORK_ORDER, TECHNICAL_REPORT, TECHNICAL_OPINION, PMOC e RECEIPT continuam baseados em Operation e no Document Engine oficial; nenhum renderer/contexto paralelo foi criado.

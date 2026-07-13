@@ -731,38 +731,40 @@ model EquipmentMetric {
 /// reused by every produced document (OS, PMOC, Laudo, Relatório, Orçamento,
 /// Recibo). Each Work Order goes through exactly one Operation.
 model Operation {
-  id                   String                @id @default(uuid()) @db.Uuid
-  number               Int                   @unique @default(autoincrement())
-  customerId           String                @map("customer_id") @db.Uuid
-  addressId            String?               @map("address_id") @db.Uuid
-  equipmentId          String?               @map("equipment_id") @db.Uuid
-  operatorId           String                @map("operator_id") @db.Uuid
-  type                 OperationType
-  status               OperationStatus       @default(DRAFT)
-  scheduledFor         DateTime?             @map("scheduled_for") @db.Timestamptz(3)
-  startedAt            DateTime?             @map("started_at") @db.Timestamptz(3)
-  completedAt          DateTime?             @map("completed_at") @db.Timestamptz(3)
-  checklist            Json                  @default("[]")
-  observations         String?               @db.Text
-  reportedIssue        String?               @map("reported_issue") @db.Text
-  serviceDescription   String?               @map("service_description") @db.Text
-  signatureData        String?               @map("signature_data") @db.Text
-  signedAt             DateTime?             @map("signed_at") @db.Timestamptz(3)
-  createdAt            DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt            DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
-  customer             Customer              @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  address              CustomerAddress?      @relation(fields: [addressId], references: [id], onDelete: SetNull)
-  equipment            Equipment?            @relation(fields: [equipmentId], references: [id], onDelete: SetNull)
-  operator             User                  @relation(fields: [operatorId], references: [id], onDelete: Restrict)
-  photos               OperationPhoto[]
-  documents            OperationDocument[]
-  assignment           Assignment?
-  assignmentHistory    AssignmentHistory[]
-  lifecycleEvents      AssetLifecycleEvent[]
-  maintenanceExecution MaintenanceExecution?
-  parts                OperationPart[]
-  stockMovements       StockMovement[]
-  budgets              Budget[]
+  id                       String                @id @default(uuid()) @db.Uuid
+  number                   Int                   @unique @default(autoincrement())
+  customerId               String                @map("customer_id") @db.Uuid
+  addressId                String?               @map("address_id") @db.Uuid
+  equipmentId              String?               @map("equipment_id") @db.Uuid
+  operatorId               String                @map("operator_id") @db.Uuid
+  type                     OperationType
+  status                   OperationStatus       @default(DRAFT)
+  scheduledFor             DateTime?             @map("scheduled_for") @db.Timestamptz(3)
+  startedAt                DateTime?             @map("started_at") @db.Timestamptz(3)
+  completedAt              DateTime?             @map("completed_at") @db.Timestamptz(3)
+  checklist                Json                  @default("[]")
+  observations             String?               @db.Text
+  reportedIssue            String?               @map("reported_issue") @db.Text
+  serviceDescription       String?               @map("service_description") @db.Text
+  technicalDiagnosis       String?               @map("technical_diagnosis") @db.Text
+  technicalRecommendations String?               @map("technical_recommendations") @db.Text
+  signatureData            String?               @map("signature_data") @db.Text
+  signedAt                 DateTime?             @map("signed_at") @db.Timestamptz(3)
+  createdAt                DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+  customer                 Customer              @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  address                  CustomerAddress?      @relation(fields: [addressId], references: [id], onDelete: SetNull)
+  equipment                Equipment?            @relation(fields: [equipmentId], references: [id], onDelete: SetNull)
+  operator                 User                  @relation(fields: [operatorId], references: [id], onDelete: Restrict)
+  photos                   OperationPhoto[]
+  documents                OperationDocument[]
+  assignment               Assignment?
+  assignmentHistory        AssignmentHistory[]
+  lifecycleEvents          AssetLifecycleEvent[]
+  maintenanceExecution     MaintenanceExecution?
+  parts                    OperationPart[]
+  stockMovements           StockMovement[]
+  budgets                  Budget[]
 
   @@index([customerId, createdAt])
   @@index([equipmentId, createdAt])

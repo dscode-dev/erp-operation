@@ -1,5 +1,18 @@
 # Security
 
+## DC-02 — controles do Relatório de Visita Técnica
+
+- novos campos textuais são opcionais, passam por DTO whitelist/sanitização e possuem limites de
+  20.000 caracteres;
+- UUID, RBAC, isolamento da instalação e validação de relacionamentos permanecem nos serviços de
+  Operation/Document Engine;
+- fotos e assinaturas continuam validadas por MIME, magic bytes e tamanho antes do Storage;
+- DocumentContext é a única camada que resolve logo, QR, fotos e assinaturas;
+- Builder, Renderer e frontend não consultam Prisma ou Storage e não escolhem assinatura;
+- respostas de catálogo não expõem `storageKey`, path, tokens ou binários;
+- download exige endpoint autenticado e stale detection; render mantém fingerprint e auditoria;
+- runtime é local-only, requer opt-in e grava evidências apenas em `/private/tmp`.
+
 ## Product Backlog Closure 07 — segurança dos workflows
 
 - navegação aplica `canReports`; backend mantém JWT, RoleGuard e restrição OWNER para RECEIPT;

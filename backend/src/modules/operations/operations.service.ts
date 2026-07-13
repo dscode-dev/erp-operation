@@ -158,6 +158,8 @@ export class OperationsService {
           observations: dto.observations ?? null,
           reportedIssue: dto.reportedIssue ?? null,
           serviceDescription: dto.serviceDescription ?? null,
+          technicalDiagnosis: dto.technicalDiagnosis ?? null,
+          technicalRecommendations: dto.technicalRecommendations ?? null,
           signatureData,
           signedAt: signatureData ? (dto.signedAt ? new Date(dto.signedAt) : new Date()) : null,
         },
@@ -271,6 +273,8 @@ export class OperationsService {
           ...(dto.observations !== undefined ? { observations: dto.observations } : {}),
           ...(dto.reportedIssue !== undefined ? { reportedIssue: dto.reportedIssue } : {}),
           ...(dto.serviceDescription !== undefined ? { serviceDescription: dto.serviceDescription } : {}),
+          ...(dto.technicalDiagnosis !== undefined ? { technicalDiagnosis: dto.technicalDiagnosis } : {}),
+          ...(dto.technicalRecommendations !== undefined ? { technicalRecommendations: dto.technicalRecommendations } : {}),
           ...(signatureData ? { signatureData, signedAt: dto.signedAt ? new Date(dto.signedAt) : new Date() } : {}),
         },
       });
