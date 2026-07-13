@@ -1,5 +1,10 @@
 # STATE — Frontend
 
+## Refinamento do cabeçalho documental
+
+- `DocumentViewer` centraliza verticalmente a logo em relação ao bloco textual e não apresenta
+  metadados técnicos no rodapé público.
+
 ## DC-02 — Relatório de Visita Técnica
 
 - o workflow `TECHNICAL_REPORT` coleta objetivo, diagnóstico, atividades, recomendações e

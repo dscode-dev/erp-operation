@@ -1,5 +1,8 @@
 # ORBIT — Document Certification DC-02 — Technical Report
 
+Refinamento posterior: logo centralizada verticalmente no cabeçalho de Preview/PDF e versão interna
+do Blueprint removida do rodapé visível.
+
 Data: 13 de julho de 2026  
 Tipo certificado: `TECHNICAL_REPORT`
 

@@ -1,5 +1,8 @@
 # ARCHITECTURE — Frontend
 
+`DocumentViewer` continua consumindo o Blueprint oficial. A versão raiz é metadado de integração e
+não conteúdo visual; header e footer são apresentados sem composição documental paralela.
+
 ## DC-02
 
 ```text

@@ -1,5 +1,11 @@
 # COMPONENTS — Frontend
 
+## Refinamento documental
+
+| Componente | Alteração |
+|---|---|
+| `DocumentViewer` | logo alinhada verticalmente ao texto; rodapé limitado a `footer.content` |
+
 ## DC-02
 
 | Componente | Alteração |

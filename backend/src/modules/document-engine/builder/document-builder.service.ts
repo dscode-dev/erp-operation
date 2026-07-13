@@ -83,7 +83,9 @@ export class DocumentBuilderService {
         sourceKind: 'operation',
         sourceId: operation.id,
         templateId: context.template?.id ?? null,
-        templateUpdatedAt: context.template?.updatedAt ? new Date(context.template.updatedAt).toISOString() : null,
+        templateUpdatedAt: context.template?.updatedAt
+          ? new Date(context.template.updatedAt).toISOString()
+          : null,
         generatedAt,
         locale: 'pt-BR',
         timezone: settings.timezone,
@@ -107,10 +109,18 @@ export class DocumentBuilderService {
         subtitle: `Operação ${String(operation.number).padStart(6, '0')}`,
         organizationName: this.clean(organization.tradeName || organization.legalName),
         documentNumber: document.number,
-        logo: context.assets.logo ? { mimeType: context.assets.logo.mimeType, fileSize: context.assets.logo.fileSize, contentBase64: context.assets.logo.contentBase64 } : null,
+        logo: context.assets.logo
+          ? {
+              mimeType: context.assets.logo.mimeType,
+              fileSize: context.assets.logo.fileSize,
+              contentBase64: context.assets.logo.contentBase64,
+            }
+          : null,
       },
       footer: {
-        content: this.clean(`${organization.tradeName || organization.legalName} · ${this.organizationAddress(organization)} · ${organization.phone} · ${organization.email}${organization.website ? ` · ${organization.website}` : ''} · ${document.number} · Blueprint v1.0`),
+        content: this.clean(
+          `${organization.tradeName || organization.legalName} · ${this.organizationAddress(organization)} · ${organization.phone} · ${organization.email}${organization.website ? ` · ${organization.website}` : ''} · ${document.number}`,
+        ),
         generatedAt,
       },
       visualStyle: this.visualStyle(organization.primaryColor),
@@ -159,10 +169,18 @@ export class DocumentBuilderService {
         subtitle: 'Pré-visualização de modelo',
         organizationName: this.clean(organization.tradeName || organization.legalName),
         documentNumber: placeholders.documentNumber,
-        logo: context.assets.logo ? { mimeType: context.assets.logo.mimeType, fileSize: context.assets.logo.fileSize, contentBase64: context.assets.logo.contentBase64 } : null,
+        logo: context.assets.logo
+          ? {
+              mimeType: context.assets.logo.mimeType,
+              fileSize: context.assets.logo.fileSize,
+              contentBase64: context.assets.logo.contentBase64,
+            }
+          : null,
       },
       footer: {
-        content: this.clean(template.footerContent || `Modelo gerado por ${organization.tradeName}`),
+        content: this.clean(
+          template.footerContent || `Modelo gerado por ${organization.tradeName}`,
+        ),
         generatedAt,
       },
       visualStyle: this.visualStyle(organization.primaryColor),
@@ -189,7 +207,9 @@ export class DocumentBuilderService {
         sourceKind: 'budget',
         sourceId: budget.id,
         templateId: context.template?.id ?? null,
-        templateUpdatedAt: context.template?.updatedAt ? new Date(context.template.updatedAt).toISOString() : null,
+        templateUpdatedAt: context.template?.updatedAt
+          ? new Date(context.template.updatedAt).toISOString()
+          : null,
         generatedAt,
         locale: 'pt-BR',
         timezone: settings.timezone,
@@ -210,13 +230,24 @@ export class DocumentBuilderService {
       },
       header: {
         title: 'Orçamento',
-        subtitle: budget.operation ? `Operação ${String(budget.operation.number).padStart(6, '0')}` : budget.title,
+        subtitle: budget.operation
+          ? `Operação ${String(budget.operation.number).padStart(6, '0')}`
+          : budget.title,
         organizationName: this.clean(organization.tradeName || organization.legalName),
         documentNumber: number,
-        logo: context.assets.logo ? { mimeType: context.assets.logo.mimeType, fileSize: context.assets.logo.fileSize, contentBase64: context.assets.logo.contentBase64 } : null,
+        logo: context.assets.logo
+          ? {
+              mimeType: context.assets.logo.mimeType,
+              fileSize: context.assets.logo.fileSize,
+              contentBase64: context.assets.logo.contentBase64,
+            }
+          : null,
       },
       footer: {
-        content: this.clean(context.template?.footerContent || `Gerado por ${organization.tradeName} · ${organization.email}`),
+        content: this.clean(
+          context.template?.footerContent ||
+            `Gerado por ${organization.tradeName} · ${organization.email}`,
+        ),
         generatedAt,
       },
       visualStyle: this.visualStyle(organization.primaryColor),
@@ -224,12 +255,17 @@ export class DocumentBuilderService {
     };
   }
 
-  private sections(context: DocumentContext, generatedAt: string, documentNumber: string): DocumentSection[] {
-    const sections = context.configuration.type === DocumentTemplateType.WORK_ORDER
-      ? this.workOrderSections(context, generatedAt, documentNumber)
-      : context.configuration.type === DocumentTemplateType.TECHNICAL_REPORT
-        ? this.visitReportSections(context, generatedAt, documentNumber)
-        : this.sharedIdentitySections(context);
+  private sections(
+    context: DocumentContext,
+    generatedAt: string,
+    documentNumber: string,
+  ): DocumentSection[] {
+    const sections =
+      context.configuration.type === DocumentTemplateType.WORK_ORDER
+        ? this.workOrderSections(context, generatedAt, documentNumber)
+        : context.configuration.type === DocumentTemplateType.TECHNICAL_REPORT
+          ? this.visitReportSections(context, generatedAt, documentNumber)
+          : this.sharedIdentitySections(context);
 
     switch (context.configuration.type) {
       case DocumentTemplateType.WORK_ORDER:
@@ -304,7 +340,7 @@ export class DocumentBuilderService {
               'Contato',
               primaryContact
                 ? `${primaryContact.name}${primaryContact.phone ? ` · ${primaryContact.phone}` : ''}`
-                : operation.customer.phone ?? '—',
+                : (operation.customer.phone ?? '—'),
             ],
             ['Endereço', address ? this.address(address) : '—'],
           ]),
@@ -316,7 +352,11 @@ export class DocumentBuilderService {
     return sections;
   }
 
-  private workOrderSections(context: DocumentContext, generatedAt: string, documentNumber: string): DocumentSection[] {
+  private workOrderSections(
+    context: DocumentContext,
+    generatedAt: string,
+    documentNumber: string,
+  ): DocumentSection[] {
     const { operation } = context;
     const address = operation.address ?? operation.customer.addresses[0] ?? null;
     const contact = operation.customer.contacts[0] ?? null;
@@ -339,25 +379,54 @@ export class DocumentBuilderService {
         ],
       },
       {
-        id: 'work-order-customer', title: 'Cliente', critical: true,
-        components: [this.metadata('work-order-customer-metadata', [
-          ['Cliente', operation.customer.tradeName ?? operation.customer.name],
-          ['Razão/Nome', operation.customer.name],
-          ['Documento', operation.customer.cnpj ?? operation.customer.cpf ?? '—'],
-          ['Contato', contact ? `${contact.name}${contact.phone ? ` · ${contact.phone}` : ''}` : operation.customer.phone ?? '—'],
-          ['Endereço', address ? this.address(address) : '—'],
-        ])],
+        id: 'work-order-customer',
+        title: 'Cliente',
+        critical: true,
+        components: [
+          this.metadata('work-order-customer-metadata', [
+            ['Cliente', operation.customer.tradeName ?? operation.customer.name],
+            ['Razão/Nome', operation.customer.name],
+            ['Documento', operation.customer.cnpj ?? operation.customer.cpf ?? '—'],
+            [
+              'Contato',
+              contact
+                ? `${contact.name}${contact.phone ? ` · ${contact.phone}` : ''}`
+                : (operation.customer.phone ?? '—'),
+            ],
+            ['Endereço', address ? this.address(address) : '—'],
+          ]),
+        ],
       },
       operation.equipment ? { ...this.equipmentSection(context), pageBreakAfter: true } : null,
       {
-        id: 'work-order-reported-issue', title: 'Defeito ou solicitação informada',
-        components: [{ id: 'work-order-reported-issue-text', kind: 'observation', text: this.clean(operation.reportedIssue || 'Não informado.'), keepTogether: true }],
+        id: 'work-order-reported-issue',
+        title: 'Defeito ou solicitação informada',
+        components: [
+          {
+            id: 'work-order-reported-issue-text',
+            kind: 'observation',
+            text: this.clean(operation.reportedIssue || 'Não informado.'),
+            keepTogether: true,
+          },
+        ],
       },
       {
-        id: 'work-order-services', title: 'Serviços executados',
-        components: serviceItems.length > 1
-          ? [{ id: 'work-order-services-list', kind: 'list', items: serviceItems }]
-          : [{ id: 'work-order-services-text', kind: 'paragraph', text: this.clean(operation.serviceDescription || 'A execução deve ser detalhada no checklist e nos registros operacionais.'), keepTogether: true }],
+        id: 'work-order-services',
+        title: 'Serviços executados',
+        components:
+          serviceItems.length > 1
+            ? [{ id: 'work-order-services-list', kind: 'list', items: serviceItems }]
+            : [
+                {
+                  id: 'work-order-services-text',
+                  kind: 'paragraph',
+                  text: this.clean(
+                    operation.serviceDescription ||
+                      'A execução deve ser detalhada no checklist e nos registros operacionais.',
+                  ),
+                  keepTogether: true,
+                },
+              ],
       },
       this.checklistSection(operation, 'Checklist da execução'),
       this.materialsSection(operation),
@@ -383,7 +452,10 @@ export class DocumentBuilderService {
             ['Número', documentNumber],
             ['Emissão', this.date(generatedAt)],
             ['Responsável', operation.assignment?.assignee.name ?? operation.operator.name],
-            ['Função', operation.assignment?.assignee.jobTitle ?? operation.operator.jobTitle ?? '—'],
+            [
+              'Função',
+              operation.assignment?.assignee.jobTitle ?? operation.operator.jobTitle ?? '—',
+            ],
             ['Situação', operation.status],
             ['Referência operacional', `OP-${String(operation.number).padStart(6, '0')}`],
           ]),
@@ -398,7 +470,12 @@ export class DocumentBuilderService {
             ['Cliente', operation.customer.tradeName ?? operation.customer.name],
             ['Razão/Nome', operation.customer.name],
             ['Documento', operation.customer.cnpj ?? operation.customer.cpf ?? '—'],
-            ['Contato', contact ? `${contact.name}${contact.phone ? ` · ${contact.phone}` : ''}` : operation.customer.phone ?? '—'],
+            [
+              'Contato',
+              contact
+                ? `${contact.name}${contact.phone ? ` · ${contact.phone}` : ''}`
+                : (operation.customer.phone ?? '—'),
+            ],
           ]),
         ],
       },
@@ -422,27 +499,45 @@ export class DocumentBuilderService {
         id: 'visit-objective',
         title: 'Objetivo da visita',
         critical: true,
-        components: this.technicalNarrative('visit-objective', operation.reportedIssue, 'Objetivo não informado.'),
+        components: this.technicalNarrative(
+          'visit-objective',
+          operation.reportedIssue,
+          'Objetivo não informado.',
+        ),
       },
       {
         id: 'visit-diagnosis',
         title: 'Diagnóstico ou situação encontrada',
         critical: true,
-        components: this.technicalNarrative('visit-diagnosis', operation.technicalDiagnosis, 'Diagnóstico técnico não registrado.'),
+        components: this.technicalNarrative(
+          'visit-diagnosis',
+          operation.technicalDiagnosis,
+          'Diagnóstico técnico não registrado.',
+        ),
       },
       {
         id: 'visit-activities',
         title: 'Atividades executadas',
-        components: this.technicalNarrative('visit-activities', operation.serviceDescription, 'Atividades executadas não registradas.'),
+        components: this.technicalNarrative(
+          'visit-activities',
+          operation.serviceDescription,
+          'Atividades executadas não registradas.',
+        ),
       },
       this.checklistSection(operation, 'Checklist complementar'),
       {
         id: 'visit-recommendations',
         title: 'Recomendações técnicas',
-        components: this.technicalNarrative('visit-recommendations', operation.technicalRecommendations, 'Não foram registradas recomendações técnicas.'),
+        components: this.technicalNarrative(
+          'visit-recommendations',
+          operation.technicalRecommendations,
+          'Não foram registradas recomendações técnicas.',
+        ),
       },
       this.materialsSection(operation),
-      ...(operation.photos.length > 0 ? [this.photosSection(context, 'Evidências fotográficas')] : []),
+      ...(operation.photos.length > 0
+        ? [this.photosSection(context, 'Evidências fotográficas')]
+        : []),
       this.observationSection(operation, 'Observações finais'),
     ].filter((section): section is DocumentSection => Boolean(section));
     return sections;
@@ -460,8 +555,14 @@ export class DocumentBuilderService {
             ['Atribuído para', operation.assignment?.assignee.name ?? operation.operator.name],
             ['Atribuído por', operation.assignment?.assigner.name ?? '—'],
             ['Aceito em', this.date(operation.assignment?.acceptedAt ?? null)],
-            ['Iniciado em', this.date(operation.startedAt ?? operation.assignment?.startedAt ?? null)],
-            ['Concluído em', this.date(operation.completedAt ?? operation.assignment?.completedAt ?? null)],
+            [
+              'Iniciado em',
+              this.date(operation.startedAt ?? operation.assignment?.startedAt ?? null),
+            ],
+            [
+              'Concluído em',
+              this.date(operation.completedAt ?? operation.assignment?.completedAt ?? null),
+            ],
           ]),
         ],
       },
@@ -482,7 +583,9 @@ export class DocumentBuilderService {
           {
             id: 'legacy-report-note',
             kind: 'observation',
-            text: this.clean('Documento REPORT preservado para compatibilidade histórica. Novas emissões analíticas devem usar Laudo Técnico (TECHNICAL_OPINION).'),
+            text: this.clean(
+              'Documento REPORT preservado para compatibilidade histórica. Novas emissões analíticas devem usar Laudo Técnico (TECHNICAL_OPINION).',
+            ),
             keepTogether: true,
           },
         ],
@@ -504,7 +607,10 @@ export class DocumentBuilderService {
             ['Cliente', operation.customer.tradeName ?? operation.customer.name],
             ['Equipamento avaliado', operation.equipment?.name ?? '—'],
             ['Responsável pela inspeção', operation.operator.name],
-            ['Período observado', `${this.date(operation.startedAt)} → ${this.date(operation.completedAt)}`],
+            [
+              'Período observado',
+              `${this.date(operation.startedAt)} → ${this.date(operation.completedAt)}`,
+            ],
           ]),
         ],
       },
@@ -529,7 +635,10 @@ export class DocumentBuilderService {
           {
             id: 'technical-opinion-analysis-text',
             kind: 'paragraph',
-            text: this.clean(operation.serviceDescription || 'Análise baseada nos dados registrados na Operation, checklist, materiais e evidências anexadas.'),
+            text: this.clean(
+              operation.serviceDescription ||
+                'Análise baseada nos dados registrados na Operation, checklist, materiais e evidências anexadas.',
+            ),
             keepTogether: true,
           },
         ],
@@ -542,7 +651,12 @@ export class DocumentBuilderService {
           {
             id: 'technical-opinion-conclusion-text',
             kind: 'observation',
-            text: this.clean(operation.observations || (operation.status === 'COMPLETED' ? 'Atendimento concluído conforme registros operacionais disponíveis.' : `Operation em status ${operation.status}; conclusão técnica definitiva não registrada.`)),
+            text: this.clean(
+              operation.observations ||
+                (operation.status === 'COMPLETED'
+                  ? 'Atendimento concluído conforme registros operacionais disponíveis.'
+                  : `Operation em status ${operation.status}; conclusão técnica definitiva não registrada.`),
+            ),
             keepTogether: true,
           },
         ],
@@ -572,7 +686,22 @@ export class DocumentBuilderService {
       },
       this.maintenanceSection(operation),
       this.pmocEnvironmentsSection(operation),
-      ...(operation.serviceDescription ? [{ id: 'pmoc-measurements', title: 'Medições', components: [{ id: 'pmoc-measurements-text', kind: 'observation' as const, text: this.clean(operation.serviceDescription), keepTogether: true }] }] : []),
+      ...(operation.serviceDescription
+        ? [
+            {
+              id: 'pmoc-measurements',
+              title: 'Medições',
+              components: [
+                {
+                  id: 'pmoc-measurements-text',
+                  kind: 'observation' as const,
+                  text: this.clean(operation.serviceDescription),
+                  keepTogether: true,
+                },
+              ],
+            },
+          ]
+        : []),
       this.checklistSection(operation, 'Execução PMOC registrada'),
       this.observationSection(operation, 'Pendências e conclusão'),
     ].filter((section): section is DocumentSection => Boolean(section));
@@ -636,7 +765,10 @@ export class DocumentBuilderService {
   private evidenceAndRelatedSections(context: DocumentContext): DocumentSection[] {
     const { operation } = context;
     const sections: DocumentSection[] = [];
-    if (context.configuration.type !== DocumentTemplateType.TECHNICAL_REPORT && operation.photos.length > 0) {
+    if (
+      context.configuration.type !== DocumentTemplateType.TECHNICAL_REPORT &&
+      operation.photos.length > 0
+    ) {
       sections.push(this.photosSection(context, 'Evidências fotográficas'));
     }
     const relatedDocuments = operation.documents.filter(
@@ -664,11 +796,19 @@ export class DocumentBuilderService {
     const { operation } = context;
     const equipment = operation.equipment;
     if (!equipment) {
-      throw new ApplicationException(ERROR_CODES.DOCUMENT_RENDER_FAILED, 'Equipment section requested without equipment', HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new ApplicationException(
+        ERROR_CODES.DOCUMENT_RENDER_FAILED,
+        'Equipment section requested without equipment',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
     const qrCode = context.assets.qrCode;
     if (!qrCode) {
-      throw new ApplicationException(ERROR_CODES.DOCUMENT_RENDER_FAILED, 'Equipment QR image could not be resolved', HttpStatus.CONFLICT);
+      throw new ApplicationException(
+        ERROR_CODES.DOCUMENT_RENDER_FAILED,
+        'Equipment QR image could not be resolved',
+        HttpStatus.CONFLICT,
+      );
     }
     return {
       id: 'equipment',
@@ -689,7 +829,11 @@ export class DocumentBuilderService {
           kind: 'qrCode',
           label: 'QR do equipamento',
           value: equipment.qrCode,
-          image: { mimeType: 'image/png', fileSize: qrCode.fileSize, contentBase64: qrCode.contentBase64 },
+          image: {
+            mimeType: 'image/png',
+            fileSize: qrCode.fileSize,
+            contentBase64: qrCode.contentBase64,
+          },
           keepTogether: true,
         },
       ],
@@ -714,15 +858,27 @@ export class DocumentBuilderService {
     ];
   }
 
-  private checklistSection(operation: DocumentContext['operation'], title: string): DocumentSection {
+  private checklistSection(
+    operation: DocumentContext['operation'],
+    title: string,
+  ): DocumentSection {
     return {
       id: `checklist-${this.slug(title)}`,
       title,
-      components: [{ id: 'operation-checklist', kind: 'checklist', items: this.checklist(operation.checklist) }],
+      components: [
+        {
+          id: 'operation-checklist',
+          kind: 'checklist',
+          items: this.checklist(operation.checklist),
+        },
+      ],
     };
   }
 
-  private observationSection(operation: DocumentContext['operation'], title: string): DocumentSection | null {
+  private observationSection(
+    operation: DocumentContext['operation'],
+    title: string,
+  ): DocumentSection | null {
     if (!operation.observations) return null;
     return {
       id: `observations-${this.slug(title)}`,
@@ -766,7 +922,9 @@ export class DocumentBuilderService {
     };
   }
 
-  private assignmentHistorySection(operation: DocumentContext['operation']): DocumentSection | null {
+  private assignmentHistorySection(
+    operation: DocumentContext['operation'],
+  ): DocumentSection | null {
     const history = operation.assignment?.history ?? [];
     if (history.length === 0) return null;
     return {
@@ -837,7 +995,9 @@ export class DocumentBuilderService {
             name: this.clean(environment.name),
             area: this.clean(environment.area ?? '—'),
             occupancy: environment.occupancy != null ? String(environment.occupancy) : '—',
-            equipments: this.clean(environment.equipments.map((item) => item.equipment.name).join(', ') || '—'),
+            equipments: this.clean(
+              environment.equipments.map((item) => item.equipment.name).join(', ') || '—',
+            ),
           })),
         },
       ],
@@ -862,9 +1022,14 @@ export class DocumentBuilderService {
     };
   }
 
-  private imageForPhoto(context: DocumentContext, photoId: string): { mimeType: string; fileSize: number; contentBase64: string } | null {
+  private imageForPhoto(
+    context: DocumentContext,
+    photoId: string,
+  ): { mimeType: string; fileSize: number; contentBase64: string } | null {
     const photo = context.operation.photos.find((item) => item.id === photoId);
-    const resolved = photo ? context.assets.images.find((image) => image.storageKey === photo.storageKey) : null;
+    const resolved = photo
+      ? context.assets.images.find((image) => image.storageKey === photo.storageKey)
+      : null;
     return resolved
       ? {
           mimeType: resolved.mimeType,
@@ -1004,7 +1169,7 @@ export class DocumentBuilderService {
               'Contato',
               primaryContact
                 ? `${primaryContact.name}${primaryContact.phone ? ` · ${primaryContact.phone}` : ''}`
-                : budget.customer.phone ?? '—',
+                : (budget.customer.phone ?? '—'),
             ],
             ['Endereço', address ? this.address(address) : '—'],
           ]),
@@ -1035,7 +1200,13 @@ export class DocumentBuilderService {
       sections.push({
         id: 'budget-template-header',
         title: 'Cabeçalho',
-        components: [{ id: 'budget-header-content', kind: 'paragraph', text: this.clean(template.headerContent) }],
+        components: [
+          {
+            id: 'budget-header-content',
+            kind: 'paragraph',
+            text: this.clean(template.headerContent),
+          },
+        ],
       });
     }
 
@@ -1089,7 +1260,11 @@ export class DocumentBuilderService {
           {
             id: 'budget-observations-content',
             kind: 'observation',
-            text: this.clean([budget.description, budget.observations, template?.observations].filter(Boolean).join('\n')),
+            text: this.clean(
+              [budget.description, budget.observations, template?.observations]
+                .filter(Boolean)
+                .join('\n'),
+            ),
             keepTogether: true,
           },
         ],
@@ -1120,7 +1295,11 @@ export class DocumentBuilderService {
         role: 'fixed',
         label: 'Responsável técnico',
         name: this.clean(institutional.name),
-        title: this.clean([institutional.title, institutional.professionalCouncil, institutional.department].filter(Boolean).join(' · ')),
+        title: this.clean(
+          [institutional.title, institutional.professionalCouncil, institutional.department]
+            .filter(Boolean)
+            .join(' · '),
+        ),
         signedAt: null,
         caption: 'Responsável técnico',
         image: {
@@ -1138,9 +1317,7 @@ export class DocumentBuilderService {
         name: execution.name ? this.clean(execution.name) : null,
         title: execution.title ? this.clean(execution.title) : null,
         signedAt: execution.signedAt,
-        caption: execution.caption
-          ? this.clean(execution.caption)
-          : 'Assinatura coletada em campo',
+        caption: execution.caption ? this.clean(execution.caption) : 'Assinatura coletada em campo',
         image: execution.image
           ? {
               mimeType: execution.image.mimeType,
@@ -1209,21 +1386,37 @@ export class DocumentBuilderService {
   }
 
   private organizationAddress(organization: {
-    street?: string | null; number?: string | null; complement?: string | null;
-    district?: string | null; city: string; state: string; zipCode?: string | null;
+    street?: string | null;
+    number?: string | null;
+    complement?: string | null;
+    district?: string | null;
+    city: string;
+    state: string;
+    zipCode?: string | null;
   }): string {
-    return this.clean([
-      [organization.street, organization.number].filter(Boolean).join(', '),
-      organization.complement,
-      organization.district,
-      `${organization.city}/${organization.state}`,
-      organization.zipCode ? `CEP ${organization.zipCode}` : null,
-    ].filter(Boolean).join(' · '));
+    return this.clean(
+      [
+        [organization.street, organization.number].filter(Boolean).join(', '),
+        organization.complement,
+        organization.district,
+        `${organization.city}/${organization.state}`,
+        organization.zipCode ? `CEP ${organization.zipCode}` : null,
+      ]
+        .filter(Boolean)
+        .join(' · '),
+    );
   }
 
   private visualStyle(primary: string): DocumentVisualStyle {
     return {
-      colors: { primary, text: '#0f172a', muted: '#64748b', border: '#e2e8f0', surface: '#f8fafc', background: '#ffffff' },
+      colors: {
+        primary,
+        text: '#0f172a',
+        muted: '#64748b',
+        border: '#e2e8f0',
+        surface: '#f8fafc',
+        background: '#ffffff',
+      },
       typography: { title: 16, section: 13, body: 10, label: 9, caption: 8 },
       spacing: { section: 8, component: 12, cardPadding: 8 },
     };
@@ -1273,13 +1466,19 @@ export class DocumentBuilderService {
 
   private lines(value: string | null): string[] {
     if (!value) return [];
-    return value.split(/\r?\n/).map((line) => line.replace(/^\s*[-•*]\s*/, '').trim()).filter(Boolean).map((line) => this.clean(line));
+    return value
+      .split(/\r?\n/)
+      .map((line) => line.replace(/^\s*[-•*]\s*/, '').trim())
+      .filter(Boolean)
+      .map((line) => this.clean(line));
   }
 
   private date(value: Date | string | null): string {
     if (!value) return '—';
     return new Intl.DateTimeFormat('pt-BR', {
-      dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Recife',
+      dateStyle: 'short',
+      timeStyle: 'short',
+      timeZone: 'America/Recife',
     }).format(new Date(value));
   }
 

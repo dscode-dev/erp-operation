@@ -117,18 +117,44 @@ describe('DocumentEngine foundation', () => {
     const luminance = new Uint8ClampedArray(png.width * png.height);
     for (let index = 0; index < luminance.length; index += 1) {
       const offset = index * 4;
-      luminance[index] = Math.round((png.data[offset] + 2 * png.data[offset + 1] + png.data[offset + 2]) / 4);
+      luminance[index] = Math.round(
+        (png.data[offset] + 2 * png.data[offset + 1] + png.data[offset + 2]) / 4,
+      );
     }
     const source = new RGBLuminanceSource(luminance, png.width, png.height);
-    const decoded = new QRCodeReader().decode(new BinaryBitmap(new HybridBinarizer(source))).getText();
+    const decoded = new QRCodeReader()
+      .decode(new BinaryBitmap(new HybridBinarizer(source)))
+      .getText();
     expect(decoded).toBe(payload);
     const doc = blueprint(1);
-    doc.sections.push({ id: 'qr', title: 'QR', components: [{ id: 'equipment-qr', kind: 'qrCode', label: 'QR do equipamento', value: payload, image: { mimeType: 'image/png', fileSize: asset.fileSize, contentBase64: asset.contentBase64 } }] });
+    doc.sections.push({
+      id: 'qr',
+      title: 'QR',
+      components: [
+        {
+          id: 'equipment-qr',
+          kind: 'qrCode',
+          label: 'QR do equipamento',
+          value: payload,
+          image: {
+            mimeType: 'image/png',
+            fileSize: asset.fileSize,
+            contentBase64: asset.contentBase64,
+          },
+        },
+      ],
+    });
     const rendered = renderer().render(doc);
     const pdf = await new PdfEngineService().create(rendered);
     const qr = doc.sections.at(-1)?.components[0];
     expect(qr?.kind === 'qrCode' ? qr.image.contentBase64 : null).toBe(asset.contentBase64);
-    expect(rendered.pages.flatMap((page) => page.elements).some((element) => element.type === 'image' && element.contentBase64 === asset.contentBase64)).toBe(true);
+    expect(
+      rendered.pages
+        .flatMap((page) => page.elements)
+        .some(
+          (element) => element.type === 'image' && element.contentBase64 === asset.contentBase64,
+        ),
+    ).toBe(true);
     expect(pdf.buffer.toString('latin1')).toContain('/Subtype /Image');
   });
 
@@ -267,23 +293,65 @@ describe('DocumentEngine foundation', () => {
       signatureId: 'institutional-1',
       fixedSignature: null,
       institutionalSignatures: [
-        { id: 'institutional-1', name: 'Ana', title: 'Responsável técnica', professionalCouncil: 'CREA 123', department: 'Engenharia', image: { storageKey: 'a', mimeType: 'image/png', fileSize: 68, contentBase64: ONE_PIXEL_PNG } },
-        { id: 'institutional-2', name: 'Bruno', title: 'Diretor técnico', professionalCouncil: null, department: 'Diretoria', image: { storageKey: 'b', mimeType: 'image/png', fileSize: 68, contentBase64: ONE_PIXEL_PNG } },
+        {
+          id: 'institutional-1',
+          name: 'Ana',
+          title: 'Responsável técnica',
+          professionalCouncil: 'CREA 123',
+          department: 'Engenharia',
+          image: {
+            storageKey: 'a',
+            mimeType: 'image/png',
+            fileSize: 68,
+            contentBase64: ONE_PIXEL_PNG,
+          },
+        },
+        {
+          id: 'institutional-2',
+          name: 'Bruno',
+          title: 'Diretor técnico',
+          professionalCouncil: null,
+          department: 'Diretoria',
+          image: {
+            storageKey: 'b',
+            mimeType: 'image/png',
+            fileSize: 68,
+            contentBase64: ONE_PIXEL_PNG,
+          },
+        },
       ],
       collectedSignature: null,
-      executionSignatures: [{ role: 'client', label: 'Assinatura do cliente', name: null, title: null, signedAt: null, caption: 'Coletada na execução', image: null }],
+      executionSignatures: [
+        {
+          role: 'client',
+          label: 'Assinatura do cliente',
+          name: null,
+          title: null,
+          signedAt: null,
+          caption: 'Coletada na execução',
+          image: null,
+        },
+      ],
     };
     const builder = new DocumentBuilderService({} as never);
-    const built = (builder as unknown as { buildFromContext: (ctx: unknown) => DocumentBlueprint }).buildFromContext(context);
-    const component = built.sections.flatMap((section) => section.components).find((item) => item.kind === 'signature');
+    const built = (
+      builder as unknown as { buildFromContext: (ctx: unknown) => DocumentBlueprint }
+    ).buildFromContext(context);
+    const component = built.sections
+      .flatMap((section) => section.components)
+      .find((item) => item.kind === 'signature');
     expect(component && 'signatures' in component ? component.signatures : []).toHaveLength(3);
   });
 
   it('builds semantically different Technical Report and Technical Opinion blueprints', () => {
     const builder = new DocumentBuilderService({} as never);
     const base = operationContext(DocumentTemplateType.TECHNICAL_REPORT);
-    const report = (builder as unknown as { buildFromContext: (ctx: unknown) => DocumentBlueprint }).buildFromContext(base);
-    const opinion = (builder as unknown as { buildFromContext: (ctx: unknown) => DocumentBlueprint }).buildFromContext({
+    const report = (
+      builder as unknown as { buildFromContext: (ctx: unknown) => DocumentBlueprint }
+    ).buildFromContext(base);
+    const opinion = (
+      builder as unknown as { buildFromContext: (ctx: unknown) => DocumentBlueprint }
+    ).buildFromContext({
       ...base,
       configuration: { ...base.configuration, type: DocumentTemplateType.TECHNICAL_OPINION },
     });
@@ -315,7 +383,11 @@ describe('DocumentEngine foundation', () => {
     operation.reportedIssue = 'Objetivo, diagnóstico ou referência oficial';
     operation.serviceDescription = 'Análise, medição ou valor recebido oficial';
     operation.observations = 'Conclusão e observações persistidas';
-    const built = (new DocumentBuilderService({} as never) as unknown as { buildFromContext: (ctx: unknown) => DocumentBlueprint }).buildFromContext(context);
+    const built = (
+      new DocumentBuilderService({} as never) as unknown as {
+        buildFromContext: (ctx: unknown) => DocumentBlueprint;
+      }
+    ).buildFromContext(context);
     const rendered = renderer().render(built);
     const pdf = await new PdfEngineService().create(rendered);
     expect(built.sections.map((section) => section.id)).toContain(expectedSection);
@@ -327,47 +399,108 @@ describe('DocumentEngine foundation', () => {
     const context = operationContext(DocumentTemplateType.TECHNICAL_REPORT);
     const operation = context.operation as Record<string, unknown>;
     operation.reportedIssue = 'Avaliar a perda de rendimento térmico relatada pelo cliente.';
-    operation.technicalDiagnosis = 'Foi identificada obstrução parcial do filtro.\n- Pressão dentro da faixa operacional\n- Dreno com escoamento reduzido';
-    operation.serviceDescription = 'Limpeza técnica do conjunto filtrante.\nHigienização da bandeja e desobstrução do dreno.';
-    operation.technicalRecommendations = '- Repetir inspeção em 30 dias\n- Monitorar corrente do compressor';
+    operation.technicalDiagnosis =
+      'Foi identificada obstrução parcial do filtro.\n- Pressão dentro da faixa operacional\n- Dreno com escoamento reduzido';
+    operation.serviceDescription =
+      'Limpeza técnica do conjunto filtrante.\nHigienização da bandeja e desobstrução do dreno.';
+    operation.technicalRecommendations =
+      '- Repetir inspeção em 30 dias\n- Monitorar corrente do compressor';
     operation.observations = 'Equipamento liberado em operação, sem ruído anormal após os testes.';
-    operation.parts = [{
-      id: 'part-1', quantity: 1, notes: 'Substituído em campo',
-      product: { id: 'product-1', sku: 'FLT-001', name: 'Filtro lavável', unit: 'UN', brand: 'Orbit', model: 'F1', category: 'Filtro' },
-      inventoryItem: { id: 'inventory-1', location: 'Almoxarifado principal' },
-    }];
-    operation.photos = [{
-      id: 'photo-1', storageKey: 'operations/report/photo.png', caption: 'Evaporadora após higienização',
-      mimeType: 'image/png', fileSize: 68, createdAt: new Date('2026-07-13T12:00:00.000Z'),
-    }];
-    (context.assets as { images: unknown[] }).images = [{ storageKey: 'operations/report/photo.png', mimeType: 'image/png', fileSize: 68, contentBase64: ONE_PIXEL_PNG }];
+    operation.parts = [
+      {
+        id: 'part-1',
+        quantity: 1,
+        notes: 'Substituído em campo',
+        product: {
+          id: 'product-1',
+          sku: 'FLT-001',
+          name: 'Filtro lavável',
+          unit: 'UN',
+          brand: 'Orbit',
+          model: 'F1',
+          category: 'Filtro',
+        },
+        inventoryItem: { id: 'inventory-1', location: 'Almoxarifado principal' },
+      },
+    ];
+    operation.photos = [
+      {
+        id: 'photo-1',
+        storageKey: 'operations/report/photo.png',
+        caption: 'Evaporadora após higienização',
+        mimeType: 'image/png',
+        fileSize: 68,
+        createdAt: new Date('2026-07-13T12:00:00.000Z'),
+      },
+    ];
+    (context.assets as { images: unknown[] }).images = [
+      {
+        storageKey: 'operations/report/photo.png',
+        mimeType: 'image/png',
+        fileSize: 68,
+        contentBase64: ONE_PIXEL_PNG,
+      },
+    ];
     context.signature = {
       requiresSignature: true,
       signatureMode: 'HYBRID',
       signatureId: 'signature-1',
       fixedSignature: null,
-      institutionalSignatures: [{
-        id: 'signature-1', name: 'Responsável Técnica', title: 'Engenheira Mecânica',
-        professionalCouncil: 'CREA-PE 123456', department: 'Engenharia',
-        image: { storageKey: 'signatures/technical.png', mimeType: 'image/png', fileSize: 68, contentBase64: ONE_PIXEL_PNG },
-      }],
+      institutionalSignatures: [
+        {
+          id: 'signature-1',
+          name: 'Responsável Técnica',
+          title: 'Engenheira Mecânica',
+          professionalCouncil: 'CREA-PE 123456',
+          department: 'Engenharia',
+          image: {
+            storageKey: 'signatures/technical.png',
+            mimeType: 'image/png',
+            fileSize: 68,
+            contentBase64: ONE_PIXEL_PNG,
+          },
+        },
+      ],
       collectedSignature: null,
-      executionSignatures: [{
-        role: 'client', label: 'Assinatura do cliente', name: 'Responsável local', title: null,
-        signedAt: '2026-07-13T12:00:00.000Z', caption: 'Coletada durante a visita',
-        image: { storageKey: 'operations/report/client.png', mimeType: 'image/png', fileSize: 68, contentBase64: ONE_PIXEL_PNG },
-      }],
+      executionSignatures: [
+        {
+          role: 'client',
+          label: 'Assinatura do cliente',
+          name: 'Responsável local',
+          title: null,
+          signedAt: '2026-07-13T12:00:00.000Z',
+          caption: 'Coletada durante a visita',
+          image: {
+            storageKey: 'operations/report/client.png',
+            mimeType: 'image/png',
+            fileSize: 68,
+            contentBase64: ONE_PIXEL_PNG,
+          },
+        },
+      ],
     };
 
-    const built = (new DocumentBuilderService({} as never) as unknown as {
-      buildFromContext: (ctx: unknown) => DocumentBlueprint;
-    }).buildFromContext(context);
+    const built = (
+      new DocumentBuilderService({} as never) as unknown as {
+        buildFromContext: (ctx: unknown) => DocumentBlueprint;
+      }
+    ).buildFromContext(context);
     const ids = built.sections.map((section) => section.id);
     expect(ids).toEqual([
-      'technical-report-identification', 'technical-report-customer', 'technical-report-location',
-      'technical-report-equipment', 'technical-report-equipment-qr', 'visit-objective', 'visit-diagnosis', 'visit-activities',
-      'checklist-checklist-complementar', 'visit-recommendations', 'materials-consumed',
-      'photos-evidencias-fotograficas', 'observations-observacoes-finais', 'signature',
+      'technical-report-identification',
+      'technical-report-customer',
+      'technical-report-location',
+      'technical-report-equipment',
+      'technical-report-equipment-qr',
+      'visit-objective',
+      'visit-diagnosis',
+      'visit-activities',
+      'checklist-checklist-complementar',
+      'visit-recommendations',
+      'materials-consumed',
+      'photos-evidencias-fotograficas',
+      'observations-observacoes-finais',
+      'signature',
     ]);
     const diagnosis = built.sections.find((section) => section.id === 'visit-diagnosis');
     expect(diagnosis?.components.map((component) => component.kind)).toEqual(['paragraph', 'list']);
@@ -376,8 +509,14 @@ describe('DocumentEngine foundation', () => {
     const rendered = renderer().render(built);
     const pdf = await new PdfEngineService().create(rendered);
     expect(rendered.blueprint).toBe(built);
-    expect(rendered.pages.flatMap((page) => page.elements).some((element) => element.type === 'text' && element.text.includes('Avaliar a perda'))).toBe(true);
-    expect(rendered.pages.flatMap((page) => page.elements).filter((element) => element.type === 'image')).toHaveLength(4);
+    expect(
+      rendered.pages
+        .flatMap((page) => page.elements)
+        .some((element) => element.type === 'text' && element.text.includes('Avaliar a perda')),
+    ).toBe(true);
+    expect(
+      rendered.pages.flatMap((page) => page.elements).filter((element) => element.type === 'image'),
+    ).toHaveLength(4);
     expect(pdf.buffer.subarray(0, 5).toString('latin1')).toBe('%PDF-');
     expect(pdf.pageCount).toBe(rendered.pages.length);
   });
@@ -387,63 +526,133 @@ describe('DocumentEngine foundation', () => {
     ['FIXED', 1],
     ['COLLECTED', 1],
     ['HYBRID', 2],
-  ] as const)('applies TECHNICAL_REPORT signature policy %s without automatic selection', (mode, expectedCount) => {
-    const context = operationContext(DocumentTemplateType.TECHNICAL_REPORT);
-    const institutional = {
-      id: 'signature-fixed', name: 'Responsável Técnica', title: 'Engenheira Mecânica',
-      professionalCouncil: 'CREA-PE 123456', department: 'Engenharia',
-      image: { storageKey: 'signatures/fixed.png', mimeType: 'image/png', fileSize: 68, contentBase64: ONE_PIXEL_PNG },
-    };
-    const collected = {
-      role: 'client' as const, label: 'Assinatura do cliente', name: 'Responsável local', title: null,
-      signedAt: '2026-07-13T12:00:00.000Z', caption: 'Coletada na execução',
-      image: { storageKey: 'operations/report/client.png', mimeType: 'image/png', fileSize: 68, contentBase64: ONE_PIXEL_PNG },
-    };
-    context.signature = {
-      requiresSignature: mode !== 'NONE', signatureMode: mode, signatureId: mode === 'FIXED' || mode === 'HYBRID' ? institutional.id : null,
-      fixedSignature: null,
-      institutionalSignatures: mode === 'FIXED' || mode === 'HYBRID' ? [institutional] : [],
-      collectedSignature: null,
-      executionSignatures: mode === 'COLLECTED' || mode === 'HYBRID' ? [collected] : [],
-    };
-    const built = (new DocumentBuilderService({} as never) as unknown as {
-      buildFromContext: (ctx: unknown) => DocumentBlueprint;
-    }).buildFromContext(context);
-    const signature = built.sections.flatMap((section) => section.components).find((component) => component.kind === 'signature');
-    expect(signature?.kind === 'signature' ? signature.signatures.length : 0).toBe(expectedCount);
-    if (signature?.kind === 'signature') expect(signature.mode).toBe(mode);
-  });
+  ] as const)(
+    'applies TECHNICAL_REPORT signature policy %s without automatic selection',
+    (mode, expectedCount) => {
+      const context = operationContext(DocumentTemplateType.TECHNICAL_REPORT);
+      const institutional = {
+        id: 'signature-fixed',
+        name: 'Responsável Técnica',
+        title: 'Engenheira Mecânica',
+        professionalCouncil: 'CREA-PE 123456',
+        department: 'Engenharia',
+        image: {
+          storageKey: 'signatures/fixed.png',
+          mimeType: 'image/png',
+          fileSize: 68,
+          contentBase64: ONE_PIXEL_PNG,
+        },
+      };
+      const collected = {
+        role: 'client' as const,
+        label: 'Assinatura do cliente',
+        name: 'Responsável local',
+        title: null,
+        signedAt: '2026-07-13T12:00:00.000Z',
+        caption: 'Coletada na execução',
+        image: {
+          storageKey: 'operations/report/client.png',
+          mimeType: 'image/png',
+          fileSize: 68,
+          contentBase64: ONE_PIXEL_PNG,
+        },
+      };
+      context.signature = {
+        requiresSignature: mode !== 'NONE',
+        signatureMode: mode,
+        signatureId: mode === 'FIXED' || mode === 'HYBRID' ? institutional.id : null,
+        fixedSignature: null,
+        institutionalSignatures: mode === 'FIXED' || mode === 'HYBRID' ? [institutional] : [],
+        collectedSignature: null,
+        executionSignatures: mode === 'COLLECTED' || mode === 'HYBRID' ? [collected] : [],
+      };
+      const built = (
+        new DocumentBuilderService({} as never) as unknown as {
+          buildFromContext: (ctx: unknown) => DocumentBlueprint;
+        }
+      ).buildFromContext(context);
+      const signature = built.sections
+        .flatMap((section) => section.components)
+        .find((component) => component.kind === 'signature');
+      expect(signature?.kind === 'signature' ? signature.signatures.length : 0).toBe(expectedCount);
+      if (signature?.kind === 'signature') expect(signature.mode).toBe(mode);
+    },
+  );
 
   it('certifies Work Order semantic order and keeps the same Blueprint for preview and PDF render', async () => {
     const context = operationContext(DocumentTemplateType.WORK_ORDER);
     const operation = context.operation as Record<string, unknown>;
     operation.reportedIssue = 'Cliente relata temperatura elevada — equipamento sem rendimento.';
-    operation.serviceDescription = 'Inspeção técnica completa\n- Correção do vazamento\nRecarga de fluido refrigerante';
-    (context.assets as Record<string, unknown>).logo = { storageKey: 'organization/logo.png', mimeType: 'image/png', fileSize: 68, contentBase64: ONE_PIXEL_PNG };
+    operation.serviceDescription =
+      'Inspeção técnica completa\n- Correção do vazamento\nRecarga de fluido refrigerante';
+    (context.assets as Record<string, unknown>).logo = {
+      storageKey: 'organization/logo.png',
+      mimeType: 'image/png',
+      fileSize: 68,
+      contentBase64: ONE_PIXEL_PNG,
+    };
     const builder = new DocumentBuilderService({} as never);
-    const workOrder = (builder as unknown as { buildFromContext: (ctx: unknown) => DocumentBlueprint }).buildFromContext(context);
+    const workOrder = (
+      builder as unknown as { buildFromContext: (ctx: unknown) => DocumentBlueprint }
+    ).buildFromContext(context);
     const ids = workOrder.sections.map((section) => section.id);
     expect(ids).toEqual([
-      'work-order-identification', 'work-order-customer', 'equipment', 'work-order-reported-issue',
-      'work-order-services', 'checklist-checklist-da-execucao', 'observations-observacoes-e-resultado-operacional',
+      'work-order-identification',
+      'work-order-customer',
+      'equipment',
+      'work-order-reported-issue',
+      'work-order-services',
+      'checklist-checklist-da-execucao',
+      'observations-observacoes-e-resultado-operacional',
     ]);
-    expect(workOrder.sections.find((section) => section.id === 'equipment')?.pageBreakAfter).toBe(true);
+    expect(workOrder.sections.find((section) => section.id === 'equipment')?.pageBreakAfter).toBe(
+      true,
+    );
+    expect(workOrder.footer.content).not.toContain('Blueprint');
     const rendered = renderer().render(workOrder);
     const pdf = await new PdfEngineService().create(rendered);
     expect(rendered.blueprint).toBe(workOrder);
     expect(rendered.pages[0]?.elements.some((element) => element.type === 'image')).toBe(true);
-    const checklistPage = rendered.pages.find((page) => page.elements.some((element) => element.type === 'text' && element.text === 'Checklist da execução'));
-    expect(checklistPage?.elements.some((element) => element.type === 'text' && element.text.includes('Inspeção visual'))).toBe(true);
-    expect(checklistPage?.elements.filter((element) => element.type === 'line' && element.color === '#0f766e')).toHaveLength(4);
-    expect(rendered.pages[0]?.elements.some((element) => element.type === 'text' && element.text === 'Defeito ou solicitação informada')).toBe(false);
-    expect(rendered.pages[1]?.elements.some((element) => element.type === 'text' && element.text === 'Defeito ou solicitação informada')).toBe(true);
+    const headerLogo = rendered.pages[0]?.elements.find(
+      (element) => element.type === 'image' && element.width === 68 && element.height === 42,
+    );
+    expect(headerLogo?.type === 'image' ? headerLogo.y : null).toBeCloseTo(780.89, 1);
+    const checklistPage = rendered.pages.find((page) =>
+      page.elements.some(
+        (element) => element.type === 'text' && element.text === 'Checklist da execução',
+      ),
+    );
+    expect(
+      checklistPage?.elements.some(
+        (element) => element.type === 'text' && element.text.includes('Inspeção visual'),
+      ),
+    ).toBe(true);
+    expect(
+      checklistPage?.elements.filter(
+        (element) => element.type === 'line' && element.color === '#0f766e',
+      ),
+    ).toHaveLength(4);
+    expect(
+      rendered.pages[0]?.elements.some(
+        (element) => element.type === 'text' && element.text === 'Defeito ou solicitação informada',
+      ),
+    ).toBe(false);
+    expect(
+      rendered.pages[1]?.elements.some(
+        (element) => element.type === 'text' && element.text === 'Defeito ou solicitação informada',
+      ),
+    ).toBe(true);
     expect(pdf.buffer.subarray(0, 5).toString('latin1')).toBe('%PDF-');
     expect(JSON.stringify(workOrder)).toContain('temperatura elevada — equipamento');
   });
 
   it('hydrates collected execution signatures into the official document context', async () => {
     const now = new Date('2026-07-10T12:00:00.000Z');
-    const operation = (operationContext(DocumentTemplateType.WORK_ORDER) as unknown as { operation: Record<string, unknown> }).operation;
+    const operation = (
+      operationContext(DocumentTemplateType.WORK_ORDER) as unknown as {
+        operation: Record<string, unknown>;
+      }
+    ).operation;
     operation.signatureData = `data:image/png;base64,${ONE_PIXEL_PNG}`;
     operation.signedAt = now;
     operation.documents = [];
@@ -490,12 +699,23 @@ describe('DocumentEngine foundation', () => {
           },
         }),
       } as never,
-      { generateQrCode: jest.fn().mockResolvedValue({ storageKey: 'generated:qr', mimeType: 'image/png', fileSize: 68, contentBase64: ONE_PIXEL_PNG }) } as never,
+      {
+        generateQrCode: jest
+          .fn()
+          .mockResolvedValue({
+            storageKey: 'generated:qr',
+            mimeType: 'image/png',
+            fileSize: 68,
+            contentBase64: ONE_PIXEL_PNG,
+          }),
+      } as never,
     );
 
     const created = await context.create('operation-id', DocumentTemplateType.WORK_ORDER);
     const builder = new DocumentBuilderService({} as never);
-    const blueprint = (builder as unknown as { buildFromContext: (ctx: unknown) => DocumentBlueprint }).buildFromContext(created);
+    const blueprint = (
+      builder as unknown as { buildFromContext: (ctx: unknown) => DocumentBlueprint }
+    ).buildFromContext(created);
     const signature = blueprint.sections
       .flatMap((section) => section.components)
       .find((component) => component.kind === 'signature');
@@ -504,7 +724,9 @@ describe('DocumentEngine foundation', () => {
     expect(created.signature.signatureMode).toBe('COLLECTED');
     expect(created.signature.collectedSignature?.image?.contentBase64).toBe(ONE_PIXEL_PNG);
     expect(signature).toBeDefined();
-    expect(signature && 'signatures' in signature ? signature.signatures[0]?.image?.contentBase64 : null).toBe(ONE_PIXEL_PNG);
+    expect(
+      signature && 'signatures' in signature ? signature.signatures[0]?.image?.contentBase64 : null,
+    ).toBe(ONE_PIXEL_PNG);
   });
 
   it('resolves the exact institutional signature configured by the WORK_ORDER template', async () => {
@@ -512,25 +734,87 @@ describe('DocumentEngine foundation', () => {
     const operation = base.operation as Record<string, unknown>;
     operation.signatureData = `data:image/png;base64,${ONE_PIXEL_PNG}`;
     operation.signedAt = new Date();
-    const institutional = { id: '7db71471-0cf4-4414-8d06-83eb9c1917c1', name: 'Responsável Técnica', title: 'Engenheira Mecânica', professionalCouncil: 'CREA-PE 123', department: 'Engenharia', imageStorageKey: 'signatures/technical.png', mimeType: 'image/png', fileSize: 68, active: true, deletedAt: null };
-    const configuration = { ...base.configuration, defaultTemplate: { id: 'template', organizationId: 'organization', type: 'WORK_ORDER', name: 'OS', headerContent: '', footerContent: '', observations: '', isDefault: true, isSystem: true, isActive: true, requiresSignature: true, signatureMode: 'FIXED', signatureId: institutional.id, executionSignatureClient: true, executionSignatureTechnician: true, executionSignatureOperator: true, createdAt: new Date(), updatedAt: new Date(), signature: institutional, institutionalSignatures: [{ position: 0, signature: institutional }] } };
+    const institutional = {
+      id: '7db71471-0cf4-4414-8d06-83eb9c1917c1',
+      name: 'Responsável Técnica',
+      title: 'Engenheira Mecânica',
+      professionalCouncil: 'CREA-PE 123',
+      department: 'Engenharia',
+      imageStorageKey: 'signatures/technical.png',
+      mimeType: 'image/png',
+      fileSize: 68,
+      active: true,
+      deletedAt: null,
+    };
+    const configuration = {
+      ...base.configuration,
+      defaultTemplate: {
+        id: 'template',
+        organizationId: 'organization',
+        type: 'WORK_ORDER',
+        name: 'OS',
+        headerContent: '',
+        footerContent: '',
+        observations: '',
+        isDefault: true,
+        isSystem: true,
+        isActive: true,
+        requiresSignature: true,
+        signatureMode: 'FIXED',
+        signatureId: institutional.id,
+        executionSignatureClient: true,
+        executionSignatureTechnician: true,
+        executionSignatureOperator: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        signature: institutional,
+        institutionalSignatures: [{ position: 0, signature: institutional }],
+      },
+    };
     const context = new DocumentContextService(
-      { operation: { findUnique: jest.fn().mockResolvedValue(operation) }, brandAsset: { findFirst: jest.fn().mockResolvedValue(null) } } as never,
+      {
+        operation: { findUnique: jest.fn().mockResolvedValue(operation) },
+        brandAsset: { findFirst: jest.fn().mockResolvedValue(null) },
+      } as never,
       { getConfigurationForType: jest.fn().mockResolvedValue(configuration) } as never,
-      { generateQrCode: jest.fn().mockResolvedValue((base.assets as { qrCode: unknown }).qrCode), resolveSignature: jest.fn().mockResolvedValue({ storageKey: institutional.imageStorageKey, mimeType: 'image/png', fileSize: 68, contentBase64: ONE_PIXEL_PNG }) } as never,
+      {
+        generateQrCode: jest.fn().mockResolvedValue((base.assets as { qrCode: unknown }).qrCode),
+        resolveSignature: jest
+          .fn()
+          .mockResolvedValue({
+            storageKey: institutional.imageStorageKey,
+            mimeType: 'image/png',
+            fileSize: 68,
+            contentBase64: ONE_PIXEL_PNG,
+          }),
+      } as never,
     );
     const created = await context.create('operation', DocumentTemplateType.WORK_ORDER);
-    const built = (new DocumentBuilderService({} as never) as unknown as { buildFromContext: (ctx: unknown) => DocumentBlueprint }).buildFromContext(created);
-    const component = built.sections.flatMap((section) => section.components).find((item) => item.kind === 'signature');
+    const built = (
+      new DocumentBuilderService({} as never) as unknown as {
+        buildFromContext: (ctx: unknown) => DocumentBlueprint;
+      }
+    ).buildFromContext(created);
+    const component = built.sections
+      .flatMap((section) => section.components)
+      .find((item) => item.kind === 'signature');
     expect(created.signature.institutionalSignatures[0]?.id).toBe(institutional.id);
     expect(created.signature.executionSignatures).toHaveLength(0);
-    expect(component && 'signatures' in component ? component.signatures[0] : null).toMatchObject({ id: institutional.id, label: 'Responsável técnico', name: institutional.name });
+    expect(component && 'signatures' in component ? component.signatures[0] : null).toMatchObject({
+      id: institutional.id,
+      label: 'Responsável técnico',
+      name: institutional.name,
+    });
     expect(component && 'signatures' in component ? component.signatures : []).toHaveLength(1);
   });
 
   it('hydrates persisted operation photos into image blueprint components', async () => {
     const now = new Date('2026-07-10T12:00:00.000Z');
-    const operation = (operationContext(DocumentTemplateType.TECHNICAL_REPORT) as unknown as { operation: Record<string, unknown> }).operation;
+    const operation = (
+      operationContext(DocumentTemplateType.TECHNICAL_REPORT) as unknown as {
+        operation: Record<string, unknown>;
+      }
+    ).operation;
     operation.photos = [
       {
         id: 'photo-id',
@@ -576,13 +860,22 @@ describe('DocumentEngine foundation', () => {
           fileSize: Buffer.from(ONE_PIXEL_PNG, 'base64').length,
           contentBase64: ONE_PIXEL_PNG,
         }),
-        generateQrCode: jest.fn().mockResolvedValue({ storageKey: 'generated:qr', mimeType: 'image/png', fileSize: 68, contentBase64: ONE_PIXEL_PNG }),
+        generateQrCode: jest
+          .fn()
+          .mockResolvedValue({
+            storageKey: 'generated:qr',
+            mimeType: 'image/png',
+            fileSize: 68,
+            contentBase64: ONE_PIXEL_PNG,
+          }),
       } as never,
     );
 
     const created = await context.create('operation-id', DocumentTemplateType.TECHNICAL_REPORT);
     const builder = new DocumentBuilderService({} as never);
-    const blueprint = (builder as unknown as { buildFromContext: (ctx: unknown) => DocumentBlueprint }).buildFromContext(created);
+    const blueprint = (
+      builder as unknown as { buildFromContext: (ctx: unknown) => DocumentBlueprint }
+    ).buildFromContext(created);
     const image = blueprint.sections
       .flatMap((section) => section.components)
       .find((component) => component.kind === 'image');
@@ -593,24 +886,41 @@ describe('DocumentEngine foundation', () => {
   });
 
   it('rejects invalid collected signature payloads before persistence', () => {
-    const service = new OperationsService({} as never, {} as never, {} as never, {} as never, {} as never);
-    const normalize = (service as unknown as { normalizeSignatureData: (value?: string) => string | null }).normalizeSignatureData.bind(service);
+    const service = new OperationsService(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+    const normalize = (
+      service as unknown as { normalizeSignatureData: (value?: string) => string | null }
+    ).normalizeSignatureData.bind(service);
 
-    expect(() => normalize(`data:image/png;base64,${Buffer.from('bad').toString('base64')}`)).toThrow('Signature binary is invalid');
+    expect(() =>
+      normalize(`data:image/png;base64,${Buffer.from('bad').toString('base64')}`),
+    ).toThrow('Signature binary is invalid');
   });
 
   it('waits for signature/photo persistence and returns the authoritative Operation after update', async () => {
-    const operation = { id: '7db71471-0cf4-4414-8d06-83eb9c1917c9', signatureData: null, signedAt: null, photos: [] };
+    const operation = {
+      id: '7db71471-0cf4-4414-8d06-83eb9c1917c9',
+      signatureData: null,
+      signedAt: null,
+      photos: [],
+    };
     const transactionOperationUpdate = jest.fn().mockResolvedValue(operation);
     const operationFindUnique = jest.fn().mockResolvedValue(operation);
     const photoCreate = jest.fn().mockResolvedValue({ id: 'photo-id' });
     const prisma = {
       operation: { findUnique: operationFindUnique },
       operationPhoto: { create: photoCreate },
-      $transaction: jest.fn(async (callback: (tx: unknown) => Promise<void>) => callback({
-        operation: { update: transactionOperationUpdate },
-        auditLog: { create: jest.fn() },
-      })),
+      $transaction: jest.fn(async (callback: (tx: unknown) => Promise<void>) =>
+        callback({
+          operation: { update: transactionOperationUpdate },
+          auditLog: { create: jest.fn() },
+        }),
+      ),
     };
     const storageSave = jest.fn().mockResolvedValue(undefined);
     const service = new OperationsService(
@@ -645,21 +955,25 @@ describe('DocumentEngine foundation', () => {
       id: 'signature',
       title: 'Assinatura',
       critical: true,
-      components: [{
-        id: 'execution-signature',
-        kind: 'signature',
-        mode: 'COLLECTED',
-        signatures: [{
-          id: 'collected',
-          role: 'collected',
-          label: 'Assinatura do cliente',
-          name: null,
-          title: null,
-          signedAt: '2026-07-11T10:00:00.000Z',
-          caption: 'Assinatura coletada na execução',
-          image: { mimeType: 'image/png', fileSize: 68, contentBase64: ONE_PIXEL_PNG },
-        }],
-      }],
+      components: [
+        {
+          id: 'execution-signature',
+          kind: 'signature',
+          mode: 'COLLECTED',
+          signatures: [
+            {
+              id: 'collected',
+              role: 'collected',
+              label: 'Assinatura do cliente',
+              name: null,
+              title: null,
+              signedAt: '2026-07-11T10:00:00.000Z',
+              caption: 'Assinatura coletada na execução',
+              image: { mimeType: 'image/png', fileSize: 68, contentBase64: ONE_PIXEL_PNG },
+            },
+          ],
+        },
+      ],
     });
     const document = {
       id: 'f50e8e28-0ee0-4cd1-b9e3-3f22f1d744f5',
@@ -687,24 +1001,42 @@ describe('DocumentEngine foundation', () => {
       {} as never,
     );
 
-    await expect(service.downloadDocument(
-      document.id,
-      { id: 'actor-id', role: Role.OWNER } as never,
-      { requestId: 'request-id', ip: null, userAgent: null },
-    )).rejects.toMatchObject({ code: 'DOCUMENT_STALE' });
+    await expect(
+      service.downloadDocument(document.id, { id: 'actor-id', role: Role.OWNER } as never, {
+        requestId: 'request-id',
+        ip: null,
+        userAgent: null,
+      }),
+    ).rejects.toMatchObject({ code: 'DOCUMENT_STALE' });
     expect(getDocumentPdf).not.toHaveBeenCalled();
   });
 
   it('keeps source fingerprints stable across preview timestamps and changes them for semantic content', () => {
-    const service = new DocumentEngineService({} as never, {} as never, {} as never, {} as never, {} as never, {} as never, {} as never);
-    const fingerprint = (value: DocumentBlueprint): string | undefined => (service as unknown as {
-      withSourceFingerprint: (blueprint: DocumentBlueprint) => DocumentBlueprint;
-    }).withSourceFingerprint(value).metadata.sourceFingerprint;
+    const service = new DocumentEngineService(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+    const fingerprint = (value: DocumentBlueprint): string | undefined =>
+      (
+        service as unknown as {
+          withSourceFingerprint: (blueprint: DocumentBlueprint) => DocumentBlueprint;
+        }
+      ).withSourceFingerprint(value).metadata.sourceFingerprint;
     const first = blueprint(1);
-    const regenerated = { ...first, metadata: { ...first.metadata, generatedAt: '2026-07-11T12:00:00.000Z' }, footer: { ...first.footer, generatedAt: '2026-07-11T12:00:00.000Z' } };
+    const regenerated = {
+      ...first,
+      metadata: { ...first.metadata, generatedAt: '2026-07-11T12:00:00.000Z' },
+      footer: { ...first.footer, generatedAt: '2026-07-11T12:00:00.000Z' },
+    };
     const changed = structuredClone(first);
     const metadata = changed.sections[0]?.components[0];
-    if (metadata?.kind === 'metadata' && metadata.items[0]) metadata.items[0].value = 'Outro cliente';
+    if (metadata?.kind === 'metadata' && metadata.items[0])
+      metadata.items[0].value = 'Outro cliente';
 
     expect(fingerprint(first)).toBe(fingerprint(regenerated));
     expect(fingerprint(changed)).not.toBe(fingerprint(first));
@@ -712,21 +1044,59 @@ describe('DocumentEngine foundation', () => {
 
   it('lists the official repository with server-side filters and pagination', async () => {
     const now = new Date('2026-07-11T12:00:00.000Z');
-    const findMany = jest.fn(); const count = jest.fn();
-    const prisma = { operationDocument: { findMany, count }, $transaction: jest.fn().mockResolvedValue([[{
-      id: 'doc', number: 'OS-1', type: 'WORK_ORDER', status: 'READY', budgetId: null, operationId: 'op',
-      renderedAt: now, createdAt: now, updatedAt: now, fileSize: 100, renderMetadata: { blueprintVersion: '1.0' }, budget: null,
-      operation: { id: 'op', number: 1, customer: { id: 'c', name: 'Cliente' }, equipment: { id: 'e', name: 'Equipamento', tag: 'EQ' }, operator: { id: 'u', name: 'Operador' } },
-    }], 1]) };
-    const service = new DocumentEngineService(prisma as never, {} as never, {} as never, {} as never, {} as never, {} as never, {} as never);
-    const result = await service.listDocuments({ page: 1, limit: 20, search: 'OS', customerId: '00000000-0000-4000-8000-000000000001' }, { id: 'owner', role: Role.OWNER } as never) as { items: Array<{ number: string; origin: string }>; pagination: { total: number } };
+    const findMany = jest.fn();
+    const count = jest.fn();
+    const prisma = {
+      operationDocument: { findMany, count },
+      $transaction: jest.fn().mockResolvedValue([
+        [
+          {
+            id: 'doc',
+            number: 'OS-1',
+            type: 'WORK_ORDER',
+            status: 'READY',
+            budgetId: null,
+            operationId: 'op',
+            renderedAt: now,
+            createdAt: now,
+            updatedAt: now,
+            fileSize: 100,
+            renderMetadata: { blueprintVersion: '1.0' },
+            budget: null,
+            operation: {
+              id: 'op',
+              number: 1,
+              customer: { id: 'c', name: 'Cliente' },
+              equipment: { id: 'e', name: 'Equipamento', tag: 'EQ' },
+              operator: { id: 'u', name: 'Operador' },
+            },
+          },
+        ],
+        1,
+      ]),
+    };
+    const service = new DocumentEngineService(
+      prisma as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+    const result = (await service.listDocuments(
+      { page: 1, limit: 20, search: 'OS', customerId: '00000000-0000-4000-8000-000000000001' },
+      { id: 'owner', role: Role.OWNER } as never,
+    )) as { items: Array<{ number: string; origin: string }>; pagination: { total: number } };
     expect(result.items[0]).toMatchObject({ number: 'OS-1', origin: 'OPERATION' });
     expect(result.pagination.total).toBe(1);
     expect(prisma.$transaction).toHaveBeenCalled();
   });
 });
 
-function operationContext(type: DocumentTemplateType): Record<string, unknown> & { configuration: Record<string, unknown> } {
+function operationContext(
+  type: DocumentTemplateType,
+): Record<string, unknown> & { configuration: Record<string, unknown> } {
   const now = new Date('2026-07-10T12:00:00.000Z');
   return {
     kind: 'operation',
@@ -752,8 +1122,27 @@ function operationContext(type: DocumentTemplateType): Record<string, unknown> &
       settings: { timezone: 'America/Recife', currency: 'BRL' },
     },
     template: null,
-    signature: { requiresSignature: false, signatureMode: 'NONE', signatureId: null, fixedSignature: null, institutionalSignatures: [], collectedSignature: null, executionSignatures: [] },
-    assets: { signature: null, logo: null, watermark: null, qrCode: { storageKey: 'generated:qr', mimeType: 'image/png', fileSize: 68, contentBase64: ONE_PIXEL_PNG }, images: [] },
+    signature: {
+      requiresSignature: false,
+      signatureMode: 'NONE',
+      signatureId: null,
+      fixedSignature: null,
+      institutionalSignatures: [],
+      collectedSignature: null,
+      executionSignatures: [],
+    },
+    assets: {
+      signature: null,
+      logo: null,
+      watermark: null,
+      qrCode: {
+        storageKey: 'generated:qr',
+        mimeType: 'image/png',
+        fileSize: 68,
+        contentBase64: ONE_PIXEL_PNG,
+      },
+      images: [],
+    },
     operation: {
       id: '7db71471-0cf4-4414-8d06-83eb9c1917c9',
       number: 42,
@@ -773,7 +1162,16 @@ function operationContext(type: DocumentTemplateType): Record<string, unknown> &
         cnpj: '00.000.000/0001-00',
         cpf: null,
         phone: '+55 81 3000-0000',
-        addresses: [{ name: 'Matriz', street: 'Rua A', number: '100', district: 'Boa Viagem', city: 'Recife', state: 'PE' }],
+        addresses: [
+          {
+            name: 'Matriz',
+            street: 'Rua A',
+            number: '100',
+            district: 'Boa Viagem',
+            city: 'Recife',
+            state: 'PE',
+          },
+        ],
         contacts: [{ name: 'Ana', phone: '+55 81 98888-0000' }],
       },
       address: null,

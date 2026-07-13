@@ -1,5 +1,11 @@
 # Security
 
+## Metadados técnicos no documento
+
+- A versão do Blueprint continua disponível para compatibilidade e stale detection, mas não é
+  incorporada ao conteúdo visual do relatório ou PDF.
+- O ajuste não altera respostas protegidas, Storage, RBAC, auditoria ou resolução de assets.
+
 ## Limites JSON para evidências operacionais
 
 - O limite amplo não é global: somente `/api/v1/operations` aceita até 120 MiB para suportar o

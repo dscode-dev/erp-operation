@@ -1,5 +1,11 @@
 # API Contracts
 
+## Refinamento visual do Blueprint
+
+`footer.content` não inclui versão técnica do Blueprint. A propriedade raiz `version` permanece no
+contrato exclusivamente para compatibilidade interna do Document Engine. A logo do header é
+centralizada verticalmente no Preview e na renderização oficial.
+
 ## DC-02 — conteúdo técnico da Operation e TECHNICAL_REPORT
 
 `POST /api/v1/operations` e `PATCH /api/v1/operations/:id` aceitam, de forma aditiva:

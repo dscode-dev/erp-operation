@@ -19,6 +19,9 @@ Não montar seções, QR, fotos ou assinaturas no frontend. `pageBreakAfter` e o
 Blueprint são a única fonte de composição. O runtime certificado utiliza quatro páginas tanto no
 Viewer quanto no PDF.
 
+A propriedade técnica raiz `version` não deve ser exibida no documento. O rodapé público consome
+somente `footer.content`; o alinhamento da logo é responsabilidade do `DocumentViewer`.
+
 ## Product Backlog Closure 07 — Central de Relatórios
 
 Use `/reports` como orquestrador dos workflows e `/report-templates` somente para modelos. Antes do preview, consulte a configuração por tipo; o backend continua sendo a autoridade para template, branding e assinatura. Após render, atualize `GET /documents`: o `OperationDocument` já estará no repositório. Para PMOC, vincule a Operation a uma MaintenanceExecution. RECEIPT mantém acesso exclusivo de OWNER.

@@ -1,5 +1,13 @@
 # Backend State
 
+## Refinamento visual — cabeçalho e rodapé documental
+
+- Logo centralizada verticalmente entre a faixa institucional e a linha inferior do cabeçalho em
+  todas as páginas renderizadas.
+- `Blueprint v1.0` permanece metadado interno, mas foi removido do rodapé público; o documento
+  exibe apenas identificação institucional e documental.
+- Preview/PDF permanecem no fluxo oficial. Sem migration ou alteração de endpoint.
+
 ## Correção — payload de evidências de Operation
 
 - O parser JSON padrão de aproximadamente 100 KiB foi substituído por limites explícitos e

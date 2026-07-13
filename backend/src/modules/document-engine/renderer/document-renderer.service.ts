@@ -30,6 +30,9 @@ import { LayoutEngine } from '../layout/layout-engine.service';
 const LINE_HEIGHT = 13;
 const SMALL_LINE_HEIGHT = 11;
 const SECTION_TITLE_HEIGHT = 24;
+const HEADER_ACCENT_HEIGHT = 8;
+const HEADER_LOGO_WIDTH = 68;
+const HEADER_LOGO_HEIGHT = 42;
 
 @Injectable()
 export class DocumentRendererService {
@@ -45,8 +48,13 @@ export class DocumentRendererService {
 
     for (const [sectionIndex, section] of blueprint.sections.entries()) {
       if (sectionIndex > 0) y -= 10;
-      const sectionHeader = this.sectionHeader(section.title, blueprint.metadata.organization.primaryColor);
-      const firstBlockHeight = section.components[0] ? (this.blocks(section.components[0], width)[0]?.height ?? 0) : 0;
+      const sectionHeader = this.sectionHeader(
+        section.title,
+        blueprint.metadata.organization.primaryColor,
+      );
+      const firstBlockHeight = section.components[0]
+        ? (this.blocks(section.components[0], width)[0]?.height ?? 0)
+        : 0;
       if (this.layout.shouldBreak(y, sectionHeader.height + firstBlockHeight)) {
         current = this.newPage(blueprint, pages.length + 1);
         pages.push(current);
@@ -136,7 +144,17 @@ export class DocumentRendererService {
       component,
       height,
       draw: (x, y, width): RenderedElement[] => {
-        const elements: RenderedElement[] = [{ type: 'rect', x, y: y - height + 4, width, height, fillColor: '#f8fafc', strokeColor: '#e2e8f0' }];
+        const elements: RenderedElement[] = [
+          {
+            type: 'rect',
+            x,
+            y: y - height + 4,
+            width,
+            height,
+            fillColor: '#f8fafc',
+            strokeColor: '#e2e8f0',
+          },
+        ];
         component.items.forEach((item, index) => {
           const column = index % 2;
           const row = Math.floor(index / 2);
@@ -151,7 +169,14 @@ export class DocumentRendererService {
             bold: true,
             color: '#64748b',
           });
-          elements.push({ type: 'text', x: itemX, y: labelY - 13, text: item.value, size: 9, color: '#0f172a' });
+          elements.push({
+            type: 'text',
+            x: itemX,
+            y: labelY - 13,
+            text: item.value,
+            size: 9,
+            color: '#0f172a',
+          });
         });
         return elements;
       },
@@ -160,7 +185,10 @@ export class DocumentRendererService {
 
   private paragraphBlocks(component: ParagraphComponent, width: number): LayoutBlock[] {
     const lines = this.wrap(component.text, width, 10);
-    const linesPerBlock = Math.max(1, Math.floor((this.layout.availableHeight() - 8) / LINE_HEIGHT));
+    const linesPerBlock = Math.max(
+      1,
+      Math.floor((this.layout.availableHeight() - 8) / LINE_HEIGHT),
+    );
     return this.chunk(lines, linesPerBlock).map((blockLines) => ({
       component,
       height: 8 + blockLines.length * LINE_HEIGHT,
@@ -178,14 +206,25 @@ export class DocumentRendererService {
 
   private observationBlocks(component: ObservationComponent, width: number): LayoutBlock[] {
     const lines = this.wrap(component.text, width - 16, 10);
-    const linesPerBlock = Math.max(1, Math.floor((this.layout.availableHeight() - 18) / LINE_HEIGHT));
+    const linesPerBlock = Math.max(
+      1,
+      Math.floor((this.layout.availableHeight() - 18) / LINE_HEIGHT),
+    );
     return this.chunk(lines, linesPerBlock).map((blockLines) => {
       const height = 18 + blockLines.length * LINE_HEIGHT;
       return {
         component,
         height,
         draw: (x, y, blockWidth) => [
-          { type: 'rect' as const, x, y: y - height + 4, width: blockWidth, height, fillColor: '#f8fafc', strokeColor: '#e2e8f0' },
+          {
+            type: 'rect' as const,
+            x,
+            y: y - height + 4,
+            width: blockWidth,
+            height,
+            fillColor: '#f8fafc',
+            strokeColor: '#e2e8f0',
+          },
           ...blockLines.map((line, index) => ({
             type: 'text' as const,
             x: x + 8,
@@ -224,13 +263,48 @@ export class DocumentRendererService {
       component,
       height: item.note ? 30 : 18,
       draw: (x, y, width) => [
-        { type: 'rect', x, y: y - 12, width: 9, height: 9, strokeColor: item.done ? '#0f766e' : '#94a3b8' },
+        {
+          type: 'rect',
+          x,
+          y: y - 12,
+          width: 9,
+          height: 9,
+          strokeColor: item.done ? '#0f766e' : '#94a3b8',
+        },
         ...(item.done
           ? [
-              { type: 'line' as const, x1: x + 1.5, y1: y - 7, x2: x + 4, y2: y - 10, color: '#0f766e' },
-              { type: 'line' as const, x1: x + 1.5, y1: y - 6.5, x2: x + 4, y2: y - 9.5, color: '#0f766e' },
-              { type: 'line' as const, x1: x + 4, y1: y - 10, x2: x + 8.5, y2: y - 3, color: '#0f766e' },
-              { type: 'line' as const, x1: x + 4, y1: y - 9.5, x2: x + 8.5, y2: y - 2.5, color: '#0f766e' },
+              {
+                type: 'line' as const,
+                x1: x + 1.5,
+                y1: y - 7,
+                x2: x + 4,
+                y2: y - 10,
+                color: '#0f766e',
+              },
+              {
+                type: 'line' as const,
+                x1: x + 1.5,
+                y1: y - 6.5,
+                x2: x + 4,
+                y2: y - 9.5,
+                color: '#0f766e',
+              },
+              {
+                type: 'line' as const,
+                x1: x + 4,
+                y1: y - 10,
+                x2: x + 8.5,
+                y2: y - 3,
+                color: '#0f766e',
+              },
+              {
+                type: 'line' as const,
+                x1: x + 4,
+                y1: y - 9.5,
+                x2: x + 8.5,
+                y2: y - 2.5,
+                color: '#0f766e',
+              },
             ]
           : []),
         {
@@ -282,7 +356,15 @@ export class DocumentRendererService {
     const totalWidth = widths.reduce((sum, value) => sum + value, 0);
     widths[widths.length - 1] += width - totalWidth;
     let cursor = x;
-    elements.push({ type: 'rect', x, y: y - headerHeight + 4, width, height: headerHeight, fillColor: '#f1f5f9', strokeColor: '#cbd5e1' });
+    elements.push({
+      type: 'rect',
+      x,
+      y: y - headerHeight + 4,
+      width,
+      height: headerHeight,
+      fillColor: '#f1f5f9',
+      strokeColor: '#cbd5e1',
+    });
     component.columns.forEach((column, index) => {
       elements.push({
         type: 'text',
@@ -370,8 +452,24 @@ export class DocumentRendererService {
       component,
       height,
       draw: (x, y, width) => [
-        { type: 'rect', x, y: y - 100, width, height: 104, fillColor: '#f8fafc', strokeColor: '#e2e8f0' },
-        { type: 'image', x: x + 8, y: y - 92, width: 88, height: 88, mimeType: component.image.mimeType, contentBase64: component.image.contentBase64 },
+        {
+          type: 'rect',
+          x,
+          y: y - 100,
+          width,
+          height: 104,
+          fillColor: '#f8fafc',
+          strokeColor: '#e2e8f0',
+        },
+        {
+          type: 'image',
+          x: x + 8,
+          y: y - 92,
+          width: 88,
+          height: 88,
+          mimeType: component.image.mimeType,
+          contentBase64: component.image.contentBase64,
+        },
         { type: 'text', x: x + 112, y: y - 22, text: component.label, size: 10, bold: true },
         { type: 'text', x: x + 112, y: y - 40, text: component.value, size: 8 },
         {
@@ -479,6 +577,10 @@ export class DocumentRendererService {
     const logo = blueprint.header.logo;
     const headerTextX = DOCUMENT_PAGE.marginLeft + (logo ? 78 : 0);
     const organizationX = DOCUMENT_PAGE.width - DOCUMENT_PAGE.marginRight - 150;
+    const headerContentBottom = DOCUMENT_PAGE.height - DOCUMENT_PAGE.headerHeight;
+    const headerContentTop = DOCUMENT_PAGE.height - HEADER_ACCENT_HEIGHT;
+    const logoY =
+      headerContentBottom + (headerContentTop - headerContentBottom - HEADER_LOGO_HEIGHT) / 2;
     return {
       pageNumber,
       elements: [
@@ -501,21 +603,23 @@ export class DocumentRendererService {
           strokeColor: blueprint.metadata.organization.primaryColor,
         },
         {
-          ...(logo ? {
-            type: 'image' as const,
-            x: DOCUMENT_PAGE.marginLeft,
-            y: DOCUMENT_PAGE.height - 72,
-            width: 68,
-            height: 42,
-            mimeType: logo.mimeType,
-            contentBase64: logo.contentBase64,
-          } : {
-            type: 'rect' as const,
-            x: DOCUMENT_PAGE.marginLeft,
-            y: DOCUMENT_PAGE.height - 30,
-            width: 0,
-            height: 0,
-          }),
+          ...(logo
+            ? {
+                type: 'image' as const,
+                x: DOCUMENT_PAGE.marginLeft,
+                y: logoY,
+                width: HEADER_LOGO_WIDTH,
+                height: HEADER_LOGO_HEIGHT,
+                mimeType: logo.mimeType,
+                contentBase64: logo.contentBase64,
+              }
+            : {
+                type: 'rect' as const,
+                x: DOCUMENT_PAGE.marginLeft,
+                y: DOCUMENT_PAGE.height - 30,
+                width: 0,
+                height: 0,
+              }),
         },
         {
           type: 'text',
@@ -601,7 +705,9 @@ export class DocumentRendererService {
 
   private formatDate(value: string): string {
     return new Intl.DateTimeFormat('pt-BR', {
-      dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Recife',
+      dateStyle: 'short',
+      timeStyle: 'short',
+      timeZone: 'America/Recife',
     }).format(new Date(value));
   }
 

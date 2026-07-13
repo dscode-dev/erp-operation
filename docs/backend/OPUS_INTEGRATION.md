@@ -1,5 +1,8 @@
 # OPUS Frontend Integration
 
+Apresentação documental: não mostrar `blueprint.version` no relatório. Renderizar apenas
+`footer.content` no rodapé e manter a logo centralizada verticalmente com o bloco textual do header.
+
 ## DC-02 — Technical Report
 
 `OperationDetail` agora inclui `technicalDiagnosis` e `technicalRecommendations`. A Central coleta:

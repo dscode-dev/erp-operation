@@ -311,8 +311,8 @@ function DocumentPage({ blueprint, sections, page, total }: { blueprint: Documen
     <article className="mx-auto min-h-[1060px] w-[780px] bg-white text-slate-950 shadow-[var(--shadow-card)]" style={{ backgroundColor: visual?.colors.background, color: visual?.colors.text }}>
       <div className="h-2" style={{ backgroundColor: visual?.colors.primary ?? "var(--color-primary)" }} />
       <div className="p-10">
-        <header className="flex items-start justify-between gap-6 border-b border-slate-200 pb-5">
-          <div className="flex items-start gap-4">
+        <header className="flex items-center justify-between gap-6 border-b border-slate-200 pb-5">
+          <div className="flex items-center gap-4">
             {blueprint.header.logo && (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={`data:${blueprint.header.logo.mimeType};base64,${blueprint.header.logo.contentBase64}`} alt={`Logo ${blueprint.header.organizationName}`} className="h-14 w-24 object-contain" />

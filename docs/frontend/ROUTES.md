@@ -1,5 +1,7 @@
 # ROUTES — Frontend
 
+O refinamento de header/footer ocorre no `DocumentViewer` compartilhado e não cria nem altera rotas.
+
 ## DC-02
 
 Sem rota nova. `/reports` cria/edita a origem `Operation` e abre o `TECHNICAL_REPORT` no
