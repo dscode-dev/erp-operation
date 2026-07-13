@@ -498,8 +498,10 @@ OS nasce de uma Operation; criar uma Operation gera automaticamente um
 Endpoints: `GET /operations` (lista/filtros `customerId,equipmentId,operatorId,type,status,search`),
 `GET /operations/stats`, `GET /operations/:id`, `GET /operations/photos/:photoId`
 (base64), `POST /operations` (cria + OS rascunho; `operatorId` opcional para delegação por OWNER/MANAGER),
-`PATCH /operations/:id`. Fotos como data URL (PNG/JPEG, máx. 16 × 5 MiB);
-assinatura como data URL (texto). O histórico de equipamento/cliente é derivado de
+`PATCH /operations/:id`. Fotos como data URL (PNG/JPEG, máx. 16 × 5 MiB) e assinatura como data
+URL (texto). O parser da rota suporta o volume agregado do contrato. Em
+`413 UPLOAD_FILE_TOO_LARGE`, preserve o estado do formulário e peça redução/compressão das
+evidências; não faça retry automático. O histórico de equipamento/cliente é derivado de
 `/operations` por `equipmentId`/`customerId`. Migration:
 `20260627150000_operation_domain_foundation`.
 

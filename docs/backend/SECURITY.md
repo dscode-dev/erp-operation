@@ -1,5 +1,19 @@
 # Security
 
+## Limites JSON para evidências operacionais
+
+- O limite amplo não é global: somente `/api/v1/operations` aceita até 120 MiB para suportar o
+  contrato legado de evidências Base64 (16 × 5 MiB + assinatura).
+- Todas as demais rotas JSON permanecem em 1 MiB.
+- Ambos os valores são validados por ENV e possuem hard caps de 128 MiB e 10 MiB,
+  respectivamente.
+- Fotos continuam sujeitas à quantidade, MIME, tamanho binário e StorageProvider; ampliar o parser
+  não ignora validações de domínio, JWT, RBAC ou rate limit.
+- Excesso retorna resposta sanitizada `413 UPLOAD_FILE_TOO_LARGE`; a mensagem interna do parser não
+  é exposta ao cliente.
+- Request ID é atribuído antes dos parsers e preservado pelo middleware Nest, garantindo header e
+  correlação de log também para payloads rejeitados antes dos guards/controllers.
+
 ## DC-02 — controles do Relatório de Visita Técnica
 
 - novos campos textuais são opcionais, passam por DTO whitelist/sanitização e possuem limites de

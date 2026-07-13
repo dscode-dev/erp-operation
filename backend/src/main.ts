@@ -1,20 +1,35 @@
 import { ValidationPipe, VersioningType } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
+import { json, urlencoded } from 'express';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { AppLoggerService } from './infra/logger/app-logger.service';
+import { applyRequestId } from './infra/security/request-id.middleware';
 import { AppConfigService } from './modules/config/app-config.service';
 import { API_PREFIX, API_VERSION } from './shared/constants/api.constants';
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule, {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bufferLogs: true,
+    bodyParser: false,
   });
   const config = app.get(AppConfigService);
   const logger = app.get(AppLoggerService);
 
   app.useLogger(logger);
   app.enableShutdownHooks();
+  app.use(applyRequestId);
+  const operationsPath = `/${API_PREFIX}/v${API_VERSION}/operations`;
+  app.use(
+    operationsPath,
+    json({ limit: config.operationJsonBodyLimitBytes }),
+    urlencoded({ extended: true, limit: config.operationJsonBodyLimitBytes }),
+  );
+  app.use(
+    json({ limit: config.httpJsonBodyLimitBytes }),
+    urlencoded({ extended: true, limit: config.httpJsonBodyLimitBytes }),
+  );
   app.use(helmet());
   app.enableCors({
     origin: config.corsOrigins,

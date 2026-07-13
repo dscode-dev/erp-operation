@@ -17,6 +17,11 @@ interface NormalizedError {
   details: Record<string, unknown>;
 }
 
+interface HttpStatusError {
+  status?: unknown;
+  statusCode?: unknown;
+}
+
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
   constructor(private readonly logger: AppLoggerService) {}
@@ -25,7 +30,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const http = host.switchToHttp();
     const request = http.getRequest<RequestWithId>();
     const response = http.getResponse<Response>();
-    const status = exception instanceof HttpException ? exception.getStatus() : 500;
+    const status = this.resolveStatus(exception);
     const normalized = this.normalize(exception, status);
 
     this.logger.error('Request failed', {
@@ -48,6 +53,13 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
   private normalize(exception: unknown, status: number): NormalizedError {
     if (!(exception instanceof HttpException)) {
+      if (status === 413) {
+        return {
+          code: ERROR_CODES.UPLOAD_FILE_TOO_LARGE,
+          message: 'Request payload exceeds the allowed size',
+          details: {},
+        };
+      }
       return {
         code: ERROR_CODES.INTERNAL_SERVER_ERROR,
         message: 'An unexpected error occurred',
@@ -92,6 +104,17 @@ export class GlobalExceptionFilter implements ExceptionFilter {
             : exception.message,
       details,
     };
+  }
+
+  private resolveStatus(exception: unknown): number {
+    if (exception instanceof HttpException) return exception.getStatus();
+    if (!exception || typeof exception !== 'object') return HttpStatus.INTERNAL_SERVER_ERROR;
+
+    const candidate = exception as HttpStatusError;
+    const status = candidate.statusCode ?? candidate.status;
+    return typeof status === 'number' && Number.isInteger(status) && status >= 400 && status <= 599
+      ? status
+      : HttpStatus.INTERNAL_SERVER_ERROR;
   }
 
   private codeForStatus(status: number): string {

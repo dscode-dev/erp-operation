@@ -1,5 +1,17 @@
 # Backend State
 
+## Correção — payload de evidências de Operation
+
+- O parser JSON padrão de aproximadamente 100 KiB foi substituído por limites explícitos e
+  configuráveis.
+- `/api/v1/operations` possui limite isolado de 120 MiB, suficiente para o contrato existente de
+  até 16 fotos de 5 MiB em Data URL mais assinatura e conteúdo técnico.
+- As demais rotas permanecem limitadas a 1 MiB para não ampliar globalmente o consumo de memória.
+- Erros do body parser agora retornam `413 UPLOAD_FILE_TOO_LARGE` no envelope oficial, em vez de
+  `500 INTERNAL_SERVER_ERROR`.
+- Request ID passou a ser atribuído antes do parser e permanece estável no restante do pipeline.
+- Variáveis: `HTTP_JSON_BODY_LIMIT_BYTES` e `OPERATION_JSON_BODY_LIMIT_BYTES`. Sem migration.
+
 ## DC-02 — certificação do Relatório de Visita Técnica
 
 - `TECHNICAL_REPORT` foi certificado sobre o fluxo oficial Context → Builder → Blueprint →

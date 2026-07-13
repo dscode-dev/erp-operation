@@ -1817,10 +1817,16 @@ banco isolado da empresa; não há atribuição cross-tenant.
 Fotos: PNG/JPEG (data URL), máx. 16 por operação, 5 MiB cada; persistidas via
 storage provider. Assinatura: data URL armazenada como texto.
 
+O body JSON de `/operations` possui limite HTTP específico configurado por
+`OPERATION_JSON_BODY_LIMIT_BYTES` (default `125829120`, 120 MiB). Esse limite existe porque Base64
+adiciona overhead ao tamanho binário das evidências. As demais rotas JSON usam
+`HTTP_JSON_BODY_LIMIT_BYTES` (default `1048576`, 1 MiB).
+
 Errors: `CUSTOMER_NOT_FOUND` (404), `VALIDATION_ERROR` (400, endereço/equipamento
 fora do cliente), `OPERATION_PHOTO_INVALID` (400), `OPERATION_NOT_FOUND` (404),
 `OPERATION_PHOTO_NOT_FOUND` (404), `OPERATION_OPERATOR_INVALID` (400, operador
-delegado inexistente, inativo, desativado ou sem perfil operacional).
+delegado inexistente, inativo, desativado ou sem perfil operacional),
+`UPLOAD_FILE_TOO_LARGE` (413, body JSON acima do limite da rota).
 
 Migration: `20260627150000_operation_domain_foundation` (tabelas `operations`,
 `operation_photos`, `operation_documents` + enums).

@@ -22,6 +22,25 @@ describe('demo environment policy', () => {
     const environment = validateEnvironment(baseEnvironment);
     expect(environment.ENABLE_DEMO_DATA).toBe(false);
     expect(environment.ENABLE_DEMO_ENDPOINTS).toBe(false);
+    expect(environment.HTTP_JSON_BODY_LIMIT_BYTES).toBe(1_048_576);
+    expect(environment.OPERATION_JSON_BODY_LIMIT_BYTES).toBe(125_829_120);
+  });
+
+  it('validates configurable JSON body limits', () => {
+    const environment = validateEnvironment({
+      ...baseEnvironment,
+      HTTP_JSON_BODY_LIMIT_BYTES: '2097152',
+      OPERATION_JSON_BODY_LIMIT_BYTES: '67108864',
+    });
+
+    expect(environment.HTTP_JSON_BODY_LIMIT_BYTES).toBe(2_097_152);
+    expect(environment.OPERATION_JSON_BODY_LIMIT_BYTES).toBe(67_108_864);
+    expect(() =>
+      validateEnvironment({
+        ...baseEnvironment,
+        OPERATION_JSON_BODY_LIMIT_BYTES: String(129 * 1024 * 1024),
+      }),
+    ).toThrow('OPERATION_JSON_BODY_LIMIT_BYTES');
   });
 
   it('allows demo flags in development', () => {

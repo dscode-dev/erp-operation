@@ -102,6 +102,11 @@ Fluxo frontend oficial:
 Após salvar, fotos e assinatura entram no `DocumentContext` e aparecem no preview real e no PDF
 renderizado pelo Document Engine.
 
+O backend aceita o payload de evidências da Operation dentro do contrato oficial (até 16 fotos de
+5 MiB cada). Se o tamanho agregado ultrapassar o limite HTTP configurado, retorna `413` com código
+`UPLOAD_FILE_TOO_LARGE`; a UI deve preservar o formulário e orientar a remoção ou compressão de
+fotos. Esse erro não deve ser apresentado como falha interna nem disparar retry automático.
+
 ## Sprint 21 — Performance and observability integration
 
 Novos endpoints operacionais disponíveis para health/observabilidade:

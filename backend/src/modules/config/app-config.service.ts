@@ -18,6 +18,14 @@ export class AppConfigService {
     return this.configService.get('CORS_ORIGINS', { infer: true });
   }
 
+  get httpJsonBodyLimitBytes(): number {
+    return this.configService.get('HTTP_JSON_BODY_LIMIT_BYTES', { infer: true });
+  }
+
+  get operationJsonBodyLimitBytes(): number {
+    return this.configService.get('OPERATION_JSON_BODY_LIMIT_BYTES', { infer: true });
+  }
+
   get jwtSecret(): string {
     return this.configService.get('JWT_SECRET', { infer: true });
   }

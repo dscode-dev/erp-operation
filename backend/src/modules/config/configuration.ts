@@ -18,6 +18,8 @@ export interface EnvironmentVariables {
   JWT_ISSUER: string;
   JWT_AUDIENCE: string;
   CORS_ORIGINS: string[];
+  HTTP_JSON_BODY_LIMIT_BYTES: number;
+  OPERATION_JSON_BODY_LIMIT_BYTES: number;
   STORAGE_PROVIDER: StorageProvider;
   STORAGE_DRIVER: StorageDriver;
   STORAGE_PATH: string;
@@ -136,7 +138,12 @@ function assertProductionStoragePath(value: string): void {
   if (!isAbsolute(value)) {
     throw new Error('STORAGE_PATH must be an absolute mounted path in production');
   }
-  if (value === '/tmp' || value.startsWith('/tmp/') || value === '/var/tmp' || value.startsWith('/var/tmp/')) {
+  if (
+    value === '/tmp' ||
+    value.startsWith('/tmp/') ||
+    value === '/var/tmp' ||
+    value.startsWith('/var/tmp/')
+  ) {
     throw new Error('STORAGE_PATH must not point to a temporary directory in production');
   }
 }
@@ -214,6 +221,16 @@ export function validateEnvironment(config: Record<string, unknown>): Environmen
     JWT_ISSUER: requireString(config, 'JWT_ISSUER'),
     JWT_AUDIENCE: requireString(config, 'JWT_AUDIENCE'),
     CORS_ORIGINS: parseCorsOrigins(requireString(config, 'CORS_ORIGINS')),
+    HTTP_JSON_BODY_LIMIT_BYTES: parsePositiveInteger(
+      optionalString(config, 'HTTP_JSON_BODY_LIMIT_BYTES', '1048576'),
+      'HTTP_JSON_BODY_LIMIT_BYTES',
+      10 * 1024 * 1024,
+    ),
+    OPERATION_JSON_BODY_LIMIT_BYTES: parsePositiveInteger(
+      optionalString(config, 'OPERATION_JSON_BODY_LIMIT_BYTES', '125829120'),
+      'OPERATION_JSON_BODY_LIMIT_BYTES',
+      128 * 1024 * 1024,
+    ),
     STORAGE_PROVIDER: storageProvider as EnvironmentVariables['STORAGE_PROVIDER'],
     STORAGE_DRIVER: storageDriver as EnvironmentVariables['STORAGE_DRIVER'],
     STORAGE_PATH: requireString(config, 'STORAGE_PATH'),
