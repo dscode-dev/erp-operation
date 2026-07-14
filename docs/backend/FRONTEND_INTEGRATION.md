@@ -1,5 +1,11 @@
 # Frontend Integration
 
+## Work Order — QR textual
+
+No `WORK_ORDER`, mostre o item `Código QR` recebido no metadata de Equipamento. Não espere imagem
+ou componente `qrCode`, não gere QR local e não reserve espaço visual para ele. O scanner de
+equipamentos continua usando o lookup oficial fora do documento.
+
 ## Refinamento TECHNICAL_REPORT — 14/07/2026
 
 O frontend deve renderizar `sections` na ordem recebida. `technical-report-inspected-equipments`
@@ -40,9 +46,9 @@ Em modo `FIXED`, não espere itens `collected`: apenas as assinaturas institucio
 retornadas. `pageBreakAfter` é uma orientação de paginação do Blueprint, não uma nova regra de
 negócio.
 
-O frontend deve renderizar `qrCode.image` recebido no Blueprint e nunca fabricar QR a partir do
-texto. Para navegação/scanner, envie `qrCode.value` ao lookup oficial. `DocumentViewer` usa os tokens
-de `visualStyle` quando presentes e mantém defaults compatíveis para documentos históricos.
+Para documentos históricos que ainda possuam `qrCode`, o Viewer preserva compatibilidade. Novos
+Blueprints de `WORK_ORDER` usam exclusivamente o metadata `Código QR`. Para navegação/scanner, envie
+o identificador persistido ao lookup oficial.
 
 Em template `HYBRID`, `signature.signatures` pode conter simultaneamente itens `institutional` e
 `collected`. Exiba na ordem entregue; não procure assinaturas, não reconstrua políticas e não leia
@@ -2197,3 +2203,8 @@ No workflow `/reports`: carregue equipamentos por `GET /equipments?customerId=..
 O `DocumentViewer` deve consumir `header.corporate`; não monte cabeçalho ou tabela no browser. Campos
 novos podem ser nulos/vazios em operações antigas. Os modos suportados são `WEEKLY`, `MONTHLY`,
 `QUARTERLY`, `SEMIANNUAL`, `ANNUAL` e `CORRECTIVE`.
+# Technical Report checklist integration
+
+Load reusable activities with `GET /api/v1/maintenance-checklist-templates?maintenanceType=SEMIANNUAL&active=true&page=1&limit=100`. The catalog ID is a selection aid only: when saving the report, send snapshots through the existing Operation `maintenanceChecklist` payload (`maintenanceType`, `description`, `executed`, `observations`). This guarantees that later catalog changes do not alter historical reports.
+
+Technical Reports may send multiple entries through `inspectedEquipments`. Their top-level `equipmentId` may be null. The Central de Relatórios does not send `photos` for `TECHNICAL_REPORT`; image evidence is currently enabled there only for `PMOC`.

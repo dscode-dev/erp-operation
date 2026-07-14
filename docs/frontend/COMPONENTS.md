@@ -1,5 +1,11 @@
 # COMPONENTS — Frontend
 
+## Work Order — QR textual
+
+`DocumentViewer` não exige alteração especializada: a OS apresenta o identificador por
+`MetadataComponent`. `QrCodeComponent` permanece disponível somente para Blueprints históricos ou
+outros tipos documentais.
+
 ## Refinamento TECHNICAL_REPORT
 
 | Componente       | Alteração                                                                 |
@@ -581,3 +587,8 @@ Tipos:
 - `ReportWorkflowDrawer` / `ContentStep`: em `TECHNICAL_REPORT`, coleta competência, enum de
   manutenção, listas semanal/semestral e equipamentos/setores. Apenas persiste o payload da
   Operation; não monta PDF ou snapshots.
+# Components added/extended — Technical Report workflow
+
+- `MultiSelect`: reusable searchable multi-selection with selected chips, keyboard-focusable search, empty state, and bounded dropdown scrolling.
+- `ReportWorkflowDrawer`: equipment selection and structured maintenance checklist now live exclusively in Content; Evidence gates image upload to PMOC.
+- `MaintenanceChecklistsPage` / `ChecklistEditor`: paginated catalog, filters, create/edit drawer, and confirmed soft deactivation.

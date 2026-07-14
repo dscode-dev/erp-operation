@@ -1,5 +1,10 @@
 # STATE — Frontend
 
+## Work Order — QR textual
+
+- O `DocumentViewer` recebe apenas metadata `Código QR` nas novas Ordens de Serviço.
+- Não existe QR gráfico local ou espaço reservado; documentos históricos continuam compatíveis.
+
 ## Refinamento TECHNICAL_REPORT — 14/07/2026
 
 - `DocumentViewer` passou a espelhar o cabeçalho PDF em duas linhas: logo isolada, seguida por
@@ -870,3 +875,9 @@ Validação:
 
 - `npm run lint` passou com 2 warnings preexistentes;
 - `npm run build` passou.
+# Closure — Technical Report Creation UX (2026-07-14)
+
+- Central de Relatórios now selects Technical Report equipment only in Content through a searchable multi-select; Origin no longer exposes the ambiguous single-equipment field.
+- Weekly/semiannual free-text syntax was replaced with the persistent checklist catalog, structured execution toggles, and per-item observations.
+- Added `/maintenance-checklists` for catalog management and inline creation for OWNER/MANAGER.
+- Technical Report image upload was removed from the workflow; PMOC keeps the existing secure image flow.

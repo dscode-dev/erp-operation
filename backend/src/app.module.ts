@@ -22,6 +22,7 @@ import { DocumentEngineModule } from './modules/document-engine/document-engine.
 import { SignaturesModule } from './modules/signatures/signatures.module';
 import { AssetLifecycleModule } from './modules/asset-lifecycle/asset-lifecycle.module';
 import { MaintenancePlanningModule } from './modules/maintenance-planning/maintenance-planning.module';
+import { MaintenanceChecklistTemplatesModule } from './modules/maintenance-checklist-templates/maintenance-checklist-templates.module';
 import { PmocComplianceModule } from './modules/pmoc-compliance/pmoc-compliance.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
 import { PricingModule } from './modules/pricing/pricing.module';
@@ -62,6 +63,7 @@ import { ResponseEnvelopeInterceptor } from './shared/interceptors/response-enve
     SignaturesModule,
     AssetLifecycleModule,
     MaintenancePlanningModule,
+    MaintenanceChecklistTemplatesModule,
     PmocComplianceModule,
     InventoryModule,
     PricingModule,

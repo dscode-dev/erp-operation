@@ -1,5 +1,11 @@
 # API Contracts
 
+## WORK_ORDER — identificação textual do equipamento
+
+Os endpoints existentes permanecem iguais. No Blueprint de `WORK_ORDER`, a seção `equipment`
+contém `metadata` com `Código QR: <Equipment.qrCode>` e não contém mais componente `qrCode` com
+imagem Base64. O identificador continua aceito por `GET /equipments/lookup/:qrCode`.
+
 ## TECHNICAL_REPORT — ordem oficial do Blueprint
 
 Os endpoints existentes de preview/render não mudaram. `sections` agora é devolvido nesta ordem:
@@ -63,10 +69,8 @@ Semântica reutilizada: `reportedIssue` representa objetivo/diagnóstico/referê
 preferencial após Equipamento. Em `SignatureMode.FIXED`, o componente contém exclusivamente as
 assinaturas institucionais configuradas; flags de execução não acrescentam placeholders.
 
-Os endpoints existentes de preview/render/download não mudaram. Em `WORK_ORDER`, o componente
-`qrCode` agora inclui `image: { mimeType: "image/png", contentBase64, fileSize }`, além de `label` e
-`value`. `value` permanece o payload oficial de `Equipment.qrCode`, resolvível por
-`GET /equipments/lookup/:qrCode`.
+O contrato gráfico descrito originalmente foi substituído: `WORK_ORDER` expõe apenas o identificador
+em `equipment.metadata`. Outros tipos que ainda utilizam `qrCode` preservam o contrato do componente.
 
 O Blueprint pode retornar `visualStyle` com tokens de cor, tipografia e espaçamento. O campo é
 aditivo e retrocompatível. `signature.signatures[]` continua retornando somente a imagem resolvida e
@@ -4713,3 +4717,28 @@ de marca/modelo/capacidade/tag/série. Respostas detalhadas retornam `maintenanc
 `OPERATION_REFERENCE_PERIOD_INVALID`.
 
 Endpoints do Document Engine não mudaram; o Preview inclui as novas seções quando os dados existem.
+# Maintenance checklist template catalog
+
+Base path: `/api/v1/maintenance-checklist-templates`.
+
+- `GET /` (`OWNER`, `MANAGER`, `VIEWER`): paginated list. Query: `page`, `limit` (max 100), `search`, `maintenanceType`, `active`.
+- `GET /:id` (`OWNER`, `MANAGER`, `VIEWER`): returns one organization-scoped item.
+- `POST /` (`OWNER`, `MANAGER`): `{ "maintenanceType": "SEMIANNUAL", "description": "...", "active": true }`.
+- `PATCH /:id` (`OWNER`, `MANAGER`): accepts a partial create payload.
+- `DELETE /:id` (`OWNER`, `MANAGER`): soft-deactivates and returns `{ "deactivated": true }`.
+
+Item response:
+
+```json
+{
+  "id": "uuid",
+  "organizationId": "uuid",
+  "maintenanceType": "SEMIANNUAL",
+  "description": "Inspeção das conexões e componentes elétricos",
+  "active": true,
+  "createdAt": "2026-07-14T14:30:00.000Z",
+  "updatedAt": "2026-07-14T14:30:00.000Z"
+}
+```
+
+Errors follow the global envelope. Relevant codes: `MAINTENANCE_CHECKLIST_TEMPLATE_NOT_FOUND` (404), `MAINTENANCE_CHECKLIST_TEMPLATE_CONFLICT` (409), validation errors (400), unauthorized (401), forbidden (403), and rate limit (429).

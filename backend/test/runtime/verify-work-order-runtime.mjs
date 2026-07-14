@@ -250,6 +250,11 @@ try {
   const pdf = Buffer.from(download.contentBase64, 'base64');
   const components = preview.sections.flatMap((section) => section.components.map((component) => component.kind));
   const signature = preview.sections.flatMap((section) => section.components).find((component) => component.kind === 'signature');
+  const equipmentMetadata = preview.sections.find((section) => section.id === 'equipment')?.components.find((component) => component.kind === 'metadata');
+  if (components.includes('qrCode')) throw new Error('Work Order must not contain a rasterized QR component.');
+  if (!equipmentMetadata?.items?.some((item) => item.label === 'Código QR' && item.value === equipment.qrCode)) {
+    throw new Error('Work Order equipment section is missing the persisted QR identifier.');
+  }
   const expectedOrder = ['work-order-identification', 'work-order-customer', ...(equipment ? ['equipment'] : []), 'work-order-reported-issue', 'work-order-services', 'checklist-checklist-da-execucao'];
   if (!expectedOrder.every((id, index) => preview.sections[index]?.id === id)) {
     throw new Error(`Unexpected Work Order section order: ${preview.sections.map((section) => section.id).join(', ')}`);
@@ -273,7 +278,7 @@ try {
     serviceDescriptionPresent: JSON.stringify(preview).includes('Recarga de fluido refrigerante'),
     materialPresent: JSON.stringify(preview).includes('Fluido refrigerante técnico'),
     organizationLogoPresent: Boolean(preview.header.logo),
-    qrImagePresent: Boolean(preview.sections.flatMap((section) => section.components).find((component) => component.kind === 'qrCode')?.image?.contentBase64),
+    qrImagePresent: false,
     qrPayload: equipment.qrCode,
     qrLookupResolvedEquipment: equipmentFromQr.id === equipment.id,
     institutionalSignatureId: institutionalSignature.id,

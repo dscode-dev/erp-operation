@@ -693,6 +693,16 @@ export type OperationInspectedEquipment = {
   equipment?: { id: string; name: string; type: EquipmentType };
 };
 
+export type MaintenanceChecklistTemplate = {
+  id: string;
+  organizationId: string;
+  maintenanceType: OperationMaintenanceType;
+  description: string;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type OperationDocument = {
   id: string;
   operationId?: string | null;

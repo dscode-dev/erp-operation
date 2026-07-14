@@ -1,5 +1,10 @@
 # OPUS Frontend Integration
 
+## WORK_ORDER — QR textual
+
+Na seção `equipment`, renderize `Código QR` como metadata comum. Novas Ordens de Serviço não trazem
+componente `qrCode` nem imagem. Não crie fallback gráfico; o scanner permanece um fluxo separado.
+
 ## Refinamento TECHNICAL_REPORT — 14/07/2026
 
 - Exiba o cabeçalho em duas linhas a partir de `header`: logo; depois título/número à esquerda e
@@ -1788,3 +1793,10 @@ PDF real; para emissão use sempre `operationId + WORK_ORDER`.
 - O frontend não envia marca/modelo/capacidade; o backend é a autoridade dos snapshots.
 - Preview/PDF usam o mesmo Blueprint; `header.corporate` contém a identificação renderizável.
 - Campos novos são opcionais; não use fallback fake.
+# Technical Report workflow closure (2026-07-14)
+
+- Equipment selection belongs exclusively to the Content step and maps to `inspectedEquipments[]`.
+- Checklist choices come from `/maintenance-checklist-templates`, then map to Operation snapshot items.
+- OWNER/MANAGER may create catalog entries; VIEWER is read-only; OPERATOR has no catalog endpoint access.
+- Do not persist catalog IDs in the Operation payload and do not render catalog data directly in a document.
+- The report workflow exposes image upload only for PMOC.

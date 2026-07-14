@@ -1,5 +1,11 @@
 # Security
 
+## QR textual na Ordem de Serviço
+
+- A OS publica apenas o identificador não secreto `Equipment.qrCode` no metadata.
+- Nenhum PNG/Base64 é resolvido ou incorporado ao Blueprint/PDF de `WORK_ORDER`.
+- O identificador não concede acesso; lookup continua autenticado e sujeito a RBAC.
+
 ## Minimização de assets no TECHNICAL_REPORT
 
 - O Context não resolve foto operacional nem QR do equipamento para o relatório de visita, pois
@@ -1785,3 +1791,6 @@ Notifications:
 
 AppSec dedicado: 12 suites / 38 testes aprovados, além dos gates PostgreSQL de integração e
 concorrência.
+# Maintenance checklist catalog security
+
+The catalog is scoped to the installation Organization in every query. Reads require OWNER, MANAGER, or VIEWER; mutations require OWNER or MANAGER. UUID parsing, DTO allow-list validation, input length limits, control-character removal, global throttling, conflict handling, and audit events are applied. Deactivation is soft, preventing catalog cleanup from changing historical Operation and document snapshots.

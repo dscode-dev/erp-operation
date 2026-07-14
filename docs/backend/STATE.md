@@ -1,5 +1,14 @@
 # Backend State
 
+## Work Order — remoção do QR gráfico
+
+- `WORK_ORDER` não inclui mais `QrCodeComponent`; a seção `Equipamento` mantém somente o campo
+  textual `Código QR` com o identificador persistido.
+- O `DocumentContext` não gera mais PNG de QR para Ordem de Serviço, evitando asset sem consumidor
+  e a página isolada provocada pelo bloco gráfico.
+- Lookup/scanner do equipamento e QR nos demais fluxos permanecem inalterados. Sem migration e sem
+  endpoint novo.
+
 ## DC-02 — refinamento estrutural do Relatório de Visita Técnica (14/07/2026)
 
 - Cabeçalho oficial ampliado de 96 para 168 pt e reorganizado em duas linhas: logo isolada na
@@ -2595,3 +2604,10 @@ Bloqueadores externos ainda abertos:
 Veredito:
 
 - `ORBIT_RELEASE_CANDIDATE_NOT_READY`.
+# Closure — Technical Report Creation UX (2026-07-14)
+
+- Added the organization-scoped `MaintenanceChecklistTemplate` catalog and migration `20260714143000_maintenance_checklist_template_catalog`.
+- Added authenticated CRUD at `/api/v1/maintenance-checklist-templates`; deletion is a soft deactivation so historical Operation snapshots remain immutable.
+- The seed idempotently installs a small HVAC starter catalog only for an HVAC organization. Runtime operation does not depend on seed data.
+- Technical Report creation now persists selected catalog entries as the existing `OperationMaintenanceChecklistItem` snapshots. No Document Engine contract or renderer was changed.
+- Report photos remain supported by the existing Operation contract, but the Central de Relatórios workflow now submits photos only for PMOC.

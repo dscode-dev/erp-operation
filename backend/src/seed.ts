@@ -9,6 +9,7 @@ import {
   FinancialEntryStatus,
   FinancialEntryType,
   FinancialHistoryAction,
+  OperationMaintenanceType,
   PurchaseHistoryAction,
   PurchaseOrderStatus,
   PrismaClient,
@@ -38,6 +39,7 @@ async function main(): Promise<void> {
   const email = requiredEnvironment('OWNER_EMAIL').toLowerCase();
   await seedOwner(email);
   await seedOrganization();
+  await seedMaintenanceChecklistTemplates();
   await seedDemoData(prisma, {
     log: (event) => process.stdout.write(`${JSON.stringify(event)}\n`),
   });
@@ -46,6 +48,51 @@ async function main(): Promise<void> {
   await seedBudgets();
   await seedFinancialCore();
   await seedProcurement();
+}
+
+async function seedMaintenanceChecklistTemplates(): Promise<void> {
+  const organization = await prisma.organization.findFirst({
+    orderBy: { createdAt: 'asc' },
+    select: { id: true, segment: true },
+  });
+  if (!organization || organization.segment?.trim().toUpperCase() !== 'HVAC') return;
+
+  const templates: Array<{
+    maintenanceType: OperationMaintenanceType;
+    description: string;
+  }> = [
+    {
+      maintenanceType: OperationMaintenanceType.WEEKLY,
+      description: 'Inspeção visual das condições gerais do equipamento',
+    },
+    {
+      maintenanceType: OperationMaintenanceType.WEEKLY,
+      description: 'Verificação de ruídos e vibrações anormais',
+    },
+    {
+      maintenanceType: OperationMaintenanceType.WEEKLY,
+      description: 'Verificação das condições dos filtros de ar',
+    },
+    {
+      maintenanceType: OperationMaintenanceType.SEMIANNUAL,
+      description: 'Higienização de filtros, bandeja e sistema de drenagem',
+    },
+    {
+      maintenanceType: OperationMaintenanceType.SEMIANNUAL,
+      description: 'Inspeção das conexões e componentes elétricos',
+    },
+    {
+      maintenanceType: OperationMaintenanceType.SEMIANNUAL,
+      description: 'Verificação das serpentinas e das condições de troca térmica',
+    },
+  ];
+  await prisma.maintenanceChecklistTemplate.createMany({
+    data: templates.map((template) => ({ organizationId: organization.id, ...template })),
+    skipDuplicates: true,
+  });
+  process.stdout.write(
+    `${JSON.stringify({ event: 'maintenance_checklist_templates_ensured', count: templates.length })}\n`,
+  );
 }
 
 async function seedOwner(email: string): Promise<void> {
@@ -231,7 +278,11 @@ function defaultTemplateName(type: DocumentTemplateType): string {
 async function seedInventoryMaterials(): Promise<void> {
   const [organization, actor] = await Promise.all([
     prisma.organization.findFirst({ orderBy: { createdAt: 'asc' }, select: { id: true } }),
-    prisma.user.findFirst({ where: { role: Role.OWNER }, orderBy: { createdAt: 'asc' }, select: { id: true } }),
+    prisma.user.findFirst({
+      where: { role: Role.OWNER },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    }),
   ]);
   if (!organization || !actor) return;
 
@@ -454,7 +505,10 @@ async function seedProductPricing(): Promise<void> {
   ];
 
   for (const item of pricings) {
-    const product = await prisma.product.findUnique({ where: { sku: item.sku }, select: { id: true } });
+    const product = await prisma.product.findUnique({
+      where: { sku: item.sku },
+      select: { id: true },
+    });
     if (!product) continue;
     const existing = await prisma.productPricing.findFirst({
       where: { organizationId: organization.id, productId: product.id, active: true },
@@ -462,7 +516,9 @@ async function seedProductPricing(): Promise<void> {
     });
     if (existing) continue;
     const marginPercentage =
-      item.salePrice === 0 ? 0 : Number((((item.salePrice - item.averageCost) / item.salePrice) * 100).toFixed(2));
+      item.salePrice === 0
+        ? 0
+        : Number((((item.salePrice - item.averageCost) / item.salePrice) * 100).toFixed(2));
     await prisma.productPricing.create({
       data: {
         organizationId: organization.id,
@@ -484,7 +540,11 @@ async function seedProductPricing(): Promise<void> {
 async function seedBudgets(): Promise<void> {
   const [organization, actor, operation] = await Promise.all([
     prisma.organization.findFirst({ orderBy: { createdAt: 'asc' }, select: { id: true } }),
-    prisma.user.findFirst({ where: { role: Role.OWNER }, orderBy: { createdAt: 'asc' }, select: { id: true } }),
+    prisma.user.findFirst({
+      where: { role: Role.OWNER },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    }),
     prisma.operation.findFirst({
       where: { equipmentId: { not: null } },
       orderBy: { createdAt: 'asc' },
@@ -567,7 +627,11 @@ async function seedBudgets(): Promise<void> {
 async function seedFinancialCore(): Promise<void> {
   const [organization, actor, budget] = await Promise.all([
     prisma.organization.findFirst({ orderBy: { createdAt: 'asc' }, select: { id: true } }),
-    prisma.user.findFirst({ where: { role: Role.OWNER }, orderBy: { createdAt: 'asc' }, select: { id: true } }),
+    prisma.user.findFirst({
+      where: { role: Role.OWNER },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    }),
     prisma.budget.findFirst({ orderBy: { createdAt: 'asc' }, select: { id: true, total: true } }),
   ]);
   if (!organization || !actor) return;
@@ -660,7 +724,10 @@ async function seedFinancialCore(): Promise<void> {
   ];
 
   for (const entry of entries) {
-    const exists = await prisma.financialEntry.findUnique({ where: { id: entry.id }, select: { id: true } });
+    const exists = await prisma.financialEntry.findUnique({
+      where: { id: entry.id },
+      select: { id: true },
+    });
     if (exists) continue;
     await prisma.financialEntry.create({
       data: {
@@ -688,14 +755,24 @@ async function seedFinancialCore(): Promise<void> {
     });
   }
 
-  process.stdout.write(`${JSON.stringify({ event: 'financial_seed_completed', entries: entries.length })}\n`);
+  process.stdout.write(
+    `${JSON.stringify({ event: 'financial_seed_completed', entries: entries.length })}\n`,
+  );
 }
 
 async function seedProcurement(): Promise<void> {
   const [organization, actor, supplier] = await Promise.all([
     prisma.organization.findFirst({ orderBy: { createdAt: 'asc' }, select: { id: true } }),
-    prisma.user.findFirst({ where: { role: Role.OWNER }, orderBy: { createdAt: 'asc' }, select: { id: true } }),
-    prisma.supplier.findFirst({ where: { isActive: true }, orderBy: { legalName: 'asc' }, select: { id: true } }),
+    prisma.user.findFirst({
+      where: { role: Role.OWNER },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    }),
+    prisma.supplier.findFirst({
+      where: { isActive: true },
+      orderBy: { legalName: 'asc' },
+      select: { id: true },
+    }),
   ]);
   if (!organization || !actor || !supplier) return;
   const existing = await prisma.purchaseOrder.findFirst({
@@ -749,7 +826,10 @@ async function seedProcurement(): Promise<void> {
       },
     });
     const inventoryItem =
-      (await prisma.inventoryItem.findFirst({ where: { organizationId: organization.id, productId: first.productId }, select: { id: true } })) ??
+      (await prisma.inventoryItem.findFirst({
+        where: { organizationId: organization.id, productId: first.productId },
+        select: { id: true },
+      })) ??
       (await prisma.inventoryItem.create({
         data: {
           organizationId: organization.id,
@@ -773,16 +853,24 @@ async function seedProcurement(): Promise<void> {
         occurredAt: new Date(),
       },
     });
-    const inventory = await prisma.inventoryItem.findUnique({ where: { id: inventoryItem.id }, select: { currentQuantity: true, reservedQuantity: true } });
+    const inventory = await prisma.inventoryItem.findUnique({
+      where: { id: inventoryItem.id },
+      select: { currentQuantity: true, reservedQuantity: true },
+    });
     if (inventory) {
       const current = Number(inventory.currentQuantity) + 4;
       await prisma.inventoryItem.update({
         where: { id: inventoryItem.id },
-        data: { currentQuantity: current, availableQuantity: current - Number(inventory.reservedQuantity) },
+        data: {
+          currentQuantity: current,
+          availableQuantity: current - Number(inventory.reservedQuantity),
+        },
       });
     }
   }
-  process.stdout.write(`${JSON.stringify({ event: 'procurement_seed_created', purchaseOrderId: order.id, number: order.number })}\n`);
+  process.stdout.write(
+    `${JSON.stringify({ event: 'procurement_seed_created', purchaseOrderId: order.id, number: order.number })}\n`,
+  );
 }
 
 main()

@@ -709,11 +709,25 @@ describe('DocumentEngine foundation', () => {
     expect(workOrder.sections.find((section) => section.id === 'equipment')?.pageBreakAfter).toBe(
       true,
     );
+    const equipmentComponents =
+      workOrder.sections.find((section) => section.id === 'equipment')?.components ?? [];
+    expect(equipmentComponents.map((component) => component.kind)).toEqual(['metadata']);
+    const equipmentMetadata = equipmentComponents.find((component) => component.kind === 'metadata');
+    expect(
+      equipmentMetadata?.kind === 'metadata'
+        ? equipmentMetadata.items.find((item) => item.label === 'Código QR')?.value
+        : null,
+    ).toBe('equipment:7db71471-0cf4-4414-8d06-83eb9c1917c9');
     expect(workOrder.footer.content).not.toContain('Blueprint');
     const rendered = renderer().render(workOrder);
     const pdf = await new PdfEngineService().create(rendered);
     expect(rendered.blueprint).toBe(workOrder);
     expect(rendered.pages[0]?.elements.some((element) => element.type === 'image')).toBe(true);
+    expect(
+      workOrder.sections
+        .flatMap((section) => section.components)
+        .some((component) => component.kind === 'qrCode'),
+    ).toBe(false);
     const headerLogo = rendered.pages[0]?.elements.find(
       (element) => element.type === 'image' && element.width === 100 && element.height === 32,
     );
@@ -945,6 +959,12 @@ describe('DocumentEngine foundation', () => {
       },
     ];
     operation.documents = [];
+    const generateQrCode = jest.fn().mockResolvedValue({
+      storageKey: 'generated:qr',
+      mimeType: 'image/png',
+      fileSize: 68,
+      contentBase64: ONE_PIXEL_PNG,
+    });
 
     const context = new DocumentContextService(
       {
@@ -978,12 +998,7 @@ describe('DocumentEngine foundation', () => {
           fileSize: Buffer.from(ONE_PIXEL_PNG, 'base64').length,
           contentBase64: ONE_PIXEL_PNG,
         }),
-        generateQrCode: jest.fn().mockResolvedValue({
-          storageKey: 'generated:qr',
-          mimeType: 'image/png',
-          fileSize: 68,
-          contentBase64: ONE_PIXEL_PNG,
-        }),
+        generateQrCode,
       } as never,
     );
 
@@ -997,6 +1012,8 @@ describe('DocumentEngine foundation', () => {
       .find((component) => component.kind === 'image');
 
     expect(created.assets.images[0]?.contentBase64).toBe(ONE_PIXEL_PNG);
+    expect(created.assets.qrCode).toBeNull();
+    expect(generateQrCode).not.toHaveBeenCalled();
     expect(image).toBeDefined();
     expect(image && 'image' in image ? image.image?.contentBase64 : null).toBe(ONE_PIXEL_PNG);
   });

@@ -9,6 +9,7 @@ import {
   ReceiptText,
   RefreshCw,
   ShieldCheck,
+  X,
 } from 'lucide-react';
 import { PageHeader } from '@platform/components/page-header';
 import { Pagination } from '@platform/components/pagination';
@@ -18,6 +19,7 @@ import {
   documentsApi,
   equipmentsApi,
   maintenanceApi,
+  maintenanceChecklistTemplatesApi,
   operationApi,
   pmocApi,
   usersApi,
@@ -28,6 +30,7 @@ import {
   type DocumentConfiguration,
   type DocumentKind,
   type EquipmentSummary,
+  type MaintenanceChecklistTemplate,
   type OperationDetail,
   type OperationMaintenanceType,
   type OperationSummary,
@@ -42,6 +45,7 @@ import { EmptyState } from '@erp/ui/empty-state';
 import { SkeletonCard } from '@erp/ui/skeletons';
 import { DocumentViewer } from '@erp/ui/documents/document-viewer';
 import { SignaturePad } from '@erp/ui/documents/signature-pad';
+import { MultiSelect } from '@erp/ui/multi-select';
 import { DOCUMENT_KIND_LABEL } from '@erp/types';
 import { formatDate } from '@erp/utils';
 
@@ -60,7 +64,7 @@ const REPORT_TYPES: Array<{
   {
     type: 'TECHNICAL_REPORT',
     title: 'Relatório de Visita Técnica',
-    description: 'Visita, atividades, fotos, observações e assinaturas.',
+    description: 'Visita, equipamentos, atividades, observações e assinaturas.',
     icon: FileText,
   },
   {
@@ -105,8 +109,13 @@ type WorkflowForm = {
   referenceMonth: string;
   referenceYear: string;
   maintenanceType: OperationMaintenanceType;
-  weeklyChecklist: string;
-  semiannualChecklist: string;
+  maintenanceChecklist: Array<{
+    templateId?: string;
+    maintenanceType: OperationMaintenanceType;
+    description: string;
+    executed: boolean;
+    observations: string;
+  }>;
   inspectedEquipments: Array<{ equipmentId: string; sector: string }>;
 };
 
@@ -132,8 +141,7 @@ const emptyForm: WorkflowForm = {
   referenceMonth: String(new Date().getMonth() + 1),
   referenceYear: String(new Date().getFullYear()),
   maintenanceType: 'SEMIANNUAL',
-  weeklyChecklist: '',
-  semiannualChecklist: '',
+  maintenanceChecklist: [],
   inspectedEquipments: [],
 };
 
@@ -378,6 +386,7 @@ function ReportWorkflowDrawer({
   onClose: () => void;
   onRendered: () => void;
 }) {
+  const { hasRole } = useAuth();
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<WorkflowForm>(emptyForm);
   const [operation, setOperation] = useState<OperationDetail | null>(null);
@@ -404,6 +413,17 @@ function ReportWorkflowDrawer({
   const configuration = useQuery<DocumentConfiguration>(
     (signal) => documentsApi.getConfigurationByType(type, { signal }),
     [type],
+  );
+  const checklistTemplates = useQuery<Paginated<MaintenanceChecklistTemplate>>(
+    (signal) =>
+      maintenanceChecklistTemplatesApi.list({
+        page: 1,
+        limit: 100,
+        active: true,
+        maintenanceType: form.maintenanceType,
+        signal,
+      }),
+    [form.maintenanceType],
   );
   const isWorkOrder = type === 'WORK_ORDER';
 
@@ -473,12 +493,12 @@ function ReportWorkflowDrawer({
           : current.referenceMonth,
         referenceYear: detail.referenceYear ? String(detail.referenceYear) : current.referenceYear,
         maintenanceType: detail.maintenanceType ?? current.maintenanceType,
-        weeklyChecklist: checklistText(
-          detail.maintenanceChecklistItems.filter((item) => item.maintenanceType === 'WEEKLY'),
-        ),
-        semiannualChecklist: checklistText(
-          detail.maintenanceChecklistItems.filter((item) => item.maintenanceType === 'SEMIANNUAL'),
-        ),
+        maintenanceChecklist: detail.maintenanceChecklistItems.map((item) => ({
+          maintenanceType: item.maintenanceType,
+          description: item.description,
+          executed: item.executed,
+          observations: item.observations ?? '',
+        })),
         inspectedEquipments: detail.inspectedEquipments.map((item) => ({
           equipmentId: item.equipmentId,
           sector: item.sector,
@@ -501,6 +521,16 @@ function ReportWorkflowDrawer({
         objective: `Execução do plano PMOC ${plan.contractNumber ?? plan.id}`,
         observations: plan.observations ?? current.observations,
       }));
+  }
+
+  async function createChecklistTemplate(description: string) {
+    const created = await maintenanceChecklistTemplatesApi.create({
+      maintenanceType: form.maintenanceType,
+      description,
+      active: true,
+    });
+    await checklistTemplates.refetch();
+    return created;
   }
 
   async function preparePreview() {
@@ -639,8 +669,19 @@ function ReportWorkflowDrawer({
           onPmoc={selectPmoc}
         />
       )}
-      {step === 1 && <ContentStep type={type} form={form} equipments={equipments} onSet={set} />}
-      {step === 2 && <EvidenceStep form={form} onSet={set} />}
+      {step === 1 && (
+        <ContentStep
+          type={type}
+          form={form}
+          equipments={equipments}
+          checklistTemplates={checklistTemplates.data?.items ?? []}
+          checklistTemplatesLoading={checklistTemplates.loading}
+          canManageChecklist={hasRole('OWNER', 'MANAGER')}
+          onCreateChecklist={createChecklistTemplate}
+          onSet={set}
+        />
+      )}
+      {step === 2 && <EvidenceStep type={type} form={form} onSet={set} />}
       {step === 3 && operation && (
         <DocumentViewer
           source={{ operationId: operation.id, type }}
@@ -710,7 +751,12 @@ function OriginStep({
         <select
           value={form.customerId}
           disabled={type === 'PMOC'}
-          onChange={(event) => onSet('customerId', event.target.value)}
+          onChange={(event) => {
+            onSet('customerId', event.target.value);
+            onSet('addressId', '');
+            onSet('equipmentId', '');
+            onSet('inspectedEquipments', []);
+          }}
         >
           <option value="">Selecione…</option>
           {customers.map((item) => (
@@ -730,20 +776,22 @@ function OriginStep({
           ))}
         </select>
       </Field>
-      <Field label="Equipamento">
-        <select
-          value={form.equipmentId}
-          disabled={type === 'PMOC'}
-          onChange={(event) => onSet('equipmentId', event.target.value)}
-        >
-          <option value="">Sem equipamento</option>
-          {equipments.map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.name} · {item.tag}
-            </option>
-          ))}
-        </select>
-      </Field>
+      {type !== 'TECHNICAL_REPORT' && (
+        <Field label="Equipamento">
+          <select
+            value={form.equipmentId}
+            disabled={type === 'PMOC'}
+            onChange={(event) => onSet('equipmentId', event.target.value)}
+          >
+            <option value="">Sem equipamento</option>
+            {equipments.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name} · {item.tag}
+              </option>
+            ))}
+          </select>
+        </Field>
+      )}
       <Field label="Responsável">
         <select
           value={form.operatorId}
@@ -767,13 +815,93 @@ function ContentStep({
   type,
   form,
   equipments,
+  checklistTemplates,
+  checklistTemplatesLoading,
+  canManageChecklist,
+  onCreateChecklist,
   onSet,
 }: {
   type: DocumentKind;
   form: WorkflowForm;
   equipments: EquipmentSummary[];
+  checklistTemplates: MaintenanceChecklistTemplate[];
+  checklistTemplatesLoading: boolean;
+  canManageChecklist: boolean;
+  onCreateChecklist: (description: string) => Promise<MaintenanceChecklistTemplate>;
   onSet: <K extends keyof WorkflowForm>(key: K, value: WorkflowForm[K]) => void;
 }) {
+  const [newChecklistDescription, setNewChecklistDescription] = useState('');
+  const [creatingChecklist, setCreatingChecklist] = useState(false);
+  const [checklistError, setChecklistError] = useState<string | null>(null);
+
+  const selectedChecklistItems = form.maintenanceChecklist.filter(
+    (item) => item.maintenanceType === form.maintenanceType,
+  );
+  const selectedChecklistTemplateIds = checklistTemplates
+    .filter((template) =>
+      selectedChecklistItems.some(
+        (item) =>
+          item.templateId === template.id ||
+          (!item.templateId && item.description === template.description),
+      ),
+    )
+    .map((template) => template.id);
+
+  function selectChecklistTemplates(templateIds: string[]) {
+    const selectedIds = new Set(templateIds);
+    const customItems = selectedChecklistItems.filter(
+      (item) =>
+        !checklistTemplates.some(
+          (template) =>
+            template.id === item.templateId ||
+            (!item.templateId && template.description === item.description),
+        ),
+    );
+    const catalogItems = checklistTemplates
+      .filter((template) => selectedIds.has(template.id))
+      .map((template) => {
+        const current = selectedChecklistItems.find(
+          (item) =>
+            item.templateId === template.id || item.description === template.description,
+        );
+        return (
+          current ?? {
+            templateId: template.id,
+            maintenanceType: template.maintenanceType,
+            description: template.description,
+            executed: false,
+            observations: '',
+          }
+        );
+      });
+    onSet('maintenanceChecklist', [...customItems, ...catalogItems]);
+  }
+
+  async function createChecklist() {
+    const description = newChecklistDescription.trim();
+    if (description.length < 3) return;
+    setCreatingChecklist(true);
+    setChecklistError(null);
+    try {
+      const created = await onCreateChecklist(description);
+      onSet('maintenanceChecklist', [
+        ...selectedChecklistItems,
+        {
+          templateId: created.id,
+          maintenanceType: created.maintenanceType,
+          description: created.description,
+          executed: false,
+          observations: '',
+        },
+      ]);
+      setNewChecklistDescription('');
+    } catch (cause) {
+      setChecklistError(message(cause));
+    } finally {
+      setCreatingChecklist(false);
+    }
+  }
+
   if (type === 'WORK_ORDER')
     return (
       <p className="text-sm text-[var(--color-muted-foreground)]">
@@ -853,9 +981,10 @@ function ContentStep({
           <Field label="Tipo de manutenção">
             <select
               value={form.maintenanceType}
-              onChange={(event) =>
-                onSet('maintenanceType', event.target.value as OperationMaintenanceType)
-              }
+              onChange={(event) => {
+                onSet('maintenanceType', event.target.value as OperationMaintenanceType);
+                onSet('maintenanceChecklist', []);
+              }}
             >
               <option value="WEEKLY">Semanal</option>
               <option value="MONTHLY">Mensal</option>
@@ -866,81 +995,179 @@ function ContentStep({
             </select>
           </Field>
         </div>
-        <div className="grid gap-4 lg:grid-cols-2">
-          <Area
-            label="Checklist semanal — [x] descrição | observação"
-            value={form.weeklyChecklist}
-            onChange={(value) => onSet('weeklyChecklist', value)}
-          />
-          <Area
-            label="Checklist semestral — [x] descrição | observação"
-            value={form.semiannualChecklist}
-            onChange={(value) => onSet('semiannualChecklist', value)}
-          />
-        </div>
-        <div className="space-y-2">
-          <p className="text-sm font-medium">Equipamentos</p>
-          {equipments.length === 0 ? (
-            <p className="text-caption">Selecione um cliente com equipamentos cadastrados.</p>
-          ) : (
-            equipments.map((equipment) => {
-              const selected = form.inspectedEquipments.find(
-                (item) => item.equipmentId === equipment.id,
-              );
-              return (
-                <div
-                  key={equipment.id}
-                  className="grid gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] p-3 md:grid-cols-[auto_1fr_1fr] md:items-center"
-                >
-                  <input
-                    type="checkbox"
-                    checked={Boolean(selected)}
-                    onChange={(event) =>
-                      onSet(
-                        'inspectedEquipments',
-                        event.target.checked
-                          ? [
-                              ...form.inspectedEquipments,
-                              {
-                                equipmentId: equipment.id,
-                                sector: equipment.address?.name || equipment.name,
-                              },
-                            ]
-                          : form.inspectedEquipments.filter(
-                              (item) => item.equipmentId !== equipment.id,
-                            ),
-                      )
+        <section className="space-y-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] p-4">
+          <div>
+            <h3 className="text-sm font-semibold">Equipamentos incluídos</h3>
+            <p className="text-caption">
+              Selecione os ativos que formarão a tabela do relatório. A busca evita listas extensas no formulário.
+            </p>
+          </div>
+          <MultiSelect
+            label="Selecionar equipamentos"
+            options={equipments.map((equipment) => ({
+              value: equipment.id,
+              label: `${equipment.name} · ${equipment.tag || 'sem tag'}`,
+              description: [equipment.manufacturer, equipment.model, equipment.capacity]
+                .filter(Boolean)
+                .join(' · '),
+            }))}
+            value={form.inspectedEquipments.map((item) => item.equipmentId)}
+            onChange={(equipmentIds) =>
+              onSet(
+                'inspectedEquipments',
+                equipmentIds.map((equipmentId) => {
+                  const current = form.inspectedEquipments.find(
+                    (item) => item.equipmentId === equipmentId,
+                  );
+                  const equipment = equipments.find((item) => item.id === equipmentId);
+                  return (
+                    current ?? {
+                      equipmentId,
+                      sector: equipment?.address?.name || equipment?.name || 'Não informado',
                     }
-                  />
-                  <span className="text-sm">
-                    <strong>{equipment.name}</strong> ·{' '}
-                    {equipment.manufacturer ?? 'Marca não informada'} ·{' '}
-                    {equipment.model ?? 'Modelo não informado'} ·{' '}
-                    {equipment.capacity ?? 'Capacidade não informada'}
-                  </span>
-                  {selected && (
-                    <input
-                      aria-label={`Setor de ${equipment.name}`}
-                      value={selected.sector}
-                      onChange={(event) =>
-                        onSet(
-                          'inspectedEquipments',
-                          form.inspectedEquipments.map((item) =>
-                            item.equipmentId === equipment.id
-                              ? { ...item, sector: event.target.value }
-                              : item,
-                          ),
-                        )
-                      }
-                      placeholder="Setor/ambiente"
-                      className="h-9 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm"
-                    />
-                  )}
-                </div>
-              );
-            })
+                  );
+                }),
+              )
+            }
+            placeholder={
+              equipments.length ? 'Buscar e selecionar equipamentos' : 'Cliente sem equipamentos'
+            }
+            emptyMessage="Nenhum equipamento encontrado para este cliente."
+          />
+          {form.inspectedEquipments.map((item) => {
+            const equipment = equipments.find((candidate) => candidate.id === item.equipmentId);
+            if (!equipment) return null;
+            return (
+              <div
+                key={item.equipmentId}
+                className="grid gap-2 rounded-[var(--radius-md)] bg-[var(--color-muted)]/50 p-3 md:grid-cols-[1fr_260px_auto] md:items-center"
+              >
+                <span className="text-sm">
+                  <strong>{equipment.name}</strong> · {equipment.manufacturer ?? 'Marca não informada'} ·{' '}
+                  {equipment.model ?? 'Modelo não informado'}
+                </span>
+                <input
+                  aria-label={`Setor de ${equipment.name}`}
+                  value={item.sector}
+                  onChange={(event) =>
+                    onSet(
+                      'inspectedEquipments',
+                      form.inspectedEquipments.map((current) =>
+                        current.equipmentId === item.equipmentId
+                          ? { ...current, sector: event.target.value }
+                          : current,
+                      ),
+                    )
+                  }
+                  placeholder="Setor/ambiente"
+                  className="h-9 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm"
+                />
+                <button
+                  type="button"
+                  aria-label={`Remover ${equipment.name}`}
+                  onClick={() =>
+                    onSet(
+                      'inspectedEquipments',
+                      form.inspectedEquipments.filter(
+                        (current) => current.equipmentId !== item.equipmentId,
+                      ),
+                    )
+                  }
+                  className="rounded-md p-2 text-[var(--color-muted-foreground)] hover:bg-[var(--color-card)] hover:text-[var(--color-danger)]"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            );
+          })}
+        </section>
+        <section className="space-y-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] p-4">
+          <div>
+            <h3 className="text-sm font-semibold">Checklist de manutenção</h3>
+            <p className="text-caption">
+              Use atividades padronizadas e registre somente a execução e a observação desta visita.
+            </p>
+          </div>
+          <MultiSelect
+            label="Atividades do checklist"
+            options={checklistTemplates.map((template) => ({
+              value: template.id,
+              label: template.description,
+            }))}
+            value={selectedChecklistTemplateIds}
+            onChange={selectChecklistTemplates}
+            placeholder={checklistTemplatesLoading ? 'Carregando atividades…' : 'Buscar atividades'}
+            emptyMessage="Nenhuma atividade cadastrada para esta periodicidade."
+          />
+          {selectedChecklistItems.map((item, index) => (
+            <div
+              key={item.templateId ?? `${item.description}-${index}`}
+              className="grid gap-2 rounded-[var(--radius-md)] bg-[var(--color-muted)]/50 p-3 md:grid-cols-[auto_1fr_280px_auto] md:items-center"
+            >
+              <input
+                type="checkbox"
+                checked={item.executed}
+                aria-label={`Marcar ${item.description} como executada`}
+                onChange={(event) =>
+                  onSet(
+                    'maintenanceChecklist',
+                    selectedChecklistItems.map((current, currentIndex) =>
+                      currentIndex === index ? { ...current, executed: event.target.checked } : current,
+                    ),
+                  )
+                }
+              />
+              <span className="text-sm">{item.description}</span>
+              <input
+                value={item.observations}
+                maxLength={2000}
+                onChange={(event) =>
+                  onSet(
+                    'maintenanceChecklist',
+                    selectedChecklistItems.map((current, currentIndex) =>
+                      currentIndex === index ? { ...current, observations: event.target.value } : current,
+                    ),
+                  )
+                }
+                placeholder="Observação opcional"
+                className="h-9 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm"
+              />
+              <button
+                type="button"
+                aria-label={`Remover ${item.description}`}
+                onClick={() =>
+                  onSet(
+                    'maintenanceChecklist',
+                    selectedChecklistItems.filter((_, currentIndex) => currentIndex !== index),
+                  )
+                }
+                className="rounded-md p-2 text-[var(--color-muted-foreground)] hover:bg-[var(--color-card)] hover:text-[var(--color-danger)]"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          ))}
+          {canManageChecklist && (
+            <div className="grid gap-2 md:grid-cols-[1fr_auto]">
+              <input
+                value={newChecklistDescription}
+                maxLength={500}
+                onChange={(event) => setNewChecklistDescription(event.target.value)}
+                placeholder="Nova atividade para esta periodicidade"
+                className="h-10 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm"
+              />
+              <button
+                type="button"
+                disabled={creatingChecklist || newChecklistDescription.trim().length < 3}
+                onClick={() => void createChecklist()}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 text-sm disabled:opacity-50"
+              >
+                <Plus className="h-4 w-4" /> {creatingChecklist ? 'Adicionando…' : 'Adicionar novo'}
+              </button>
+            </div>
           )}
-        </div>
+          {checklistError && <p className="text-sm text-[var(--color-danger)]">{checklistError}</p>}
+        </section>
         <Area
           label="Objetivo da visita"
           value={form.objective}
@@ -985,9 +1212,11 @@ function ContentStep({
 }
 
 function EvidenceStep({
+  type,
   form,
   onSet,
 }: {
+  type: DocumentKind;
   form: WorkflowForm;
   onSet: <K extends keyof WorkflowForm>(key: K, value: WorkflowForm[K]) => void;
 }) {
@@ -998,21 +1227,23 @@ function EvidenceStep({
         value={form.checklist}
         onChange={(value) => onSet('checklist', value)}
       />
-      <Field label="Fotos">
-        <input
-          type="file"
-          accept="image/png,image/jpeg"
-          multiple
-          onChange={async (event) => {
-            const files = Array.from(event.target.files ?? []).slice(0, 10);
-            const photos = await Promise.all(
-              files.map(async (file) => ({ dataUrl: await fileDataUrl(file), caption: file.name })),
-            );
-            onSet('photos', photos);
-          }}
-        />
-        <span className="text-caption">{form.photos.length} foto(s) selecionada(s).</span>
-      </Field>
+      {type === 'PMOC' && (
+        <Field label="Fotos do PMOC">
+          <input
+            type="file"
+            accept="image/png,image/jpeg"
+            multiple
+            onChange={async (event) => {
+              const files = Array.from(event.target.files ?? []).slice(0, 10);
+              const photos = await Promise.all(
+                files.map(async (file) => ({ dataUrl: await fileDataUrl(file), caption: file.name })),
+              );
+              onSet('photos', photos);
+            }}
+          />
+          <span className="text-caption">{form.photos.length} foto(s) selecionada(s).</span>
+        </Field>
+      )}
       <div>
         <p className="mb-2 text-sm font-medium">
           Assinatura coletada, quando exigida pelo template
@@ -1041,7 +1272,7 @@ function contentFor(type: DocumentKind, form: WorkflowForm) {
     }));
   const common = {
     checklist,
-    photos: form.photos,
+    photos: type === 'PMOC' ? form.photos : [],
     signatureData: form.signatureData,
     signedAt: form.signatureData ? new Date().toISOString() : undefined,
   };
@@ -1070,10 +1301,12 @@ function contentFor(type: DocumentKind, form: WorkflowForm) {
       referenceMonth: Number(form.referenceMonth),
       referenceYear: Number(form.referenceYear),
       maintenanceType: form.maintenanceType,
-      maintenanceChecklist: [
-        ...parseMaintenanceChecklist(form.weeklyChecklist, 'WEEKLY'),
-        ...parseMaintenanceChecklist(form.semiannualChecklist, 'SEMIANNUAL'),
-      ],
+      maintenanceChecklist: form.maintenanceChecklist.map((item) => ({
+        maintenanceType: item.maintenanceType,
+        description: item.description,
+        executed: item.executed,
+        observations: item.observations || undefined,
+      })),
       inspectedEquipments: form.inspectedEquipments,
     };
   return {
@@ -1088,29 +1321,6 @@ function operationTypeFor(
   type: DocumentKind,
 ): 'PREVENTIVA' | 'CORRETIVA' | 'INSTALACAO' | 'PROJETO' {
   return type === 'PMOC' ? 'PREVENTIVA' : type === 'TECHNICAL_OPINION' ? 'CORRETIVA' : 'PROJETO';
-}
-function parseMaintenanceChecklist(value: string, maintenanceType: OperationMaintenanceType) {
-  return value
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => ({
-      maintenanceType,
-      description: line
-        .replace(/^\[[ xX]\]\s*/, '')
-        .split('|')[0]
-        .trim(),
-      executed: !line.startsWith('[ ]'),
-      observations: line.split('|')[1]?.trim() || undefined,
-    }));
-}
-function checklistText(items: OperationDetail['maintenanceChecklistItems']) {
-  return items
-    .map(
-      (item) =>
-        `${item.executed ? '[x]' : '[ ]'} ${item.description}${item.observations ? ` | ${item.observations}` : ''}`,
-    )
-    .join('\n');
 }
 function message(cause: unknown) {
   return cause instanceof ApiClientError || cause instanceof Error

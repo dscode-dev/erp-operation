@@ -1,5 +1,8 @@
 # ARCHITECTURE — Frontend
 
+O Builder backend decide que `WORK_ORDER` contém somente `Código QR` no metadata. O Viewer não
+interpreta o tipo documental nem recria a imagem, preservando a arquitetura Blueprint-driven.
+
 O cabeçalho em duas linhas é uma projeção do `header` do Blueprint; a ordem das seções e a decisão
 de omitir QR/documentos relacionados pertencem ao Builder backend. O frontend não replica essas
 regras e apenas preserva a ordem recebida.
@@ -846,3 +849,6 @@ identidade corporativa.
 
 O workflow persiste primeiro os dados documentais na Operation e só então solicita Preview. Assim,
 regenerações não dependem de estado React ou de campos técnicos que mudem depois da emissão.
+# Technical Report form architecture
+
+Catalog entries are fetched through `maintenanceChecklistTemplatesApi`. The UI uses their IDs only while selecting; it sends immutable description/type/execution/observation snapshots through the existing Operation API. Equipment choices similarly map to `inspectedEquipments[]`. This keeps DocumentContext and the official Document Engine unchanged and prevents the renderer from querying mutable catalogs.

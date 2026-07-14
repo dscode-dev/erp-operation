@@ -1,5 +1,8 @@
 # ROUTES — Frontend
 
+A remoção do QR gráfico da Ordem de Serviço não altera rotas. Preview, render, download e lookup de
+equipamentos preservam os endpoints atuais.
+
 O refinamento estrutural de `TECHNICAL_REPORT` não cria rotas. `/reports` e `/documentos` continuam
 usando o mesmo `DocumentViewer` e os endpoints oficiais de Preview → Render → Download.
 
@@ -428,3 +431,6 @@ Nenhuma rota nova foi criada.
 - `/reports`: workflow do Relatório de Visita Técnica com competência, manutenção, checklists e
   equipamentos filtrados pelo cliente; Preview/Render/Download oficiais.
 - `/settings`: inscrição estadual e telefones alimentam o Corporate Header de todos os documentos.
+# `/maintenance-checklists`
+
+Persistent library of maintenance activities used by the Technical Report workflow. OWNER and MANAGER can create, edit, and deactivate; VIEWER can read. OPERATOR is denied. The route consumes only `/api/v1/maintenance-checklist-templates`.

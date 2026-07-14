@@ -27,6 +27,7 @@ export * as dashboardApi from "./dashboard";
 export * as financialApi from "./financial";
 export * as procurementApi from "./procurement";
 export * as maintenanceApi from "./maintenance";
+export * as maintenanceChecklistTemplatesApi from "./maintenance-checklist-templates";
 export * as pmocApi from "./pmoc";
 export * as demoApi from "./demo";
 
@@ -51,6 +52,7 @@ export type {
 } from "./financial";
 export type { ListPurchaseOrdersParams } from "./procurement";
 export type { ListMaintenancePlansParams, ListMaintenanceExecutionsParams } from "./maintenance";
+export type { ListMaintenanceChecklistTemplatesParams } from "./maintenance-checklist-templates";
 export type { ListPmocParams } from "./pmoc";
 export type { OrdersData, ProductsData, ServicesData } from "./operations";
 export type { OperationPhotoContent } from "./operation";

@@ -392,7 +392,9 @@ export class DocumentBuilderService {
           ]),
         ],
       },
-      operation.equipment ? { ...this.equipmentSection(context), pageBreakAfter: true } : null,
+      operation.equipment
+        ? { ...this.equipmentSection(context, false), pageBreakAfter: true }
+        : null,
       {
         id: 'work-order-reported-issue',
         title: 'Defeito ou solicitação informada',
@@ -810,7 +812,10 @@ export class DocumentBuilderService {
     return sections;
   }
 
-  private equipmentSection(context: DocumentContext): DocumentSection {
+  private equipmentSection(
+    context: DocumentContext,
+    includeQrImage = true,
+  ): DocumentSection {
     const { operation } = context;
     const equipment = operation.equipment;
     if (!equipment) {
@@ -821,40 +826,43 @@ export class DocumentBuilderService {
       );
     }
     const qrCode = context.assets.qrCode;
-    if (!qrCode) {
+    if (includeQrImage && !qrCode) {
       throw new ApplicationException(
         ERROR_CODES.DOCUMENT_RENDER_FAILED,
         'Equipment QR image could not be resolved',
         HttpStatus.CONFLICT,
       );
     }
+    const components: DocumentBlueprintComponent[] = [
+      this.metadata('equipment-metadata', [
+        ['Nome', equipment.name],
+        ['Tag', equipment.tag ?? '—'],
+        ['Tipo', equipment.type],
+        ['Fabricante', equipment.manufacturer ?? '—'],
+        ['Modelo', equipment.model ?? '—'],
+        ['Nº de série', equipment.serialNumber ?? '—'],
+        ['Código QR', equipment.qrCode],
+      ]),
+    ];
+    if (includeQrImage && qrCode) {
+      components.push({
+        id: 'equipment-qr',
+        kind: 'qrCode',
+        label: 'QR do equipamento',
+        value: equipment.qrCode,
+        image: {
+          mimeType: 'image/png',
+          fileSize: qrCode.fileSize,
+          contentBase64: qrCode.contentBase64,
+        },
+        keepTogether: true,
+      });
+    }
     return {
       id: 'equipment',
       title: 'Equipamento',
       critical: true,
-      components: [
-        this.metadata('equipment-metadata', [
-          ['Nome', equipment.name],
-          ['Tag', equipment.tag ?? '—'],
-          ['Tipo', equipment.type],
-          ['Fabricante', equipment.manufacturer ?? '—'],
-          ['Modelo', equipment.model ?? '—'],
-          ['Nº de série', equipment.serialNumber ?? '—'],
-          ['QR Code', equipment.qrCode],
-        ]),
-        {
-          id: 'equipment-qr',
-          kind: 'qrCode',
-          label: 'QR do equipamento',
-          value: equipment.qrCode,
-          image: {
-            mimeType: 'image/png',
-            fileSize: qrCode.fileSize,
-            contentBase64: qrCode.contentBase64,
-          },
-          keepTogether: true,
-        },
-      ],
+      components,
     };
   }
 

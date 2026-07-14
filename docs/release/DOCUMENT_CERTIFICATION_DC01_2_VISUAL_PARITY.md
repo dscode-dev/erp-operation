@@ -3,6 +3,17 @@
 Data: 12 de julho de 2026  
 Escopo: Ordem de Serviço (`WORK_ORDER`)
 
+## Refinamento de 14 de julho de 2026 — QR textual
+
+- A imagem de QR foi removida das novas Ordens de Serviço por provocar uma página isolada.
+- A seção `Equipamento` mantém `Código QR` com o valor persistido e resolvível pelo lookup oficial.
+- O Context não gera PNG para `WORK_ORDER`; não há Base64 nem espaço gráfico reservado.
+- Runtime `OS-000017`: `qrImagePresent=false`, lookup confirmado, PDF válido com 24.497 bytes e
+  inspeção visual sem página exclusiva de QR.
+
+As referências abaixo ao QR gráfico registram a certificação histórica original e estão
+substituídas, para novas emissões de `WORK_ORDER`, por este refinamento.
+
 ## Resultado
 
 A Ordem de Serviço usa um único `DocumentBlueprint` para Preview e PDF. O QR agora é uma imagem

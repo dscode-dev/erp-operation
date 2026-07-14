@@ -378,40 +378,41 @@ model RefreshToken {
 }
 
 model Organization {
-  id                  String                @id @default(uuid()) @db.Uuid
-  legalName           String                @map("legal_name") @db.VarChar(180)
-  tradeName           String                @map("trade_name") @db.VarChar(120)
-  cnpj                String                @db.VarChar(18)
-  stateRegistration   String?               @map("state_registration") @db.VarChar(30)
-  email               String                @db.VarChar(254)
-  phone               String                @db.VarChar(30)
-  phoneNumbers        String[]              @default([]) @map("phone_numbers")
-  website             String?               @db.VarChar(255)
-  zipCode             String?               @map("zip_code") @db.VarChar(10)
-  street              String?               @db.VarChar(180)
-  number              String?               @db.VarChar(20)
-  complement          String?               @db.VarChar(120)
-  district            String?               @db.VarChar(120)
-  city                String                @db.VarChar(100)
-  state               String                @db.VarChar(2)
-  primaryColor        String                @map("primary_color") @db.VarChar(7)
-  secondaryColor      String                @map("secondary_color") @db.VarChar(7)
-  segment             String?               @db.VarChar(80)
-  isActive            Boolean               @default(true) @map("is_active")
-  createdAt           DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt           DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
-  settings            OrganizationSettings?
-  assets              BrandAsset[]
-  templates           DocumentTemplate[]
-  pmocPlans           PmocPlan[]
-  inventoryItems      InventoryItem[]
-  productPricings     ProductPricing[]
-  budgets             Budget[]
-  financialAccounts   FinancialAccount[]
-  financialCategories FinancialCategory[]
-  financialEntries    FinancialEntry[]
-  purchaseOrders      PurchaseOrder[]
-  notifications       Notification[]
+  id                            String                         @id @default(uuid()) @db.Uuid
+  legalName                     String                         @map("legal_name") @db.VarChar(180)
+  tradeName                     String                         @map("trade_name") @db.VarChar(120)
+  cnpj                          String                         @db.VarChar(18)
+  stateRegistration             String?                        @map("state_registration") @db.VarChar(30)
+  email                         String                         @db.VarChar(254)
+  phone                         String                         @db.VarChar(30)
+  phoneNumbers                  String[]                       @default([]) @map("phone_numbers")
+  website                       String?                        @db.VarChar(255)
+  zipCode                       String?                        @map("zip_code") @db.VarChar(10)
+  street                        String?                        @db.VarChar(180)
+  number                        String?                        @db.VarChar(20)
+  complement                    String?                        @db.VarChar(120)
+  district                      String?                        @db.VarChar(120)
+  city                          String                         @db.VarChar(100)
+  state                         String                         @db.VarChar(2)
+  primaryColor                  String                         @map("primary_color") @db.VarChar(7)
+  secondaryColor                String                         @map("secondary_color") @db.VarChar(7)
+  segment                       String?                        @db.VarChar(80)
+  isActive                      Boolean                        @default(true) @map("is_active")
+  createdAt                     DateTime                       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                     DateTime                       @updatedAt @map("updated_at") @db.Timestamptz(3)
+  settings                      OrganizationSettings?
+  assets                        BrandAsset[]
+  templates                     DocumentTemplate[]
+  pmocPlans                     PmocPlan[]
+  inventoryItems                InventoryItem[]
+  productPricings               ProductPricing[]
+  budgets                       Budget[]
+  financialAccounts             FinancialAccount[]
+  financialCategories           FinancialCategory[]
+  financialEntries              FinancialEntry[]
+  purchaseOrders                PurchaseOrder[]
+  notifications                 Notification[]
+  maintenanceChecklistTemplates MaintenanceChecklistTemplate[]
 
   @@map("organizations")
 }
@@ -804,6 +805,21 @@ model OperationMaintenanceChecklistItem {
   @@unique([operationId, maintenanceType, position], map: "op_maintenance_checklist_type_position_uq")
   @@index([operationId, maintenanceType], map: "op_maintenance_checklist_type_idx")
   @@map("operation_maintenance_checklist_items")
+}
+
+model MaintenanceChecklistTemplate {
+  id              String                   @id @default(uuid()) @db.Uuid
+  organizationId  String                   @map("organization_id") @db.Uuid
+  maintenanceType OperationMaintenanceType @map("maintenance_type")
+  description     String                   @db.VarChar(500)
+  active          Boolean                  @default(true)
+  createdAt       DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(3)
+  organization    Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, maintenanceType, description], map: "maintenance_checklist_template_unique")
+  @@index([organizationId, maintenanceType, active], map: "maintenance_checklist_template_lookup_idx")
+  @@map("maintenance_checklist_templates")
 }
 
 model OperationInspectedEquipment {
