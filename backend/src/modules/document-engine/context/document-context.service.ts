@@ -290,17 +290,21 @@ export class DocumentContextService {
 
     const template = configuration.defaultTemplate;
     const signature = await this.resolveSignature(template, operation);
+    const usesOperationPhotos = type !== DocumentTemplateType.TECHNICAL_REPORT;
+    const usesEquipmentQr = type !== DocumentTemplateType.TECHNICAL_REPORT;
     const [images, logo, qrCode] = await Promise.all([
-      Promise.all(
-        operation.photos.map((photo) =>
-          this.assets.resolveDocumentImage(photo.storageKey, {
-            mimeType: photo.mimeType,
-            fileSize: photo.fileSize,
-          }),
-        ),
-      ),
+      usesOperationPhotos
+        ? Promise.all(
+            operation.photos.map((photo) =>
+              this.assets.resolveDocumentImage(photo.storageKey, {
+                mimeType: photo.mimeType,
+                fileSize: photo.fileSize,
+              }),
+            ),
+          )
+        : Promise.resolve([]),
       this.resolveLatestBrandAsset(configuration.organization.id, BrandAssetType.LOGO),
-      operation.equipment?.qrCode
+      usesEquipmentQr && operation.equipment?.qrCode
         ? this.assets.generateQrCode(operation.equipment.qrCode)
         : Promise.resolve(null),
     ]);

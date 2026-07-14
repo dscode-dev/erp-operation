@@ -1,5 +1,12 @@
 # STATE — Frontend
 
+## Refinamento TECHNICAL_REPORT — 14/07/2026
+
+- `DocumentViewer` passou a espelhar o cabeçalho PDF em duas linhas: logo isolada, seguida por
+  título/número e dados institucionais em colunas independentes.
+- A Central renomeou a seleção para `Equipamentos`; a composição e a ordem permanecem recebidas do
+  Blueprint oficial, sem QR ou seções locais.
+
 ## Refinamento do cabeçalho documental
 
 - `DocumentViewer` centraliza verticalmente a logo em relação ao bloco textual e não apresenta

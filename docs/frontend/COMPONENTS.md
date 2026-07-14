@@ -1,5 +1,12 @@
 # COMPONENTS — Frontend
 
+## Refinamento TECHNICAL_REPORT
+
+| Componente       | Alteração                                                                 |
+| ---------------- | ------------------------------------------------------------------------- |
+| `DocumentViewer` | cabeçalho em duas linhas, com colunas independentes e dados sem colisão   |
+| `ContentStep`    | seleção múltipla apresentada como `Equipamentos`, sem alterar o contrato  |
+
 ## Refinamento documental
 
 | Componente       | Alteração                                                                |

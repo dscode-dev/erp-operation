@@ -229,7 +229,7 @@ describe('DocumentEngine foundation', () => {
 
     expect(measure.measureText({ text: 'ERP', width: 80, fontSize: 10 }).height).toBeGreaterThan(0);
     expect(layout.contentWidth()).toBeGreaterThan(400);
-    expect(layout.availableHeight()).toBeGreaterThan(600);
+    expect(layout.availableHeight()).toBeGreaterThan(500);
     expect(wrapped.length).toBeGreaterThan(1);
   });
 
@@ -421,14 +421,23 @@ describe('DocumentEngine foundation', () => {
       }
     ).buildFromContext(context);
     const sectionIds = built.sections.map((section) => section.id);
-    expect(sectionIds).toEqual(
-      expect.arrayContaining([
-        'technical-report-reference-period',
-        'maintenance-checklist-weekly',
-        'maintenance-checklist-semiannual',
-        'technical-report-inspected-equipments',
-      ]),
-    );
+    expect(sectionIds).toEqual([
+      'technical-report-identification',
+      'technical-report-customer',
+      'technical-report-location',
+      'technical-report-inspected-equipments',
+      'technical-report-reference-period',
+      'maintenance-checklist-semiannual',
+      'visit-objective',
+      'visit-diagnosis',
+      'visit-activities',
+      'checklist-checklist-complementar',
+      'visit-recommendations',
+      'observations-observacoes-finais',
+    ]);
+    expect(sectionIds).not.toContain('technical-report-equipment-qr');
+    expect(sectionIds).not.toContain('related-documents');
+    expect(sectionIds).not.toContain('maintenance-checklist-weekly');
     expect(built.header.corporate).toMatchObject({
       legalName: 'ERP Operation LTDA',
       tradeName: 'Orbit',
@@ -440,6 +449,10 @@ describe('DocumentEngine foundation', () => {
     const table = built.sections
       .find((section) => section.id === 'technical-report-inspected-equipments')
       ?.components.find((component) => component.kind === 'table');
+    expect(
+      built.sections.find((section) => section.id === 'technical-report-inspected-equipments')
+        ?.title,
+    ).toBe('Equipamentos');
     expect(table?.kind === 'table' ? table.columns.map((column) => column.label) : []).toEqual([
       'ITEM',
       'SETOR',
@@ -581,15 +594,12 @@ describe('DocumentEngine foundation', () => {
       'technical-report-identification',
       'technical-report-customer',
       'technical-report-location',
-      'technical-report-equipment',
-      'technical-report-equipment-qr',
+      'technical-report-inspected-equipments',
       'visit-objective',
       'visit-diagnosis',
       'visit-activities',
       'checklist-checklist-complementar',
       'visit-recommendations',
-      'materials-consumed',
-      'photos-evidencias-fotograficas',
       'observations-observacoes-finais',
       'signature',
     ]);
@@ -607,7 +617,7 @@ describe('DocumentEngine foundation', () => {
     ).toBe(true);
     expect(
       rendered.pages.flatMap((page) => page.elements).filter((element) => element.type === 'image'),
-    ).toHaveLength(4);
+    ).toHaveLength(2);
     expect(pdf.buffer.subarray(0, 5).toString('latin1')).toBe('%PDF-');
     expect(pdf.pageCount).toBe(rendered.pages.length);
   });
@@ -705,10 +715,10 @@ describe('DocumentEngine foundation', () => {
     expect(rendered.blueprint).toBe(workOrder);
     expect(rendered.pages[0]?.elements.some((element) => element.type === 'image')).toBe(true);
     const headerLogo = rendered.pages[0]?.elements.find(
-      (element) => element.type === 'image' && element.width === 68 && element.height === 42,
+      (element) => element.type === 'image' && element.width === 100 && element.height === 32,
     );
     expect(headerLogo?.type === 'image' ? headerLogo.y : null).toBeCloseTo(
-      DOCUMENT_PAGE.height - DOCUMENT_PAGE.headerHeight + (DOCUMENT_PAGE.headerHeight - 8 - 42) / 2,
+      DOCUMENT_PAGE.height - 8 - 48 / 2 - 32 / 2,
       1,
     );
     const checklistPage = rendered.pages.find((page) =>
@@ -732,8 +742,10 @@ describe('DocumentEngine foundation', () => {
       ),
     ).toBe(false);
     expect(
-      rendered.pages[1]?.elements.some(
+      rendered.pages.slice(1).some((page) =>
+        page.elements.some(
         (element) => element.type === 'text' && element.text === 'Defeito ou solicitação informada',
+      ),
       ),
     ).toBe(true);
     expect(pdf.buffer.subarray(0, 5).toString('latin1')).toBe('%PDF-');
@@ -927,7 +939,7 @@ describe('DocumentEngine foundation', () => {
       } as never,
       {
         getConfigurationForType: jest.fn().mockResolvedValue({
-          type: DocumentTemplateType.TECHNICAL_REPORT,
+          type: DocumentTemplateType.WORK_ORDER,
           organization: {
             legalName: 'ERP Operation LTDA',
             tradeName: 'Orbit',
@@ -959,7 +971,7 @@ describe('DocumentEngine foundation', () => {
       } as never,
     );
 
-    const created = await context.create('operation-id', DocumentTemplateType.TECHNICAL_REPORT);
+    const created = await context.create('operation-id', DocumentTemplateType.WORK_ORDER);
     const builder = new DocumentBuilderService({} as never);
     const blueprint = (
       builder as unknown as { buildFromContext: (ctx: unknown) => DocumentBlueprint }

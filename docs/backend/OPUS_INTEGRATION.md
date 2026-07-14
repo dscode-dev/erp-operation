@@ -1,5 +1,14 @@
 # OPUS Frontend Integration
 
+## Refinamento TECHNICAL_REPORT — 14/07/2026
+
+- Exiba o cabeçalho em duas linhas a partir de `header`: logo; depois título/número à esquerda e
+  dados institucionais à direita.
+- Preserve a ordem de `sections`. `technical-report-inspected-equipments` é a tabela
+  `Equipamentos`, com uma ou várias linhas.
+- Não espere nem recrie QR individual, materiais, fotos ou documentos relacionados nesse tipo.
+- O checklist de manutenção recebido corresponde somente à periodicidade selecionada na Operation.
+
 Apresentação documental: não mostrar `blueprint.version` no relatório. Renderizar apenas
 `footer.content` no rodapé e manter a logo centralizada verticalmente com o bloco textual do header.
 
@@ -16,8 +25,9 @@ Apresentação documental: não mostrar `blueprint.version` no relatório. Rende
 | Observações finais     | `observations`             |
 
 Use somente `DocumentViewer` + endpoints oficiais de `TECHNICAL_REPORT`. O Blueprint entrega
-parágrafos/listas, QR, fotos e assinaturas já resolvidos. Não interpretar SignatureMode, não gerar QR
-e não acessar Storage. `GET /documents?type=TECHNICAL_REPORT` confirma a emissão no repositório.
+parágrafos/listas, equipamentos e assinaturas já resolvidos. Não interpretar SignatureMode, não
+gerar QR e não acessar Storage. `GET /documents?type=TECHNICAL_REPORT` confirma a emissão no
+repositório.
 
 ## Product Backlog Closure 07
 

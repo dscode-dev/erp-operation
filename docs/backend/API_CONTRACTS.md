@@ -1,5 +1,20 @@
 # API Contracts
 
+## TECHNICAL_REPORT — ordem oficial do Blueprint
+
+Os endpoints existentes de preview/render não mudaram. `sections` agora é devolvido nesta ordem:
+
+`technical-report-identification` → `technical-report-customer` →
+`technical-report-location` → `technical-report-inspected-equipments` →
+`technical-report-reference-period` → `maintenance-checklist-<periodicidade>` →
+`visit-objective` → `visit-diagnosis` → `visit-activities` →
+`checklist-checklist-complementar` → `visit-recommendations` →
+`observations-observacoes-finais` → `signature` (quando configurada).
+
+A tabela de equipamentos possui `ITEM`, `SETOR`, `MARCA`, `MODELO` e `CAPACIDADE`. Para este tipo,
+não são emitidas as seções de QR individual, materiais, fotos ou documentos relacionados. Campos
+opcionais sem dados continuam seguindo a omissão já prevista no contrato.
+
 ## Refinamento visual do Blueprint
 
 `footer.content` não inclui versão técnica do Blueprint. A propriedade raiz `version` permanece no

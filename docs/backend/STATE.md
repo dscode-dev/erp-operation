@@ -1,5 +1,18 @@
 # Backend State
 
+## DC-02 — refinamento estrutural do Relatório de Visita Técnica (14/07/2026)
+
+- Cabeçalho oficial ampliado de 96 para 168 pt e reorganizado em duas linhas: logo isolada na
+  primeira; título/número à esquerda e dados institucionais quebráveis à direita na segunda.
+- Ordem semântica do `TECHNICAL_REPORT`: identificação, cliente, local, equipamentos em tabela,
+  período, checklist da periodicidade selecionada, objetivo, diagnóstico, atividades, checklist
+  complementar, recomendações, observações e assinatura.
+- A seção passou a se chamar `Equipamentos` e mantém as colunas `ITEM`, `SETOR`, `MARCA`, `MODELO`
+  e `CAPACIDADE`; quando não existe seleção múltipla, utiliza o equipamento principal como fallback.
+- QR individual, materiais, fotos e documentos relacionados foram removidos exclusivamente deste
+  modelo. O Context não resolve esses assets para `TECHNICAL_REPORT`, evitando I/O sem consumo.
+- Sem migration ou alteração de endpoint.
+
 ## Refinamento visual — cabeçalho e rodapé documental
 
 - Logo centralizada verticalmente entre a faixa institucional e a linha inferior do cabeçalho em
@@ -26,9 +39,8 @@
   LayoutEngine → Renderer → PdfEngine → Storage.
 - Operation recebeu `technicalDiagnosis` e `technicalRecommendations`; `reportedIssue`,
   `serviceDescription` e `observations` preservam objetivo, atividades e observações finais.
-- Blueprint oficial: identificação, cliente, local, equipamento/QR, objetivo, diagnóstico,
-  atividades, checklist complementar, recomendações, materiais, fotos, observações, relacionados e
-  assinaturas.
+- A estrutura descrita nesta certificação foi refinada em 14/07/2026 conforme o bloco mais recente
+  deste documento.
 - narrativas reconhecem parágrafos, quebras de linha e listas; blocos textuais longos agora são
   quebrados genericamente pelo Renderer sem regra específica de relatório.
 - política NONE/FIXED/COLLECTED/HYBRID permanece resolvida no DocumentContext; o Builder não busca

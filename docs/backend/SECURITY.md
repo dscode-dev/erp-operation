@@ -1,5 +1,14 @@
 # Security
 
+## Minimização de assets no TECHNICAL_REPORT
+
+- O Context não resolve foto operacional nem QR do equipamento para o relatório de visita, pois
+  esses componentes não pertencem mais ao modelo certificado.
+- A tabela usa somente snapshots e dados relacionais já autorizados da Operation; nenhum
+  `storageKey`, Base64, caminho ou binário é introduzido na seção.
+- Assinaturas permanecem resolvidas exclusivamente pela política do template e pelo
+  `DocumentAssetResolver`; RBAC, isolamento, auditoria e download autenticado não mudaram.
+
 ## Metadados técnicos no documento
 
 - A versão do Blueprint continua disponível para compatibilidade e stale detection, mas não é

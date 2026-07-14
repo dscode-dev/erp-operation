@@ -1,5 +1,9 @@
 # ARCHITECTURE — Frontend
 
+O cabeçalho em duas linhas é uma projeção do `header` do Blueprint; a ordem das seções e a decisão
+de omitir QR/documentos relacionados pertencem ao Builder backend. O frontend não replica essas
+regras e apenas preserva a ordem recebida.
+
 `DocumentViewer` continua consumindo o Blueprint oficial. A versão raiz é metadado de integração e
 não conteúdo visual; header e footer são apresentados sem composição documental paralela.
 

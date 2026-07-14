@@ -489,6 +489,7 @@ export class DocumentBuilderService {
           ]),
         ],
       },
+      this.inspectedEquipmentSection(operation),
       ...(operation.referenceMonth && operation.referenceYear
         ? [
             {
@@ -513,10 +514,6 @@ export class DocumentBuilderService {
           ]
         : []),
       ...this.maintenanceChecklistSections(operation),
-      ...((operation.inspectedEquipments?.length ?? 0) > 0
-        ? [this.inspectedEquipmentSection(operation)]
-        : []),
-      ...(operation.equipment ? this.technicalReportEquipmentSections(context) : []),
       {
         id: 'visit-objective',
         title: 'Objetivo da visita',
@@ -556,10 +553,6 @@ export class DocumentBuilderService {
           'Não foram registradas recomendações técnicas.',
         ),
       },
-      this.materialsSection(operation),
-      ...(operation.photos.length > 0
-        ? [this.photosSection(context, 'Evidências fotográficas')]
-        : []),
       this.observationSection(operation, 'Observações finais'),
     ].filter((section): section is DocumentSection => Boolean(section));
     return sections;
@@ -796,7 +789,10 @@ export class DocumentBuilderService {
     const relatedDocuments = operation.documents.filter(
       (document) => document.type !== context.configuration.type,
     );
-    if (relatedDocuments.length > 0) {
+    if (
+      context.configuration.type !== DocumentTemplateType.TECHNICAL_REPORT &&
+      relatedDocuments.length > 0
+    ) {
       sections.push({
         id: 'related-documents',
         title: 'Documentos relacionados',
@@ -904,6 +900,11 @@ export class DocumentBuilderService {
       current.push(item);
       groups.set(item.maintenanceType, current);
     }
+    if (operation.maintenanceType) {
+      const selectedItems = groups.get(operation.maintenanceType) ?? [];
+      groups.clear();
+      groups.set(operation.maintenanceType, selectedItems);
+    }
     return [...groups.entries()].map(([type, items]) => ({
       id: `maintenance-checklist-${type.toLowerCase()}`,
       title: `Checklist de manutenção — ${this.maintenanceTypeLabel(type)}`,
@@ -922,9 +923,34 @@ export class DocumentBuilderService {
   }
 
   private inspectedEquipmentSection(operation: DocumentContextOperation): DocumentSection {
+    const inspected = operation.inspectedEquipments ?? [];
+    const rows =
+      inspected.length > 0
+        ? inspected.map((item, index) => ({
+            item: String(index + 1).padStart(2, '0'),
+            sector: this.clean(item.sector),
+            brand: this.clean(item.brandSnapshot ?? '—'),
+            model: this.clean(item.modelSnapshot ?? '—'),
+            capacity: this.clean(item.capacitySnapshot ?? '—'),
+          }))
+        : operation.equipment
+          ? [
+              {
+                item: '01',
+                sector: this.clean(
+                  operation.equipment.address?.name ??
+                    operation.address?.name ??
+                    operation.equipment.name,
+                ),
+                brand: this.clean(operation.equipment.manufacturer ?? '—'),
+                model: this.clean(operation.equipment.model ?? '—'),
+                capacity: this.clean(operation.equipment.capacity ?? '—'),
+              },
+            ]
+          : [];
     return {
       id: 'technical-report-inspected-equipments',
-      title: 'Equipamentos inspecionados',
+      title: 'Equipamentos',
       components: [
         {
           id: 'technical-report-inspected-equipments-table',
@@ -936,13 +962,7 @@ export class DocumentBuilderService {
             { key: 'model', label: 'MODELO', width: 0.19 },
             { key: 'capacity', label: 'CAPACIDADE', width: 0.18 },
           ],
-          rows: (operation.inspectedEquipments ?? []).map((item, index) => ({
-            item: String(index + 1).padStart(2, '0'),
-            sector: this.clean(item.sector),
-            brand: this.clean(item.brandSnapshot ?? '—'),
-            model: this.clean(item.modelSnapshot ?? '—'),
-            capacity: this.clean(item.capacitySnapshot ?? '—'),
-          })),
+          rows,
         },
       ],
     };

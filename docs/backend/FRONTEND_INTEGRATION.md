@@ -1,5 +1,12 @@
 # Frontend Integration
 
+## Refinamento TECHNICAL_REPORT — 14/07/2026
+
+O frontend deve renderizar `sections` na ordem recebida. `technical-report-inspected-equipments`
+tem o título `Equipamentos` e pode conter uma ou várias linhas. Não criar QR, materiais, fotos ou
+documentos relacionados como fallback neste relatório. O cabeçalho do `DocumentViewer` espelha o
+PDF em duas linhas, mantendo o número já prefixado devolvido em `header.documentNumber`.
+
 ## DC-02 — Relatório de Visita Técnica
 
 Na Central, persista os cinco campos textuais da Operation separadamente: `reportedIssue`
@@ -16,8 +23,8 @@ Fluxo obrigatório:
 6. atualizar o catálogo por `GET /documents`.
 
 Não montar seções, QR, fotos ou assinaturas no frontend. `pageBreakAfter` e os componentes do
-Blueprint são a única fonte de composição. O runtime certificado utiliza quatro páginas tanto no
-Viewer quanto no PDF.
+Blueprint são a única fonte de composição. A quantidade de páginas depende do conteúdo e da tabela
+de equipamentos.
 
 A propriedade técnica raiz `version` não deve ser exibida no documento. O rodapé público consome
 somente `footer.content`; o alinhamento da logo é responsabilidade do `DocumentViewer`.

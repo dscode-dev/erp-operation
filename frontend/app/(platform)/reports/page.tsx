@@ -879,7 +879,7 @@ function ContentStep({
           />
         </div>
         <div className="space-y-2">
-          <p className="text-sm font-medium">Equipamentos inspecionados</p>
+          <p className="text-sm font-medium">Equipamentos</p>
           {equipments.length === 0 ? (
             <p className="text-caption">Selecione um cliente com equipamentos cadastrados.</p>
           ) : (

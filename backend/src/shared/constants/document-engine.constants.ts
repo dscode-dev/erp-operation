@@ -23,7 +23,7 @@ export const DOCUMENT_PAGE = {
   marginRight: 42,
   marginBottom: 54,
   marginLeft: 42,
-  headerHeight: 96,
+  headerHeight: 168,
   footerHeight: 34,
 } as const;
 

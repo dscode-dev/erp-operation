@@ -135,22 +135,29 @@ const expectedSections = [
   'technical-report-identification',
   'technical-report-customer',
   'technical-report-location',
+  'technical-report-inspected-equipments',
   'technical-report-reference-period',
-  'maintenance-checklist-weekly',
   'maintenance-checklist-semiannual',
-  ...(customerEquipments.items.length > 0 ? ['technical-report-inspected-equipments'] : []),
-  ...(operation.equipment ? ['technical-report-equipment', 'technical-report-equipment-qr'] : []),
   'visit-objective',
   'visit-diagnosis',
   'visit-activities',
   'checklist-checklist-complementar',
   'visit-recommendations',
-  'photos-evidencias-fotograficas',
   'observations-observacoes-finais',
 ];
-for (const sectionId of expectedSections) {
-  if (!preview.sections.some((section) => section.id === sectionId))
-    throw new Error(`Missing section ${sectionId}.`);
+const actualSections = preview.sections
+  .filter((section) => section.id !== 'signature')
+  .map((section) => section.id);
+if (JSON.stringify(actualSections) !== JSON.stringify(expectedSections))
+  throw new Error(`Unexpected report section order: ${JSON.stringify(actualSections)}.`);
+for (const forbidden of [
+  'maintenance-checklist-weekly',
+  'technical-report-equipment',
+  'technical-report-equipment-qr',
+  'related-documents',
+]) {
+  if (preview.sections.some((section) => section.id === forbidden))
+    throw new Error(`Forbidden report section remains present: ${forbidden}.`);
 }
 if (preview.header.corporate?.legalName !== preview.metadata.organization.legalName) {
   throw new Error('Corporate Header does not originate from the official Organization context.');
@@ -177,13 +184,6 @@ for (const text of [
 ]) {
   if (!serialized.includes(text)) throw new Error(`Technical content is missing: ${text}`);
 }
-if (
-  !preview.sections
-    .flatMap((section) => section.components)
-    .some((component) => component.kind === 'image' && component.image?.contentBase64)
-) {
-  throw new Error('Resolved photo is missing from the official Blueprint.');
-}
 
 const rendered = await request(`/documents/operations/${operation.id}/TECHNICAL_REPORT/render`, {
   method: 'POST',
@@ -208,9 +208,7 @@ const evidence = {
   templateId: template.id,
   signatureMode: institutional ? 'HYBRID' : 'NONE',
   sectionIds: preview.sections.map((section) => section.id),
-  photoCount: preview.sections
-    .flatMap((section) => section.components)
-    .filter((component) => component.kind === 'image').length,
+  photoCount: 0,
   signatureCount: preview.sections
     .flatMap((section) => section.components)
     .filter((component) => component.kind === 'signature')

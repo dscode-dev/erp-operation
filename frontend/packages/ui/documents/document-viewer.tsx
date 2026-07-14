@@ -415,52 +415,53 @@ function DocumentPage({
         style={{ backgroundColor: visual?.colors.primary ?? 'var(--color-primary)' }}
       />
       <div className="p-10">
-        <header className="flex items-center justify-between gap-6 border-b border-slate-200 pb-5">
-          <div className="flex items-center gap-4">
+        <header className="border-b border-slate-200 pb-6">
+          <div className="flex min-h-12 items-center">
             {headerLogo && (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={`data:${headerLogo.mimeType};base64,${headerLogo.contentBase64}`}
                 alt={`Logo ${blueprint.header.organizationName}`}
-                className="h-16 w-28 object-contain"
+                className="h-10 w-32 object-contain object-left"
               />
             )}
-            <div>
+          </div>
+          <div className="mt-4 grid grid-cols-[minmax(0,1fr)_minmax(260px,1fr)] gap-10">
+            <div className="min-w-0">
               <h1 className="text-2xl font-semibold">{blueprint.header.title}</h1>
-              <p className="mt-1 text-sm text-slate-500">{blueprint.header.subtitle}</p>
-              <p className="mt-2 font-mono text-xs text-slate-500">
+              <p className="mt-2 font-mono text-xs font-semibold text-slate-500">
                 {blueprint.header.documentNumber}
               </p>
             </div>
-          </div>
-          <div className="text-right text-xs leading-relaxed text-slate-500">
-            <strong className="block text-sm text-slate-900">
-              {corporate?.tradeName || blueprint.header.organizationName}
-            </strong>
-            {corporate?.legalName && corporate.legalName !== corporate.tradeName && (
-              <span className="block">{corporate.legalName}</span>
-            )}
-            <span>{corporate?.cnpj || blueprint.metadata.organization.cnpj}</span>
-            {corporate?.stateRegistration && <span> · IE {corporate.stateRegistration}</span>}
-            <br />
-            <span>
-              {corporate?.fullAddress ||
-                blueprint.metadata.organization.address ||
-                `${blueprint.metadata.organization.city}/${blueprint.metadata.organization.state}`}
-            </span>
-            <br />
-            <span>
-              {(corporate?.phoneNumbers ?? [blueprint.metadata.organization.phone])
-                .filter(Boolean)
-                .join(' · ')}{' '}
-              · {corporate?.email || blueprint.metadata.organization.email}
-            </span>
-            {(corporate?.website || blueprint.metadata.organization.website) && (
-              <>
-                <br />
-                <span>{corporate?.website || blueprint.metadata.organization.website}</span>
-              </>
-            )}
+            <div className="min-w-0 text-right text-xs leading-relaxed text-slate-500">
+              <strong className="block text-sm text-slate-900">
+                {corporate?.tradeName || blueprint.header.organizationName}
+              </strong>
+              {corporate?.legalName && corporate.legalName !== corporate.tradeName && (
+                <span className="block">{corporate.legalName}</span>
+              )}
+              <span>{corporate?.cnpj || blueprint.metadata.organization.cnpj}</span>
+              {corporate?.stateRegistration && <span> · IE {corporate.stateRegistration}</span>}
+              <br />
+              <span>
+                {corporate?.fullAddress ||
+                  blueprint.metadata.organization.address ||
+                  `${blueprint.metadata.organization.city}/${blueprint.metadata.organization.state}`}
+              </span>
+              <br />
+              <span>
+                {(corporate?.phoneNumbers ?? [blueprint.metadata.organization.phone])
+                  .filter(Boolean)
+                  .join(' · ')}{' '}
+                · {corporate?.email || blueprint.metadata.organization.email}
+              </span>
+              {(corporate?.website || blueprint.metadata.organization.website) && (
+                <>
+                  <br />
+                  <span>{corporate?.website || blueprint.metadata.organization.website}</span>
+                </>
+              )}
+            </div>
           </div>
         </header>
         <div className="mt-7 space-y-7">

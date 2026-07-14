@@ -31,8 +31,10 @@ const LINE_HEIGHT = 13;
 const SMALL_LINE_HEIGHT = 11;
 const SECTION_TITLE_HEIGHT = 24;
 const HEADER_ACCENT_HEIGHT = 8;
-const HEADER_LOGO_WIDTH = 68;
-const HEADER_LOGO_HEIGHT = 42;
+const HEADER_LOGO_WIDTH = 100;
+const HEADER_LOGO_HEIGHT = 32;
+const HEADER_FIRST_ROW_HEIGHT = 48;
+const HEADER_COMPANY_WIDTH = 245;
 
 @Injectable()
 export class DocumentRendererService {
@@ -577,12 +579,10 @@ export class DocumentRendererService {
   private newPage(blueprint: DocumentBlueprint, pageNumber: number): RenderedPage {
     const corporate = blueprint.header.corporate;
     const logo = corporate?.logo ?? blueprint.header.logo;
-    const headerTextX = DOCUMENT_PAGE.marginLeft + (logo ? 78 : 0);
-    const organizationX = DOCUMENT_PAGE.width - DOCUMENT_PAGE.marginRight - 220;
-    const headerContentBottom = DOCUMENT_PAGE.height - DOCUMENT_PAGE.headerHeight;
     const headerContentTop = DOCUMENT_PAGE.height - HEADER_ACCENT_HEIGHT;
-    const logoY =
-      headerContentBottom + (headerContentTop - headerContentBottom - HEADER_LOGO_HEIGHT) / 2;
+    const secondRowTop = headerContentTop - HEADER_FIRST_ROW_HEIGHT;
+    const organizationX = DOCUMENT_PAGE.width - DOCUMENT_PAGE.marginRight - HEADER_COMPANY_WIDTH;
+    const logoY = headerContentTop - HEADER_FIRST_ROW_HEIGHT / 2 - HEADER_LOGO_HEIGHT / 2;
     return {
       pageNumber,
       elements: [
@@ -625,29 +625,26 @@ export class DocumentRendererService {
         },
         {
           type: 'text',
-          x: headerTextX,
-          y: DOCUMENT_PAGE.height - 35,
+          x: DOCUMENT_PAGE.marginLeft,
+          y: secondRowTop - 18,
           text: blueprint.header.title,
           size: 16,
           bold: true,
         },
         {
           type: 'text',
-          x: headerTextX,
-          y: DOCUMENT_PAGE.height - 50,
-          text: blueprint.header.subtitle ?? blueprint.header.documentNumber,
-          size: 8,
-          color: '#64748b',
-        },
-        {
-          type: 'text',
-          x: headerTextX,
-          y: DOCUMENT_PAGE.height - 63,
+          x: DOCUMENT_PAGE.marginLeft,
+          y: secondRowTop - 38,
           text: blueprint.header.documentNumber,
-          size: 8,
+          size: 9,
           bold: true,
         },
-        ...this.corporateHeaderElements(blueprint, organizationX),
+        ...this.corporateHeaderElements(
+          blueprint,
+          organizationX,
+          HEADER_COMPANY_WIDTH,
+          secondRowTop - 4,
+        ),
         {
           type: 'line',
           x1: DOCUMENT_PAGE.marginLeft,
@@ -680,14 +677,19 @@ export class DocumentRendererService {
     };
   }
 
-  private corporateHeaderElements(blueprint: DocumentBlueprint, x: number): RenderedElement[] {
+  private corporateHeaderElements(
+    blueprint: DocumentBlueprint,
+    x: number,
+    width: number,
+    startY: number,
+  ): RenderedElement[] {
     const corporate = blueprint.header.corporate;
     if (!corporate) {
       return [
         {
           type: 'text',
           x,
-          y: DOCUMENT_PAGE.height - 32,
+          y: startY,
           text: blueprint.header.organizationName,
           size: 9,
           bold: true,
@@ -695,14 +697,14 @@ export class DocumentRendererService {
         {
           type: 'text',
           x,
-          y: DOCUMENT_PAGE.height - 45,
+          y: startY - 13,
           text: blueprint.metadata.organization.address,
           size: 7,
         },
         {
           type: 'text',
           x,
-          y: DOCUMENT_PAGE.height - 57,
+          y: startY - 25,
           text: `${blueprint.metadata.organization.phone} · ${blueprint.metadata.organization.email}`,
           size: 7,
         },
@@ -727,14 +729,22 @@ export class DocumentRendererService {
       { text: corporate.website, size: 7, bold: false },
     ].filter((line) => line.text);
 
-    return lines.slice(0, 7).map((line, index) => ({
-      type: 'text',
-      x,
-      y: DOCUMENT_PAGE.height - 29 - index * 11,
-      text: line.text,
-      size: line.size,
-      bold: line.bold,
-    }));
+    const elements: RenderedElement[] = [];
+    let y = startY;
+    for (const line of lines) {
+      for (const wrappedLine of this.wrap(line.text, width, line.size)) {
+        elements.push({
+          type: 'text',
+          x,
+          y,
+          text: wrappedLine,
+          size: line.size,
+          bold: line.bold,
+        });
+        y -= line.size >= 9 ? 12 : 10;
+      }
+    }
+    return elements;
   }
 
   private wrap(text: string, width: number, fontSize: number): string[] {

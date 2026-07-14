@@ -1,5 +1,8 @@
 # ROUTES — Frontend
 
+O refinamento estrutural de `TECHNICAL_REPORT` não cria rotas. `/reports` e `/documentos` continuam
+usando o mesmo `DocumentViewer` e os endpoints oficiais de Preview → Render → Download.
+
 O refinamento de header/footer ocorre no `DocumentViewer` compartilhado e não cria nem altera rotas.
 
 ## DC-02
