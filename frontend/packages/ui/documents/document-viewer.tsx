@@ -516,13 +516,13 @@ function ComponentPreview({
   }
   if (component.kind === 'table') {
     return (
-      <table className="w-full text-sm">
+      <table className="w-full table-fixed text-sm">
         <thead>
           <tr className="border-b text-left text-[10px] uppercase tracking-wider text-slate-400">
             {component.columns.map((col) => (
               <th
                 key={col.key}
-                className="py-2"
+                className="break-words px-1 py-2 align-top"
                 style={{ width: col.width ? `${col.width * 100}%` : undefined }}
               >
                 {col.label}
@@ -534,7 +534,7 @@ function ComponentPreview({
           {component.rows.map((row, index) => (
             <tr key={index} className="border-b border-slate-100">
               {component.columns.map((col) => (
-                <td key={col.key} className="py-2">
+                <td key={col.key} className="break-words px-1 py-2 align-top">
                   {row[col.key] ?? '—'}
                 </td>
               ))}

@@ -290,9 +290,12 @@ export class DocumentContextService {
 
     const template = configuration.defaultTemplate;
     const signature = await this.resolveSignature(template, operation);
-    const usesOperationPhotos = type !== DocumentTemplateType.TECHNICAL_REPORT;
+    const usesOperationPhotos =
+      type !== DocumentTemplateType.TECHNICAL_REPORT &&
+      type !== DocumentTemplateType.TECHNICAL_OPINION;
     const usesEquipmentQr =
       type !== DocumentTemplateType.TECHNICAL_REPORT &&
+      type !== DocumentTemplateType.TECHNICAL_OPINION &&
       type !== DocumentTemplateType.WORK_ORDER;
     const [images, logo, qrCode] = await Promise.all([
       usesOperationPhotos

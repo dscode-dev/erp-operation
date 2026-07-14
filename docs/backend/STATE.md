@@ -1,5 +1,24 @@
 # Backend State
 
+## DC-03 — certificação do Laudo Técnico (14/07/2026)
+
+- `TECHNICAL_OPINION` foi especializado no fluxo oficial Context → Builder → Blueprint →
+  LayoutEngine → Renderer → PdfEngine → Storage; nenhum caminho documental paralelo foi criado.
+- Operation recebeu campos próprios para objetivo, condições observadas, análise e conclusão do
+  Laudo, impedindo que uma mesma Operation reutilize acidentalmente conteúdo de
+  `TECHNICAL_REPORT`.
+- Estrutura certificada: identificação, solicitante, objetivo, descrição dos equipamentos,
+  condições observadas, análise técnica, conclusão e assinatura.
+- A tabela reutiliza `OperationInspectedEquipment` com equipamento, marca, modelo, capacidade,
+  série e local; checklist, materiais, fotos, QR, timeline e documentos relacionados são excluídos.
+- Responsável Técnico e CREA vêm da assinatura institucional configurada no template; os modos
+  NONE/FIXED/COLLECTED/HYBRID permanecem autoridade do `DocumentContext`.
+- O Renderer passou a medir e quebrar células de tabela genericamente, inclusive identificadores
+  sem espaços, mantendo a mesma semântica no Viewer e no PDF.
+- Migration: `20260714153000_technical_opinion_certification`.
+- Runtime local: `LDO-000022`, duas páginas, dois equipamentos, HYBRID com duas assinaturas, PDF
+  válido e registro confirmado em `/documents`.
+
 ## Work Order — criação independente e estrutura consolidada (14/07/2026)
 
 - A Central de Relatórios agora pode reutilizar uma Operation concluída ou criar uma OS do zero.

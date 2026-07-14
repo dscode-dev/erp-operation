@@ -112,6 +112,26 @@ export class CreateOperationDto {
   @IsString()
   @MaxLength(20000)
   technicalRecommendations?: string;
+  @IsOptional()
+  @Transform(({ value }) => trim(value))
+  @IsString()
+  @MaxLength(20000)
+  technicalOpinionObjective?: string;
+  @IsOptional()
+  @Transform(({ value }) => trim(value))
+  @IsString()
+  @MaxLength(20000)
+  technicalOpinionConditions?: string;
+  @IsOptional()
+  @Transform(({ value }) => trim(value))
+  @IsString()
+  @MaxLength(30000)
+  technicalOpinionAnalysis?: string;
+  @IsOptional()
+  @Transform(({ value }) => trim(value))
+  @IsString()
+  @MaxLength(20000)
+  technicalOpinionConclusion?: string;
   @IsOptional() @IsString() @MaxLength(2_000_000) signatureData?: string;
   @IsOptional() @IsDateString() signedAt?: string;
   @IsOptional()
@@ -170,6 +190,26 @@ export class UpdateOperationDto {
   @IsString()
   @MaxLength(20000)
   technicalRecommendations?: string;
+  @IsOptional()
+  @Transform(({ value }) => trim(value))
+  @IsString()
+  @MaxLength(20000)
+  technicalOpinionObjective?: string;
+  @IsOptional()
+  @Transform(({ value }) => trim(value))
+  @IsString()
+  @MaxLength(20000)
+  technicalOpinionConditions?: string;
+  @IsOptional()
+  @Transform(({ value }) => trim(value))
+  @IsString()
+  @MaxLength(30000)
+  technicalOpinionAnalysis?: string;
+  @IsOptional()
+  @Transform(({ value }) => trim(value))
+  @IsString()
+  @MaxLength(20000)
+  technicalOpinionConclusion?: string;
   @IsOptional() @IsString() @MaxLength(2_000_000) signatureData?: string;
   @IsOptional() @IsDateString() signedAt?: string;
   @IsOptional()

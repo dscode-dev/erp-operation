@@ -32,11 +32,23 @@ export class DocumentMeasureService {
   }
 
   wrap(text: string, width: number, fontSize: number): string[] {
-    const maxChars = Math.max(20, Math.floor(width / (fontSize * 0.52)));
+    const maxChars = Math.max(4, Math.floor(width / (fontSize * 0.52)));
     const words = text.split(/\s+/).filter(Boolean);
     const lines: string[] = [];
     let current = '';
-    for (const word of words) {
+    for (const sourceWord of words) {
+      let word = sourceWord;
+      if (word.length > maxChars) {
+        if (current) {
+          lines.push(current);
+          current = '';
+        }
+        while (word.length > maxChars) {
+          lines.push(word.slice(0, maxChars));
+          word = word.slice(maxChars);
+        }
+        if (!word) continue;
+      }
       const candidate = current ? `${current} ${word}` : word;
       if (candidate.length > maxChars && current) {
         lines.push(current);

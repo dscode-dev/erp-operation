@@ -182,6 +182,10 @@ export class OperationsService {
           serviceDescription: dto.serviceDescription ?? null,
           technicalDiagnosis: dto.technicalDiagnosis ?? null,
           technicalRecommendations: dto.technicalRecommendations ?? null,
+          technicalOpinionObjective: dto.technicalOpinionObjective ?? null,
+          technicalOpinionConditions: dto.technicalOpinionConditions ?? null,
+          technicalOpinionAnalysis: dto.technicalOpinionAnalysis ?? null,
+          technicalOpinionConclusion: dto.technicalOpinionConclusion ?? null,
           referenceMonth: dto.referenceMonth ?? null,
           referenceYear: dto.referenceYear ?? null,
           maintenanceType: dto.maintenanceType ?? null,
@@ -332,6 +336,18 @@ export class OperationsService {
             : {}),
           ...(dto.technicalRecommendations !== undefined
             ? { technicalRecommendations: dto.technicalRecommendations }
+            : {}),
+          ...(dto.technicalOpinionObjective !== undefined
+            ? { technicalOpinionObjective: dto.technicalOpinionObjective }
+            : {}),
+          ...(dto.technicalOpinionConditions !== undefined
+            ? { technicalOpinionConditions: dto.technicalOpinionConditions }
+            : {}),
+          ...(dto.technicalOpinionAnalysis !== undefined
+            ? { technicalOpinionAnalysis: dto.technicalOpinionAnalysis }
+            : {}),
+          ...(dto.technicalOpinionConclusion !== undefined
+            ? { technicalOpinionConclusion: dto.technicalOpinionConclusion }
             : {}),
           ...(dto.referenceMonth !== undefined ? { referenceMonth: dto.referenceMonth } : {}),
           ...(dto.referenceYear !== undefined ? { referenceYear: dto.referenceYear } : {}),

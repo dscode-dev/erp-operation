@@ -1,5 +1,39 @@
 # API Contracts
 
+## DC-03 — conteúdo oficial de TECHNICAL_OPINION
+
+`POST /api/v1/operations` e `PATCH /api/v1/operations/:id` aceitam aditivamente:
+
+```json
+{
+  "technicalOpinionObjective": "Objetivo técnico (até 20.000 caracteres)",
+  "technicalOpinionConditions": "Uma condição observada por linha (até 20.000 caracteres)",
+  "technicalOpinionAnalysis": "Análise em múltiplos parágrafos (até 30.000 caracteres)",
+  "technicalOpinionConclusion": "Conclusão técnica (até 20.000 caracteres)",
+  "inspectedEquipments": [
+    { "equipmentId": "uuid", "sector": "Sala de máquinas" }
+  ]
+}
+```
+
+Os campos são opcionais, sanitizados e retornados em `OperationDetail`. Permanecem:
+
+- `GET /documents/operations/:operationId/TECHNICAL_OPINION/preview`;
+- `POST /documents/operations/:operationId/TECHNICAL_OPINION/render`;
+- `GET /documents/:documentId/preview`;
+- `POST /documents/:documentId/render`;
+- `GET /documents/:documentId/download`;
+- `GET /documents?type=TECHNICAL_OPINION`.
+
+Ordem de `sections`: `technical-opinion-identification` →
+`technical-opinion-requester` → `technical-opinion-objective` →
+`technical-opinion-equipments` → `technical-opinion-site-conditions` →
+`technical-opinion-analysis` → `technical-opinion-conclusion` → `signature`, quando
+configurada.
+
+Não são emitidos checklist, materiais, fotos, QR, timeline, Assignment ou documentos relacionados.
+A tabela usa `EQUIPAMENTO`, `MARCA`, `MODELO`, `CAPACIDADE`, `SÉRIE` e `LOCAL`.
+
 ## WORK_ORDER — origem e Blueprint consolidados
 
 Nenhum endpoint novo foi criado. Para uma OS independente, o frontend usa `POST /api/v1/operations`

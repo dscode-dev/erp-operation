@@ -1,5 +1,19 @@
 # Frontend Integration
 
+## DC-03 — fluxo do Laudo Técnico
+
+Na Central de Relatórios, crie/atualize uma Operation `DRAFT` com os quatro campos
+`technicalOpinion*` e `inspectedEquipments[]`. O equipamento principal pode ser o primeiro item
+selecionado; a tabela autoritativa é `inspectedEquipments`.
+
+Use somente `DocumentViewer` com `{ operationId, type: "TECHNICAL_OPINION" }`. O frontend não
+monta introdução, tabela, CREA, assinatura ou seção. A origem seleciona cliente, endereço e
+responsável; os equipamentos múltiplos e o conteúdo ficam na etapa Conteúdo; a terceira etapa
+coleta somente assinatura quando exigida.
+
+Não envie checklist ou fotos para compor o Laudo. Preview, Render, Download e catálogo usam os
+endpoints documentais existentes.
+
 ## Wizard de Ordem de Serviço
 
 No primeiro passo, ofereça duas origens mutuamente exclusivas:

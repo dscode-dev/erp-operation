@@ -1,5 +1,17 @@
 # Security
 
+## DC-03 — segurança documental do Laudo Técnico
+
+- Campos passam pela whitelist global, trim, validação de tipo e limites de 20/30 mil caracteres;
+  equipamentos continuam validados contra o cliente da Operation.
+- `DocumentContext` é a única camada que resolve logo e assinaturas; Builder não consulta Prisma
+  ou Storage, e Renderer não interpreta política de assinatura.
+- Fotos e QR não são resolvidos para `TECHNICAL_OPINION`, reduzindo exposição e I/O; respostas não
+  publicam paths ou `storageKey`, e auditoria não recebe Base64.
+- Responsável Técnico e CREA derivam somente de assinatura institucional ativa configurada.
+  FIXED/HYBRID falham de forma segura quando assinatura ou imagem não existe.
+- JWT, RBAC, rate limit, auditoria, stale detection e download exclusivo pelo backend permanecem.
+
 ## Work Order criada pela Central de Relatórios
 
 - A criação independente passa por `POST /operations`, preservando JWT, RBAC, validação de cliente,

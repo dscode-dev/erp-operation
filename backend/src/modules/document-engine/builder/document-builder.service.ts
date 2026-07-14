@@ -260,7 +260,9 @@ export class DocumentBuilderService {
         ? this.workOrderSections(context, generatedAt, documentNumber)
         : context.configuration.type === DocumentTemplateType.TECHNICAL_REPORT
           ? this.visitReportSections(context, generatedAt, documentNumber)
-          : this.sharedIdentitySections(context);
+          : context.configuration.type === DocumentTemplateType.TECHNICAL_OPINION
+            ? this.technicalOpinionSections(context, generatedAt, documentNumber)
+            : this.sharedIdentitySections(context);
 
     switch (context.configuration.type) {
       case DocumentTemplateType.WORK_ORDER:
@@ -271,7 +273,6 @@ export class DocumentBuilderService {
         sections.push(...this.legacyReportSections(context));
         break;
       case DocumentTemplateType.TECHNICAL_OPINION:
-        sections.push(...this.technicalOpinionSections(context));
         break;
       case DocumentTemplateType.PMOC:
         sections.push(...this.pmocReportSections(context));
@@ -289,7 +290,12 @@ export class DocumentBuilderService {
 
     sections.push(...this.evidenceAndRelatedSections(context));
 
-    const signature = this.signatureComponent(context);
+    const signature = this.signatureComponent(
+      context,
+      context.configuration.type === DocumentTemplateType.TECHNICAL_OPINION
+        ? new Date(context.operation.createdAt).toISOString()
+        : null,
+    );
     if (signature) {
       sections.push({
         id: 'signature',
@@ -623,74 +629,161 @@ export class DocumentBuilderService {
     ];
   }
 
-  private technicalOpinionSections(context: DocumentContext): DocumentSection[] {
+  private technicalOpinionSections(
+    context: DocumentContext,
+    generatedAt: string,
+    documentNumber: string,
+  ): DocumentSection[] {
     const { operation } = context;
+    const address = operation.address ?? operation.customer.addresses[0] ?? null;
+    const responsible = context.signature.institutionalSignatures[0] ?? null;
+    const inspectionDate =
+      operation.startedAt ??
+      operation.completedAt ??
+      operation.scheduledFor ??
+      operation.createdAt ??
+      generatedAt;
+    const conditions = this.lines(operation.technicalOpinionConditions);
+
     return [
       {
-        id: 'technical-opinion-object',
-        title: 'Objeto da avaliação técnica',
+        id: 'technical-opinion-identification',
+        title: 'Identificação do Laudo',
         critical: true,
         components: [
-          this.metadata('technical-opinion-object-metadata', [
-            ['Operação analisada', String(operation.number).padStart(6, '0')],
-            ['Cliente', operation.customer.tradeName ?? operation.customer.name],
-            ['Equipamento avaliado', operation.equipment?.name ?? '—'],
-            ['Responsável pela inspeção', operation.operator.name],
-            [
-              'Período observado',
-              `${this.date(operation.startedAt)} → ${this.date(operation.completedAt)}`,
-            ],
+          this.metadata('technical-opinion-identification-metadata', [
+            ['Número do Laudo', documentNumber],
+            ['Data', this.dateOnly(generatedAt)],
+            ['Responsável Técnico', responsible?.name ?? 'Não configurado'],
+            ['CREA', responsible?.professionalCouncil ?? 'Não configurado'],
           ]),
         ],
       },
       {
-        id: 'technical-opinion-findings',
-        title: 'Diagnóstico',
+        id: 'technical-opinion-requester',
+        title: 'Solicitante',
+        critical: true,
         components: [
-          {
-            id: 'technical-opinion-findings-text',
-            kind: 'observation',
-            text: this.clean(operation.reportedIssue || 'Diagnóstico técnico não registrado.'),
-            keepTogether: true,
-          },
+          this.metadata('technical-opinion-requester-metadata', [
+            ['Cliente', operation.customer.tradeName ?? operation.customer.name],
+            ['Endereço completo', address ? this.address(address) : 'Não informado'],
+          ]),
         ],
       },
-      this.checklistSection(operation, 'Evidências e verificações consideradas'),
-      this.materialsSection(operation),
       {
-        id: 'technical-opinion-analysis',
-        title: 'Análise técnica',
+        id: 'technical-opinion-objective',
+        title: 'Objetivo',
+        critical: true,
+        components: this.technicalProse(
+          'technical-opinion-objective',
+          operation.technicalOpinionObjective,
+          'Objetivo do Laudo Técnico não informado.',
+        ),
+      },
+      this.technicalOpinionEquipmentSection(operation),
+      {
+        id: 'technical-opinion-site-conditions',
+        title: 'Condições observadas no local',
+        critical: true,
         components: [
           {
-            id: 'technical-opinion-analysis-text',
+            id: 'technical-opinion-site-conditions-introduction',
             kind: 'paragraph',
             text: this.clean(
-              operation.serviceDescription ||
-                'Análise baseada nos dados registrados na Operation, checklist, materiais e evidências anexadas.',
+              `Durante a vistoria técnica realizada em ${this.dateOnly(inspectionDate)}, foram observadas as seguintes condições:`,
             ),
             keepTogether: true,
           },
+          ...(conditions.length > 0
+            ? [
+                {
+                  id: 'technical-opinion-site-conditions-list',
+                  kind: 'list' as const,
+                  items: conditions,
+                },
+              ]
+            : [
+                {
+                  id: 'technical-opinion-site-conditions-empty',
+                  kind: 'paragraph' as const,
+                  text: 'Condições observadas não informadas.',
+                  keepTogether: true,
+                },
+              ]),
         ],
+      },
+      {
+        id: 'technical-opinion-analysis',
+        title: 'Análise Técnica',
+        critical: true,
+        components: this.technicalProse(
+          'technical-opinion-analysis',
+          operation.technicalOpinionAnalysis,
+          'Análise técnica não informada.',
+        ),
       },
       {
         id: 'technical-opinion-conclusion',
         title: 'Conclusão',
         critical: true,
-        components: [
-          {
-            id: 'technical-opinion-conclusion-text',
-            kind: 'observation',
-            text: this.clean(
-              operation.observations ||
-                (operation.status === 'COMPLETED'
-                  ? 'Atendimento concluído conforme registros operacionais disponíveis.'
-                  : `Operation em status ${operation.status}; conclusão técnica definitiva não registrada.`),
-            ),
-            keepTogether: true,
-          },
-        ],
+        components: this.technicalProse(
+          'technical-opinion-conclusion',
+          operation.technicalOpinionConclusion,
+          'Conclusão técnica não informada.',
+        ),
       },
-    ].filter((section): section is DocumentSection => Boolean(section));
+    ];
+  }
+
+  private technicalOpinionEquipmentSection(operation: DocumentContextOperation): DocumentSection {
+    const inspected = operation.inspectedEquipments ?? [];
+    const rows =
+      inspected.length > 0
+        ? inspected.map((item, index) => ({
+            equipment: this.clean(item.equipment.name || `Equipamento ${index + 1}`),
+            brand: this.clean(item.brandSnapshot ?? '—'),
+            model: this.clean(item.modelSnapshot ?? '—'),
+            capacity: this.clean(item.capacitySnapshot ?? '—'),
+            serial: this.clean(item.serialSnapshot ?? '—'),
+            location: this.clean(item.sector),
+          }))
+        : operation.equipment
+          ? [
+              {
+                equipment: this.clean(operation.equipment.name),
+                brand: this.clean(operation.equipment.manufacturer ?? '—'),
+                model: this.clean(operation.equipment.model ?? '—'),
+                capacity: this.clean(operation.equipment.capacity ?? '—'),
+                serial: this.clean(operation.equipment.serialNumber ?? '—'),
+                location: this.clean(
+                  operation.equipment.address?.name ??
+                    operation.address?.name ??
+                    operation.equipment.name,
+                ),
+              },
+            ]
+          : [];
+
+    return {
+      id: 'technical-opinion-equipments',
+      title: 'Descrição dos Equipamentos',
+      critical: true,
+      components: [
+        {
+          id: 'technical-opinion-equipments-table',
+          kind: 'table',
+          columns: [
+            { key: 'equipment', label: 'EQUIPAMENTO', width: 0.22 },
+            { key: 'brand', label: 'MARCA', width: 0.14 },
+            { key: 'model', label: 'MODELO', width: 0.16 },
+            { key: 'capacity', label: 'CAPACIDADE', width: 0.16 },
+            { key: 'serial', label: 'SÉRIE', width: 0.16 },
+            { key: 'location', label: 'LOCAL', width: 0.16 },
+          ],
+          rows,
+        },
+      ],
+    };
   }
 
   private pmocReportSections(context: DocumentContext): DocumentSection[] {
@@ -796,6 +889,7 @@ export class DocumentBuilderService {
     const sections: DocumentSection[] = [];
     if (
       context.configuration.type !== DocumentTemplateType.TECHNICAL_REPORT &&
+      context.configuration.type !== DocumentTemplateType.TECHNICAL_OPINION &&
       operation.photos.length > 0
     ) {
       sections.push(this.photosSection(context, 'Evidências fotográficas'));
@@ -805,6 +899,7 @@ export class DocumentBuilderService {
     );
     if (
       context.configuration.type !== DocumentTemplateType.TECHNICAL_REPORT &&
+      context.configuration.type !== DocumentTemplateType.TECHNICAL_OPINION &&
       context.configuration.type !== DocumentTemplateType.WORK_ORDER &&
       relatedDocuments.length > 0
     ) {
@@ -1480,7 +1575,10 @@ export class DocumentBuilderService {
     return sections;
   }
 
-  private signatureComponent(context: DocumentBuildContext): DocumentBlueprintComponent | null {
+  private signatureComponent(
+    context: DocumentBuildContext,
+    institutionalSignedAt: string | null = null,
+  ): DocumentBlueprintComponent | null {
     const { signature } = context;
     if (!signature.requiresSignature || signature.signatureMode === SignatureMode.NONE) return null;
 
@@ -1496,7 +1594,7 @@ export class DocumentBuilderService {
             .filter(Boolean)
             .join(' · '),
         ),
-        signedAt: null,
+        signedAt: institutionalSignedAt,
         caption: 'Responsável técnico',
         image: {
           mimeType: institutional.image.mimeType,
@@ -1703,6 +1801,25 @@ export class DocumentBuilderService {
     return components;
   }
 
+  /** Preserves authored technical paragraphs without interpreting bullets as operational data. */
+  private technicalProse(
+    id: string,
+    value: string | null,
+    fallback: string,
+  ): DocumentBlueprintComponent[] {
+    const source = value?.trim() || fallback;
+    const paragraphs = source
+      .split(/\n\s*\n/u)
+      .map((paragraph) => paragraph.trim())
+      .filter(Boolean);
+    return (paragraphs.length > 0 ? paragraphs : [fallback]).map((paragraph, index) => ({
+      id: `${id}-paragraph-${index}`,
+      kind: 'paragraph',
+      text: this.clean(paragraph),
+      keepTogether: true,
+    }));
+  }
+
   private lines(value: string | null): string[] {
     if (!value) return [];
     return value
@@ -1717,6 +1834,14 @@ export class DocumentBuilderService {
     return new Intl.DateTimeFormat('pt-BR', {
       dateStyle: 'short',
       timeStyle: 'short',
+      timeZone: 'America/Recife',
+    }).format(new Date(value));
+  }
+
+  private dateOnly(value: Date | string | null): string {
+    if (!value) return '—';
+    return new Intl.DateTimeFormat('pt-BR', {
+      dateStyle: 'short',
       timeZone: 'America/Recife',
     }).format(new Date(value));
   }

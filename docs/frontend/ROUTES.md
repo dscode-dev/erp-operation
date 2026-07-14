@@ -1,5 +1,11 @@
 # ROUTES — Frontend
 
+## DC-03
+
+`/reports` inicia o Laudo Técnico em quatro etapas: Origem → Conteúdo → Assinatura → Preview.
+Preview, Render e Download continuam nos endpoints oficiais de `TECHNICAL_OPINION`; o documento
+emitido aparece em `/documentos`. Nenhuma rota nova foi adicionada.
+
 A remoção do QR gráfico da Ordem de Serviço não altera rotas. Preview, render, download e lookup de
 equipamentos preservam os endpoints atuais.
 

@@ -119,7 +119,7 @@ export class DocumentRendererService {
       case 'checklist':
         return this.checklistBlocks(component);
       case 'table':
-        return this.tableBlocks(component);
+        return this.tableBlocks(component, width);
       case 'image':
         return [this.imageBlock(component)];
       case 'imageGallery':
@@ -334,35 +334,63 @@ export class DocumentRendererService {
     }));
   }
 
-  private tableBlocks(component: TableComponent): LayoutBlock[] {
-    const headerHeight = 18;
-    const rowHeight = 17;
+  private tableBlocks(component: TableComponent, width: number): LayoutBlock[] {
     const blockPadding = 6;
-    const rowsPerBlock = this.layout.rowsPerTableBlock(headerHeight + blockPadding, rowHeight);
-    const chunks = component.rows.length > 0 ? this.chunk(component.rows, rowsPerBlock) : [[]];
+    const widths = this.tableColumnWidths(component, width);
+    const headerHeight = Math.max(
+      18,
+      ...component.columns.map(
+        (column, index) =>
+          this.wrap(column.label, Math.max(20, widths[index] - 8), 8).length * 9 + 8,
+      ),
+    );
+    const sourceRows =
+      component.rows.length > 0
+        ? component.rows
+        : [Object.fromEntries(component.columns.map((column) => [column.key, '—']))];
+    const measuredRows = sourceRows.map((row) => {
+      const lines = component.columns.map((column, index) =>
+        this.wrap(row[column.key] ?? '—', Math.max(20, widths[index] - 8), 8),
+      );
+      return { row, lines, height: Math.max(17, ...lines.map((cell) => cell.length * 9 + 7)) };
+    });
+    const chunks: (typeof measuredRows)[] = [];
+    const maxRowsHeight = this.layout.availableHeight() - headerHeight - blockPadding;
+    let current: typeof measuredRows = [];
+    let currentHeight = 0;
+    for (const row of measuredRows) {
+      if (current.length > 0 && currentHeight + row.height > maxRowsHeight) {
+        chunks.push(current);
+        current = [];
+        currentHeight = 0;
+      }
+      current.push(row);
+      currentHeight += row.height;
+    }
+    if (current.length > 0) chunks.push(current);
+
     return chunks.map((rows) => ({
       component,
-      height: headerHeight + Math.max(1, rows.length) * rowHeight + blockPadding,
-      draw: (x, y, width) =>
-        this.tableElements(component, rows, x, y, width, headerHeight, rowHeight),
+      height: headerHeight + rows.reduce((total, row) => total + row.height, 0) + blockPadding,
+      draw: (x, y, blockWidth) =>
+        this.tableElements(component, rows, x, y, blockWidth, headerHeight),
     }));
   }
 
   private tableElements(
     component: TableComponent,
-    rows: Array<Record<string, string>>,
+    rows: Array<{
+      row: Record<string, string>;
+      lines: string[][];
+      height: number;
+    }>,
     x: number,
     y: number,
     width: number,
     headerHeight: number,
-    rowHeight: number,
   ): RenderedElement[] {
     const elements: RenderedElement[] = [];
-    const widths = component.columns.map((column) =>
-      Math.floor(width * (column.width ?? 1 / component.columns.length)),
-    );
-    const totalWidth = widths.reduce((sum, value) => sum + value, 0);
-    widths[widths.length - 1] += width - totalWidth;
+    const widths = this.tableColumnWidths(component, width);
     let cursor = x;
     elements.push({
       type: 'rect',
@@ -374,36 +402,47 @@ export class DocumentRendererService {
       strokeColor: '#cbd5e1',
     });
     component.columns.forEach((column, index) => {
-      elements.push({
-        type: 'text',
-        x: cursor + 4,
-        y: y - 9,
-        text: column.label,
-        size: 8,
-        bold: true,
-      });
-      cursor += widths[index];
-    });
-    const dataRows =
-      rows.length > 0
-        ? rows
-        : [Object.fromEntries(component.columns.map((column) => [column.key, '—']))];
-    dataRows.forEach((row, rowIndex) => {
-      const rowY = y - headerHeight - rowIndex * rowHeight;
-      elements.push({ type: 'line', x1: x, y1: rowY, x2: x + width, y2: rowY });
-      cursor = x;
-      component.columns.forEach((column, columnIndex) => {
+      this.wrap(column.label, Math.max(20, widths[index] - 8), 8).forEach((line, lineIndex) =>
         elements.push({
           type: 'text',
           x: cursor + 4,
-          y: rowY - 11,
-          text: row[column.key] ?? '—',
+          y: y - 9 - lineIndex * 9,
+          text: line,
           size: 8,
-        });
+          bold: true,
+        }),
+      );
+      cursor += widths[index];
+    });
+    let rowsHeight = 0;
+    rows.forEach(({ lines, height }) => {
+      const rowY = y - headerHeight - rowsHeight;
+      elements.push({ type: 'line', x1: x, y1: rowY, x2: x + width, y2: rowY });
+      cursor = x;
+      component.columns.forEach((_column, columnIndex) => {
+        lines[columnIndex].forEach((line, lineIndex) =>
+          elements.push({
+            type: 'text',
+            x: cursor + 4,
+            y: rowY - 11 - lineIndex * 9,
+            text: line,
+            size: 8,
+          }),
+        );
         cursor += widths[columnIndex];
       });
+      rowsHeight += height;
     });
     return elements;
+  }
+
+  private tableColumnWidths(component: TableComponent, width: number): number[] {
+    const widths = component.columns.map((column) =>
+      Math.floor(width * (column.width ?? 1 / component.columns.length)),
+    );
+    const totalWidth = widths.reduce((sum, value) => sum + value, 0);
+    widths[widths.length - 1] += width - totalWidth;
+    return widths;
   }
 
   private imageBlock(component: ImageComponent): LayoutBlock {

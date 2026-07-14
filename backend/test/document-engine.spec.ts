@@ -370,9 +370,167 @@ describe('DocumentEngine foundation', () => {
     expect(reportSectionIds).toContain('visit-diagnosis');
     expect(reportSectionIds).toContain('visit-activities');
     expect(reportSectionIds).toContain('visit-recommendations');
-    expect(opinionSectionIds).toContain('technical-opinion-object');
+    expect(opinionSectionIds).toContain('technical-opinion-identification');
+    expect(opinionSectionIds).toContain('technical-opinion-site-conditions');
     expect(opinionSectionIds).toContain('technical-opinion-conclusion');
     expect(opinionSectionIds).not.toEqual(reportSectionIds);
+  });
+
+  it('certifies the DC-03 Technical Opinion structure, signatures and Preview/PDF parity', async () => {
+    const context = operationContext(DocumentTemplateType.TECHNICAL_OPINION);
+    const operation = context.operation as Record<string, unknown>;
+    operation.technicalOpinionObjective =
+      'Avaliar tecnicamente os danos térmicos observados nos sistemas de climatização.';
+    operation.technicalOpinionConditions =
+      '- Carcaças com deformação térmica severa\n- Componentes elétricos carbonizados\n- Linhas frigorígenas comprometidas';
+    operation.technicalOpinionAnalysis =
+      'As evidências visuais demonstram perda de isolamento dielétrico e comprometimento mecânico.\n\nA recuperação não apresenta segurança técnica nem viabilidade econômica.';
+    operation.technicalOpinionConclusion =
+      'Conclui-se pela substituição integral das unidades afetadas, com descarte ambientalmente adequado.';
+    operation.inspectedEquipments = [
+      {
+        id: 'inspection-1',
+        equipmentId: 'equipment-1',
+        position: 0,
+        sector: 'Sala 01',
+        brandSnapshot: 'Carrier',
+        modelSnapshot: 'Split Hi Wall',
+        capacitySnapshot: '18.000 BTU/h',
+        tagSnapshot: 'EQ-01',
+        serialSnapshot: 'SN-001',
+        equipment: { id: 'equipment-1', name: 'Evaporadora 01', type: 'SPLIT' },
+      },
+      {
+        id: 'inspection-2',
+        equipmentId: 'equipment-2',
+        position: 1,
+        sector: 'Auditório',
+        brandSnapshot: 'Daikin',
+        modelSnapshot: 'Piso Teto',
+        capacitySnapshot: '24.000 BTU/h',
+        tagSnapshot: 'EQ-02',
+        serialSnapshot: 'SN-002',
+        equipment: { id: 'equipment-2', name: 'Condensadora 02', type: 'CONDENSER' },
+      },
+    ];
+    operation.parts = [
+      {
+        id: 'part-forbidden',
+        quantity: 1,
+        notes: null,
+        product: { sku: 'SKU-1', name: 'Peça', unit: 'UN' },
+        inventoryItem: { location: 'A1' },
+      },
+    ];
+    operation.photos = [
+      { id: 'photo-forbidden', caption: 'Não deve aparecer', mimeType: 'image/png', fileSize: 68 },
+    ];
+    operation.documents = [
+      {
+        id: 'opinion-document',
+        type: DocumentTemplateType.TECHNICAL_OPINION,
+        number: 'LDO-000042',
+        status: 'DRAFT',
+      },
+      {
+        id: 'work-order-document',
+        type: DocumentTemplateType.WORK_ORDER,
+        number: 'OS-000042',
+        status: 'READY',
+      },
+    ];
+    context.signature = {
+      requiresSignature: true,
+      signatureMode: 'HYBRID',
+      signatureId: 'signature-engineer',
+      fixedSignature: null,
+      institutionalSignatures: [
+        {
+          id: 'signature-engineer',
+          name: 'Marina Albuquerque',
+          title: 'Engenheira Mecânica',
+          professionalCouncil: 'CREA-PE 123456',
+          department: 'Engenharia',
+          image: {
+            storageKey: 'signatures/marina.png',
+            mimeType: 'image/png',
+            fileSize: 68,
+            contentBase64: ONE_PIXEL_PNG,
+          },
+        },
+      ],
+      collectedSignature: null,
+      executionSignatures: [
+        {
+          role: 'client',
+          label: 'Assinatura do cliente/responsável',
+          name: 'Carlos Lima',
+          title: 'Solicitante',
+          signedAt: '2026-07-10T12:00:00.000Z',
+          caption: 'Assinatura coletada na execução',
+          image: {
+            storageKey: 'operations/42/signature.png',
+            mimeType: 'image/png',
+            fileSize: 68,
+            contentBase64: ONE_PIXEL_PNG,
+          },
+        },
+      ],
+    };
+
+    const built = (
+      new DocumentBuilderService({} as never) as unknown as {
+        buildFromContext: (ctx: unknown) => DocumentBlueprint;
+      }
+    ).buildFromContext(context);
+    const sectionIds = built.sections.map((section) => section.id);
+    expect(sectionIds).toEqual([
+      'technical-opinion-identification',
+      'technical-opinion-requester',
+      'technical-opinion-objective',
+      'technical-opinion-equipments',
+      'technical-opinion-site-conditions',
+      'technical-opinion-analysis',
+      'technical-opinion-conclusion',
+      'signature',
+    ]);
+    expect(sectionIds).not.toEqual(
+      expect.arrayContaining([
+        'materials-consumed',
+        'related-documents',
+        'photos-evidencias-fotograficas',
+        'checklist-evidencias-e-verificacoes-consideradas',
+      ]),
+    );
+    const identification = JSON.stringify(
+      built.sections.find((section) => section.id === 'technical-opinion-identification'),
+    );
+    expect(identification).toContain('Marina Albuquerque');
+    expect(identification).toContain('CREA-PE 123456');
+    const equipmentTable = built.sections
+      .find((section) => section.id === 'technical-opinion-equipments')
+      ?.components.find((component) => component.kind === 'table');
+    expect(
+      equipmentTable?.kind === 'table' ? equipmentTable.columns.map((column) => column.label) : [],
+    ).toEqual(['EQUIPAMENTO', 'MARCA', 'MODELO', 'CAPACIDADE', 'SÉRIE', 'LOCAL']);
+    expect(equipmentTable?.kind === 'table' ? equipmentTable.rows : []).toHaveLength(2);
+    const signatures = built.sections
+      .find((section) => section.id === 'signature')
+      ?.components.find((component) => component.kind === 'signature');
+    expect(signatures?.kind === 'signature' ? signatures.signatures : []).toHaveLength(2);
+    expect(JSON.stringify(built)).toContain('substituição integral das unidades afetadas');
+    expect(
+      built.sections
+        .flatMap((section) => section.components)
+        .some((item) => item.kind === 'qrCode'),
+    ).toBe(false);
+
+    const rendered = renderer().render(built);
+    const pdf = await new PdfEngineService().create(rendered);
+    expect(rendered.blueprint).toBe(built);
+    expect(rendered.pages.length).toBeGreaterThanOrEqual(1);
+    expect(pdf.pageCount).toBe(rendered.pages.length);
+    expect(pdf.buffer.subarray(0, 5).toString('latin1')).toBe('%PDF-');
   });
 
   it('certifies DC02B corporate header, maintenance contract and long inspected-equipment pagination', () => {
@@ -476,7 +634,7 @@ describe('DocumentEngine foundation', () => {
   it.each([
     [DocumentTemplateType.WORK_ORDER, 'work-order-identification'],
     [DocumentTemplateType.TECHNICAL_REPORT, 'visit-objective'],
-    [DocumentTemplateType.TECHNICAL_OPINION, 'technical-opinion-findings'],
+    [DocumentTemplateType.TECHNICAL_OPINION, 'technical-opinion-site-conditions'],
     [DocumentTemplateType.PMOC, 'pmoc-compliance-context'],
     [DocumentTemplateType.RECEIPT, 'receipt-reference'],
   ])('builds and renders the official report-center workflow %s', async (type, expectedSection) => {
@@ -1342,6 +1500,7 @@ function operationContext(
       scheduledFor: now,
       startedAt: now,
       completedAt: now,
+      createdAt: now,
       signedAt: now,
       checklist: [{ label: 'Inspeção visual', done: true, note: 'Sem avarias aparentes' }],
       observations: 'Equipamento inspecionado e operando conforme registros do atendimento.',

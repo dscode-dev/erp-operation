@@ -1,5 +1,14 @@
 # COMPONENTS — Frontend
 
+## DC-03
+
+- `ReportWorkflowDrawer`: orquestra os campos dedicados do Laudo e usa o primeiro equipamento
+  selecionado somente como relação principal da Operation.
+- `InspectedEquipmentSelector`: reutilizado no Laudo para seleção múltipla pesquisável e edição do
+  setor/local de cada ativo.
+- `DocumentViewer`: permanece genérico; tabelas usam `table-layout: fixed` e `break-words` para
+  refletir com segurança o mesmo Blueprint renderizado no PDF.
+
 ## Work Order — QR textual
 
 `DocumentViewer` não exige alteração especializada: a OS apresenta o identificador por

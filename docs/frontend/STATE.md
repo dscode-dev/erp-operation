@@ -1,5 +1,16 @@
 # STATE — Frontend
 
+## DC-03 — Laudo Técnico
+
+- A Central de Relatórios coleta conteúdo próprio do `TECHNICAL_OPINION`: objetivo, condições
+  observadas, análise e conclusão.
+- A seleção de equipamento único foi removida da Origem; equipamentos múltiplos são escolhidos no
+  Conteúdo pelo seletor reutilizável e formam a tabela oficial.
+- A etapa Evidências foi reduzida a Assinatura para esse tipo: não há checklist nem fotos.
+- `DocumentViewer` continua sendo o único preview/render/download e passou a quebrar conteúdo de
+  células em tabelas de largura fixa.
+- Nenhuma rota ou endpoint novo foi criado.
+
 ## Work Order — QR textual
 
 - O `DocumentViewer` recebe apenas metadata `Código QR` nas novas Ordens de Serviço.

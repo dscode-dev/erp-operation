@@ -753,6 +753,10 @@ export type OperationDetail = Omit<OperationSummary, 'equipment'> & {
   serviceDescription: string | null;
   technicalDiagnosis: string | null;
   technicalRecommendations: string | null;
+  technicalOpinionObjective: string | null;
+  technicalOpinionConditions: string | null;
+  technicalOpinionAnalysis: string | null;
+  technicalOpinionConclusion: string | null;
   referenceMonth: number | null;
   referenceYear: number | null;
   maintenanceType: OperationMaintenanceType | null;
@@ -786,6 +790,10 @@ export type CreateOperationPayload = {
   serviceDescription?: string | null;
   technicalDiagnosis?: string | null;
   technicalRecommendations?: string | null;
+  technicalOpinionObjective?: string | null;
+  technicalOpinionConditions?: string | null;
+  technicalOpinionAnalysis?: string | null;
+  technicalOpinionConclusion?: string | null;
   referenceMonth?: number | null;
   referenceYear?: number | null;
   maintenanceType?: OperationMaintenanceType | null;

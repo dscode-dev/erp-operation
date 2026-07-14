@@ -1,5 +1,22 @@
 # ARCHITECTURE — Frontend
 
+## DC-03
+
+```text
+Central de Relatórios
+→ Operation com campos technicalOpinion* + inspectedEquipments
+→ DocumentViewer
+→ DocumentContext
+→ DocumentBuilder
+→ mesmo DocumentBlueprint
+├─ Preview
+└─ Renderer → PdfEngine → Download
+```
+
+O frontend não interpreta política de assinatura, não monta seções do Laudo e não reutiliza o
+conteúdo do Relatório de Visita. A quebra visual de células é uma projeção genérica do contrato de
+tabela, sem regra local de `TECHNICAL_OPINION`.
+
 O Builder backend decide que `WORK_ORDER` contém somente `Código QR` no metadata. O Viewer não
 interpreta o tipo documental nem recria a imagem, preservando a arquitetura Blueprint-driven.
 

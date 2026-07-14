@@ -97,6 +97,7 @@ type WorkflowForm = {
   pmocId: string;
   objective: string;
   diagnosis: string;
+  siteConditions: string;
   observations: string;
   analysis: string;
   recommendations: string;
@@ -130,6 +131,7 @@ const emptyForm: WorkflowForm = {
   pmocId: '',
   objective: '',
   diagnosis: '',
+  siteConditions: '',
   observations: '',
   analysis: '',
   recommendations: '',
@@ -491,6 +493,14 @@ function ReportWorkflowDrawer({
         observations: detail.observations ?? '',
         analysis: detail.serviceDescription ?? '',
         recommendations: detail.technicalRecommendations ?? '',
+        ...(type === 'TECHNICAL_OPINION'
+          ? {
+              objective: detail.technicalOpinionObjective ?? '',
+              siteConditions: detail.technicalOpinionConditions ?? '',
+              analysis: detail.technicalOpinionAnalysis ?? '',
+              conclusion: detail.technicalOpinionConclusion ?? '',
+            }
+          : {}),
         checklist: detail.checklist
           .map(
             (item) =>
@@ -564,7 +574,9 @@ function ReportWorkflowDrawer({
             customerId: form.customerId,
             addressId: form.addressId || null,
             equipmentId:
-              (type === 'WORK_ORDER' ? form.inspectedEquipments[0]?.equipmentId : null) ||
+              (type === 'WORK_ORDER' || type === 'TECHNICAL_OPINION'
+                ? form.inspectedEquipments[0]?.equipmentId
+                : null) ||
               form.equipmentId ||
               null,
             operatorId: form.operatorId,
@@ -600,7 +612,12 @@ function ReportWorkflowDrawer({
     }
   }
 
-  const steps = ['Origem', 'Conteúdo', 'Evidências', 'Preview'];
+  const steps = [
+    'Origem',
+    'Conteúdo',
+    type === 'TECHNICAL_OPINION' ? 'Assinatura' : 'Evidências',
+    'Preview',
+  ];
   return (
     <Drawer
       open
@@ -875,7 +892,7 @@ function OriginStep({
           ))}
         </select>
       </Field>
-      {type !== 'TECHNICAL_REPORT' && (
+      {type !== 'TECHNICAL_REPORT' && type !== 'TECHNICAL_OPINION' && (
         <Field label="Equipamento">
           <select
             value={form.equipmentId}
@@ -960,8 +977,7 @@ function ContentStep({
       .filter((template) => selectedIds.has(template.id))
       .map((template) => {
         const current = selectedChecklistItems.find(
-          (item) =>
-            item.templateId === template.id || item.description === template.description,
+          (item) => item.templateId === template.id || item.description === template.description,
         );
         return (
           current ?? {
@@ -1074,11 +1090,17 @@ function ContentStep({
     );
   if (type === 'TECHNICAL_OPINION')
     return (
-      <div className="space-y-4">
+      <div className="space-y-5">
+        <InspectedEquipmentSelector form={form} equipments={equipments} onSet={onSet} />
         <Area
-          label="Diagnóstico"
+          label="Objetivo do Laudo"
           value={form.objective}
           onChange={(value) => onSet('objective', value)}
+        />
+        <Area
+          label="Condições observadas no local — uma condição técnica por linha"
+          value={form.siteConditions}
+          onChange={(value) => onSet('siteConditions', value)}
         />
         <Area
           label="Análise técnica"
@@ -1086,7 +1108,7 @@ function ContentStep({
           onChange={(value) => onSet('analysis', value)}
         />
         <Area
-          label="Conclusão"
+          label="Conclusão técnica"
           value={form.conclusion}
           onChange={(value) => onSet('conclusion', value)}
         />
@@ -1164,7 +1186,9 @@ function ContentStep({
                   onSet(
                     'maintenanceChecklist',
                     selectedChecklistItems.map((current, currentIndex) =>
-                      currentIndex === index ? { ...current, executed: event.target.checked } : current,
+                      currentIndex === index
+                        ? { ...current, executed: event.target.checked }
+                        : current,
                     ),
                   )
                 }
@@ -1177,7 +1201,9 @@ function ContentStep({
                   onSet(
                     'maintenanceChecklist',
                     selectedChecklistItems.map((current, currentIndex) =>
-                      currentIndex === index ? { ...current, observations: event.target.value } : current,
+                      currentIndex === index
+                        ? { ...current, observations: event.target.value }
+                        : current,
                     ),
                   )
                 }
@@ -1277,7 +1303,8 @@ function InspectedEquipmentSelector({
       <div>
         <h3 className="text-sm font-semibold">Equipamentos incluídos</h3>
         <p className="text-caption">
-          Selecione os ativos que formarão a tabela do documento. A busca suporta clientes com muitos equipamentos.
+          Selecione os ativos que formarão a tabela do documento. A busca suporta clientes com
+          muitos equipamentos.
         </p>
       </div>
       <MultiSelect
@@ -1321,8 +1348,8 @@ function InspectedEquipmentSelector({
             className="grid gap-2 rounded-[var(--radius-md)] bg-[var(--color-muted)]/50 p-3 md:grid-cols-[1fr_260px_auto] md:items-center"
           >
             <span className="text-sm">
-              <strong>{equipment.name}</strong> · {equipment.manufacturer ?? 'Marca não informada'} ·{' '}
-              {equipment.model ?? 'Modelo não informado'}
+              <strong>{equipment.name}</strong> · {equipment.manufacturer ?? 'Marca não informada'}{' '}
+              · {equipment.model ?? 'Modelo não informado'}
             </span>
             <input
               aria-label={`Setor de ${equipment.name}`}
@@ -1376,7 +1403,8 @@ function EvidenceStep({
       <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-muted)]/40 p-4">
         <strong className="text-sm">Evidências da Operation</strong>
         <p className="mt-1 text-caption">
-          Fotos e assinaturas existentes serão resolvidas pelo backend. Nenhum arquivo é duplicado neste fluxo.
+          Fotos e assinaturas existentes serão resolvidas pelo backend. Nenhum arquivo é duplicado
+          neste fluxo.
         </p>
       </div>
     );
@@ -1398,7 +1426,10 @@ function EvidenceStep({
             onChange={async (event) => {
               const files = Array.from(event.target.files ?? []).slice(0, 10);
               const photos = await Promise.all(
-                files.map(async (file) => ({ dataUrl: await fileDataUrl(file), caption: file.name })),
+                files.map(async (file) => ({
+                  dataUrl: await fileDataUrl(file),
+                  caption: file.name,
+                })),
               );
               onSet('photos', photos);
             }}
@@ -1448,9 +1479,13 @@ function contentFor(type: DocumentKind, form: WorkflowForm) {
   if (type === 'TECHNICAL_OPINION')
     return {
       ...common,
-      reportedIssue: form.objective,
-      serviceDescription: form.analysis,
-      observations: form.conclusion,
+      checklist: [],
+      photos: [],
+      technicalOpinionObjective: form.objective,
+      technicalOpinionConditions: form.siteConditions,
+      technicalOpinionAnalysis: form.analysis,
+      technicalOpinionConclusion: form.conclusion,
+      inspectedEquipments: form.inspectedEquipments,
     };
   if (type === 'TECHNICAL_REPORT')
     return {

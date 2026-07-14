@@ -1,5 +1,20 @@
 # OPUS Frontend Integration
 
+## DC-03 — TECHNICAL_OPINION
+
+| Campo UI                        | Campo API                    |
+| ------------------------------- | ---------------------------- |
+| Objetivo do Laudo               | `technicalOpinionObjective`  |
+| Condições, uma por linha        | `technicalOpinionConditions` |
+| Análise técnica                 | `technicalOpinionAnalysis`   |
+| Conclusão técnica               | `technicalOpinionConclusion` |
+| Equipamentos e setor/local      | `inspectedEquipments[]`      |
+
+Não reutilize `reportedIssue`, `technicalDiagnosis`, `serviceDescription`, `observations`,
+checklist ou fotos para montar o Laudo. Preserve a ordem recebida e use tabela fixa com quebra de
+palavras. Responsável/CREA e assinaturas já chegam resolvidos; não acesse Storage nem interprete
+`SignatureMode`.
+
 ## WORK_ORDER — QR textual
 
 Na seção `equipment`, renderize `Código QR` como metadata comum. Novas Ordens de Serviço não trazem
