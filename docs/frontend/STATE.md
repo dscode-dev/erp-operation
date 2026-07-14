@@ -4,6 +4,8 @@
 
 - `DocumentViewer` passou a espelhar o cabeçalho PDF em duas linhas: logo isolada, seguida por
   título/número e dados institucionais em colunas independentes.
+- O Renderer PDF foi alinhado às proporções já aprovadas no Preview; nenhuma composição frontend
+  adicional foi criada.
 - A Central renomeou a seleção para `Equipamentos`; a composição e a ordem permanecem recebidas do
   Blueprint oficial, sem QR ou seções locais.
 

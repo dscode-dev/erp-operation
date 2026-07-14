@@ -56,7 +56,9 @@ Refinamento de 14/07/2026:
 - Equipamentos: 1 linha na tabela oficial.
 - QR, fotos e relacionados: ausentes conforme contrato refinado.
 - Assinaturas: 2, conforme política `HYBRID`.
-- PDF: `%PDF-`, 25.472 bytes, 3 páginas; inspeção visual sem colisão no cabeçalho.
+- PDF: `%PDF-`, 25.473 bytes, 3 páginas; inspeção visual sem colisão no cabeçalho.
+- Paridade de header: padding superior, linha da logo, gap e topo do título/empresa reproduzem a
+  composição aprovada no `DocumentViewer`.
 - `/documentos`: registro confirmado.
 
 Evidência histórica anterior ao refinamento (substituída para composição visual):

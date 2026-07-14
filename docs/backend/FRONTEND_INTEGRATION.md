@@ -5,7 +5,8 @@
 O frontend deve renderizar `sections` na ordem recebida. `technical-report-inspected-equipments`
 tem o título `Equipamentos` e pode conter uma ou várias linhas. Não criar QR, materiais, fotos ou
 documentos relacionados como fallback neste relatório. O cabeçalho do `DocumentViewer` espelha o
-PDF em duas linhas, mantendo o número já prefixado devolvido em `header.documentNumber`.
+PDF em duas linhas, mantendo o número já prefixado devolvido em `header.documentNumber`; o Renderer
+PDF usa o mesmo alinhamento superior entre título e empresa.
 
 ## DC-02 — Relatório de Visita Técnica
 

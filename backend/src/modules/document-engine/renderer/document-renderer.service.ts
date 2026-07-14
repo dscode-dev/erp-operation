@@ -33,7 +33,9 @@ const SECTION_TITLE_HEIGHT = 24;
 const HEADER_ACCENT_HEIGHT = 8;
 const HEADER_LOGO_WIDTH = 100;
 const HEADER_LOGO_HEIGHT = 32;
-const HEADER_FIRST_ROW_HEIGHT = 48;
+const HEADER_TOP_PADDING = 30;
+const HEADER_LOGO_ROW_HEIGHT = 38;
+const HEADER_ROW_GAP = 12;
 const HEADER_COMPANY_WIDTH = 245;
 
 @Injectable()
@@ -580,9 +582,10 @@ export class DocumentRendererService {
     const corporate = blueprint.header.corporate;
     const logo = corporate?.logo ?? blueprint.header.logo;
     const headerContentTop = DOCUMENT_PAGE.height - HEADER_ACCENT_HEIGHT;
-    const secondRowTop = headerContentTop - HEADER_FIRST_ROW_HEIGHT;
+    const secondRowTop =
+      headerContentTop - HEADER_TOP_PADDING - HEADER_LOGO_ROW_HEIGHT - HEADER_ROW_GAP;
     const organizationX = DOCUMENT_PAGE.width - DOCUMENT_PAGE.marginRight - HEADER_COMPANY_WIDTH;
-    const logoY = headerContentTop - HEADER_FIRST_ROW_HEIGHT / 2 - HEADER_LOGO_HEIGHT / 2;
+    const logoY = headerContentTop - HEADER_TOP_PADDING - HEADER_LOGO_HEIGHT;
     return {
       pageNumber,
       elements: [
@@ -643,7 +646,7 @@ export class DocumentRendererService {
           blueprint,
           organizationX,
           HEADER_COMPANY_WIDTH,
-          secondRowTop - 4,
+          secondRowTop - 11,
         ),
         {
           type: 'line',

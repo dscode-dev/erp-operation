@@ -718,7 +718,23 @@ describe('DocumentEngine foundation', () => {
       (element) => element.type === 'image' && element.width === 100 && element.height === 32,
     );
     expect(headerLogo?.type === 'image' ? headerLogo.y : null).toBeCloseTo(
-      DOCUMENT_PAGE.height - 8 - 48 / 2 - 32 / 2,
+      DOCUMENT_PAGE.height - 8 - 30 - 32,
+      1,
+    );
+    const headerTitle = rendered.pages[0]?.elements.find(
+      (element) => element.type === 'text' && element.text === 'Ordem de Serviço',
+    );
+    const headerCompany = rendered.pages[0]?.elements.find(
+      (element) => element.type === 'text' && element.text === 'Orbit',
+    );
+    expect(
+      headerTitle?.type === 'text'
+        ? DOCUMENT_PAGE.height - headerTitle.y - headerTitle.size
+        : null,
+    ).toBeCloseTo(
+      headerCompany?.type === 'text'
+        ? DOCUMENT_PAGE.height - headerCompany.y - headerCompany.size
+        : 0,
       1,
     );
     const checklistPage = rendered.pages.find((page) =>

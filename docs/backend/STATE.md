@@ -4,6 +4,8 @@
 
 - Cabeçalho oficial ampliado de 96 para 168 pt e reorganizado em duas linhas: logo isolada na
   primeira; título/número à esquerda e dados institucionais quebráveis à direita na segunda.
+- O Renderer replica as proporções do Preview: 30 pt de padding após a faixa, linha de logo de
+  38 pt, intervalo de 12 pt e alinhamento superior exato entre título e empresa.
 - Ordem semântica do `TECHNICAL_REPORT`: identificação, cliente, local, equipamentos em tabela,
   período, checklist da periodicidade selecionada, objetivo, diagnóstico, atividades, checklist
   complementar, recomendações, observações e assinatura.
