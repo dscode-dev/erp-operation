@@ -434,3 +434,7 @@ Nenhuma rota nova foi criada.
 # `/maintenance-checklists`
 
 Persistent library of maintenance activities used by the Technical Report workflow. OWNER and MANAGER can create, edit, and deactivate; VIEWER can read. OPERATOR is denied. The route consumes only `/api/v1/maintenance-checklist-templates`.
+# `/reports` — Ordem de Serviço
+
+O card Ordem de Serviço abre um wizard com origem por Operation concluída ou preenchimento novo. O
+modo novo cria uma Operation DRAFT oficial e segue Preview → Render → Download no mesmo drawer.

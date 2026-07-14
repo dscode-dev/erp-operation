@@ -88,6 +88,7 @@ const REPORT_TYPES: Array<{
 ];
 
 type WorkflowForm = {
+  workOrderSource: '' | 'EXISTING' | 'NEW';
   operationId: string;
   customerId: string;
   addressId: string;
@@ -120,6 +121,7 @@ type WorkflowForm = {
 };
 
 const emptyForm: WorkflowForm = {
+  workOrderSource: '',
   operationId: '',
   customerId: '',
   addressId: '',
@@ -403,7 +405,7 @@ function ReportWorkflowDrawer({
     [],
   );
   const operations = useQuery<Paginated<OperationSummary>>(
-    (signal) => operationApi.listOperations({ page: 1, limit: 100, signal }),
+    (signal) => operationApi.listOperations({ page: 1, limit: 100, status: 'COMPLETED', signal }),
     [],
   );
   const pmocs = useQuery<Paginated<PmocPlan>>(
@@ -461,6 +463,12 @@ function ReportWorkflowDrawer({
     setForm((current) => ({ ...current, [key]: value }));
   }
 
+  function selectWorkOrderSource(source: 'EXISTING' | 'NEW') {
+    setOperation(null);
+    setError(null);
+    setForm({ ...emptyForm, workOrderSource: source });
+  }
+
   async function selectOperation(id: string) {
     set('operationId', id);
     setError(null);
@@ -473,6 +481,7 @@ function ReportWorkflowDrawer({
       setOperation(detail);
       setForm((current) => ({
         ...current,
+        workOrderSource: 'EXISTING',
         customerId: detail.customer?.id ?? '',
         addressId: detail.address?.id ?? '',
         equipmentId: detail.equipment?.id ?? '',
@@ -538,11 +547,13 @@ function ReportWorkflowDrawer({
     setError(null);
     try {
       let detail = operation;
-      if (isWorkOrder) {
+      if (isWorkOrder && form.workOrderSource === 'EXISTING') {
         if (!form.operationId)
           throw new Error('Selecione uma Operation para emitir a Ordem de Serviço.');
         detail = detail ?? (await operationApi.getOperation(form.operationId));
       } else {
+        if (isWorkOrder && form.workOrderSource !== 'NEW')
+          throw new Error('Escolha se deseja usar uma Operation ou criar a OS do zero.');
         if (!form.customerId || !form.operatorId)
           throw new Error('Cliente e responsável são obrigatórios.');
         const content = contentFor(type, form);
@@ -552,7 +563,10 @@ function ReportWorkflowDrawer({
           detail = await operationApi.createOperation({
             customerId: form.customerId,
             addressId: form.addressId || null,
-            equipmentId: form.equipmentId || null,
+            equipmentId:
+              (type === 'WORK_ORDER' ? form.inspectedEquipments[0]?.equipmentId : null) ||
+              form.equipmentId ||
+              null,
             operatorId: form.operatorId,
             type: operationTypeFor(type),
             status: 'DRAFT',
@@ -665,6 +679,7 @@ function ReportWorkflowDrawer({
           addresses={addresses}
           equipments={equipments}
           onSet={set}
+          onWorkOrderSource={selectWorkOrderSource}
           onOperation={selectOperation}
           onPmoc={selectPmoc}
         />
@@ -704,6 +719,7 @@ function OriginStep({
   addresses,
   equipments,
   onSet,
+  onWorkOrderSource,
   onOperation,
   onPmoc,
 }: {
@@ -716,21 +732,104 @@ function OriginStep({
   addresses: CustomerAddress[];
   equipments: EquipmentSummary[];
   onSet: <K extends keyof WorkflowForm>(key: K, value: WorkflowForm[K]) => void;
+  onWorkOrderSource: (source: 'EXISTING' | 'NEW') => void;
   onOperation: (id: string) => void;
   onPmoc: (id: string) => void;
 }) {
   if (type === 'WORK_ORDER')
     return (
-      <Field label="Operation oficial">
-        <select value={form.operationId} onChange={(event) => void onOperation(event.target.value)}>
-          <option value="">Selecione…</option>
-          {operations.map((item) => (
-            <option key={item.id} value={item.id}>
-              OP-{String(item.number).padStart(6, '0')} · {item.customer?.name ?? 'Cliente'}
-            </option>
-          ))}
-        </select>
-      </Field>
+      <div className="space-y-5">
+        <div className="grid gap-3 md:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => onWorkOrderSource('EXISTING')}
+            className={`rounded-[var(--radius-lg)] border p-4 text-left transition ${form.workOrderSource === 'EXISTING' ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5' : 'border-[var(--color-border)] hover:bg-[var(--color-muted)]'}`}
+          >
+            <strong className="block text-sm">Usar Operation existente</strong>
+            <span className="mt-1 block text-caption">
+              Aproveita cliente, equipamentos, execução, fotos e assinatura já registrados.
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => onWorkOrderSource('NEW')}
+            className={`rounded-[var(--radius-lg)] border p-4 text-left transition ${form.workOrderSource === 'NEW' ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5' : 'border-[var(--color-border)] hover:bg-[var(--color-muted)]'}`}
+          >
+            <strong className="block text-sm">Criar ordem do zero</strong>
+            <span className="mt-1 block text-caption">
+              Cria uma Operation rascunho oficial e permite preencher todos os dados da OS.
+            </span>
+          </button>
+        </div>
+        {form.workOrderSource === 'EXISTING' && (
+          <Field label="Operation oficial">
+            <select
+              value={form.operationId}
+              onChange={(event) => void onOperation(event.target.value)}
+            >
+              <option value="">Selecione…</option>
+              {operations.map((item) => (
+                <option key={item.id} value={item.id}>
+                  OP-{String(item.number).padStart(6, '0')} · {item.customer?.name ?? 'Cliente'}
+                </option>
+              ))}
+            </select>
+          </Field>
+        )}
+        {form.workOrderSource === 'NEW' && (
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label="Cliente">
+              <select
+                value={form.customerId}
+                onChange={(event) => {
+                  onSet('customerId', event.target.value);
+                  onSet('addressId', '');
+                  onSet('equipmentId', '');
+                  onSet('inspectedEquipments', []);
+                }}
+              >
+                <option value="">Selecione…</option>
+                {customers.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.tradeName ?? item.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Endereço">
+              <select
+                value={form.addressId}
+                onChange={(event) => onSet('addressId', event.target.value)}
+              >
+                <option value="">Endereço principal</option>
+                {addresses.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name ?? 'Endereço'} · {item.street ?? 'logradouro não informado'}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Responsável">
+              <select
+                value={form.operatorId}
+                onChange={(event) => onSet('operatorId', event.target.value)}
+              >
+                <option value="">Selecione…</option>
+                {users
+                  .filter((item) => item.isActive)
+                  .map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name} · {item.role}
+                    </option>
+                  ))}
+              </select>
+            </Field>
+          </div>
+        )}
+        {!form.workOrderSource && (
+          <p className="text-caption">Selecione uma das origens para continuar.</p>
+        )}
+      </div>
     );
   return (
     <div className="grid gap-4 md:grid-cols-2">
@@ -902,13 +1001,51 @@ function ContentStep({
     }
   }
 
-  if (type === 'WORK_ORDER')
+  if (type === 'WORK_ORDER') {
+    if (form.workOrderSource === 'EXISTING')
+      return (
+        <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-muted)]/40 p-4">
+          <strong className="text-sm">Dados carregados da Operation</strong>
+          <p className="mt-1 text-caption">
+            A ordem utilizará os dados operacionais persistidos, incluindo equipamentos, checklist,
+            fotos e assinatura. Para corrigi-los, edite a Operation de origem.
+          </p>
+        </div>
+      );
     return (
-      <p className="text-sm text-[var(--color-muted-foreground)]">
-        A Ordem de Serviço utiliza os dados já persistidos na Operation selecionada. Edite a
-        Operation no módulo Operações quando necessário.
-      </p>
+      <div className="space-y-5">
+        <InspectedEquipmentSelector form={form} equipments={equipments} onSet={onSet} />
+        <Area
+          label="Defeito ou solicitação informada"
+          value={form.objective}
+          onChange={(value) => onSet('objective', value)}
+        />
+        <section className="space-y-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] p-4">
+          <div>
+            <h3 className="text-sm font-semibold">Serviços executados / Checklist da execução</h3>
+            <p className="text-caption">
+              Informe o resumo técnico e, quando necessário, detalhe uma atividade por linha.
+            </p>
+          </div>
+          <Area
+            label="Resumo dos serviços executados"
+            value={form.analysis}
+            onChange={(value) => onSet('analysis', value)}
+          />
+          <Area
+            label="Atividades do checklist — uma por linha"
+            value={form.checklist}
+            onChange={(value) => onSet('checklist', value)}
+          />
+        </section>
+        <Area
+          label="Observações e resultado operacional"
+          value={form.observations}
+          onChange={(value) => onSet('observations', value)}
+        />
+      </div>
     );
+  }
   if (type === 'RECEIPT')
     return (
       <div className="grid gap-4 md:grid-cols-2">
@@ -995,92 +1132,7 @@ function ContentStep({
             </select>
           </Field>
         </div>
-        <section className="space-y-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] p-4">
-          <div>
-            <h3 className="text-sm font-semibold">Equipamentos incluídos</h3>
-            <p className="text-caption">
-              Selecione os ativos que formarão a tabela do relatório. A busca evita listas extensas no formulário.
-            </p>
-          </div>
-          <MultiSelect
-            label="Selecionar equipamentos"
-            options={equipments.map((equipment) => ({
-              value: equipment.id,
-              label: `${equipment.name} · ${equipment.tag || 'sem tag'}`,
-              description: [equipment.manufacturer, equipment.model, equipment.capacity]
-                .filter(Boolean)
-                .join(' · '),
-            }))}
-            value={form.inspectedEquipments.map((item) => item.equipmentId)}
-            onChange={(equipmentIds) =>
-              onSet(
-                'inspectedEquipments',
-                equipmentIds.map((equipmentId) => {
-                  const current = form.inspectedEquipments.find(
-                    (item) => item.equipmentId === equipmentId,
-                  );
-                  const equipment = equipments.find((item) => item.id === equipmentId);
-                  return (
-                    current ?? {
-                      equipmentId,
-                      sector: equipment?.address?.name || equipment?.name || 'Não informado',
-                    }
-                  );
-                }),
-              )
-            }
-            placeholder={
-              equipments.length ? 'Buscar e selecionar equipamentos' : 'Cliente sem equipamentos'
-            }
-            emptyMessage="Nenhum equipamento encontrado para este cliente."
-          />
-          {form.inspectedEquipments.map((item) => {
-            const equipment = equipments.find((candidate) => candidate.id === item.equipmentId);
-            if (!equipment) return null;
-            return (
-              <div
-                key={item.equipmentId}
-                className="grid gap-2 rounded-[var(--radius-md)] bg-[var(--color-muted)]/50 p-3 md:grid-cols-[1fr_260px_auto] md:items-center"
-              >
-                <span className="text-sm">
-                  <strong>{equipment.name}</strong> · {equipment.manufacturer ?? 'Marca não informada'} ·{' '}
-                  {equipment.model ?? 'Modelo não informado'}
-                </span>
-                <input
-                  aria-label={`Setor de ${equipment.name}`}
-                  value={item.sector}
-                  onChange={(event) =>
-                    onSet(
-                      'inspectedEquipments',
-                      form.inspectedEquipments.map((current) =>
-                        current.equipmentId === item.equipmentId
-                          ? { ...current, sector: event.target.value }
-                          : current,
-                      ),
-                    )
-                  }
-                  placeholder="Setor/ambiente"
-                  className="h-9 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm"
-                />
-                <button
-                  type="button"
-                  aria-label={`Remover ${equipment.name}`}
-                  onClick={() =>
-                    onSet(
-                      'inspectedEquipments',
-                      form.inspectedEquipments.filter(
-                        (current) => current.equipmentId !== item.equipmentId,
-                      ),
-                    )
-                  }
-                  className="rounded-md p-2 text-[var(--color-muted-foreground)] hover:bg-[var(--color-card)] hover:text-[var(--color-danger)]"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            );
-          })}
-        </section>
+        <InspectedEquipmentSelector form={form} equipments={equipments} onSet={onSet} />
         <section className="space-y-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] p-4">
           <div>
             <h3 className="text-sm font-semibold">Checklist de manutenção</h3>
@@ -1211,6 +1263,105 @@ function ContentStep({
   );
 }
 
+function InspectedEquipmentSelector({
+  form,
+  equipments,
+  onSet,
+}: {
+  form: WorkflowForm;
+  equipments: EquipmentSummary[];
+  onSet: <K extends keyof WorkflowForm>(key: K, value: WorkflowForm[K]) => void;
+}) {
+  return (
+    <section className="space-y-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] p-4">
+      <div>
+        <h3 className="text-sm font-semibold">Equipamentos incluídos</h3>
+        <p className="text-caption">
+          Selecione os ativos que formarão a tabela do documento. A busca suporta clientes com muitos equipamentos.
+        </p>
+      </div>
+      <MultiSelect
+        label="Selecionar equipamentos"
+        options={equipments.map((equipment) => ({
+          value: equipment.id,
+          label: `${equipment.name} · ${equipment.tag || 'sem tag'}`,
+          description: [equipment.manufacturer, equipment.model, equipment.capacity]
+            .filter(Boolean)
+            .join(' · '),
+        }))}
+        value={form.inspectedEquipments.map((item) => item.equipmentId)}
+        onChange={(equipmentIds) =>
+          onSet(
+            'inspectedEquipments',
+            equipmentIds.map((equipmentId) => {
+              const current = form.inspectedEquipments.find(
+                (item) => item.equipmentId === equipmentId,
+              );
+              const equipment = equipments.find((item) => item.id === equipmentId);
+              return (
+                current ?? {
+                  equipmentId,
+                  sector: equipment?.address?.name || equipment?.name || 'Não informado',
+                }
+              );
+            }),
+          )
+        }
+        placeholder={
+          equipments.length ? 'Buscar e selecionar equipamentos' : 'Cliente sem equipamentos'
+        }
+        emptyMessage="Nenhum equipamento encontrado para este cliente."
+      />
+      {form.inspectedEquipments.map((item) => {
+        const equipment = equipments.find((candidate) => candidate.id === item.equipmentId);
+        if (!equipment) return null;
+        return (
+          <div
+            key={item.equipmentId}
+            className="grid gap-2 rounded-[var(--radius-md)] bg-[var(--color-muted)]/50 p-3 md:grid-cols-[1fr_260px_auto] md:items-center"
+          >
+            <span className="text-sm">
+              <strong>{equipment.name}</strong> · {equipment.manufacturer ?? 'Marca não informada'} ·{' '}
+              {equipment.model ?? 'Modelo não informado'}
+            </span>
+            <input
+              aria-label={`Setor de ${equipment.name}`}
+              value={item.sector}
+              onChange={(event) =>
+                onSet(
+                  'inspectedEquipments',
+                  form.inspectedEquipments.map((current) =>
+                    current.equipmentId === item.equipmentId
+                      ? { ...current, sector: event.target.value }
+                      : current,
+                  ),
+                )
+              }
+              placeholder="Setor/ambiente"
+              className="h-9 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm"
+            />
+            <button
+              type="button"
+              aria-label={`Remover ${equipment.name}`}
+              onClick={() =>
+                onSet(
+                  'inspectedEquipments',
+                  form.inspectedEquipments.filter(
+                    (current) => current.equipmentId !== item.equipmentId,
+                  ),
+                )
+              }
+              className="rounded-md p-2 text-[var(--color-muted-foreground)] hover:bg-[var(--color-card)] hover:text-[var(--color-danger)]"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        );
+      })}
+    </section>
+  );
+}
+
 function EvidenceStep({
   type,
   form,
@@ -1220,15 +1371,26 @@ function EvidenceStep({
   form: WorkflowForm;
   onSet: <K extends keyof WorkflowForm>(key: K, value: WorkflowForm[K]) => void;
 }) {
+  if (type === 'WORK_ORDER' && form.workOrderSource === 'EXISTING')
+    return (
+      <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-muted)]/40 p-4">
+        <strong className="text-sm">Evidências da Operation</strong>
+        <p className="mt-1 text-caption">
+          Fotos e assinaturas existentes serão resolvidas pelo backend. Nenhum arquivo é duplicado neste fluxo.
+        </p>
+      </div>
+    );
   return (
     <div className="space-y-5">
-      <Area
-        label="Checklist — uma atividade por linha"
-        value={form.checklist}
-        onChange={(value) => onSet('checklist', value)}
-      />
-      {type === 'PMOC' && (
-        <Field label="Fotos do PMOC">
+      {type !== 'WORK_ORDER' && (
+        <Area
+          label="Checklist — uma atividade por linha"
+          value={form.checklist}
+          onChange={(value) => onSet('checklist', value)}
+        />
+      )}
+      {(type === 'PMOC' || type === 'WORK_ORDER') && (
+        <Field label={type === 'PMOC' ? 'Fotos do PMOC' : 'Evidências fotográficas opcionais'}>
           <input
             type="file"
             accept="image/png,image/jpeg"
@@ -1272,7 +1434,7 @@ function contentFor(type: DocumentKind, form: WorkflowForm) {
     }));
   const common = {
     checklist,
-    photos: type === 'PMOC' ? form.photos : [],
+    photos: type === 'PMOC' || type === 'WORK_ORDER' ? form.photos : [],
     signatureData: form.signatureData,
     signedAt: form.signatureData ? new Date().toISOString() : undefined,
   };
@@ -1307,6 +1469,14 @@ function contentFor(type: DocumentKind, form: WorkflowForm) {
         executed: item.executed,
         observations: item.observations || undefined,
       })),
+      inspectedEquipments: form.inspectedEquipments,
+    };
+  if (type === 'WORK_ORDER')
+    return {
+      ...common,
+      reportedIssue: form.objective,
+      serviceDescription: form.analysis,
+      observations: form.observations,
       inspectedEquipments: form.inspectedEquipments,
     };
   return {

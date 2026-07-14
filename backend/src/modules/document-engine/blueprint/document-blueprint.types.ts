@@ -7,6 +7,7 @@ export type DocumentComponentKind =
   | 'table'
   | 'list'
   | 'image'
+  | 'imageGallery'
   | 'qrCode'
   | 'checklist'
   | 'signature'
@@ -116,6 +117,12 @@ export interface ImageComponent extends BlueprintBaseComponent {
   } | null;
 }
 
+export interface ImageGalleryComponent extends BlueprintBaseComponent {
+  kind: 'imageGallery';
+  images: Array<Omit<ImageComponent, 'id' | 'kind' | 'keepTogether'>>;
+  columns: 2;
+}
+
 export interface QrCodeComponent extends BlueprintBaseComponent {
   kind: 'qrCode';
   label: string;
@@ -178,6 +185,7 @@ export type DocumentBlueprintComponent =
   | TableComponent
   | ListComponent
   | ImageComponent
+  | ImageGalleryComponent
   | QrCodeComponent
   | ChecklistComponent
   | SignatureComponent

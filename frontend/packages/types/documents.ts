@@ -47,6 +47,19 @@ export type DocumentComponent =
     }
   | {
       id: string;
+      kind: 'imageGallery';
+      columns: 2;
+      images: Array<{
+        sourceId: string;
+        caption: string | null;
+        mimeType: string;
+        fileSize: number;
+        image?: { mimeType: string; fileSize: number; contentBase64: string } | null;
+      }>;
+      keepTogether?: boolean;
+    }
+  | {
+      id: string;
       kind: 'qrCode';
       label: string;
       value: string;

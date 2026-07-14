@@ -881,3 +881,10 @@ Validação:
 - Weekly/semiannual free-text syntax was replaced with the persistent checklist catalog, structured execution toggles, and per-item observations.
 - Added `/maintenance-checklists` for catalog management and inline creation for OWNER/MANAGER.
 - Technical Report image upload was removed from the workflow; PMOC keeps the existing secure image flow.
+# Work Order wizard closure — 14/07/2026
+
+- O wizard da Central permite escolher Operation existente ou criar a OS do zero.
+- O modo novo coleta cliente/responsável na origem e múltiplos equipamentos, solicitação,
+  execução/checklist e observações no conteúdo.
+- Evidências fotográficas são opcionais e a assinatura continua obedecendo ao template.
+- O DocumentViewer suporta a galeria oficial de duas colunas recebida no Blueprint.

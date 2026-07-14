@@ -1,5 +1,16 @@
 # Security
 
+## Work Order criada pela Central de Relatórios
+
+- A criação independente passa por `POST /operations`, preservando JWT, RBAC, validação de cliente,
+  endereço, operador e vínculo dos equipamentos ao mesmo cliente.
+- Fotos mantêm os limites, MIME/magic bytes, UUID de Storage e resolução exclusiva pelo
+  `DocumentAssetResolver` já existentes.
+- A galeria é construída somente com assets autorizados no `DocumentContext`; Builder e Renderer
+  não acessam Prisma ou Storage.
+- Reutilizar uma Operation não copia fotos, assinaturas ou dados e evita divergência histórica.
+- Documentos relacionados não são expostos no Blueprint da OS; downloads continuam autenticados.
+
 ## QR textual na Ordem de Serviço
 
 - A OS publica apenas o identificador não secreto `Equipment.qrCode` no metadata.

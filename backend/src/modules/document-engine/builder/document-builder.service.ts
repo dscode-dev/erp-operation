@@ -356,6 +356,35 @@ export class DocumentBuilderService {
     const address = operation.address ?? operation.customer.addresses[0] ?? null;
     const contact = operation.customer.contacts[0] ?? null;
     const serviceItems = this.lines(operation.serviceDescription);
+    const checklistItems = this.checklist(operation.checklist);
+    const executionComponents: DocumentBlueprintComponent[] = [];
+    if (operation.serviceDescription) {
+      executionComponents.push(
+        serviceItems.length > 1
+          ? { id: 'work-order-services-list', kind: 'list', items: serviceItems }
+          : {
+              id: 'work-order-services-text',
+              kind: 'paragraph',
+              text: this.clean(operation.serviceDescription),
+              keepTogether: true,
+            },
+      );
+    }
+    if (checklistItems.length > 0) {
+      executionComponents.push({
+        id: 'work-order-execution-checklist',
+        kind: 'checklist',
+        items: checklistItems,
+      });
+    }
+    if (executionComponents.length === 0) {
+      executionComponents.push({
+        id: 'work-order-services-empty',
+        kind: 'paragraph',
+        text: 'Serviços executados não registrados.',
+        keepTogether: true,
+      });
+    }
     return [
       {
         id: 'work-order-identification',
@@ -392,9 +421,7 @@ export class DocumentBuilderService {
           ]),
         ],
       },
-      operation.equipment
-        ? { ...this.equipmentSection(context, false), pageBreakAfter: true }
-        : null,
+      this.inspectedEquipmentSection(operation, 'work-order'),
       {
         id: 'work-order-reported-issue',
         title: 'Defeito ou solicitação informada',
@@ -408,25 +435,10 @@ export class DocumentBuilderService {
         ],
       },
       {
-        id: 'work-order-services',
-        title: 'Serviços executados',
-        components:
-          serviceItems.length > 1
-            ? [{ id: 'work-order-services-list', kind: 'list', items: serviceItems }]
-            : [
-                {
-                  id: 'work-order-services-text',
-                  kind: 'paragraph',
-                  text: this.clean(
-                    operation.serviceDescription ||
-                      'A execução deve ser detalhada no checklist e nos registros operacionais.',
-                  ),
-                  keepTogether: true,
-                },
-              ],
+        id: 'work-order-execution',
+        title: 'Serviços executados / Checklist da execução',
+        components: executionComponents,
       },
-      this.checklistSection(operation, 'Checklist da execução'),
-      this.materialsSection(operation),
       this.observationSection(operation, 'Observações e resultado operacional'),
     ].filter((section): section is DocumentSection => Boolean(section));
   }
@@ -793,6 +805,7 @@ export class DocumentBuilderService {
     );
     if (
       context.configuration.type !== DocumentTemplateType.TECHNICAL_REPORT &&
+      context.configuration.type !== DocumentTemplateType.WORK_ORDER &&
       relatedDocuments.length > 0
     ) {
       sections.push({
@@ -812,10 +825,7 @@ export class DocumentBuilderService {
     return sections;
   }
 
-  private equipmentSection(
-    context: DocumentContext,
-    includeQrImage = true,
-  ): DocumentSection {
+  private equipmentSection(context: DocumentContext, includeQrImage = true): DocumentSection {
     const { operation } = context;
     const equipment = operation.equipment;
     if (!equipment) {
@@ -930,7 +940,10 @@ export class DocumentBuilderService {
     }));
   }
 
-  private inspectedEquipmentSection(operation: DocumentContextOperation): DocumentSection {
+  private inspectedEquipmentSection(
+    operation: DocumentContextOperation,
+    idPrefix = 'technical-report',
+  ): DocumentSection {
     const inspected = operation.inspectedEquipments ?? [];
     const rows =
       inspected.length > 0
@@ -957,11 +970,11 @@ export class DocumentBuilderService {
             ]
           : [];
     return {
-      id: 'technical-report-inspected-equipments',
+      id: `${idPrefix}-inspected-equipments`,
       title: 'Equipamentos',
       components: [
         {
-          id: 'technical-report-inspected-equipments-table',
+          id: `${idPrefix}-inspected-equipments-table`,
           kind: 'table',
           columns: [
             { key: 'item', label: 'ITEM', width: 0.1 },
@@ -1133,16 +1146,20 @@ export class DocumentBuilderService {
     return {
       id: `photos-${this.slug(title)}`,
       title,
-      components: operation.photos.map((photo) => ({
-        id: `photo-${photo.id}`,
-        kind: 'image',
-        sourceId: photo.id,
-        caption: photo.caption ? this.clean(photo.caption) : null,
-        mimeType: photo.mimeType,
-        fileSize: photo.fileSize,
-        image: this.imageForPhoto(context, photo.id),
-        keepTogether: true,
-      })),
+      components: [
+        {
+          id: `photo-gallery-${operation.id}`,
+          kind: 'imageGallery',
+          columns: 2,
+          images: operation.photos.map((photo) => ({
+            sourceId: photo.id,
+            caption: photo.caption ? this.clean(photo.caption) : null,
+            mimeType: photo.mimeType,
+            fileSize: photo.fileSize,
+            image: this.imageForPhoto(context, photo.id),
+          })),
+        },
+      ],
     };
   }
 

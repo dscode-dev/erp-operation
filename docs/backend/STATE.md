@@ -1,5 +1,19 @@
 # Backend State
 
+## Work Order — criação independente e estrutura consolidada (14/07/2026)
+
+- A Central de Relatórios agora pode reutilizar uma Operation concluída ou criar uma OS do zero.
+- “Do zero” continua criando uma Operation `DRAFT` oficial; o `OperationDocument` WORK_ORDER é
+  criado pela transação já existente. Não foi criado domínio, endpoint ou renderer paralelo.
+- A OS utiliza `inspectedEquipments` para uma tabela com múltiplos equipamentos e snapshots de
+  setor, marca, modelo e capacidade.
+- A estrutura oficial passou a ser: identificação, cliente, equipamentos, solicitação,
+  serviços/checklist, observações, fotos opcionais e assinatura.
+- Materiais e documentos relacionados foram removidos exclusivamente da OS.
+- Evidências existentes são omitidas quando vazias e, quando presentes, utilizam o novo componente
+  aditivo `imageGallery`, com duas colunas no Preview e no PDF.
+- Sem migration.
+
 ## Work Order — remoção do QR gráfico
 
 - `WORK_ORDER` não inclui mais `QrCodeComponent`; a seção `Equipamento` mantém somente o campo

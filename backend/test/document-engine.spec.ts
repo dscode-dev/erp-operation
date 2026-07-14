@@ -8,7 +8,10 @@ import { DocumentBuilderService } from '../src/modules/document-engine/builder/d
 import { DocumentContextService } from '../src/modules/document-engine/context/document-context.service';
 import { OperationsService } from '../src/modules/operations/operations.service';
 import { DocumentEngineService } from '../src/modules/document-engine/document-engine.service';
-import type { RenderedDocument } from '../src/modules/document-engine/renderer/document-renderer.types';
+import type {
+  RenderedDocument,
+  RenderedImage,
+} from '../src/modules/document-engine/renderer/document-renderer.types';
 import { DocumentAssetResolver } from '../src/modules/document-engine/assets/document-asset-resolver.service';
 import { PNG } from 'pngjs';
 import { BinaryBitmap, HybridBinarizer, QRCodeReader, RGBLuminanceSource } from '@zxing/library';
@@ -686,12 +689,49 @@ describe('DocumentEngine foundation', () => {
     operation.reportedIssue = 'Cliente relata temperatura elevada — equipamento sem rendimento.';
     operation.serviceDescription =
       'Inspeção técnica completa\n- Correção do vazamento\nRecarga de fluido refrigerante';
+    operation.inspectedEquipments = [
+      {
+        equipmentId: 'equipment-1',
+        sector: 'Recepção',
+        brandSnapshot: 'York',
+        modelSnapshot: 'YCAL',
+        capacitySnapshot: '60 TR',
+      },
+      {
+        equipmentId: 'equipment-2',
+        sector: 'Centro cirúrgico',
+        brandSnapshot: 'Carrier',
+        modelSnapshot: 'AquaSnap',
+        capacitySnapshot: '40 TR',
+      },
+    ];
+    operation.photos = [1, 2, 3].map((index) => ({
+      id: `photo-${index}`,
+      storageKey: `operations/42/photo-${index}.png`,
+      caption: `Evidência ${index}`,
+      mimeType: 'image/png',
+      fileSize: 68,
+    }));
+    operation.documents = [
+      {
+        id: 'related-report',
+        type: DocumentTemplateType.REPORT,
+        number: 'REL-000001',
+        status: 'READY',
+      },
+    ];
     (context.assets as Record<string, unknown>).logo = {
       storageKey: 'organization/logo.png',
       mimeType: 'image/png',
       fileSize: 68,
       contentBase64: ONE_PIXEL_PNG,
     };
+    (context.assets as Record<string, unknown>).images = [1, 2, 3].map((index) => ({
+      storageKey: `operations/42/photo-${index}.png`,
+      mimeType: 'image/png',
+      fileSize: 68,
+      contentBase64: ONE_PIXEL_PNG,
+    }));
     const builder = new DocumentBuilderService({} as never);
     const workOrder = (
       builder as unknown as { buildFromContext: (ctx: unknown) => DocumentBlueprint }
@@ -700,24 +740,27 @@ describe('DocumentEngine foundation', () => {
     expect(ids).toEqual([
       'work-order-identification',
       'work-order-customer',
-      'equipment',
+      'work-order-inspected-equipments',
       'work-order-reported-issue',
-      'work-order-services',
-      'checklist-checklist-da-execucao',
+      'work-order-execution',
       'observations-observacoes-e-resultado-operacional',
+      'photos-evidencias-fotograficas',
     ]);
-    expect(workOrder.sections.find((section) => section.id === 'equipment')?.pageBreakAfter).toBe(
-      true,
-    );
+    expect(ids).not.toContain('related-documents');
     const equipmentComponents =
-      workOrder.sections.find((section) => section.id === 'equipment')?.components ?? [];
-    expect(equipmentComponents.map((component) => component.kind)).toEqual(['metadata']);
-    const equipmentMetadata = equipmentComponents.find((component) => component.kind === 'metadata');
-    expect(
-      equipmentMetadata?.kind === 'metadata'
-        ? equipmentMetadata.items.find((item) => item.label === 'Código QR')?.value
-        : null,
-    ).toBe('equipment:7db71471-0cf4-4414-8d06-83eb9c1917c9');
+      workOrder.sections.find((section) => section.id === 'work-order-inspected-equipments')
+        ?.components ?? [];
+    expect(equipmentComponents.map((component) => component.kind)).toEqual(['table']);
+    const equipmentTable = equipmentComponents.find((component) => component.kind === 'table');
+    expect(equipmentTable?.kind === 'table' ? equipmentTable.rows : []).toHaveLength(2);
+    const execution = workOrder.sections.find((section) => section.id === 'work-order-execution');
+    expect(execution?.title).toBe('Serviços executados / Checklist da execução');
+    expect(execution?.components.map((component) => component.kind)).toEqual(['list', 'checklist']);
+    const gallery = workOrder.sections
+      .find((section) => section.id === 'photos-evidencias-fotograficas')
+      ?.components.find((component) => component.kind === 'imageGallery');
+    expect(gallery?.kind === 'imageGallery' ? gallery.images : []).toHaveLength(3);
+    expect(gallery?.kind === 'imageGallery' ? gallery.columns : null).toBe(2);
     expect(workOrder.footer.content).not.toContain('Blueprint');
     const rendered = renderer().render(workOrder);
     const pdf = await new PdfEngineService().create(rendered);
@@ -742,9 +785,7 @@ describe('DocumentEngine foundation', () => {
       (element) => element.type === 'text' && element.text === 'Orbit',
     );
     expect(
-      headerTitle?.type === 'text'
-        ? DOCUMENT_PAGE.height - headerTitle.y - headerTitle.size
-        : null,
+      headerTitle?.type === 'text' ? DOCUMENT_PAGE.height - headerTitle.y - headerTitle.size : null,
     ).toBeCloseTo(
       headerCompany?.type === 'text'
         ? DOCUMENT_PAGE.height - headerCompany.y - headerCompany.size
@@ -753,7 +794,8 @@ describe('DocumentEngine foundation', () => {
     );
     const checklistPage = rendered.pages.find((page) =>
       page.elements.some(
-        (element) => element.type === 'text' && element.text === 'Checklist da execução',
+        (element) =>
+          element.type === 'text' && element.text === 'Serviços executados / Checklist da execução',
       ),
     );
     expect(
@@ -766,20 +808,32 @@ describe('DocumentEngine foundation', () => {
         (element) => element.type === 'line' && element.color === '#0f766e',
       ),
     ).toHaveLength(4);
-    expect(
-      rendered.pages[0]?.elements.some(
-        (element) => element.type === 'text' && element.text === 'Defeito ou solicitação informada',
-      ),
-    ).toBe(false);
-    expect(
-      rendered.pages.slice(1).some((page) =>
-        page.elements.some(
-        (element) => element.type === 'text' && element.text === 'Defeito ou solicitação informada',
-      ),
-      ),
-    ).toBe(true);
+    const galleryImages = rendered.pages
+      .flatMap((page) => page.elements)
+      .filter(
+        (element): element is RenderedImage =>
+          element.type === 'image' &&
+          element.contentBase64 === ONE_PIXEL_PNG &&
+          element.height === 92,
+      );
+    expect(galleryImages).toHaveLength(3);
+    expect(galleryImages[0]?.y).toBe(galleryImages[1]?.y);
+    expect((galleryImages[0]?.x ?? 0) < (galleryImages[1]?.x ?? 0)).toBe(true);
     expect(pdf.buffer.subarray(0, 5).toString('latin1')).toBe('%PDF-');
     expect(JSON.stringify(workOrder)).toContain('temperatura elevada — equipamento');
+  });
+
+  it('omits the Work Order photographic evidence section when no photos exist', () => {
+    const context = operationContext(DocumentTemplateType.WORK_ORDER);
+    const workOrder = (
+      new DocumentBuilderService({} as never) as unknown as {
+        buildFromContext: (ctx: unknown) => DocumentBlueprint;
+      }
+    ).buildFromContext(context);
+
+    expect(workOrder.sections.map((section) => section.id)).not.toContain(
+      'photos-evidencias-fotograficas',
+    );
   });
 
   it('hydrates collected execution signatures into the official document context', async () => {
@@ -1007,15 +1061,17 @@ describe('DocumentEngine foundation', () => {
     const blueprint = (
       builder as unknown as { buildFromContext: (ctx: unknown) => DocumentBlueprint }
     ).buildFromContext(created);
-    const image = blueprint.sections
+    const gallery = blueprint.sections
       .flatMap((section) => section.components)
-      .find((component) => component.kind === 'image');
+      .find((component) => component.kind === 'imageGallery');
 
     expect(created.assets.images[0]?.contentBase64).toBe(ONE_PIXEL_PNG);
     expect(created.assets.qrCode).toBeNull();
     expect(generateQrCode).not.toHaveBeenCalled();
-    expect(image).toBeDefined();
-    expect(image && 'image' in image ? image.image?.contentBase64 : null).toBe(ONE_PIXEL_PNG);
+    expect(gallery).toBeDefined();
+    expect(gallery?.kind === 'imageGallery' ? gallery.images[0]?.image?.contentBase64 : null).toBe(
+      ONE_PIXEL_PNG,
+    );
   });
 
   it('rejects invalid collected signature payloads before persistence', () => {

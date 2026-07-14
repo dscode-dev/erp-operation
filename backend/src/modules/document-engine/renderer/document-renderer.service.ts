@@ -9,6 +9,7 @@ import type {
   ChecklistComponent,
   DocumentBlueprint,
   DocumentBlueprintComponent,
+  ImageGalleryComponent,
   ImageComponent,
   ListComponent,
   MetadataComponent,
@@ -121,6 +122,8 @@ export class DocumentRendererService {
         return this.tableBlocks(component);
       case 'image':
         return [this.imageBlock(component)];
+      case 'imageGallery':
+        return this.imageGalleryBlocks(component);
       case 'qrCode':
         return [this.qrBlock(component)];
       case 'signature':
@@ -449,6 +452,63 @@ export class DocumentRendererService {
         return elements;
       },
     };
+  }
+
+  private imageGalleryBlocks(component: ImageGalleryComponent): LayoutBlock[] {
+    const rowHeight = 128;
+    return this.chunk(component.images, 4).map((images) => ({
+      component,
+      height: Math.ceil(images.length / component.columns) * rowHeight + 4,
+      draw: (x, y, width): RenderedElement[] => {
+        const gap = 10;
+        const cardWidth = (width - gap) / component.columns;
+        return images.flatMap((image, index): RenderedElement[] => {
+          const column = index % component.columns;
+          const row = Math.floor(index / component.columns);
+          const cardX = x + column * (cardWidth + gap);
+          const cardTop = y - row * rowHeight;
+          const elements: RenderedElement[] = [
+            {
+              type: 'rect',
+              x: cardX,
+              y: cardTop - rowHeight + 6,
+              width: cardWidth,
+              height: rowHeight - 6,
+              fillColor: '#f8fafc',
+              strokeColor: '#cbd5e1',
+            },
+            {
+              type: 'text',
+              x: cardX + 7,
+              y: cardTop - 14,
+              text: image.caption ?? 'Evidência fotográfica',
+              size: 8,
+              bold: true,
+            },
+          ];
+          if (image.image) {
+            elements.push({
+              type: 'image',
+              x: cardX + 7,
+              y: cardTop - 116,
+              width: cardWidth - 14,
+              height: 92,
+              mimeType: image.image.mimeType,
+              contentBase64: image.image.contentBase64,
+            });
+          } else {
+            elements.push({
+              type: 'text',
+              x: cardX + 7,
+              y: cardTop - 42,
+              text: 'Imagem protegida indisponível.',
+              size: 8,
+            });
+          }
+          return elements;
+        });
+      },
+    }));
   }
 
   private qrBlock(component: QrCodeComponent): LayoutBlock {

@@ -1,5 +1,18 @@
 # Frontend Integration
 
+## Wizard de Ordem de Serviço
+
+No primeiro passo, ofereça duas origens mutuamente exclusivas:
+
+- Operation existente: selecione uma Operation concluída e não duplique seus dados/assets;
+- criar do zero: colete cliente, endereço e responsável, depois crie uma Operation `DRAFT` pela API.
+
+No modo novo, envie todos os equipamentos selecionados em `inspectedEquipments` e use o primeiro
+também como `equipmentId` primário. Serviços e checklist são apresentados em uma única área
+semântica, mas continuam enviados em `serviceDescription` e `checklist`. Fotos são opcionais e só
+devem ser enviadas quando selecionadas. O Viewer deve renderizar `imageGallery` diretamente e nunca
+montar galeria ou PDF fora do Blueprint.
+
 ## Work Order — QR textual
 
 No `WORK_ORDER`, mostre o item `Código QR` recebido no metadata de Equipamento. Não espere imagem

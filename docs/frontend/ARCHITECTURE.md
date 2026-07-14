@@ -852,3 +852,9 @@ regenerações não dependem de estado React ou de campos técnicos que mudem de
 # Technical Report form architecture
 
 Catalog entries are fetched through `maintenanceChecklistTemplatesApi`. The UI uses their IDs only while selecting; it sends immutable description/type/execution/observation snapshots through the existing Operation API. Equipment choices similarly map to `inspectedEquipments[]`. This keeps DocumentContext and the official Document Engine unchanged and prevents the renderer from querying mutable catalogs.
+# Work Order creation architecture
+
+A OS independente não é uma entidade local: o frontend cria uma Operation DRAFT e usa o documento
+WORK_ORDER que o backend cria transacionalmente. Múltiplos equipamentos são snapshots da Operation.
+Galerias são componentes do Blueprint e possuem implementações correspondentes no Viewer e no
+Renderer PDF, preservando paridade e evitando geração local.

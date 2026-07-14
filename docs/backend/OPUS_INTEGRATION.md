@@ -1800,3 +1800,11 @@ PDF real; para emissão use sempre `operationId + WORK_ORDER`.
 - OWNER/MANAGER may create catalog entries; VIEWER is read-only; OPERATOR has no catalog endpoint access.
 - Do not persist catalog IDs in the Operation payload and do not render catalog data directly in a document.
 - The report workflow exposes image upload only for PMOC.
+# Work Order independent creation closure — 14/07/2026
+
+- O wizard possui `EXISTING` e `NEW`; `NEW` cria Operation DRAFT oficial.
+- A OS usa `inspectedEquipments[]` para múltiplos equipamentos.
+- Preview/render/download continuam pelos endpoints do Document Engine.
+- `imageGallery` é um componente aditivo do Blueprint com duas colunas; não criar fallback local.
+- Fotos, observações e assinatura são condicionais. Materiais e documentos relacionados não fazem
+  parte da OS atual.

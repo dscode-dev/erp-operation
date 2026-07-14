@@ -647,6 +647,34 @@ function ComponentPreview({
       </div>
     );
   }
+  if (component.kind === 'imageGallery') {
+    return (
+      <div className="grid grid-cols-2 gap-3">
+        {component.images.map((image) => (
+          <figure
+            key={image.sourceId}
+            className="rounded-md border border-slate-200 bg-slate-50 p-2"
+          >
+            {image.image ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={`data:${image.image.mimeType};base64,${image.image.contentBase64}`}
+                alt={image.caption ?? 'Evidência fotográfica'}
+                className="h-32 w-full rounded object-cover"
+              />
+            ) : (
+              <div className="grid h-32 place-items-center rounded bg-slate-100 text-xs text-slate-500">
+                Imagem protegida indisponível.
+              </div>
+            )}
+            <figcaption className="mt-1.5 truncate text-[11px] text-slate-600">
+              {image.caption ?? 'Evidência fotográfica'}
+            </figcaption>
+          </figure>
+        ))}
+      </div>
+    );
+  }
   return (
     <p className="whitespace-pre-wrap text-sm leading-relaxed">
       {('text' in component ? component.text : '') || '—'}
@@ -724,6 +752,8 @@ function componentWeight(component: DocumentComponent): number {
   if (component.kind === 'checklist') return Math.max(1, Math.ceil(component.items.length / 8));
   if (component.kind === 'metadata') return Math.max(1, Math.ceil(component.items.length / 8));
   if (component.kind === 'image') return 4;
+  if (component.kind === 'imageGallery')
+    return Math.max(2, Math.ceil(component.images.length / component.columns) * 2);
   if (component.kind === 'signature') return Math.max(4, component.signatures.length * 3);
   if (component.kind === 'signaturePlaceholder') return 3;
   if (component.kind === 'list') return Math.max(1, Math.ceil(component.items.length / 8));

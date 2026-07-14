@@ -592,3 +592,9 @@ Tipos:
 - `MultiSelect`: reusable searchable multi-selection with selected chips, keyboard-focusable search, empty state, and bounded dropdown scrolling.
 - `ReportWorkflowDrawer`: equipment selection and structured maintenance checklist now live exclusively in Content; Evidence gates image upload to PMOC.
 - `MaintenanceChecklistsPage` / `ChecklistEditor`: paginated catalog, filters, create/edit drawer, and confirmed soft deactivation.
+# Work Order workflow components
+
+- `ReportWorkflowDrawer`: seletor de origem `EXISTING | NEW`, criação de Operation DRAFT e fluxo
+  completo de OS.
+- `InspectedEquipmentSelector`: multiseleção pesquisável reutilizada pela OS e Relatório de Visita.
+- `DocumentViewer`: renderização de `imageGallery` em grade compacta de duas colunas.

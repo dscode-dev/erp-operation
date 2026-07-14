@@ -1,5 +1,42 @@
 # API Contracts
 
+## WORK_ORDER — origem e Blueprint consolidados
+
+Nenhum endpoint novo foi criado. Para uma OS independente, o frontend usa `POST /api/v1/operations`
+com `status: "DRAFT"`; a transação existente cria o `OperationDocument` WORK_ORDER. Para uma
+Operation existente, permanecem os endpoints oficiais de preview/render/download.
+
+O payload pode usar `equipmentId` como equipamento primário e `inspectedEquipments[]` para a tabela
+completa. `reportedIssue`, `serviceDescription`, `checklist`, `observations`, `photos` e
+`signatureData` permanecem nos contratos existentes.
+
+Ordem de `sections`:
+
+`work-order-identification` → `work-order-customer` → `work-order-inspected-equipments` →
+`work-order-reported-issue` → `work-order-execution` →
+`observations-observacoes-e-resultado-operacional` (quando houver) →
+`photos-evidencias-fotograficas` (quando houver) → `signature` (conforme template).
+
+`work-order-execution` agrega narrativa e checklist. Evidências usam o componente aditivo:
+
+```json
+{
+  "kind": "imageGallery",
+  "columns": 2,
+  "images": [
+    {
+      "sourceId": "uuid",
+      "caption": "Painel após manutenção",
+      "mimeType": "image/jpeg",
+      "fileSize": 123456,
+      "image": { "mimeType": "image/jpeg", "fileSize": 123456, "contentBase64": "..." }
+    }
+  ]
+}
+```
+
+Não são emitidas seções de materiais ou documentos relacionados na WORK_ORDER.
+
 ## WORK_ORDER — identificação textual do equipamento
 
 Os endpoints existentes permanecem iguais. No Blueprint de `WORK_ORDER`, a seção `equipment`
