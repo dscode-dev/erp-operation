@@ -4848,3 +4848,148 @@ Item response:
 ```
 
 Errors follow the global envelope. Relevant codes: `MAINTENANCE_CHECKLIST_TEMPLATE_NOT_FOUND` (404), `MAINTENANCE_CHECKLIST_TEMPLATE_CONFLICT` (409), validation errors (400), unauthorized (401), forbidden (403), and rate limit (429).
+
+## Technical Catalogs
+
+Base path: `/api/v1/technical-catalogs`. Todos os retornos seguem o envelope global.
+
+Tipos oficiais: `CHECKLIST`, `OBJECTIVE`, `SITE_CONDITION`, `CONCLUSION`, `RECOMMENDATION`.
+
+### GET `/types`
+
+Retorna descritores ordenados fornecidos pelo backend, evitando labels de tipos duplicadas no
+frontend.
+
+```json
+{
+  "success": true,
+  "data": [{ "value": "OBJECTIVE", "label": "Objetivos" }]
+}
+```
+
+Roles de leitura: `OWNER`, `MANAGER`, `OPERATOR`, `VIEWER`.
+
+### GET `/`
+
+Query: `page` (default 1), `limit` (default 20, máximo 100), `search`, `type`,
+`maintenanceType`, `active`, `sortBy=sortOrder|title|updatedAt`, `order=asc|desc`.
+
+```json
+{
+  "success": true,
+  "data": {
+    "items": [
+      {
+        "id": "33333333-3333-4333-8333-333333333333",
+        "organizationId": "11111111-1111-4111-8111-111111111111",
+        "type": "SITE_CONDITION",
+        "title": "Compressor não parte",
+        "description": null,
+        "maintenanceType": null,
+        "sortOrder": 5,
+        "active": true,
+        "createdAt": "2026-07-15T14:00:00.000Z",
+        "updatedAt": "2026-07-15T14:00:00.000Z"
+      }
+    ],
+    "pagination": { "page": 1, "limit": 20, "total": 21, "totalPages": 2 }
+  }
+}
+```
+
+### GET `/:id`
+
+UUID v4 obrigatório. Retorna item não excluído pertencente à organização da instalação.
+
+### POST `/`
+
+Roles: `OWNER`, `MANAGER`.
+
+```json
+{
+  "type": "OBJECTIVE",
+  "title": "Avaliação de rendimento térmico",
+  "description": "Aplicável após estabilização operacional",
+  "sortOrder": 6,
+  "active": true
+}
+```
+
+Para `CHECKLIST`, `maintenanceType` é obrigatório. Para os demais tipos, esse campo é proibido.
+
+### PATCH `/:id`
+
+Roles: `OWNER`, `MANAGER`. Aceita `title`, `description`, `maintenanceType` quando checklist,
+`sortOrder` e `active`.
+
+### PATCH `/reorder`
+
+Roles: `OWNER`, `MANAGER`.
+
+```json
+{
+  "type": "CONCLUSION",
+  "items": [
+    { "id": "33333333-3333-4333-8333-333333333333", "sortOrder": 0 },
+    { "id": "44444444-4444-4444-8444-444444444444", "sortOrder": 1 }
+  ]
+}
+```
+
+Todos os IDs devem pertencer à mesma organização e ao tipo informado. Retorno:
+`{ "success": true, "data": { "reordered": 2 } }`.
+
+### DELETE `/:id`
+
+Roles: `OWNER`, `MANAGER`. Exclusão lógica (`active=false`, `deletedAt` interno). Retorna
+`{ "success": true, "data": { "deleted": true } }`.
+
+Erros específicos: `TECHNICAL_CATALOG_NOT_FOUND` (404), `TECHNICAL_CATALOG_CONFLICT` (409),
+`TECHNICAL_CATALOG_INVALID_TYPE` (400), `TECHNICAL_CATALOG_INVALID_ORDER` (400), além de 401,
+403, validação global 400 e rate limit 429.
+
+### Operation — extensão aditiva do Laudo Técnico
+
+`POST /operations` e `PATCH /operations/:id` aceitam:
+
+```json
+{
+  "technicalOpinionObjective": "Inspeção Preventiva",
+  "technicalOpinionConditions": "Ruído excessivo\nVibração anormal",
+  "technicalOpinionRecommendations": "Monitoramento periódico",
+  "technicalOpinionConclusion": "Necessita nova inspeção"
+}
+```
+
+Cada campo armazena texto/snapshot, nunca IDs do catálogo. Máximo: 20.000 caracteres por campo.
+
+## Technical Catalog — classificação contextual (Closure 08.1)
+
+`GET /technical-catalogs/taxonomy` (todas as roles autenticadas) retorna `areas[]` e
+`workflows[]` com `value` e `label` oficiais.
+
+`GET /technical-catalogs` aceita, adicionalmente:
+
+- `areas`: enums separados por vírgula; compatibilidade por interseção;
+- `workflow`: um workflow oficial;
+- `includeGeneral`: inclui itens `GENERAL` e mantém os específicos primeiro;
+- `search`: pesquisa título, descrição e tag normalizada.
+
+Exemplo:
+`?type=SITE_CONDITION&areas=HVAC,REFRIGERATION&workflow=TECHNICAL_OPINION&includeGeneral=true&active=true&page=1&limit=100`.
+
+Itens retornados incluem `tags: string[]`, `areas: TechnicalCatalogArea[]` e
+`workflows: TechnicalCatalogWorkflow[]`. POST/PATCH aceitam as mesmas coleções. Limites: 20 tags
+de 40 caracteres, 1–7 áreas e 1–6 workflows, sem duplicidade. Clientes antigos que omitirem
+áreas/workflows em criação recebem `GENERAL`.
+
+## DC-04 — payload operacional do PMOC
+
+`POST /api/v1/operations` e `PATCH /api/v1/operations/:id` aceitam `maintenanceChecklist[]` com
+`equipmentId?`, `maintenanceType`, `description`, `executed`, `result` (`YES`, `NO` ou
+`NOT_APPLICABLE`) e `observations?`. Para a coleta do cliente aceitam `customerSignerName`,
+`customerSignerRole`, `signatureData` (PNG/JPEG data URL) e `signedAt`.
+
+O equipamento deve estar ativo e pertencer ao cliente da Operation. A resposta informa
+`signatureCaptured`, mas nunca retorna `signatureData`. Preview, Render e Download continuam nos
+contratos oficiais do Document Engine.

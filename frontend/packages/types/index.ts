@@ -674,11 +674,14 @@ export type OperationDocumentStatus = 'DRAFT' | 'READY' | 'VALIDATED' | 'SENT';
 export type OperationChecklistItem = { label: string; done: boolean; note?: string | null };
 export type OperationMaintenanceChecklistItem = {
   id?: string;
+  equipmentId?: string | null;
   maintenanceType: OperationMaintenanceType;
   description: string;
   executed: boolean;
+  result?: 'YES' | 'NO' | 'NOT_APPLICABLE';
   observations?: string | null;
   position?: number;
+  equipment?: { id: string; name: string; tag: string | null } | null;
 };
 export type OperationInspectedEquipment = {
   id?: string;
@@ -703,6 +706,56 @@ export type MaintenanceChecklistTemplate = {
   active: boolean;
   createdAt: string;
   updatedAt: string;
+};
+
+export type TechnicalCatalogType =
+  | 'CHECKLIST'
+  | 'OBJECTIVE'
+  | 'SITE_CONDITION'
+  | 'CONCLUSION'
+  | 'RECOMMENDATION';
+
+export type TechnicalCatalogArea =
+  | 'GENERAL'
+  | 'HVAC'
+  | 'ELECTRICAL'
+  | 'REFRIGERATION'
+  | 'MECHANICAL'
+  | 'HYDRAULIC'
+  | 'SAFETY';
+
+export type TechnicalCatalogWorkflow =
+  | 'GENERAL'
+  | 'WORK_ORDER'
+  | 'TECHNICAL_REPORT'
+  | 'TECHNICAL_OPINION'
+  | 'PMOC'
+  | 'MAINTENANCE';
+
+export type TechnicalCatalog = {
+  id: string;
+  organizationId: string;
+  type: TechnicalCatalogType;
+  title: string;
+  description: string | null;
+  tags: string[];
+  areas: TechnicalCatalogArea[];
+  workflows: TechnicalCatalogWorkflow[];
+  maintenanceType: OperationMaintenanceType | null;
+  sortOrder: number;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type TechnicalCatalogTypeDescriptor = {
+  value: TechnicalCatalogType;
+  label: string;
+};
+
+export type TechnicalCatalogTaxonomy = {
+  areas: Array<{ value: TechnicalCatalogArea; label: string }>;
+  workflows: Array<{ value: TechnicalCatalogWorkflow; label: string }>;
 };
 
 export type OperationDocument = {
@@ -759,6 +812,7 @@ export type OperationDetail = Omit<OperationSummary, 'equipment'> & {
   technicalOpinionConditions: string | null;
   technicalOpinionAnalysis: string | null;
   technicalOpinionConclusion: string | null;
+  technicalOpinionRecommendations: string | null;
   technicalOpinionResponsible: string | null;
   technicalOpinionCrea: string | null;
   referenceMonth: number | null;
@@ -766,10 +820,23 @@ export type OperationDetail = Omit<OperationSummary, 'equipment'> & {
   maintenanceType: OperationMaintenanceType | null;
   maintenanceChecklistItems: OperationMaintenanceChecklistItem[];
   inspectedEquipments: OperationInspectedEquipment[];
-  signatureData: string | null;
+  signatureData?: never;
+  signatureCaptured?: boolean;
+  customerSignerName: string | null;
+  customerSignerRole: string | null;
   signedAt: string | null;
   photos: OperationPhoto[];
   documents: OperationDocument[];
+  maintenanceExecution?: (MaintenanceExecution & {
+    plan: MaintenancePlan & {
+      pmocPlan?: {
+        id: string;
+        responsibleTechnician: string;
+        contractNumber: string | null;
+        artNumber: string | null;
+      } | null;
+    };
+  }) | null;
 };
 
 export type OperationStats = {
@@ -798,6 +865,7 @@ export type CreateOperationPayload = {
   technicalOpinionConditions?: string | null;
   technicalOpinionAnalysis?: string | null;
   technicalOpinionConclusion?: string | null;
+  technicalOpinionRecommendations?: string | null;
   technicalOpinionResponsible?: string | null;
   technicalOpinionCrea?: string | null;
   referenceMonth?: number | null;
@@ -811,6 +879,8 @@ export type CreateOperationPayload = {
     currentSituation?: string | null;
   }>;
   signatureData?: string | null;
+  customerSignerName?: string | null;
+  customerSignerRole?: string | null;
   signedAt?: string | null;
   photos?: { dataUrl: string; caption?: string | null }[];
 };
@@ -955,6 +1025,10 @@ export type PmocPlan = {
   customer?: Pick<Customer, 'id' | 'name' | 'tradeName'>;
   equipment?: Pick<EquipmentSummary, 'id' | 'name' | 'tag' | 'type' | 'status'>;
   maintenancePlan?: MaintenancePlan & { executions?: MaintenanceExecution[] };
+  equipments?: Array<{
+    equipmentId: string;
+    equipment: Pick<EquipmentSummary, 'id' | 'name' | 'tag' | 'type' | 'status'>;
+  }>;
   compliance: {
     status: PmocComplianceStatus;
     evaluatedAt: string;

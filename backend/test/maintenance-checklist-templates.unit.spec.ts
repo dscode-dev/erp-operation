@@ -1,4 +1,4 @@
-import { OperationMaintenanceType } from '@prisma/client';
+import { OperationMaintenanceType, TechnicalCatalogType } from '@prisma/client';
 import { MaintenanceChecklistTemplatesService } from '../src/modules/maintenance-checklist-templates/maintenance-checklist-templates.service';
 
 const organizationId = '11111111-1111-4111-8111-111111111111';
@@ -17,11 +17,24 @@ describe('MaintenanceChecklistTemplatesService', () => {
   it('scopes and paginates the catalog by organization and maintenance type', async () => {
     const prisma = {
       organization: { findFirst: jest.fn().mockResolvedValue({ id: organizationId }) },
-      maintenanceChecklistTemplate: {
+      technicalCatalog: {
         findMany: jest.fn((args: unknown) => ({ kind: 'findMany', args })),
         count: jest.fn((args: unknown) => ({ kind: 'count', args })),
       },
-      $transaction: jest.fn().mockResolvedValue([[{ id: 'template-1' }], 1]),
+      $transaction: jest.fn().mockResolvedValue([
+        [
+          {
+            id: 'template-1',
+            organizationId,
+            maintenanceType: OperationMaintenanceType.SEMIANNUAL,
+            title: 'Inspecionar filtros',
+            active: true,
+            createdAt: new Date('2026-07-15T12:00:00.000Z'),
+            updatedAt: new Date('2026-07-15T12:00:00.000Z'),
+          },
+        ],
+        1,
+      ]),
     };
     const service = new MaintenanceChecklistTemplatesService(prisma as never);
 
@@ -32,37 +45,59 @@ describe('MaintenanceChecklistTemplatesService', () => {
       active: true,
     });
 
-    const findMany = prisma.maintenanceChecklistTemplate.findMany.mock.calls[0]?.[0] as {
-      where: { organizationId: string; maintenanceType: OperationMaintenanceType; active: boolean };
+    const findMany = prisma.technicalCatalog.findMany.mock.calls[0]?.[0] as {
+      where: {
+        organizationId: string;
+        type: TechnicalCatalogType;
+        maintenanceType: OperationMaintenanceType;
+        active: boolean;
+        deletedAt: null;
+      };
       skip: number;
       take: number;
     };
     expect(findMany.where).toMatchObject({
       organizationId,
+      type: TechnicalCatalogType.CHECKLIST,
       maintenanceType: OperationMaintenanceType.SEMIANNUAL,
       active: true,
+      deletedAt: null,
     });
     expect(findMany.skip).toBe(10);
     expect(findMany.take).toBe(10);
     expect(result).toEqual({
-      items: [{ id: 'template-1' }],
+      items: [
+        expect.objectContaining({
+          id: 'template-1',
+          description: 'Inspecionar filtros',
+          maintenanceType: OperationMaintenanceType.SEMIANNUAL,
+        }),
+      ],
       pagination: { page: 2, limit: 10, total: 1, totalPages: 1 },
     });
   });
 
   it('creates a sanitized item and its audit event in one transaction', async () => {
     const tx = {
-      maintenanceChecklistTemplate: {
+      technicalCatalog: {
         create: jest.fn().mockResolvedValue({
           id: '33333333-3333-4333-8333-333333333333',
+          organizationId,
+          type: TechnicalCatalogType.CHECKLIST,
           maintenanceType: OperationMaintenanceType.WEEKLY,
-          description: 'Verificar filtros',
+          title: 'Verificar filtros',
+          active: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
         }),
       },
       auditLog: { create: jest.fn().mockResolvedValue({ id: 'audit-1' }) },
     };
     const prisma = {
       organization: { findFirst: jest.fn().mockResolvedValue({ id: organizationId }) },
+      technicalCatalog: {
+        aggregate: jest.fn().mockResolvedValue({ _max: { sortOrder: 2 } }),
+      },
       $transaction: jest.fn(async (callback: (client: typeof tx) => Promise<unknown>) =>
         callback(tx),
       ),
@@ -78,13 +113,23 @@ describe('MaintenanceChecklistTemplatesService', () => {
       context,
     );
 
-    const createCalls = tx.maintenanceChecklistTemplate.create.mock.calls as unknown as Array<
-      [{ data: { organizationId: string; description: string; active: boolean } }]
+    const createCalls = tx.technicalCatalog.create.mock.calls as unknown as Array<
+      [
+        {
+          data: {
+            organizationId: string;
+            type: TechnicalCatalogType;
+            title: string;
+            active: boolean;
+          };
+        },
+      ]
     >;
     const createCall = createCalls[0][0];
     expect(createCall.data).toMatchObject({
       organizationId,
-      description: 'Verificar filtros',
+      type: TechnicalCatalogType.CHECKLIST,
+      title: 'Verificar filtros',
       active: true,
     });
     const auditCalls = tx.auditLog.create.mock.calls as unknown as Array<
@@ -101,8 +146,11 @@ describe('MaintenanceChecklistTemplatesService', () => {
   it('soft-deactivates catalog items instead of deleting them', async () => {
     const prisma = {
       organization: { findFirst: jest.fn().mockResolvedValue({ id: organizationId }) },
-      maintenanceChecklistTemplate: {
-        findFirst: jest.fn().mockResolvedValue({ id: 'template-1' }),
+      technicalCatalog: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'template-1',
+          type: TechnicalCatalogType.CHECKLIST,
+        }),
         update: jest.fn((args: unknown) => ({ kind: 'update', args })),
       },
       auditLog: { create: jest.fn((args: unknown) => ({ kind: 'audit', args })) },
@@ -116,7 +164,7 @@ describe('MaintenanceChecklistTemplatesService', () => {
       deactivated: true,
     });
 
-    const update = prisma.maintenanceChecklistTemplate.update.mock.calls[0]?.[0] as {
+    const update = prisma.technicalCatalog.update.mock.calls[0]?.[0] as {
       data: { active: boolean };
     };
     expect(update.data.active).toBe(false);

@@ -22,7 +22,7 @@ export type OperationSection =
   | { kind: "checklist"; id: string; title: string; items: OperationChecklistItem[] }
   | { kind: "text"; id: string; title: string; text: string }
   | { kind: "photos"; id: string; title: string; photos: OperationPhoto[] }
-  | { kind: "signature"; id: string; title: string; signatureData: string | null; signedAt: string | null }
+  | { kind: "signature"; id: string; title: string; captured: boolean; signedAt: string | null }
   | { kind: "documents"; id: string; title: string; documents: OperationDocument[] };
 
 function fmtDate(iso: string | null): string {
@@ -59,7 +59,7 @@ export function buildOperationSections(op: OperationDetail): OperationSection[] 
     { kind: "checklist", id: "checklist", title: "Checklist", items: op.checklist },
     { kind: "text", id: "observacoes", title: "Observações", text: op.observations ?? "" },
     { kind: "photos", id: "fotos", title: "Fotos", photos: op.photos },
-    { kind: "signature", id: "assinatura", title: "Assinatura", signatureData: op.signatureData, signedAt: op.signedAt },
+    { kind: "signature", id: "assinatura", title: "Assinatura", captured: Boolean(op.signatureCaptured), signedAt: op.signedAt },
     { kind: "documents", id: "documentos", title: "Documentos relacionados", documents: op.documents },
   ];
 }

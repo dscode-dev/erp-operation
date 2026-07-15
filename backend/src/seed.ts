@@ -15,6 +15,9 @@ import {
   PrismaClient,
   Role,
   StockMovementType,
+  TechnicalCatalogArea,
+  TechnicalCatalogType,
+  TechnicalCatalogWorkflow,
 } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { randomBytes } from 'node:crypto';
@@ -86,8 +89,39 @@ async function seedMaintenanceChecklistTemplates(): Promise<void> {
       description: 'Verificação das serpentinas e das condições de troca térmica',
     },
   ];
-  await prisma.maintenanceChecklistTemplate.createMany({
-    data: templates.map((template) => ({ organizationId: organization.id, ...template })),
+  const existing = await prisma.technicalCatalog.findMany({
+    where: {
+      organizationId: organization.id,
+      type: TechnicalCatalogType.CHECKLIST,
+      deletedAt: null,
+    },
+    select: { maintenanceType: true, title: true },
+  });
+  const keys = new Set(
+    existing.map((item) => `${item.maintenanceType}:${item.title.toLowerCase()}`),
+  );
+  await prisma.technicalCatalog.createMany({
+    data: templates
+      .filter(
+        (template) =>
+          !keys.has(`${template.maintenanceType}:${template.description.toLowerCase()}`),
+      )
+      .map((template, sortOrder) => ({
+        organizationId: organization.id,
+        type: TechnicalCatalogType.CHECKLIST,
+        maintenanceType: template.maintenanceType,
+        title: template.description,
+        tags: ['manutencao'],
+        areas: [TechnicalCatalogArea.GENERAL, TechnicalCatalogArea.HVAC],
+        workflows: [
+          TechnicalCatalogWorkflow.GENERAL,
+          TechnicalCatalogWorkflow.MAINTENANCE,
+          TechnicalCatalogWorkflow.WORK_ORDER,
+          TechnicalCatalogWorkflow.TECHNICAL_REPORT,
+          TechnicalCatalogWorkflow.PMOC,
+        ],
+        sortOrder,
+      })),
     skipDuplicates: true,
   });
   process.stdout.write(

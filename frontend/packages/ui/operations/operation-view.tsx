@@ -107,9 +107,8 @@ function SectionRenderer({
         )}
 
         {section.kind === "signature" && (
-          section.signatureData ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={section.signatureData} alt="Assinatura" className="max-h-28 bg-white rounded-[var(--radius-md)] border border-[var(--color-border)]" />
+          section.captured ? (
+            <p className="text-sm text-[var(--color-success)]">Assinatura coletada e protegida pelo backend{section.signedAt ? ` em ${new Date(section.signedAt).toLocaleString('pt-BR')}` : ''}.</p>
           ) : (
             <Empty>Assinatura não coletada.</Empty>
           )

@@ -883,3 +883,40 @@ A OS independente não é uma entidade local: o frontend cria uma Operation DRAF
 WORK_ORDER que o backend cria transacionalmente. Múltiplos equipamentos são snapshots da Operation.
 Galerias são componentes do Blueprint e possuem implementações correspondentes no Viewer e no
 Renderer PDF, preservando paridade e evitando geração local.
+
+## Technical Catalog architecture
+
+```text
+TechnicalCatalog API
+  → technicalCatalogsApi
+  → TechnicalCatalogSelector / TechnicalCatalogList
+  → ordered text snapshots
+  → Operation technicalOpinion* fields
+  → DocumentContext
+  → DocumentBuilder / Blueprint
+  → DocumentViewer and PdfEngine
+```
+
+O catálogo é uma infraestrutura de entrada, não uma dependência de renderização. A UI nunca envia
+um objeto de catálogo ao Document Engine. O texto final fica imutável em relação a futuras edições
+do catálogo. Platform e Operator compartilham o seletor, mas conservam composições adequadas ao
+contexto: edição avançada na Platform e interação compacta em campo.
+
+Os labels das tabs vêm de `/technical-catalogs/types`; os componentes não mantêm um segundo enum de
+apresentação. Autorização visual usa o AuthProvider, enquanto o backend continua autoridade RBAC.
+
+Closure 08.1 acrescenta classificação sem acoplar catálogo e documento:
+
+```text
+equipment types → areas + workflow → filtered API (+ GENERAL)
+  → shared selector → textual snapshots → Operation → official Document Engine
+```
+
+Taxonomia vem do backend e a filtragem principal é server-side. Platform e Operator escolhem apenas
+o contexto; PMOC pode reutilizar a API com `workflow=PMOC`.
+
+## DC-04 — fluxo PMOC
+
+`PmocPlan → MaintenanceExecution → Operation → DocumentContext → DocumentBuilder → Blueprint →
+DocumentViewer/PdfEngine`. Platform e Operator editam somente a Operation atribuída. Procedimentos
+e dados técnicos são snapshots; o frontend não calcula conformidade nem monta documentos.

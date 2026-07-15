@@ -22,6 +22,7 @@ import {
   maintenanceChecklistTemplatesApi,
   operationApi,
   pmocApi,
+  signaturesApi,
   usersApi,
   useQuery,
   type Customer,
@@ -37,7 +38,9 @@ import {
   type OperationSummary,
   type Paginated,
   type PmocPlan,
+  type Signature,
   type TeamUser,
+  type TechnicalCatalogArea,
 } from '@erp/api';
 import { Gate } from '@erp/ui/auth/gate';
 import { useAuth } from '@erp/ui/auth/auth-provider';
@@ -47,6 +50,7 @@ import { SkeletonCard } from '@erp/ui/skeletons';
 import { DocumentViewer } from '@erp/ui/documents/document-viewer';
 import { SignaturePad } from '@erp/ui/documents/signature-pad';
 import { MultiSelect } from '@erp/ui/multi-select';
+import { TechnicalCatalogSelector } from '@erp/ui/technical-catalog/technical-catalog-selector';
 import { DOCUMENT_KIND_LABEL } from '@erp/types';
 import { formatDate } from '@erp/utils';
 
@@ -105,11 +109,14 @@ type WorkflowForm = {
   conclusion: string;
   technicalResponsible: string;
   technicalCrea: string;
+  technicalSignatureId: string;
   reference: string;
   amount: string;
   receivedFrom: string;
   checklist: string;
   signatureData: string | null;
+  customerSignerName: string;
+  customerSignerRole: string;
   photos: Array<{ dataUrl: string; caption: string }>;
   referenceMonth: string;
   referenceYear: string;
@@ -119,6 +126,8 @@ type WorkflowForm = {
     maintenanceType: OperationMaintenanceType;
     description: string;
     executed: boolean;
+    result: 'YES' | 'NO' | 'NOT_APPLICABLE';
+    equipmentId?: string;
     observations: string;
   }>;
   inspectedEquipments: Array<{
@@ -146,11 +155,14 @@ const emptyForm: WorkflowForm = {
   conclusion: '',
   technicalResponsible: '',
   technicalCrea: '',
+  technicalSignatureId: '',
   reference: '',
   amount: '',
   receivedFrom: '',
   checklist: '',
   signatureData: null,
+  customerSignerName: '',
+  customerSignerRole: '',
   photos: [],
   referenceMonth: String(new Date().getMonth() + 1),
   referenceYear: String(new Date().getFullYear()),
@@ -429,6 +441,10 @@ function ReportWorkflowDrawer({
     (signal) => documentsApi.getConfigurationByType(type, { signal }),
     [type],
   );
+  const signatures = useQuery<Paginated<Signature>>(
+    (signal) => signaturesApi.listSignatures({ page: 1, limit: 100, active: true, signal }),
+    [],
+  );
   const checklistTemplates = useQuery<Paginated<MaintenanceChecklistTemplate>>(
     (signal) =>
       maintenanceChecklistTemplatesApi.list({
@@ -512,6 +528,7 @@ function ReportWorkflowDrawer({
               siteConditions: detail.technicalOpinionConditions ?? '',
               analysis: detail.technicalOpinionAnalysis ?? '',
               conclusion: detail.technicalOpinionConclusion ?? '',
+              recommendations: detail.technicalOpinionRecommendations ?? '',
               technicalResponsible: detail.technicalOpinionResponsible ?? '',
               technicalCrea: detail.technicalOpinionCrea ?? '',
             }
@@ -528,9 +545,11 @@ function ReportWorkflowDrawer({
         referenceYear: detail.referenceYear ? String(detail.referenceYear) : current.referenceYear,
         maintenanceType: detail.maintenanceType ?? current.maintenanceType,
         maintenanceChecklist: detail.maintenanceChecklistItems.map((item) => ({
+          equipmentId: item.equipmentId ?? undefined,
           maintenanceType: item.maintenanceType,
           description: item.description,
           executed: item.executed,
+          result: item.result ?? (item.executed ? 'YES' : 'NO'),
           observations: item.observations ?? '',
         })),
         inspectedEquipments: detail.inspectedEquipments.map((item) => ({
@@ -554,6 +573,15 @@ function ReportWorkflowDrawer({
         pmocId: id,
         customerId: plan.customerId,
         equipmentId: plan.equipmentId,
+        inspectedEquipments: (plan.equipments?.length
+          ? plan.equipments
+          : [{ equipmentId: plan.equipmentId, equipment: plan.equipment }]
+        ).map((item) => ({
+          equipmentId: item.equipmentId,
+          sector: item.equipment?.name ?? 'Não informado',
+          systemType: '',
+          currentSituation: '',
+        })),
         objective: `Execução do plano PMOC ${plan.contractNumber ?? plan.id}`,
         observations: plan.observations ?? current.observations,
       }));
@@ -597,6 +625,13 @@ function ReportWorkflowDrawer({
             throw new Error(
               'Informe tipo de sistema, local de instalação e situação atual de todos os equipamentos.',
             );
+        }
+        if (type === 'PMOC') {
+          if (!form.pmocId) throw new Error('Selecione um plano PMOC ativo.');
+          if (form.inspectedEquipments.length === 0)
+            throw new Error('Selecione ao menos um equipamento controlado pelo PMOC.');
+          if (form.signatureData && !form.customerSignerName.trim())
+            throw new Error('Informe o nome do cliente ou responsável que assinou o PMOC.');
         }
         const content = contentFor(type, form);
         if (detail) {
@@ -739,6 +774,7 @@ function ReportWorkflowDrawer({
           type={type}
           form={form}
           equipments={equipments}
+          signatures={signatures.data?.items ?? []}
           checklistTemplates={checklistTemplates.data?.items ?? []}
           checklistTemplatesLoading={checklistTemplates.loading}
           canManageChecklist={hasRole('OWNER', 'MANAGER')}
@@ -1034,6 +1070,7 @@ function ContentStep({
   type,
   form,
   equipments,
+  signatures,
   checklistTemplates,
   checklistTemplatesLoading,
   canManageChecklist,
@@ -1043,6 +1080,7 @@ function ContentStep({
   type: DocumentKind;
   form: WorkflowForm;
   equipments: EquipmentSummary[];
+  signatures: Signature[];
   checklistTemplates: MaintenanceChecklistTemplate[];
   checklistTemplatesLoading: boolean;
   canManageChecklist: boolean;
@@ -1052,6 +1090,11 @@ function ContentStep({
   const [newChecklistDescription, setNewChecklistDescription] = useState('');
   const [creatingChecklist, setCreatingChecklist] = useState(false);
   const [checklistError, setChecklistError] = useState<string | null>(null);
+  const contextualAreas = technicalCatalogAreas(
+    equipments.filter((equipment) =>
+      form.inspectedEquipments.some((selected) => selected.equipmentId === equipment.id),
+    ),
+  );
 
   const selectedChecklistItems = form.maintenanceChecklist.filter(
     (item) => item.maintenanceType === form.maintenanceType,
@@ -1088,6 +1131,7 @@ function ContentStep({
             maintenanceType: template.maintenanceType,
             description: template.description,
             executed: false,
+            result: 'NO' as const,
             observations: '',
           }
         );
@@ -1109,6 +1153,7 @@ function ContentStep({
           maintenanceType: created.maintenanceType,
           description: created.description,
           executed: false,
+          result: 'NO',
           observations: '',
         },
       ]);
@@ -1202,11 +1247,26 @@ function ContentStep({
             </p>
           </div>
           <div className="grid gap-4 md:grid-cols-2">
-            <Text
-              label="Responsável Técnico"
-              value={form.technicalResponsible}
-              onChange={(value) => onSet('technicalResponsible', value)}
-            />
+            <Field label="Responsável Técnico">
+              <select
+                value={form.technicalSignatureId}
+                onChange={(event) => {
+                  const signature = signatures.find((item) => item.id === event.target.value);
+                  onSet('technicalSignatureId', event.target.value);
+                  onSet('technicalResponsible', signature?.name ?? '');
+                  onSet('technicalCrea', signature?.professionalCouncil ?? 'Não consta');
+                }}
+              >
+                <option value="">Selecione uma assinatura institucional…</option>
+                {signatures.map((signature) => (
+                  <option key={signature.id} value={signature.id}>
+                    {[signature.name, signature.title, signature.department]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </option>
+                ))}
+              </select>
+            </Field>
             <Text
               label="CREA / Registro profissional"
               value={form.technicalCrea}
@@ -1220,26 +1280,142 @@ function ContentStep({
           technicalOpinion
           onSet={onSet}
         />
-        <Area
-          label="Objetivo do Laudo"
-          value={form.objective}
-          onChange={(value) => onSet('objective', value)}
-        />
-        <Area
-          label="Condições observadas no local — uma condição técnica por linha"
-          value={form.siteConditions}
-          onChange={(value) => onSet('siteConditions', value)}
-        />
+        <section className="space-y-2">
+          <h3 className="text-sm font-semibold">Objetivo</h3>
+          <TechnicalCatalogSelector
+            type="OBJECTIVE"
+            areas={contextualAreas}
+            workflow="TECHNICAL_OPINION"
+            label="Objetivo"
+            values={catalogLines(form.objective)}
+            onChange={(values) => onSet('objective', values.join('\n'))}
+          />
+          <Area
+            label="Objetivo — edição textual completa"
+            value={form.objective}
+            onChange={(value) => onSet('objective', value)}
+          />
+        </section>
+        <section className="space-y-2">
+          <h3 className="text-sm font-semibold">Condições observadas</h3>
+          <TechnicalCatalogSelector
+            type="SITE_CONDITION"
+            areas={contextualAreas}
+            workflow="TECHNICAL_OPINION"
+            label="Condição"
+            values={catalogLines(form.siteConditions)}
+            onChange={(values) => onSet('siteConditions', values.join('\n'))}
+          />
+          <Area
+            label="Condições — edição textual completa"
+            value={form.siteConditions}
+            onChange={(value) => onSet('siteConditions', value)}
+          />
+        </section>
         <Area
           label="Análise técnica"
           value={form.analysis}
           onChange={(value) => onSet('analysis', value)}
         />
-        <Area
-          label="Conclusão técnica"
-          value={form.conclusion}
-          onChange={(value) => onSet('conclusion', value)}
-        />
+        <section className="space-y-2">
+          <h3 className="text-sm font-semibold">Recomendações</h3>
+          <TechnicalCatalogSelector
+            type="RECOMMENDATION"
+            areas={contextualAreas}
+            workflow="TECHNICAL_OPINION"
+            label="Recomendação"
+            values={catalogLines(form.recommendations)}
+            onChange={(values) => onSet('recommendations', values.join('\n'))}
+          />
+          <Area
+            label="Recomendações — edição textual completa"
+            value={form.recommendations}
+            onChange={(value) => onSet('recommendations', value)}
+          />
+        </section>
+        <section className="space-y-2">
+          <h3 className="text-sm font-semibold">Conclusão</h3>
+          <TechnicalCatalogSelector
+            type="CONCLUSION"
+            areas={contextualAreas}
+            workflow="TECHNICAL_OPINION"
+            label="Conclusão"
+            values={catalogLines(form.conclusion)}
+            onChange={(values) => onSet('conclusion', values.join('\n'))}
+          />
+          <Area
+            label="Conclusão — edição textual completa"
+            value={form.conclusion}
+            onChange={(value) => onSet('conclusion', value)}
+          />
+        </section>
+      </div>
+    );
+  if (type === 'PMOC')
+    return (
+      <div className="space-y-5">
+        <InspectedEquipmentSelector form={form} equipments={equipments} onSet={onSet} />
+        <div className="grid gap-4 md:grid-cols-2">
+          <Field label="Periodicidade da execução">
+            <select
+              value={form.maintenanceType}
+              onChange={(event) => {
+                onSet('maintenanceType', event.target.value as OperationMaintenanceType);
+                onSet('maintenanceChecklist', []);
+              }}
+            >
+              <option value="WEEKLY">Semanal</option>
+              <option value="MONTHLY">Mensal</option>
+              <option value="QUARTERLY">Trimestral</option>
+              <option value="SEMIANNUAL">Semestral</option>
+              <option value="ANNUAL">Anual</option>
+              <option value="CORRECTIVE">Corretiva</option>
+            </select>
+          </Field>
+          <MultiSelect
+            label="Procedimentos do catálogo PMOC"
+            options={checklistTemplates.map((template) => ({ value: template.id, label: template.description }))}
+            value={selectedChecklistTemplateIds}
+            onChange={selectChecklistTemplates}
+            placeholder={checklistTemplatesLoading ? 'Carregando procedimentos…' : 'Selecionar procedimentos'}
+            emptyMessage="Nenhum procedimento cadastrado para esta periodicidade."
+          />
+        </div>
+        <section className="space-y-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] p-4">
+          <div>
+            <h3 className="text-sm font-semibold">Checklist por equipamento</h3>
+            <p className="text-caption">Cada resultado é persistido como snapshot da execução. Selecione Sim, Não ou N.A. e registre a observação quando necessário.</p>
+          </div>
+          {selectedChecklistItems.map((item, index) => (
+            <div key={item.templateId ?? `${item.description}-${index}`} className="grid gap-2 rounded-[var(--radius-md)] bg-[var(--color-muted)]/50 p-3 md:grid-cols-[1.2fr_1.6fr_130px_1.3fr_auto] md:items-center">
+              <select
+                aria-label={`Equipamento de ${item.description}`}
+                value={item.equipmentId ?? ''}
+                onChange={(event) => onSet('maintenanceChecklist', selectedChecklistItems.map((current, currentIndex) => currentIndex === index ? { ...current, equipmentId: event.target.value || undefined } : current))}
+              >
+                <option value="">Procedimento geral</option>
+                {form.inspectedEquipments.map((selected) => {
+                  const equipment = equipments.find((candidate) => candidate.id === selected.equipmentId);
+                  return <option key={selected.equipmentId} value={selected.equipmentId}>{equipment?.name ?? selected.equipmentId}</option>;
+                })}
+              </select>
+              <span className="text-sm">{item.description}</span>
+              <select
+                aria-label={`Resultado de ${item.description}`}
+                value={item.result}
+                onChange={(event) => onSet('maintenanceChecklist', selectedChecklistItems.map((current, currentIndex) => currentIndex === index ? { ...current, result: event.target.value as 'YES' | 'NO' | 'NOT_APPLICABLE', executed: event.target.value === 'YES' } : current))}
+              >
+                <option value="YES">Sim</option>
+                <option value="NO">Não</option>
+                <option value="NOT_APPLICABLE">N.A.</option>
+              </select>
+              <input value={item.observations} maxLength={2000} onChange={(event) => onSet('maintenanceChecklist', selectedChecklistItems.map((current, currentIndex) => currentIndex === index ? { ...current, observations: event.target.value } : current))} placeholder="Observação" className="h-9 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm" />
+              <button type="button" aria-label={`Remover ${item.description}`} onClick={() => onSet('maintenanceChecklist', selectedChecklistItems.filter((_, currentIndex) => currentIndex !== index))} className="rounded-md p-2 text-[var(--color-muted-foreground)] hover:text-[var(--color-danger)]"><X className="h-4 w-4" /></button>
+            </div>
+          ))}
+        </section>
+        <Area label="Objetivo e detalhes da execução" value={form.objective} onChange={(value) => onSet('objective', value)} />
+        <Area label="Observações e conclusão" value={form.observations} onChange={(value) => onSet('observations', value)} />
       </div>
     );
   if (type === 'TECHNICAL_REPORT')
@@ -1374,26 +1550,44 @@ function ContentStep({
           )}
           {checklistError && <p className="text-sm text-[var(--color-danger)]">{checklistError}</p>}
         </section>
-        <Area
-          label="Objetivo da visita"
-          value={form.objective}
-          onChange={(value) => onSet('objective', value)}
-        />
-        <Area
-          label="Diagnóstico ou situação encontrada"
-          value={form.diagnosis}
-          onChange={(value) => onSet('diagnosis', value)}
-        />
+        <section className="space-y-2">
+          <TechnicalCatalogSelector
+            type="OBJECTIVE"
+            label="Objetivo"
+            areas={contextualAreas}
+            workflow="TECHNICAL_REPORT"
+            values={catalogLines(form.objective)}
+            onChange={(values) => onSet('objective', values.join('\n'))}
+          />
+          <Area label="Objetivo da visita" value={form.objective} onChange={(value) => onSet('objective', value)} />
+        </section>
+        <section className="space-y-2">
+          <TechnicalCatalogSelector
+            type="SITE_CONDITION"
+            label="Condição"
+            areas={contextualAreas}
+            workflow="TECHNICAL_REPORT"
+            values={catalogLines(form.diagnosis)}
+            onChange={(values) => onSet('diagnosis', values.join('\n'))}
+          />
+          <Area label="Diagnóstico ou situação encontrada" value={form.diagnosis} onChange={(value) => onSet('diagnosis', value)} />
+        </section>
         <Area
           label="Atividades executadas"
           value={form.analysis}
           onChange={(value) => onSet('analysis', value)}
         />
-        <Area
-          label="Recomendações técnicas"
-          value={form.recommendations}
-          onChange={(value) => onSet('recommendations', value)}
-        />
+        <section className="space-y-2">
+          <TechnicalCatalogSelector
+            type="RECOMMENDATION"
+            label="Recomendação"
+            areas={contextualAreas}
+            workflow="TECHNICAL_REPORT"
+            values={catalogLines(form.recommendations)}
+            onChange={(values) => onSet('recommendations', values.join('\n'))}
+          />
+          <Area label="Recomendações técnicas" value={form.recommendations} onChange={(value) => onSet('recommendations', value)} />
+        </section>
         <Area
           label="Observações finais"
           value={form.observations}
@@ -1404,12 +1598,12 @@ function ContentStep({
   return (
     <div className="space-y-4">
       <Area
-        label={type === 'PMOC' ? 'Medições e objetivo da execução' : 'Objetivo da visita'}
+        label="Objetivo da visita"
         value={form.objective}
         onChange={(value) => onSet('objective', value)}
       />
       <Area
-        label={type === 'PMOC' ? 'Pendências e conclusão' : 'Observações'}
+        label="Observações"
         value={form.observations}
         onChange={(value) => onSet('observations', value)}
       />
@@ -1611,6 +1805,12 @@ function EvidenceStep({
         <p className="mb-2 text-sm font-medium">
           Assinatura coletada, quando exigida pelo template
         </p>
+        {type === 'PMOC' && (
+          <div className="mb-3 grid gap-3 md:grid-cols-2">
+            <Text label="Nome do cliente/responsável" value={form.customerSignerName} onChange={(value) => onSet('customerSignerName', value)} />
+            <Text label="Função ou vínculo" value={form.customerSignerRole} onChange={(value) => onSet('customerSignerRole', value)} />
+          </div>
+        )}
         <SignaturePad
           onChange={(value) => onSet('signatureData', value)}
           onConfirm={(value) => onSet('signatureData', value)}
@@ -1637,6 +1837,8 @@ function contentFor(type: DocumentKind, form: WorkflowForm) {
     checklist,
     photos: type === 'PMOC' || type === 'WORK_ORDER' ? form.photos : [],
     signatureData: form.signatureData,
+    customerSignerName: form.signatureData ? form.customerSignerName || undefined : undefined,
+    customerSignerRole: form.signatureData ? form.customerSignerRole || undefined : undefined,
     signedAt: form.signatureData ? new Date().toISOString() : undefined,
   };
   if (type === 'RECEIPT')
@@ -1655,6 +1857,7 @@ function contentFor(type: DocumentKind, form: WorkflowForm) {
       technicalOpinionConditions: form.siteConditions,
       technicalOpinionAnalysis: form.analysis,
       technicalOpinionConclusion: form.conclusion,
+      technicalOpinionRecommendations: form.recommendations,
       technicalOpinionResponsible: form.technicalResponsible,
       technicalOpinionCrea: form.technicalCrea,
       inspectedEquipments: form.inspectedEquipments,
@@ -1686,10 +1889,26 @@ function contentFor(type: DocumentKind, form: WorkflowForm) {
       observations: form.observations,
       inspectedEquipments: form.inspectedEquipments,
     };
+  if (type === 'PMOC')
+    return {
+      ...common,
+      serviceDescription: form.objective,
+      observations: form.observations,
+      maintenanceType: form.maintenanceType,
+      inspectedEquipments: form.inspectedEquipments,
+      maintenanceChecklist: form.maintenanceChecklist.map((item) => ({
+        equipmentId: item.equipmentId,
+        maintenanceType: item.maintenanceType,
+        description: item.description,
+        executed: item.result === 'YES',
+        result: item.result,
+        observations: item.observations || undefined,
+      })),
+    };
   return {
     ...common,
     reportedIssue: form.objective,
-    serviceDescription: type === 'PMOC' ? form.objective : undefined,
+    serviceDescription: undefined,
     observations: form.observations,
   };
 }
@@ -1698,6 +1917,24 @@ function operationTypeFor(
   type: DocumentKind,
 ): 'PREVENTIVA' | 'CORRETIVA' | 'INSTALACAO' | 'PROJETO' {
   return type === 'PMOC' ? 'PREVENTIVA' : type === 'TECHNICAL_OPINION' ? 'CORRETIVA' : 'PROJETO';
+}
+function catalogLines(value: string): string[] {
+  return value
+    .split(/\r?\n/u)
+    .map((line) => line.replace(/^\s*[-•*]\s*/u, '').trim())
+    .filter(Boolean);
+}
+function technicalCatalogAreas(equipments: EquipmentSummary[]): TechnicalCatalogArea[] {
+  const areas = new Set<TechnicalCatalogArea>();
+  for (const equipment of equipments) {
+    if (['SPLIT', 'CHILLER', 'CONDENSER', 'EVAPORATOR', 'AIR_HANDLER'].includes(equipment.type)) {
+      areas.add('HVAC');
+      areas.add('REFRIGERATION');
+    } else if (['ELECTRICAL_PANEL', 'GENERATOR', 'SOLAR_INVERTER'].includes(equipment.type)) {
+      areas.add('ELECTRICAL');
+    }
+  }
+  return areas.size > 0 ? [...areas] : ['GENERAL'];
 }
 function equipmentTypeLabel(type?: EquipmentSummary['type']): string {
   if (!type) return '';

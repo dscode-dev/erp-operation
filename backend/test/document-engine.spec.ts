@@ -387,6 +387,8 @@ describe('DocumentEngine foundation', () => {
       'As evidências visuais demonstram perda de isolamento dielétrico e comprometimento mecânico.\n\nA recuperação não apresenta segurança técnica nem viabilidade econômica.';
     operation.technicalOpinionConclusion =
       'Conclui-se pela substituição integral das unidades afetadas, com descarte ambientalmente adequado.';
+    operation.technicalOpinionRecommendations =
+      '- Substituição preventiva\n- Monitoramento periódico';
     operation.technicalOpinionResponsible = 'Marina Albuquerque';
     operation.technicalOpinionCrea = 'CREA-PE 123456';
     operation.inspectedEquipments = [
@@ -497,6 +499,7 @@ describe('DocumentEngine foundation', () => {
       'technical-opinion-equipments',
       'technical-opinion-site-conditions',
       'technical-opinion-analysis',
+      'technical-opinion-recommendations',
       'technical-opinion-conclusion',
       'signature',
     ]);
@@ -539,6 +542,7 @@ describe('DocumentEngine foundation', () => {
       ?.components.find((component) => component.kind === 'signature');
     expect(signatures?.kind === 'signature' ? signatures.signatures : []).toHaveLength(2);
     expect(JSON.stringify(built)).toContain('substituição integral das unidades afetadas');
+    expect(JSON.stringify(built)).toContain('Monitoramento periódico');
     expect(
       built.sections
         .flatMap((section) => section.components)
@@ -655,7 +659,7 @@ describe('DocumentEngine foundation', () => {
     [DocumentTemplateType.WORK_ORDER, 'work-order-identification'],
     [DocumentTemplateType.TECHNICAL_REPORT, 'visit-objective'],
     [DocumentTemplateType.TECHNICAL_OPINION, 'technical-opinion-site-conditions'],
-    [DocumentTemplateType.PMOC, 'pmoc-compliance-context'],
+    [DocumentTemplateType.PMOC, 'pmoc-identification'],
     [DocumentTemplateType.RECEIPT, 'receipt-reference'],
   ])('builds and renders the official report-center workflow %s', async (type, expectedSection) => {
     const context = operationContext(type);
@@ -676,6 +680,40 @@ describe('DocumentEngine foundation', () => {
       tradeName: 'Orbit',
       cnpj: '00.000.000/0001-00',
     });
+    expect(rendered.blueprint).toBe(built);
+    expect(pdf.buffer.subarray(0, 5).toString('latin1')).toBe('%PDF-');
+  });
+
+  it('certifies PMOC equipment checklists, photos and semantic signatures in one Blueprint', async () => {
+    const context = operationContext(DocumentTemplateType.PMOC);
+    const operation = context.operation as Record<string, unknown>;
+    operation.maintenanceType = 'MONTHLY';
+    operation.inspectedEquipments = [{
+      equipmentId: 'equipment-1', position: 0, sector: 'Sala técnica', brandSnapshot: 'Carrier',
+      modelSnapshot: 'XPower', capacitySnapshot: '36.000 BTU/h', equipment: { id: 'equipment-1', name: 'Split 01', type: 'SPLIT' },
+    }];
+    operation.maintenanceChecklistItems = [
+      { id: 'check-1', equipmentId: 'equipment-1', maintenanceType: 'MONTHLY', description: 'Limpar filtros de ar', executed: true, result: 'YES', observations: 'Sem avarias', position: 0, equipment: { id: 'equipment-1', name: 'Split 01', tag: 'AC-01' } },
+      { id: 'check-2', equipmentId: 'equipment-1', maintenanceType: 'MONTHLY', description: 'Verificar dreno', executed: false, result: 'NOT_APPLICABLE', observations: null, position: 1, equipment: { id: 'equipment-1', name: 'Split 01', tag: 'AC-01' } },
+    ];
+    context.signature = {
+      requiresSignature: true,
+      signatureMode: 'HYBRID',
+      signatureId: 'institutional',
+      fixedSignature: null,
+      institutionalSignatures: [{ id: 'institutional', name: 'Marina', title: 'Engenheira', professionalCouncil: 'CREA-123', department: 'Técnico', image: { storageKey: 'private', mimeType: 'image/png', fileSize: 68, contentBase64: ONE_PIXEL_PNG } }],
+      collectedSignature: { label: 'Cliente', name: 'Ana', title: 'Gestora', signedAt: new Date().toISOString(), caption: 'Assinatura coletada', image: { storageKey: 'private-client', mimeType: 'image/png', fileSize: 68, contentBase64: ONE_PIXEL_PNG } },
+      executionSignatures: [{ role: 'client', label: 'Assinatura do cliente/responsável', name: 'Ana', title: 'Gestora', signedAt: new Date().toISOString(), caption: 'Assinatura coletada', image: { storageKey: 'private-client', mimeType: 'image/png', fileSize: 68, contentBase64: ONE_PIXEL_PNG } }],
+    };
+    const built = (new DocumentBuilderService({} as never) as unknown as { buildFromContext: (ctx: unknown) => DocumentBlueprint }).buildFromContext(context);
+    const ids = built.sections.map((section) => section.id);
+    expect(ids).toEqual(expect.arrayContaining(['pmoc-identification', 'pmoc-operational-data', 'pmoc-inspected-equipments', 'pmoc-legal-reference', 'pmoc-checklist-0', 'signature']));
+    const table = built.sections.find((section) => section.id === 'pmoc-checklist-0')?.components[0];
+    expect(table?.kind === 'table' ? table.rows.map((row) => row.executed) : []).toEqual(['Sim', 'N.A.']);
+    const signatures = built.sections.find((section) => section.id === 'signature')?.components[0];
+    expect(signatures?.kind === 'signature' ? signatures.signatures : []).toHaveLength(2);
+    const rendered = renderer().render(built);
+    const pdf = await new PdfEngineService().create(rendered);
     expect(rendered.blueprint).toBe(built);
     expect(pdf.buffer.subarray(0, 5).toString('latin1')).toBe('%PDF-');
   });
@@ -1313,7 +1351,13 @@ describe('DocumentEngine foundation', () => {
     expect(storageSave).toHaveBeenCalled();
     expect(photoCreate).toHaveBeenCalled();
     expect(operationFindUnique).toHaveBeenCalledTimes(2);
-    expect(result).toBe(operation);
+    expect(result).toEqual({
+      id: operation.id,
+      photos: operation.photos,
+      signedAt: operation.signedAt,
+      signatureCaptured: false,
+    });
+    expect(result).not.toHaveProperty('signatureData');
   });
 
   it('detects a previously rendered Work Order as stale after its signature changes', async () => {
@@ -1522,6 +1566,9 @@ function operationContext(
       completedAt: now,
       createdAt: now,
       signedAt: now,
+      signatureData: null,
+      customerSignerName: null,
+      customerSignerRole: null,
       checklist: [{ label: 'Inspeção visual', done: true, note: 'Sem avarias aparentes' }],
       observations: 'Equipamento inspecionado e operando conforme registros do atendimento.',
       reportedIssue: null,
@@ -1532,6 +1579,7 @@ function operationContext(
       technicalOpinionConditions: null,
       technicalOpinionAnalysis: null,
       technicalOpinionConclusion: null,
+      technicalOpinionRecommendations: null,
       technicalOpinionResponsible: null,
       technicalOpinionCrea: null,
       referenceMonth: null,
@@ -1579,7 +1627,32 @@ function operationContext(
       },
       operator: { name: 'João Técnico', jobTitle: 'Técnico' },
       assignment: null,
-      maintenanceExecution: null,
+      maintenanceExecution:
+        type === DocumentTemplateType.PMOC
+          ? {
+              scheduledAt: now,
+              executedAt: now,
+              status: 'COMPLETED',
+              plan: {
+                name: 'PMOC Hospital',
+                type: 'PREVENTIVE',
+                priority: 'HIGH',
+                description: 'Plano oficial',
+                nextExecution: now,
+                pmocPlan: {
+                  id: '74bf6756-5356-4df2-a03d-e83810bd1430',
+                  responsibleTechnician: 'Marina Engenheira',
+                  contractNumber: 'PMOC-001',
+                  artNumber: 'CREA-12345',
+                  startDate: now,
+                  endDate: new Date('2027-07-10T12:00:00.000Z'),
+                  active: true,
+                  environments: [],
+                  equipments: [],
+                },
+              },
+            }
+          : null,
       parts: [],
       photos: [],
       documents: [],

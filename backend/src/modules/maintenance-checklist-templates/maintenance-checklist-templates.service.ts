@@ -1,5 +1,10 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import {
+  Prisma,
+  TechnicalCatalogArea,
+  TechnicalCatalogType,
+  TechnicalCatalogWorkflow,
+} from '@prisma/client';
 import {
   MAINTENANCE_CHECKLIST_TEMPLATE_AUDIT_ACTIONS,
   MAINTENANCE_CHECKLIST_TEMPLATE_RESOURCE,
@@ -16,15 +21,17 @@ import type {
   UpdateMaintenanceChecklistTemplateDto,
 } from './dto/maintenance-checklist-template.dto';
 
-const TEMPLATE_SELECT = {
+const CATALOG_SELECT = {
   id: true,
   organizationId: true,
   maintenanceType: true,
-  description: true,
+  title: true,
   active: true,
   createdAt: true,
   updatedAt: true,
-} satisfies Prisma.MaintenanceChecklistTemplateSelect;
+} satisfies Prisma.TechnicalCatalogSelect;
+
+type ChecklistCatalog = Prisma.TechnicalCatalogGetPayload<{ select: typeof CATALOG_SELECT }>;
 
 export interface MaintenanceChecklistTemplateAuditContext {
   requestId: string;
@@ -38,27 +45,34 @@ export class MaintenanceChecklistTemplatesService {
 
   async list(query: ListMaintenanceChecklistTemplatesQueryDto): Promise<unknown> {
     const organizationId = await this.organizationId();
-    const where: Prisma.MaintenanceChecklistTemplateWhereInput = {
+    const where: Prisma.TechnicalCatalogWhereInput = {
       organizationId,
+      type: TechnicalCatalogType.CHECKLIST,
+      deletedAt: null,
       ...(query.maintenanceType ? { maintenanceType: query.maintenanceType } : {}),
       ...(query.active !== undefined ? { active: query.active } : {}),
-      ...(query.search ? { description: { contains: query.search, mode: 'insensitive' } } : {}),
+      ...(query.search ? { title: { contains: query.search, mode: 'insensitive' } } : {}),
     };
-    const [items, total] = await this.prisma.$transaction([
-      this.prisma.maintenanceChecklistTemplate.findMany({
+    const [catalogs, total] = await this.prisma.$transaction([
+      this.prisma.technicalCatalog.findMany({
         where,
-        select: TEMPLATE_SELECT,
-        orderBy: [{ maintenanceType: 'asc' }, { description: 'asc' }],
+        select: CATALOG_SELECT,
+        orderBy: [{ maintenanceType: 'asc' }, { sortOrder: 'asc' }, { title: 'asc' }],
         skip: (query.page - 1) * query.limit,
         take: query.limit,
       }),
-      this.prisma.maintenanceChecklistTemplate.count({ where }),
+      this.prisma.technicalCatalog.count({ where }),
     ]);
-    return buildPaginatedResponse(items, total, query.page, query.limit);
+    return buildPaginatedResponse(
+      catalogs.map((item) => this.compatible(item)),
+      total,
+      query.page,
+      query.limit,
+    );
   }
 
   async get(id: string): Promise<unknown> {
-    return this.templateOrThrow(id, await this.organizationId());
+    return this.compatible(await this.templateOrThrow(id, await this.organizationId()));
   }
 
   async create(
@@ -67,24 +81,45 @@ export class MaintenanceChecklistTemplatesService {
     context: MaintenanceChecklistTemplateAuditContext,
   ): Promise<unknown> {
     const organizationId = await this.organizationId();
+    const max = await this.prisma.technicalCatalog.aggregate({
+      where: {
+        organizationId,
+        type: TechnicalCatalogType.CHECKLIST,
+        maintenanceType: dto.maintenanceType,
+        deletedAt: null,
+      },
+      _max: { sortOrder: true },
+    });
     try {
       return await this.prisma.$transaction(async (tx) => {
-        const created = await tx.maintenanceChecklistTemplate.create({
+        const created = await tx.technicalCatalog.create({
           data: {
             organizationId,
+            type: TechnicalCatalogType.CHECKLIST,
             maintenanceType: dto.maintenanceType,
-            description: this.clean(dto.description),
+            title: this.clean(dto.description),
+            tags: ['manutencao'],
+            areas: [TechnicalCatalogArea.GENERAL],
+            workflows: [
+              TechnicalCatalogWorkflow.GENERAL,
+              TechnicalCatalogWorkflow.MAINTENANCE,
+              TechnicalCatalogWorkflow.WORK_ORDER,
+              TechnicalCatalogWorkflow.TECHNICAL_REPORT,
+              TechnicalCatalogWorkflow.PMOC,
+            ],
+            sortOrder: (max._max.sortOrder ?? -1) + 1,
             active: dto.active ?? true,
           },
-          select: TEMPLATE_SELECT,
+          select: CATALOG_SELECT,
         });
         await tx.auditLog.create({
           data: this.audit(MAINTENANCE_CHECKLIST_TEMPLATE_AUDIT_ACTIONS.CREATED, actor, context, {
             templateId: created.id,
             maintenanceType: created.maintenanceType,
+            technicalCatalog: true,
           }),
         });
-        return created;
+        return this.compatible(created);
       });
     } catch (error) {
       this.rethrowConflict(error);
@@ -101,22 +136,23 @@ export class MaintenanceChecklistTemplatesService {
     await this.templateOrThrow(id, organizationId);
     try {
       return await this.prisma.$transaction(async (tx) => {
-        const updated = await tx.maintenanceChecklistTemplate.update({
+        const updated = await tx.technicalCatalog.update({
           where: { id },
           data: {
             ...(dto.maintenanceType !== undefined ? { maintenanceType: dto.maintenanceType } : {}),
-            ...(dto.description !== undefined ? { description: this.clean(dto.description) } : {}),
+            ...(dto.description !== undefined ? { title: this.clean(dto.description) } : {}),
             ...(dto.active !== undefined ? { active: dto.active } : {}),
           },
-          select: TEMPLATE_SELECT,
+          select: CATALOG_SELECT,
         });
         await tx.auditLog.create({
           data: this.audit(MAINTENANCE_CHECKLIST_TEMPLATE_AUDIT_ACTIONS.UPDATED, actor, context, {
             templateId: id,
             changedFields: Object.keys(dto),
+            technicalCatalog: true,
           }),
         });
-        return updated;
+        return this.compatible(updated);
       });
     } catch (error) {
       this.rethrowConflict(error);
@@ -131,15 +167,36 @@ export class MaintenanceChecklistTemplatesService {
     const organizationId = await this.organizationId();
     await this.templateOrThrow(id, organizationId);
     await this.prisma.$transaction([
-      this.prisma.maintenanceChecklistTemplate.update({ where: { id }, data: { active: false } }),
+      this.prisma.technicalCatalog.update({ where: { id }, data: { active: false } }),
       this.prisma.auditLog.create({
         data: this.audit(MAINTENANCE_CHECKLIST_TEMPLATE_AUDIT_ACTIONS.DEACTIVATED, actor, context, {
           templateId: id,
-          softDelete: true,
+          softDelete: false,
+          technicalCatalog: true,
         }),
       }),
     ]);
     return { deactivated: true };
+  }
+
+  private compatible(item: ChecklistCatalog): {
+    id: string;
+    organizationId: string;
+    maintenanceType: ChecklistCatalog['maintenanceType'];
+    description: string;
+    active: boolean;
+    createdAt: Date;
+    updatedAt: Date;
+  } {
+    return {
+      id: item.id,
+      organizationId: item.organizationId,
+      maintenanceType: item.maintenanceType,
+      description: item.title,
+      active: item.active,
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt,
+    };
   }
 
   private async organizationId(): Promise<string> {
@@ -157,10 +214,10 @@ export class MaintenanceChecklistTemplatesService {
     return organization.id;
   }
 
-  private async templateOrThrow(id: string, organizationId: string): Promise<unknown> {
-    const template = await this.prisma.maintenanceChecklistTemplate.findFirst({
-      where: { id, organizationId },
-      select: TEMPLATE_SELECT,
+  private async templateOrThrow(id: string, organizationId: string): Promise<ChecklistCatalog> {
+    const template = await this.prisma.technicalCatalog.findFirst({
+      where: { id, organizationId, type: TechnicalCatalogType.CHECKLIST, deletedAt: null },
+      select: CATALOG_SELECT,
     });
     if (!template) {
       throw new ApplicationException(

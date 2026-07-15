@@ -9,7 +9,9 @@ import { EmptyState } from "@erp/ui/empty-state";
 import { ErrorState } from "@erp/ui/states";
 import { StatusPill } from "@erp/ui/status-pill";
 import { DocumentViewer } from "@erp/ui/documents/document-viewer";
-import { assignmentsApi, inventoryApi, useQuery, type Assignment, type InventoryItem, type OperationDocument, type OperationPart, type Product } from "@erp/api";
+import { SignaturePad } from "@erp/ui/documents/signature-pad";
+import { PhotoInput, type CapturedPhoto } from "@erp/ui/photo-input";
+import { assignmentsApi, inventoryApi, operationApi, useQuery, type Assignment, type InventoryItem, type OperationDetail, type OperationDocument, type OperationPart, type Product } from "@erp/api";
 import {
   ASSIGNMENT_STATUS_LABEL,
   ASSIGNMENT_STATUS_PILL,
@@ -112,6 +114,7 @@ function AssignmentWorkflow({
   onAction: (action: "accept" | "start" | "complete" | "reject") => void;
 }) {
   const op = assignment.operation;
+  const operation = useQuery((signal) => operationApi.getOperation(op.id, { signal }), [op.id]);
   const [document, setDocument] = useState<OperationDocument | null>(null);
   const address = op.address
     ? `${op.address.street ?? ""}${op.address.number ? `, ${op.address.number}` : ""} · ${op.address.city ?? "cidade não informada"}/${op.address.state ?? "UF"}`
@@ -174,6 +177,10 @@ function AssignmentWorkflow({
           )}
         </div>
       </section>
+
+      {operation.data?.maintenanceExecution?.plan.pmocPlan && (
+        <PmocFieldExecution operation={operation.data} onSaved={operation.refetch} />
+      )}
 
       <section className="space-y-2">
         <div className="flex items-center justify-between gap-2">
@@ -283,6 +290,78 @@ function AssignmentWorkflow({
       )}
     </>
   );
+}
+
+function PmocFieldExecution({ operation, onSaved }: { operation: OperationDetail; onSaved: () => void }) {
+  const [items, setItems] = useState(operation.maintenanceChecklistItems);
+  const [photos, setPhotos] = useState<CapturedPhoto[]>([]);
+  const [signature, setSignature] = useState<string | null>(null);
+  const [signerName, setSignerName] = useState(operation.customerSignerName ?? "");
+  const [signerRole, setSignerRole] = useState(operation.customerSignerRole ?? "");
+  const [busy, setBusy] = useState(false);
+  const [feedback, setFeedback] = useState<string | null>(null);
+
+  async function save() {
+    setBusy(true);
+    setFeedback(null);
+    try {
+      const encodedPhotos = await Promise.all(photos.map(async (photo) => ({ dataUrl: await fileDataUrl(photo.file), caption: photo.name })));
+      await operationApi.updateOperation(operation.id, {
+        maintenanceChecklist: items.map((item) => ({
+          equipmentId: item.equipmentId,
+          maintenanceType: item.maintenanceType,
+          description: item.description,
+          result: item.result ?? (item.executed ? "YES" : "NO"),
+          executed: (item.result ?? (item.executed ? "YES" : "NO")) === "YES",
+          observations: item.observations,
+        })),
+        photos: encodedPhotos,
+        signatureData: signature,
+        customerSignerName: signature ? signerName : undefined,
+        customerSignerRole: signature ? signerRole : undefined,
+        signedAt: signature ? new Date().toISOString() : undefined,
+      });
+      setPhotos([]);
+      setFeedback("Execução PMOC salva. O Preview foi invalidado e refletirá os novos dados.");
+      onSaved();
+    } catch (cause) {
+      setFeedback(cause instanceof Error ? cause.message : "Não foi possível salvar o PMOC.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="space-y-4 rounded-[var(--radius-xl)] border border-[var(--color-primary)]/30 bg-[var(--color-card)] p-4">
+      <div><p className="text-caption">Execução vinculada</p><h2 className="font-semibold">PMOC em campo</h2><p className="text-xs text-[var(--color-muted-foreground)]">Preencha os procedimentos por equipamento, evidências e assinatura do cliente.</p></div>
+      <div className="space-y-3">
+        {items.length === 0 ? <p className="text-sm text-[var(--color-muted-foreground)]">Nenhum procedimento foi preparado para esta execução.</p> : items.map((item, index) => (
+          <div key={item.id ?? index} className="space-y-2 rounded-[var(--radius-lg)] border border-[var(--color-border)] p-3">
+            <p className="text-sm font-medium">{item.equipment?.name ?? "Procedimento geral"}</p>
+            <p className="text-sm">{item.description}</p>
+            <div className="grid grid-cols-3 gap-2">
+              {([['YES','Sim'],['NO','Não'],['NOT_APPLICABLE','N.A.']] as const).map(([value,label]) => <button key={value} type="button" onClick={() => setItems((current) => current.map((candidate, currentIndex) => currentIndex === index ? { ...candidate, result: value, executed: value === 'YES' } : candidate))} className={`h-10 rounded-[var(--radius-md)] border text-sm font-medium ${(item.result ?? (item.executed ? 'YES' : 'NO')) === value ? 'border-[var(--color-primary)] bg-[var(--color-primary)] text-white' : 'border-[var(--color-border)]'}`}>{label}</button>)}
+            </div>
+            <input value={item.observations ?? ""} onChange={(event) => setItems((current) => current.map((candidate, currentIndex) => currentIndex === index ? { ...candidate, observations: event.target.value } : candidate))} placeholder="Observação do procedimento" className="h-10 w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-3 text-sm" />
+          </div>
+        ))}
+      </div>
+      <PhotoInput photos={photos} onChange={setPhotos} />
+      <div className="grid gap-2"><input value={signerName} onChange={(event) => setSignerName(event.target.value)} placeholder="Nome do cliente/responsável" className="h-11 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-3 text-sm" /><input value={signerRole} onChange={(event) => setSignerRole(event.target.value)} placeholder="Função ou vínculo" className="h-11 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-3 text-sm" /></div>
+      <SignaturePad onChange={setSignature} onConfirm={setSignature} />
+      {feedback && <p className="text-sm text-[var(--color-muted-foreground)]">{feedback}</p>}
+      <button type="button" disabled={busy || (Boolean(signature) && !signerName.trim())} onClick={() => void save()} className="h-12 w-full rounded-[var(--radius-lg)] bg-[var(--color-primary)] text-sm font-semibold text-white disabled:opacity-50">{busy ? "Salvando…" : "Salvar execução PMOC"}</button>
+    </section>
+  );
+}
+
+function fileDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error ?? new Error("Falha ao ler a foto"));
+    reader.readAsDataURL(file);
+  });
 }
 
 function InfoRow({ icon: Icon, label, value }: { icon: typeof MapPin; label: string; value: string }) {

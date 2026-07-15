@@ -1,4 +1,9 @@
-import { OperationMaintenanceType, OperationStatus, OperationType } from '@prisma/client';
+import {
+  MaintenanceChecklistResult,
+  OperationMaintenanceType,
+  OperationStatus,
+  OperationType,
+} from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
 import {
   IsArray,
@@ -42,9 +47,11 @@ export class OperationPhotoInputDto {
 }
 
 export class OperationMaintenanceChecklistItemDto {
+  @IsOptional() @IsUUID('4') equipmentId?: string;
   @IsEnum(OperationMaintenanceType) maintenanceType!: OperationMaintenanceType;
   @Transform(({ value }) => trim(value)) @IsString() @MaxLength(500) description!: string;
   @IsBoolean() executed!: boolean;
+  @IsOptional() @IsEnum(MaintenanceChecklistResult) result?: MaintenanceChecklistResult;
   @IsOptional()
   @Transform(({ value }) => trim(value))
   @IsString()
@@ -145,6 +152,11 @@ export class CreateOperationDto {
   @IsOptional()
   @Transform(({ value }) => trim(value))
   @IsString()
+  @MaxLength(20000)
+  technicalOpinionRecommendations?: string;
+  @IsOptional()
+  @Transform(({ value }) => trim(value))
+  @IsString()
   @MaxLength(180)
   technicalOpinionResponsible?: string;
   @IsOptional()
@@ -153,6 +165,8 @@ export class CreateOperationDto {
   @MaxLength(100)
   technicalOpinionCrea?: string;
   @IsOptional() @IsString() @MaxLength(2_000_000) signatureData?: string;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(180) customerSignerName?: string;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(120) customerSignerRole?: string;
   @IsOptional() @IsDateString() signedAt?: string;
   @IsOptional()
   @IsArray()
@@ -233,6 +247,11 @@ export class UpdateOperationDto {
   @IsOptional()
   @Transform(({ value }) => trim(value))
   @IsString()
+  @MaxLength(20000)
+  technicalOpinionRecommendations?: string;
+  @IsOptional()
+  @Transform(({ value }) => trim(value))
+  @IsString()
   @MaxLength(180)
   technicalOpinionResponsible?: string;
   @IsOptional()
@@ -241,6 +260,8 @@ export class UpdateOperationDto {
   @MaxLength(100)
   technicalOpinionCrea?: string;
   @IsOptional() @IsString() @MaxLength(2_000_000) signatureData?: string;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(180) customerSignerName?: string;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(120) customerSignerRole?: string;
   @IsOptional() @IsDateString() signedAt?: string;
   @IsOptional()
   @IsArray()

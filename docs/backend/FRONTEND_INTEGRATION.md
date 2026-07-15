@@ -2247,3 +2247,43 @@ novos podem ser nulos/vazios em operações antigas. Os modos suportados são `W
 Load reusable activities with `GET /api/v1/maintenance-checklist-templates?maintenanceType=SEMIANNUAL&active=true&page=1&limit=100`. The catalog ID is a selection aid only: when saving the report, send snapshots through the existing Operation `maintenanceChecklist` payload (`maintenanceType`, `description`, `executed`, `observations`). This guarantees that later catalog changes do not alter historical reports.
 
 Technical Reports may send multiple entries through `inspectedEquipments`. Their top-level `equipmentId` may be null. The Central de Relatórios does not send `photos` for `TECHNICAL_REPORT`; image evidence is currently enabled there only for `PMOC`.
+
+## Technical Catalogs e Laudo Técnico
+
+- Carregue as abas/labels com `GET /technical-catalogs/types`.
+- Carregue seletores com `GET /technical-catalogs?type=<TYPE>&active=true&page=1&limit=100`.
+- O valor `Outros` é somente um comando de UI: abra um campo, adicione o texto digitado e nunca
+  envie a palavra `Outros` como dado.
+- Usuários podem remover/reordenar escolhas e editar somente itens personalizados no fluxo.
+- Ao salvar uma Operation, envie os textos finais em `technicalOpinionObjective`,
+  `technicalOpinionConditions`, `technicalOpinionRecommendations` e
+  `technicalOpinionConclusion`. Não envie IDs do catálogo.
+- Selecione o responsável técnico em `GET /signatures?active=true`; copie nome e conselho para os
+  snapshots da Operation. O registro profissional permanece editável e o fallback visual é
+  `Não consta`.
+- Platform mantém textareas para edição avançada depois dos seletores. Operator usa a mesma família
+  de seletores em layout compacto e suporta múltiplos equipamentos.
+- O documento continua seguindo Operation → DocumentContext → Builder → Blueprint → Viewer/PDF.
+  Nenhum catálogo deve ser consultado durante Preview ou Render.
+
+Compatibilidade: `/maintenance-checklist-templates` continua disponível e é atendido pelo catálogo
+unificado de tipo `CHECKLIST`.
+
+### Seleção contextual (Closure 08.1)
+
+- Consulte `/technical-catalogs/taxonomy` para labels oficiais.
+- Envie `areas`, `workflow`, `includeGeneral=true`, `active=true`, página 1 e limite 100.
+- A busca deve ir ao backend e cobre título, descrição e tags.
+- `GENERAL` é fallback; itens específicos vêm primeiro.
+- Valores já persistidos continuam editáveis mesmo se o item for desativado ou reclassificado.
+- Platform usa composição detalhada e Operator compacta; PMOC pode usar `workflow=PMOC`.
+
+## DC-04 — integração PMOC
+
+Selecione `PmocPlan`, use `pmoc.equipments`, vincule a Operation por `MaintenanceExecution` e
+persista procedimentos com snapshot/equipamento/resultado. Fotos são opcionais. Assinatura do
+cliente envia nome e função. Preview → Render → Download usa exclusivamente `DocumentViewer` no
+tipo `PMOC`.
+
+Estados de UX: `EM PREENCHIMENTO` antes da conclusão; `NÃO ASSINADO` após conclusão sem coleta;
+`ASSINADO` quando `signatureCaptured=true`.

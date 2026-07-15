@@ -618,3 +618,32 @@ Tipos:
   completo de OS.
 - `InspectedEquipmentSelector`: multiseleção pesquisável reutilizada pela OS e Relatório de Visita.
 - `DocumentViewer`: renderização de `imageGallery` em grade compacta de duas colunas.
+
+## Technical Catalog components
+
+- `TechnicalCatalogSelector`: consulta itens ativos por tipo, oferece seleção incremental e o comando
+  `Outros`; nunca persiste o literal de controle.
+- `TechnicalCatalogList`: exibe escolhas ordenadas, permite mover, remover e editar somente entradas
+  personalizadas.
+- `TechnicalCatalogDrawer`: editor reutilizado pela página para criação/edição de todos os tipos;
+  checklist acrescenta periodicidade.
+- `TechnicalCatalogsPage`: reaproveita a rota anterior, tabs vindas do backend, filtros cumulativos,
+  paginação padrão, reorder e confirmação de exclusão lógica.
+- `ReportWorkflowDrawer`: no `TECHNICAL_OPINION`, combina assinatura institucional, seletores de
+  catálogo, múltiplos equipamentos e textareas avançadas.
+- `AtendimentoWizard`: reutiliza os seletores compactos e seleção múltipla de equipamentos para
+  captura operacional em campo.
+
+### Closure 08.1
+
+- `TechnicalCatalogSelector`: props `areas` e `workflow`, busca remota, prioridade contextual e
+  fallback `GENERAL`; escolhas históricas permanecem em `TechnicalCatalogList`.
+- `TechnicalCatalogDrawer`: tags e multi-choice acessível para áreas/workflows.
+- `TechnicalCatalogsPage`: filtros cumulativos e badges compactos de tag.
+
+### DC-04
+
+- `PmocFieldExecution`: painel mobile dentro do detalhe da Assignment para checklist por
+  equipamento, fotos, identificação e assinatura do cliente; persiste pela Operation oficial.
+- `InspectedEquipmentSelector`, `MultiSelect`, `PhotoInput`, `SignaturePad` e `DocumentViewer`
+  foram reutilizados, sem componentes paralelos de documento.

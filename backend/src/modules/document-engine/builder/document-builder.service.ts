@@ -119,8 +119,10 @@ export class DocumentBuilderService {
       ),
       footer: {
         content: this.clean(
-          context.template?.footerContent ||
-            `${organization.tradeName || organization.legalName} · ${document.number}`,
+          type === DocumentTemplateType.PMOC
+            ? `${organization.tradeName || organization.legalName} · ${organization.phone} · ${organization.email} · ${document.number} · Versão documental 1 · Emissão ${this.date(generatedAt)}`
+            : context.template?.footerContent ||
+                `${organization.tradeName || organization.legalName} · ${document.number}`,
         ),
         generatedAt,
       },
@@ -262,6 +264,8 @@ export class DocumentBuilderService {
           ? this.visitReportSections(context, generatedAt, documentNumber)
           : context.configuration.type === DocumentTemplateType.TECHNICAL_OPINION
             ? this.technicalOpinionSections(context, generatedAt, documentNumber)
+            : context.configuration.type === DocumentTemplateType.PMOC
+              ? this.pmocReportSections(context, generatedAt, documentNumber)
             : this.sharedIdentitySections(context);
 
     switch (context.configuration.type) {
@@ -275,7 +279,6 @@ export class DocumentBuilderService {
       case DocumentTemplateType.TECHNICAL_OPINION:
         break;
       case DocumentTemplateType.PMOC:
-        sections.push(...this.pmocReportSections(context));
         break;
       case DocumentTemplateType.RECEIPT:
         sections.push(...this.receiptSections(context));
@@ -749,6 +752,16 @@ export class DocumentBuilderService {
         ),
       },
       {
+        id: 'technical-opinion-recommendations',
+        title: 'Recomendações Técnicas',
+        critical: true,
+        components: this.technicalNarrative(
+          'technical-opinion-recommendations',
+          operation.technicalOpinionRecommendations,
+          'Recomendações técnicas não informadas.',
+        ),
+      },
+      {
         id: 'technical-opinion-conclusion',
         title: 'Conclusão',
         critical: true,
@@ -819,48 +832,99 @@ export class DocumentBuilderService {
     };
   }
 
-  private pmocReportSections(context: DocumentContext): DocumentSection[] {
+  private pmocReportSections(
+    context: DocumentContext,
+    generatedAt: string,
+    documentNumber: string,
+  ): DocumentSection[] {
     const { operation } = context;
     const pmoc = operation.maintenanceExecution?.plan.pmocPlan ?? null;
+    if (!pmoc) {
+      throw new ApplicationException(
+        ERROR_CODES.DOCUMENT_RENDER_FAILED,
+        'PMOC document requires an Operation linked to a PMOC MaintenanceExecution',
+        HttpStatus.CONFLICT,
+      );
+    }
+    const address = operation.address ?? operation.customer.addresses[0] ?? null;
+    const contact = operation.customer.contacts[0] ?? null;
     const sections: DocumentSection[] = [
       {
-        id: 'pmoc-compliance-context',
-        title: 'Contexto PMOC disponível',
+        id: 'pmoc-identification',
+        title: 'Identificação do PMOC',
         critical: true,
         components: [
-          this.metadata('pmoc-context-metadata', [
-            ['Plano PMOC', pmoc ? pmoc.id : 'PMOC não vinculado à execução'],
-            ['Responsável técnico', pmoc?.responsibleTechnician ?? '—'],
-            ['Contrato', pmoc?.contractNumber ?? '—'],
-            ['ART', pmoc?.artNumber ?? '—'],
-            ['Vigência inicial', this.date(pmoc?.startDate ?? null)],
-            ['Vigência final', this.date(pmoc?.endDate ?? null)],
-            ['Status do plano', pmoc ? (pmoc.active ? 'Ativo' : 'Inativo') : '—'],
+          this.metadata('pmoc-identification-metadata', [
+            ['Título', `PMOC — ${operation.customer.tradeName ?? operation.customer.name}`],
+            ['Número', documentNumber],
+            ['Emissão', this.date(generatedAt)],
+            ['Situação', operation.signatureData ? 'ASSINADO' : operation.status === 'COMPLETED' ? 'NÃO ASSINADO' : 'EM PREENCHIMENTO'],
+            ['Responsável técnico', pmoc.responsibleTechnician],
+            ['ART/registro', pmoc.artNumber ?? '—'],
+            ['Contrato', pmoc.contractNumber ?? '—'],
+            ['Cliente', operation.customer.tradeName ?? operation.customer.name],
+            ['Endereço', address ? this.address(address) : '—'],
           ]),
         ],
       },
-      this.maintenanceSection(operation),
+      {
+        id: 'pmoc-operational-data',
+        title: 'Dados operacionais',
+        critical: true,
+        components: [this.metadata('pmoc-operational-metadata', [
+          ['Operação', `OP-${String(operation.number).padStart(6, '0')}`],
+          ['Execução prevista', this.date(operation.maintenanceExecution?.scheduledAt ?? null)],
+          ['Início', this.date(operation.startedAt)],
+          ['Conclusão', this.date(operation.completedAt)],
+          ['Técnico em campo', operation.operator.name],
+          ['Contato do cliente', contact ? `${contact.name}${contact.phone ? ` · ${contact.phone}` : ''}` : (operation.customer.phone ?? '—')],
+          ['Vigência', `${this.date(pmoc.startDate)} a ${this.date(pmoc.endDate)}`],
+          ['Periodicidade', this.maintenanceTypeLabel(operation.maintenanceType ?? 'MONTHLY')],
+        ])],
+      },
+      this.inspectedEquipmentSection(operation, 'pmoc'),
       this.pmocEnvironmentsSection(operation),
-      ...(operation.serviceDescription
-        ? [
-            {
-              id: 'pmoc-measurements',
-              title: 'Medições',
-              components: [
-                {
-                  id: 'pmoc-measurements-text',
-                  kind: 'observation' as const,
-                  text: this.clean(operation.serviceDescription),
-                  keepTogether: true,
-                },
-              ],
-            },
-          ]
-        : []),
-      this.checklistSection(operation, 'Execução PMOC registrada'),
-      this.observationSection(operation, 'Pendências e conclusão'),
+      {
+        id: 'pmoc-legal-reference',
+        title: 'Referência do plano',
+        components: [{ id: 'pmoc-legal-reference-text', kind: 'paragraph', text: 'Plano de Manutenção, Operação e Controle — referência textual: Lei nº 13.589/2018.', keepTogether: true }],
+      },
+      ...this.pmocChecklistSections(operation),
+      this.materialsSection(operation),
+      this.observationSection(operation, 'Observações e conclusão da execução'),
     ].filter((section): section is DocumentSection => Boolean(section));
     return sections;
+  }
+
+  private pmocChecklistSections(operation: DocumentContextOperation): DocumentSection[] {
+    const groups = new Map<string, typeof operation.maintenanceChecklistItems>();
+    for (const item of operation.maintenanceChecklistItems) {
+      const key = item.equipmentId ?? 'general';
+      groups.set(key, [...(groups.get(key) ?? []), item]);
+    }
+    if (groups.size === 0) {
+      return [{ id: 'pmoc-checklist-empty', title: 'Checklist PMOC', components: [{ id: 'pmoc-checklist-empty-text', kind: 'paragraph', text: 'Nenhum procedimento foi registrado para esta execução.', keepTogether: true }] }];
+    }
+    return [...groups.entries()].map(([equipmentId, items], groupIndex) => ({
+      id: `pmoc-checklist-${groupIndex}`,
+      title: `Checklist PMOC — ${items[0]?.equipment?.name ?? (equipmentId === 'general' ? 'Procedimentos gerais' : 'Equipamento')}`,
+      components: [{
+        id: `pmoc-checklist-table-${groupIndex}`,
+        kind: 'table',
+        columns: [
+          { key: 'component', label: 'COMPONENTE / UNIDADE', width: 0.24 },
+          { key: 'procedure', label: 'PROCEDIMENTO', width: 0.42 },
+          { key: 'executed', label: 'EXECUTADO', width: 0.14 },
+          { key: 'observation', label: 'OBSERVAÇÃO', width: 0.2 },
+        ],
+        rows: items.map((item) => ({
+          component: this.clean(item.equipment?.tag ?? item.equipment?.name ?? 'Geral'),
+          procedure: this.clean(item.description),
+          executed: item.result === 'YES' ? 'Sim' : item.result === 'NOT_APPLICABLE' ? 'N.A.' : 'Não',
+          observation: this.clean(item.observations ?? '—'),
+        })),
+      }],
+    }));
   }
 
   private receiptSections(context: DocumentContext): DocumentSection[] {
@@ -934,6 +998,7 @@ export class DocumentBuilderService {
       context.configuration.type !== DocumentTemplateType.TECHNICAL_REPORT &&
       context.configuration.type !== DocumentTemplateType.TECHNICAL_OPINION &&
       context.configuration.type !== DocumentTemplateType.WORK_ORDER &&
+      context.configuration.type !== DocumentTemplateType.PMOC &&
       relatedDocuments.length > 0
     ) {
       sections.push({
@@ -1278,7 +1343,7 @@ export class DocumentBuilderService {
         {
           id: `photo-gallery-${operation.id}`,
           kind: 'imageGallery',
-          columns: 2,
+          columns: context.configuration.type === DocumentTemplateType.PMOC ? 4 : 2,
           images: operation.photos.map((photo) => ({
             sourceId: photo.id,
             caption: photo.caption ? this.clean(photo.caption) : null,

@@ -2659,3 +2659,53 @@ Veredito:
 - The seed idempotently installs a small HVAC starter catalog only for an HVAC organization. Runtime operation does not depend on seed data.
 - Technical Report creation now persists selected catalog entries as the existing `OperationMaintenanceChecklistItem` snapshots. No Document Engine contract or renderer was changed.
 - Report photos remain supported by the existing Operation contract, but the Central de Relatórios workflow now submits photos only for PMOC.
+
+## Product Backlog Closure 08 — Technical Catalogs (2026-07-15)
+
+Status: concluído.
+
+- Criado o domínio único `TechnicalCatalog`, com os tipos `CHECKLIST`, `OBJECTIVE`,
+  `SITE_CONDITION`, `CONCLUSION` e `RECOMMENDATION`; não existem tabelas paralelas por tipo.
+- Migration `20260715130000_technical_catalogs` aplicada em PostgreSQL: preserva os checklists
+  existentes, remove somente a tabela legada após a cópia e instala 41 itens técnicos oficiais
+  editáveis (5 objetivos, 21 condições, 7 conclusões e 8 recomendações).
+- O endpoint legado `/maintenance-checklist-templates` foi preservado por um adapter sobre
+  `TechnicalCatalog(CHECKLIST)`, sem quebra para integrações anteriores.
+- Criados endpoints paginados `/technical-catalogs`, com busca, filtros, ordenação, ativação,
+  reordenação e exclusão lógica.
+- `Operation` recebeu `technicalOpinionRecommendations`; objetivo, condições, recomendações e
+  conclusão são persistidos como snapshots textuais. Alterações futuras no catálogo não modificam
+  operações ou documentos históricos.
+- O Document Builder apenas consome os snapshots entregues pelo `DocumentContext`; não consulta o
+  catálogo e nenhuma infraestrutura paralela de Preview/PDF foi criada.
+- Auditorias: `TECHNICAL_CATALOG_CREATED`, `TECHNICAL_CATALOG_UPDATED`,
+  `TECHNICAL_CATALOG_REORDERED` e `TECHNICAL_CATALOG_DELETED`.
+- PostgreSQL validado com 35 migrations aplicadas e API saudável após deploy.
+
+## Product Backlog Closure 08.1 — classificação e aplicabilidade (2026-07-15)
+
+Status: concluído.
+
+- `TechnicalCatalog` foi evoluído de forma aditiva com `tags[]`, `areas[]` e `workflows[]`.
+- Taxonomia oficial: áreas `GENERAL`, `HVAC`, `ELECTRICAL`, `REFRIGERATION`, `MECHANICAL`,
+  `HYDRAULIC`, `SAFETY`; workflows `GENERAL`, `WORK_ORDER`, `TECHNICAL_REPORT`,
+  `TECHNICAL_OPINION`, `PMOC`, `MAINTENANCE`.
+- Migration `20260715180000_technical_catalog_classification` aplicada sem remoção de registros.
+  Todos os 47 itens conservaram fallback `GENERAL`; defaults inequívocos receberam classificações
+  adicionais.
+- Filtros server-side combinam área/workflow e pesquisa por tags, com prioridade contextual.
+- `GET /technical-catalogs/taxonomy` centraliza labels para Platform e Operator.
+- Laudo e Visita usam contexto no preenchimento. Snapshots e Document Engine não foram alterados.
+- Índices GIN adicionados para tags, áreas e workflows; adapter legado preservado.
+
+## DC-04 — Certificação PMOC (2026-07-15)
+
+- O PMOC permanece especialização de `MaintenancePlan`; o preenchimento ocorre na
+  `MaintenanceExecution` ligada a uma `Operation` e a emissão usa somente o Document Engine.
+- `OperationMaintenanceChecklistItem` ganhou equipamento opcional e resultado
+  `YES | NO | NOT_APPLICABLE`; conteúdo e observações são snapshots da execução.
+- A assinatura coletada registra nome, função e horário do cliente/responsável, sem retornar o
+  binário nas respostas de Operation.
+- O Builder PMOC produz identificação, operação, equipamentos, ambientes, referência legal textual,
+  checklist por equipamento, materiais, fotos, observações e assinaturas do template.
+- Migration: `20260715193000_pmoc_document_certification`.

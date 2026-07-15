@@ -49,12 +49,22 @@ const OPERATION_INCLUDE = {
   },
   maintenanceChecklistItems: {
     orderBy: [{ maintenanceType: 'asc' as const }, { position: 'asc' as const }],
+    include: { equipment: { select: { id: true, name: true, tag: true } } },
   },
   inspectedEquipments: {
     orderBy: { position: 'asc' as const },
     include: { equipment: { select: { id: true, name: true, type: true } } },
   },
   documents: { orderBy: { createdAt: 'asc' as const } },
+  maintenanceExecution: {
+    include: {
+      plan: {
+        include: {
+          pmocPlan: { select: { id: true, responsibleTechnician: true, contractNumber: true, artNumber: true } },
+        },
+      },
+    },
+  },
 } satisfies Prisma.OperationInclude;
 
 const OPERATION_LIST_INCLUDE = {
@@ -138,8 +148,12 @@ export class OperationsService {
     };
   }
 
-  async get(id: string): Promise<unknown> {
-    return this.operationOrThrow(id);
+  async get(id: string, actor: AuthenticatedUser): Promise<unknown> {
+    const operation = await this.operationOrThrow(id);
+    if (actor.role === Role.OPERATOR && (operation as { operatorId: string }).operatorId !== actor.id) {
+      throw new ApplicationException(ERROR_CODES.FORBIDDEN, 'Operator can only access assigned Operations', HttpStatus.FORBIDDEN);
+    }
+    return operation;
   }
 
   async create(
@@ -153,6 +167,7 @@ export class OperationsService {
       dto.customerId,
       dto.inspectedEquipments,
     );
+    await this.validateChecklistEquipments(dto.customerId, dto.maintenanceChecklist);
     const photos = (dto.photos ?? []).map((p) => this.decodePhoto(p));
     if (photos.length > MAX_OPERATION_PHOTOS) {
       throw new ApplicationException(
@@ -188,6 +203,7 @@ export class OperationsService {
           technicalOpinionConditions: dto.technicalOpinionConditions ?? null,
           technicalOpinionAnalysis: dto.technicalOpinionAnalysis ?? null,
           technicalOpinionConclusion: dto.technicalOpinionConclusion ?? null,
+          technicalOpinionRecommendations: dto.technicalOpinionRecommendations ?? null,
           technicalOpinionResponsible: dto.technicalOpinionResponsible ?? null,
           technicalOpinionCrea: dto.technicalOpinionCrea ?? null,
           referenceMonth: dto.referenceMonth ?? null,
@@ -198,12 +214,16 @@ export class OperationsService {
               maintenanceType: item.maintenanceType,
               description: item.description,
               executed: item.executed,
+              result: item.result ?? (item.executed ? 'YES' : 'NO'),
+              equipmentId: item.equipmentId ?? null,
               observations: item.observations ?? null,
               position,
             })),
           },
           inspectedEquipments: { create: inspectedEquipments },
           signatureData,
+          customerSignerName: signatureData ? (dto.customerSignerName ?? null) : null,
+          customerSignerRole: signatureData ? (dto.customerSignerRole ?? null) : null,
           signedAt: signatureData ? (dto.signedAt ? new Date(dto.signedAt) : new Date()) : null,
         },
       });
@@ -297,7 +317,7 @@ export class OperationsService {
   ): Promise<unknown> {
     const existing = await this.prisma.operation.findUnique({
       where: { id },
-      select: { id: true, customerId: true, referenceMonth: true, referenceYear: true },
+      select: { id: true, customerId: true, operatorId: true, referenceMonth: true, referenceYear: true },
     });
     if (!existing)
       throw new ApplicationException(
@@ -305,6 +325,9 @@ export class OperationsService {
         'Operation was not found',
         HttpStatus.NOT_FOUND,
       );
+    if (actor.role === Role.OPERATOR && existing.operatorId !== actor.id) {
+      throw new ApplicationException(ERROR_CODES.FORBIDDEN, 'Operator can only update assigned Operations', HttpStatus.FORBIDDEN);
+    }
     this.validateReferencePeriod(
       dto.referenceMonth ?? existing.referenceMonth ?? undefined,
       dto.referenceYear ?? existing.referenceYear ?? undefined,
@@ -313,6 +336,7 @@ export class OperationsService {
       dto.inspectedEquipments === undefined
         ? null
         : await this.resolveInspectedEquipments(existing.customerId, dto.inspectedEquipments);
+    await this.validateChecklistEquipments(existing.customerId, dto.maintenanceChecklist);
     const photos = (dto.photos ?? []).map((p) => this.decodePhoto(p));
     if (photos.length > MAX_OPERATION_PHOTOS) {
       throw new ApplicationException(
@@ -353,6 +377,9 @@ export class OperationsService {
           ...(dto.technicalOpinionConclusion !== undefined
             ? { technicalOpinionConclusion: dto.technicalOpinionConclusion }
             : {}),
+          ...(dto.technicalOpinionRecommendations !== undefined
+            ? { technicalOpinionRecommendations: dto.technicalOpinionRecommendations }
+            : {}),
           ...(dto.technicalOpinionResponsible !== undefined
             ? { technicalOpinionResponsible: dto.technicalOpinionResponsible }
             : {}),
@@ -363,7 +390,12 @@ export class OperationsService {
           ...(dto.referenceYear !== undefined ? { referenceYear: dto.referenceYear } : {}),
           ...(dto.maintenanceType !== undefined ? { maintenanceType: dto.maintenanceType } : {}),
           ...(signatureData
-            ? { signatureData, signedAt: dto.signedAt ? new Date(dto.signedAt) : new Date() }
+            ? {
+                signatureData,
+                customerSignerName: dto.customerSignerName ?? null,
+                customerSignerRole: dto.customerSignerRole ?? null,
+                signedAt: dto.signedAt ? new Date(dto.signedAt) : new Date(),
+              }
             : {}),
         },
       });
@@ -376,6 +408,8 @@ export class OperationsService {
               maintenanceType: item.maintenanceType,
               description: item.description,
               executed: item.executed,
+              result: item.result ?? (item.executed ? 'YES' : 'NO'),
+              equipmentId: item.equipmentId ?? null,
               observations: item.observations ?? null,
               position,
             })),
@@ -514,6 +548,24 @@ export class OperationsService {
         currentSituationSnapshot: item.currentSituation || null,
       };
     });
+  }
+
+  private async validateChecklistEquipments(
+    customerId: string,
+    items?: Array<{ equipmentId?: string }>,
+  ): Promise<void> {
+    const ids = [...new Set((items ?? []).map((item) => item.equipmentId).filter(Boolean))] as string[];
+    if (ids.length === 0) return;
+    const count = await this.prisma.equipment.count({
+      where: { id: { in: ids }, customerId, isActive: true, disabledAt: null },
+    });
+    if (count !== ids.length) {
+      throw new ApplicationException(
+        ERROR_CODES.OPERATION_EQUIPMENT_INVALID,
+        'Every checklist equipment must be active and belong to the Operation customer',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
   }
 
   private decodePhoto(input: OperationPhotoInputDto): DecodedPhoto {
@@ -687,9 +739,7 @@ export class OperationsService {
     return { operatorId: operator.id, delegated: operator.id !== actor.id };
   }
 
-  private async operationOrThrow(
-    id: string,
-  ): Promise<Prisma.OperationGetPayload<{ include: typeof OPERATION_INCLUDE }>> {
+  private async operationOrThrow(id: string): Promise<unknown> {
     const operation = await this.prisma.operation.findUnique({
       where: { id },
       include: OPERATION_INCLUDE,
@@ -700,7 +750,8 @@ export class OperationsService {
         'Operation was not found',
         HttpStatus.NOT_FOUND,
       );
-    return operation;
+    const { signatureData: _privateSignature, ...safeOperation } = operation;
+    return { ...safeOperation, signatureCaptured: Boolean(_privateSignature) };
   }
 
   private audit(

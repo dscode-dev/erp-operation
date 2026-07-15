@@ -1828,3 +1828,38 @@ concorrência.
 # Maintenance checklist catalog security
 
 The catalog is scoped to the installation Organization in every query. Reads require OWNER, MANAGER, or VIEWER; mutations require OWNER or MANAGER. UUID parsing, DTO allow-list validation, input length limits, control-character removal, global throttling, conflict handling, and audit events are applied. Deactivation is soft, preventing catalog cleanup from changing historical Operation and document snapshots.
+
+## Technical Catalog security
+
+- Toda consulta inclui `organizationId` da instalação e `deletedAt=null`; IDs de outra organização
+  resultam em `TECHNICAL_CATALOG_NOT_FOUND` ou ordem inválida, sem vazamento de existência.
+- Leitura: OWNER, MANAGER, OPERATOR e VIEWER. Mutation: somente OWNER/MANAGER.
+- UUID v4, enums, paginação máxima 100, coleções de reorder limitadas a 500, comprimentos e
+  allow-list global são validados antes do serviço.
+- Reorder valida IDs únicos, mesmo tipo e mesma organização antes da transação.
+- Títulos ativos têm unicidade case-insensitive por organização/tipo; checklist também separa por
+  periodicidade. Conflitos retornam 409 controlado.
+- Entradas removem caracteres de controle. Prisma parametriza consultas; não há SQL dinâmico.
+- Exclusão é lógica e snapshots textuais impedem mutação retroativa de Operations/documentos.
+- Auditoria registra actor, request ID, IP, user agent, recurso e campos alterados, sem conteúdo
+  binário ou segredo.
+- Global rate limiting permanece aplicado aos endpoints. O Document Builder não recebe IDs de
+  catálogo e não ganhou acesso a Prisma/Storage.
+
+### Classificação e filtros (Closure 08.1)
+
+- áreas/workflows são enums allow-listed com tamanho máximo e unicidade;
+- tags têm máximo de 20 entradas/40 caracteres e são normalizadas para lowercase ASCII slug;
+- filtros Prisma são parametrizados e sempre incluem `organizationId` e `deletedAt=null`;
+- `includeGeneral` não amplia acesso entre organizações;
+- índices GIN atendem as coleções sem N+1;
+- aplicabilidade nunca é consultada por Preview/PDF nem altera snapshots.
+
+## DC-04 — PMOC em campo
+
+- OWNER/MANAGER administram planos; OPERATOR só lê/altera Operations atribuídas a ele.
+- Equipamentos do checklist são validados como ativos e do mesmo cliente.
+- Assinaturas aceitam PNG/JPEG por magic bytes até 2 MiB; fotos seguem allow-list e limites oficiais.
+- Respostas de Operation não expõem assinatura base64; storage keys não entram em auditoria.
+- Checklist, fotos e assinatura integram o fingerprint; mudança posterior torna o render stale.
+- A Lei nº 13.589/2018 é somente referência textual, sem inferência de conformidade jurídica.

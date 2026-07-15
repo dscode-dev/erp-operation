@@ -85,6 +85,39 @@ enum OperationMaintenanceType {
   CORRECTIVE
 }
 
+enum MaintenanceChecklistResult {
+  YES
+  NO
+  NOT_APPLICABLE
+}
+
+enum TechnicalCatalogType {
+  CHECKLIST
+  OBJECTIVE
+  SITE_CONDITION
+  CONCLUSION
+  RECOMMENDATION
+}
+
+enum TechnicalCatalogArea {
+  GENERAL
+  HVAC
+  ELECTRICAL
+  REFRIGERATION
+  MECHANICAL
+  HYDRAULIC
+  SAFETY
+}
+
+enum TechnicalCatalogWorkflow {
+  GENERAL
+  WORK_ORDER
+  TECHNICAL_REPORT
+  TECHNICAL_OPINION
+  PMOC
+  MAINTENANCE
+}
+
 enum OperationDocumentStatus {
   DRAFT
   READY
@@ -378,41 +411,41 @@ model RefreshToken {
 }
 
 model Organization {
-  id                            String                         @id @default(uuid()) @db.Uuid
-  legalName                     String                         @map("legal_name") @db.VarChar(180)
-  tradeName                     String                         @map("trade_name") @db.VarChar(120)
-  cnpj                          String                         @db.VarChar(18)
-  stateRegistration             String?                        @map("state_registration") @db.VarChar(30)
-  email                         String                         @db.VarChar(254)
-  phone                         String                         @db.VarChar(30)
-  phoneNumbers                  String[]                       @default([]) @map("phone_numbers")
-  website                       String?                        @db.VarChar(255)
-  zipCode                       String?                        @map("zip_code") @db.VarChar(10)
-  street                        String?                        @db.VarChar(180)
-  number                        String?                        @db.VarChar(20)
-  complement                    String?                        @db.VarChar(120)
-  district                      String?                        @db.VarChar(120)
-  city                          String                         @db.VarChar(100)
-  state                         String                         @db.VarChar(2)
-  primaryColor                  String                         @map("primary_color") @db.VarChar(7)
-  secondaryColor                String                         @map("secondary_color") @db.VarChar(7)
-  segment                       String?                        @db.VarChar(80)
-  isActive                      Boolean                        @default(true) @map("is_active")
-  createdAt                     DateTime                       @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt                     DateTime                       @updatedAt @map("updated_at") @db.Timestamptz(3)
-  settings                      OrganizationSettings?
-  assets                        BrandAsset[]
-  templates                     DocumentTemplate[]
-  pmocPlans                     PmocPlan[]
-  inventoryItems                InventoryItem[]
-  productPricings               ProductPricing[]
-  budgets                       Budget[]
-  financialAccounts             FinancialAccount[]
-  financialCategories           FinancialCategory[]
-  financialEntries              FinancialEntry[]
-  purchaseOrders                PurchaseOrder[]
-  notifications                 Notification[]
-  maintenanceChecklistTemplates MaintenanceChecklistTemplate[]
+  id                  String                @id @default(uuid()) @db.Uuid
+  legalName           String                @map("legal_name") @db.VarChar(180)
+  tradeName           String                @map("trade_name") @db.VarChar(120)
+  cnpj                String                @db.VarChar(18)
+  stateRegistration   String?               @map("state_registration") @db.VarChar(30)
+  email               String                @db.VarChar(254)
+  phone               String                @db.VarChar(30)
+  phoneNumbers        String[]              @default([]) @map("phone_numbers")
+  website             String?               @db.VarChar(255)
+  zipCode             String?               @map("zip_code") @db.VarChar(10)
+  street              String?               @db.VarChar(180)
+  number              String?               @db.VarChar(20)
+  complement          String?               @db.VarChar(120)
+  district            String?               @db.VarChar(120)
+  city                String                @db.VarChar(100)
+  state               String                @db.VarChar(2)
+  primaryColor        String                @map("primary_color") @db.VarChar(7)
+  secondaryColor      String                @map("secondary_color") @db.VarChar(7)
+  segment             String?               @db.VarChar(80)
+  isActive            Boolean               @default(true) @map("is_active")
+  createdAt           DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+  settings            OrganizationSettings?
+  assets              BrandAsset[]
+  templates           DocumentTemplate[]
+  pmocPlans           PmocPlan[]
+  inventoryItems      InventoryItem[]
+  productPricings     ProductPricing[]
+  budgets             Budget[]
+  financialAccounts   FinancialAccount[]
+  financialCategories FinancialCategory[]
+  financialEntries    FinancialEntry[]
+  purchaseOrders      PurchaseOrder[]
+  notifications       Notification[]
+  technicalCatalogs   TechnicalCatalog[]
 
   @@map("organizations")
 }
@@ -699,6 +732,7 @@ model Equipment {
   pmocLinks            PmocPlanEquipment[]
   pmocEnvironments     PmocEnvironmentEquipment[]
   operationInspections OperationInspectedEquipment[]
+  maintenanceChecklistItems OperationMaintenanceChecklistItem[]
   budgets              Budget[]
 
   @@index([customerId, status])
@@ -744,51 +778,54 @@ model EquipmentMetric {
 /// reused by every produced document (OS, PMOC, Laudo, Relatório, Orçamento,
 /// Recibo). Each Work Order goes through exactly one Operation.
 model Operation {
-  id                          String                              @id @default(uuid()) @db.Uuid
-  number                      Int                                 @unique @default(autoincrement())
-  customerId                  String                              @map("customer_id") @db.Uuid
-  addressId                   String?                             @map("address_id") @db.Uuid
-  equipmentId                 String?                             @map("equipment_id") @db.Uuid
-  operatorId                  String                              @map("operator_id") @db.Uuid
-  type                        OperationType
-  status                      OperationStatus                     @default(DRAFT)
-  scheduledFor                DateTime?                           @map("scheduled_for") @db.Timestamptz(3)
-  startedAt                   DateTime?                           @map("started_at") @db.Timestamptz(3)
-  completedAt                 DateTime?                           @map("completed_at") @db.Timestamptz(3)
-  checklist                   Json                                @default("[]")
-  observations                String?                             @db.Text
-  reportedIssue               String?                             @map("reported_issue") @db.Text
-  serviceDescription          String?                             @map("service_description") @db.Text
-  technicalDiagnosis          String?                             @map("technical_diagnosis") @db.Text
-  technicalRecommendations    String?                             @map("technical_recommendations") @db.Text
-  technicalOpinionObjective   String?                             @map("technical_opinion_objective") @db.Text
-  technicalOpinionConditions  String?                             @map("technical_opinion_conditions") @db.Text
-  technicalOpinionAnalysis    String?                             @map("technical_opinion_analysis") @db.Text
-  technicalOpinionConclusion  String?                             @map("technical_opinion_conclusion") @db.Text
-  technicalOpinionResponsible String?                             @map("technical_opinion_responsible") @db.VarChar(180)
-  technicalOpinionCrea        String?                             @map("technical_opinion_crea") @db.VarChar(100)
-  referenceMonth              Int?                                @map("reference_month") @db.SmallInt
-  referenceYear               Int?                                @map("reference_year") @db.SmallInt
-  maintenanceType             OperationMaintenanceType?           @map("maintenance_type")
-  signatureData               String?                             @map("signature_data") @db.Text
-  signedAt                    DateTime?                           @map("signed_at") @db.Timestamptz(3)
-  createdAt                   DateTime                            @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt                   DateTime                            @updatedAt @map("updated_at") @db.Timestamptz(3)
-  customer                    Customer                            @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  address                     CustomerAddress?                    @relation(fields: [addressId], references: [id], onDelete: SetNull)
-  equipment                   Equipment?                          @relation(fields: [equipmentId], references: [id], onDelete: SetNull)
-  operator                    User                                @relation(fields: [operatorId], references: [id], onDelete: Restrict)
-  photos                      OperationPhoto[]
-  documents                   OperationDocument[]
-  assignment                  Assignment?
-  assignmentHistory           AssignmentHistory[]
-  lifecycleEvents             AssetLifecycleEvent[]
-  maintenanceExecution        MaintenanceExecution?
-  parts                       OperationPart[]
-  stockMovements              StockMovement[]
-  budgets                     Budget[]
-  maintenanceChecklistItems   OperationMaintenanceChecklistItem[]
-  inspectedEquipments         OperationInspectedEquipment[]
+  id                              String                              @id @default(uuid()) @db.Uuid
+  number                          Int                                 @unique @default(autoincrement())
+  customerId                      String                              @map("customer_id") @db.Uuid
+  addressId                       String?                             @map("address_id") @db.Uuid
+  equipmentId                     String?                             @map("equipment_id") @db.Uuid
+  operatorId                      String                              @map("operator_id") @db.Uuid
+  type                            OperationType
+  status                          OperationStatus                     @default(DRAFT)
+  scheduledFor                    DateTime?                           @map("scheduled_for") @db.Timestamptz(3)
+  startedAt                       DateTime?                           @map("started_at") @db.Timestamptz(3)
+  completedAt                     DateTime?                           @map("completed_at") @db.Timestamptz(3)
+  checklist                       Json                                @default("[]")
+  observations                    String?                             @db.Text
+  reportedIssue                   String?                             @map("reported_issue") @db.Text
+  serviceDescription              String?                             @map("service_description") @db.Text
+  technicalDiagnosis              String?                             @map("technical_diagnosis") @db.Text
+  technicalRecommendations        String?                             @map("technical_recommendations") @db.Text
+  technicalOpinionObjective       String?                             @map("technical_opinion_objective") @db.Text
+  technicalOpinionConditions      String?                             @map("technical_opinion_conditions") @db.Text
+  technicalOpinionAnalysis        String?                             @map("technical_opinion_analysis") @db.Text
+  technicalOpinionConclusion      String?                             @map("technical_opinion_conclusion") @db.Text
+  technicalOpinionRecommendations String?                             @map("technical_opinion_recommendations") @db.Text
+  technicalOpinionResponsible     String?                             @map("technical_opinion_responsible") @db.VarChar(180)
+  technicalOpinionCrea            String?                             @map("technical_opinion_crea") @db.VarChar(100)
+  referenceMonth                  Int?                                @map("reference_month") @db.SmallInt
+  referenceYear                   Int?                                @map("reference_year") @db.SmallInt
+  maintenanceType                 OperationMaintenanceType?           @map("maintenance_type")
+  signatureData                   String?                             @map("signature_data") @db.Text
+  customerSignerName              String?                             @map("customer_signer_name") @db.VarChar(180)
+  customerSignerRole              String?                             @map("customer_signer_role") @db.VarChar(120)
+  signedAt                        DateTime?                           @map("signed_at") @db.Timestamptz(3)
+  createdAt                       DateTime                            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                       DateTime                            @updatedAt @map("updated_at") @db.Timestamptz(3)
+  customer                        Customer                            @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  address                         CustomerAddress?                    @relation(fields: [addressId], references: [id], onDelete: SetNull)
+  equipment                       Equipment?                          @relation(fields: [equipmentId], references: [id], onDelete: SetNull)
+  operator                        User                                @relation(fields: [operatorId], references: [id], onDelete: Restrict)
+  photos                          OperationPhoto[]
+  documents                       OperationDocument[]
+  assignment                      Assignment?
+  assignmentHistory               AssignmentHistory[]
+  lifecycleEvents                 AssetLifecycleEvent[]
+  maintenanceExecution            MaintenanceExecution?
+  parts                           OperationPart[]
+  stockMovements                  StockMovement[]
+  budgets                         Budget[]
+  maintenanceChecklistItems       OperationMaintenanceChecklistItem[]
+  inspectedEquipments             OperationInspectedEquipment[]
 
   @@index([customerId, createdAt])
   @@index([equipmentId, createdAt])
@@ -800,32 +837,47 @@ model Operation {
 model OperationMaintenanceChecklistItem {
   id              String                   @id @default(uuid()) @db.Uuid
   operationId     String                   @map("operation_id") @db.Uuid
+  equipmentId     String?                  @map("equipment_id") @db.Uuid
   maintenanceType OperationMaintenanceType @map("maintenance_type")
   description     String                   @db.VarChar(500)
   executed        Boolean                  @default(false)
+  result          MaintenanceChecklistResult @default(NO)
   observations    String?                  @db.Text
   position        Int
   createdAt       DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
   operation       Operation                @relation(fields: [operationId], references: [id], onDelete: Cascade)
+  equipment       Equipment?               @relation(fields: [equipmentId], references: [id], onDelete: Restrict)
 
   @@unique([operationId, maintenanceType, position], map: "op_maintenance_checklist_type_position_uq")
   @@index([operationId, maintenanceType], map: "op_maintenance_checklist_type_idx")
+  @@index([operationId, equipmentId], map: "op_maintenance_checklist_equipment_idx")
   @@map("operation_maintenance_checklist_items")
 }
 
-model MaintenanceChecklistTemplate {
-  id              String                   @id @default(uuid()) @db.Uuid
-  organizationId  String                   @map("organization_id") @db.Uuid
-  maintenanceType OperationMaintenanceType @map("maintenance_type")
-  description     String                   @db.VarChar(500)
-  active          Boolean                  @default(true)
-  createdAt       DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt       DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(3)
-  organization    Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+model TechnicalCatalog {
+  id              String                     @id @default(uuid()) @db.Uuid
+  organizationId  String                     @map("organization_id") @db.Uuid
+  type            TechnicalCatalogType
+  title           String                     @db.VarChar(500)
+  description     String?                    @db.Text
+  tags            String[]                   @default([])
+  areas           TechnicalCatalogArea[]     @default([GENERAL])
+  workflows       TechnicalCatalogWorkflow[] @default([GENERAL])
+  maintenanceType OperationMaintenanceType?  @map("maintenance_type")
+  sortOrder       Int                        @default(0) @map("sort_order")
+  active          Boolean                    @default(true)
+  deletedAt       DateTime?                  @map("deleted_at") @db.Timestamptz(3)
+  createdAt       DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(3)
+  organization    Organization               @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  @@unique([organizationId, maintenanceType, description], map: "maintenance_checklist_template_unique")
-  @@index([organizationId, maintenanceType, active], map: "maintenance_checklist_template_lookup_idx")
-  @@map("maintenance_checklist_templates")
+  @@index([organizationId, type, active, sortOrder], map: "technical_catalog_lookup_idx")
+  @@index([organizationId, maintenanceType, active], map: "technical_catalog_maintenance_idx")
+  @@index([organizationId, deletedAt], map: "technical_catalog_deleted_idx")
+  @@index([tags], type: Gin, map: "technical_catalog_tags_gin_idx")
+  @@index([areas], type: Gin, map: "technical_catalog_areas_gin_idx")
+  @@index([workflows], type: Gin, map: "technical_catalog_workflows_gin_idx")
+  @@map("technical_catalogs")
 }
 
 model OperationInspectedEquipment {

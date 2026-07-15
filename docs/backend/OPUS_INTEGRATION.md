@@ -1822,6 +1822,33 @@ PDF real; para emissão use sempre `operationId + WORK_ORDER`.
 - Preview/PDF usam o mesmo Blueprint; `header.corporate` contém a identificação renderizável.
 - Campos novos são opcionais; não use fallback fake.
 
+## Product Backlog Closure 08 — contrato para Opus
+
+Use `technicalCatalogsApi` para `types`, listagem, CRUD e reorder. A página existente
+`/maintenance-checklists` agora representa **Catálogos Técnicos** e deve manter as cinco tabs
+entregues por `GET /technical-catalogs/types`.
+
+Seletores de documento:
+
+```text
+GET /technical-catalogs?type=OBJECTIVE&active=true&page=1&limit=100
+GET /technical-catalogs?type=SITE_CONDITION&active=true&page=1&limit=100
+GET /technical-catalogs?type=RECOMMENDATION&active=true&page=1&limit=100
+GET /technical-catalogs?type=CONCLUSION&active=true&page=1&limit=100
+```
+
+Persistência: transforme a lista ordenada em texto separado por newline nos campos
+`technicalOpinion*` da Operation. Catálogo é auxílio de entrada; o documento histórico usa snapshot.
+Não buscar catálogo no Viewer e não montar PDF/Preview local.
+
+RBAC: OWNER/MANAGER gerenciam; OPERATOR/VIEWER consultam. A UI oculta mutations sem permissão, mas
+deve tratar 403 do backend como autoridade final.
+
+Closure 08.1: use `technicalCatalogsApi.taxonomy()` e `list({ type, areas,
+workflow, includeGeneral: true, active: true, page: 1, limit: 100 })`. Não carregue o catálogo
+inteiro para filtrar apenas no browser. Itens já selecionados são snapshots e permanecem visíveis
+mesmo fora do resultado contextual atual.
+
 # Technical Report workflow closure (2026-07-14)
 
 - Equipment selection belongs exclusively to the Content step and maps to `inspectedEquipments[]`.
@@ -1838,3 +1865,10 @@ PDF real; para emissão use sempre `operationId + WORK_ORDER`.
 - `imageGallery` é um componente aditivo do Blueprint com duas colunas; não criar fallback local.
 - Fotos, observações e assinatura são condicionais. Materiais e documentos relacionados não fazem
   parte da OS atual.
+
+## DC-04 PMOC
+
+- Platform seleciona plano, múltiplos equipamentos e procedimentos por equipamento.
+- Operator preenche a execução vinculada usando `YES | NO | NOT_APPLICABLE`, fotos e assinatura.
+- A API nunca retorna a imagem coletada; use `signatureCaptured` para o estado visual.
+- Preview/PDF são sempre o tipo `PMOC` no DocumentViewer oficial.

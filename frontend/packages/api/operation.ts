@@ -89,6 +89,7 @@ export function updateOperation(
       | 'technicalOpinionConditions'
       | 'technicalOpinionAnalysis'
       | 'technicalOpinionConclusion'
+      | 'technicalOpinionRecommendations'
       | 'technicalOpinionResponsible'
       | 'technicalOpinionCrea'
       | 'referenceMonth'
@@ -97,6 +98,8 @@ export function updateOperation(
       | 'maintenanceChecklist'
       | 'inspectedEquipments'
       | 'signatureData'
+      | 'customerSignerName'
+      | 'customerSignerRole'
       | 'signedAt'
       | 'photos'
     >

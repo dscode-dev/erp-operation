@@ -445,9 +445,37 @@ Nenhuma rota nova foi criada.
 
 # `/maintenance-checklists`
 
-Persistent library of maintenance activities used by the Technical Report workflow. OWNER and MANAGER can create, edit, and deactivate; VIEWER can read. OPERATOR is denied. The route consumes only `/api/v1/maintenance-checklist-templates`.
+Rota preservada e renomeada visualmente para **Catálogos Técnicos**. Possui tabs de Checklist,
+Objetivos, Condições Observadas, Conclusões e Recomendações. OWNER/MANAGER gerenciam; VIEWER consulta.
+Consome `/api/v1/technical-catalogs`; o adapter `/maintenance-checklist-templates` permanece apenas
+para compatibilidade dos fluxos existentes.
+
+## `/reports` — Laudo Técnico e Catálogos
+
+O wizard `TECHNICAL_OPINION` seleciona assinatura institucional ativa, múltiplos equipamentos,
+objetivos, condições, recomendações e conclusões. A Platform permite editar o texto completo após a
+seleção. O Preview continua sendo solicitado somente depois da persistência na Operation.
+
+## `/operator/atendimento` — Catálogos
+
+Equipamentos são selecionados por lista de checkboxes (até 100 registros filtrados do cliente).
+Objetivos, condições, recomendações e conclusões reutilizam os seletores técnicos compactos; os
+valores finais são enviados à Operation real.
 
 # `/reports` — Ordem de Serviço
 
 O card Ordem de Serviço abre um wizard com origem por Operation concluída ou preenchimento novo. O
 modo novo cria uma Operation DRAFT oficial e segue Preview → Render → Download no mesmo drawer.
+
+## Closure 08.1
+
+- `/maintenance-checklists`: gestão/filtros por tipo, área, workflow, status e busca.
+- `/reports`: Laudo e Visita enviam contexto técnico aos seletores, sem mudar emissão.
+- `/operator/atendimento`: usa o mesmo contrato contextual em composição compacta.
+
+## DC-04
+
+- `/reports`: criação e emissão PMOC pela cadeia oficial.
+- `/operator/services/:id`: preenchimento PMOC aparece somente quando a Operation atribuída está
+  ligada a uma `MaintenanceExecution` de PMOC.
+- `/documentos`: recebe o documento PMOC oficial após renderização.

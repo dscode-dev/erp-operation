@@ -911,3 +911,37 @@ Validação:
   execução/checklist e observações no conteúdo.
 - Evidências fotográficas são opcionais e a assinatura continua obedecendo ao template.
 - O DocumentViewer suporta a galeria oficial de duas colunas recebida no Blueprint.
+
+## Product Backlog Closure 08 — Catálogos Técnicos (2026-07-15)
+
+Status: concluído.
+
+- O menu Cadastro foi renomeado de Checklists de Manutenção para Catálogos Técnicos, preservando a
+  rota `/maintenance-checklists`.
+- A página foi convertida em tabs dinâmicas para Checklist, Objetivos, Condições Observadas,
+  Conclusões e Recomendações, todas consumindo a API oficial.
+- CRUD, busca, paginação, status, ordenação manual, ativação/desativação e exclusão lógica usam
+  `technicalCatalogsApi`; OWNER/MANAGER editam e VIEWER permanece em leitura.
+- Criados `TechnicalCatalogSelector` e `TechnicalCatalogList`, compartilhados entre Platform e
+  Operator, com `Outros`, edição de item personalizado, remoção e reordenação.
+- O wizard Platform do Laudo seleciona responsável entre assinaturas institucionais ativas, completa
+  nome/registro e mantém edição textual avançada após os seletores.
+- O Operator suporta múltiplos equipamentos em checkboxes e seletores compactos para objetivos,
+  condições, recomendações e conclusões.
+- O frontend persiste somente snapshots textuais na Operation; Preview/PDF continuam exclusivamente
+  no Document Engine.
+
+## Closure 08.1 — Technical Catalog Classification
+
+- CRUD ganhou tags e seletores múltiplos de área/workflow, além de filtros server-side.
+- `TechnicalCatalogSelector` recebe contexto, pesquisa no backend e inclui `GENERAL`, sem ocultar
+  valores históricos.
+- Laudo e Visita na Platform inferem áreas pelos equipamentos; Operator reutiliza a mesma base.
+- Nenhum conteúdo documental, Preview/PDF ou snapshot foi remodelado.
+
+## DC-04 — PMOC
+
+- O wizard da Central de Relatórios usa o plano real, múltiplos equipamentos, checklist por ativo,
+  resultado Sim/Não/N.A., fotos e identificação do cliente signatário.
+- O detalhe da Assignment no Operator reconhece execuções PMOC e permite preenchimento em campo.
+- Preview, Render e Download permanecem no DocumentViewer; não há PDF ou preview local.

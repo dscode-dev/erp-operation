@@ -120,7 +120,7 @@ export interface ImageComponent extends BlueprintBaseComponent {
 export interface ImageGalleryComponent extends BlueprintBaseComponent {
   kind: 'imageGallery';
   images: Array<Omit<ImageComponent, 'id' | 'kind' | 'keepTogether'>>;
-  columns: 2;
+  columns: 2 | 3 | 4;
 }
 
 export interface QrCodeComponent extends BlueprintBaseComponent {

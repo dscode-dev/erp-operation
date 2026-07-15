@@ -122,6 +122,8 @@ const created = await request('/operations', {
       'As evidências visuais e o grau de dano térmico demonstram comprometimento dos componentes elétricos, mecânicos e do isolamento dielétrico.\n\nA recuperação das unidades afetadas não oferece segurança operacional nem viabilidade econômica, sendo tecnicamente inadequado o reaproveitamento.',
     technicalOpinionConclusion:
       'Conclui-se pela substituição integral dos equipamentos afetados. Recomenda-se remoção e descarte ambientalmente adequado, seguidos de novo dimensionamento e instalação conforme as normas técnicas aplicáveis.',
+    technicalOpinionRecommendations:
+      '- Substituição preventiva\n- Monitoramento periódico\n- Revisão completa',
     technicalOpinionResponsible: institutional.name,
     technicalOpinionCrea: institutional.professionalCouncil,
     signatureData: `data:image/png;base64,${onePixelPng}`,
@@ -139,6 +141,7 @@ const expectedSections = [
   'technical-opinion-equipments',
   'technical-opinion-site-conditions',
   'technical-opinion-analysis',
+  'technical-opinion-recommendations',
   'technical-opinion-conclusion',
   'signature',
 ];

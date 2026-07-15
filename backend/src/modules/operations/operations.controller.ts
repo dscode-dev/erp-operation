@@ -45,8 +45,11 @@ export class OperationsController {
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR, Role.VIEWER)
   @Get(':id')
-  get(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string): Promise<unknown> {
-    return this.operations.get(id);
+  get(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ): Promise<unknown> {
+    return this.operations.get(id, actor);
   }
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR)

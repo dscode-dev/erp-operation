@@ -103,6 +103,7 @@ const DOCUMENT_CONTEXT_OPERATION_INCLUDE = {
   documents: { orderBy: { createdAt: 'asc' as const } },
   maintenanceChecklistItems: {
     orderBy: [{ maintenanceType: 'asc' as const }, { position: 'asc' as const }],
+    include: { equipment: { select: { id: true, name: true, tag: true } } },
   },
   inspectedEquipments: {
     orderBy: { position: 'asc' as const },
@@ -494,8 +495,8 @@ export class DocumentContextService {
             {
               role: 'client' as const,
               label: 'Assinatura do cliente/responsável',
-              name: null,
-              title: null,
+              name: operation?.customerSignerName ?? null,
+              title: operation?.customerSignerRole ?? null,
               signedAt: operation?.signedAt?.toISOString() ?? null,
               caption: executionSignature
                 ? 'Assinatura coletada na execução'
@@ -547,8 +548,8 @@ export class DocumentContextService {
       effectiveMode === SignatureMode.COLLECTED || effectiveMode === SignatureMode.HYBRID
         ? {
             label: 'Assinatura do cliente/responsável',
-            name: null,
-            title: null,
+            name: operation?.customerSignerName ?? null,
+            title: operation?.customerSignerRole ?? null,
             signedAt: operation?.signedAt?.toISOString() ?? null,
             caption: executionSignature
               ? 'Assinatura coletada na execução'
