@@ -89,6 +89,8 @@ export function updateOperation(
       | 'technicalOpinionConditions'
       | 'technicalOpinionAnalysis'
       | 'technicalOpinionConclusion'
+      | 'technicalOpinionResponsible'
+      | 'technicalOpinionCrea'
       | 'referenceMonth'
       | 'referenceYear'
       | 'maintenanceType'

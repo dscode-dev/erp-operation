@@ -1,5 +1,33 @@
 # API Contracts
 
+## DC-03.1 — responsabilidade e equipamentos do TECHNICAL_OPINION
+
+Extensão aditiva de `POST /api/v1/operations` e `PATCH /api/v1/operations/:id`:
+
+```json
+{
+  "technicalOpinionResponsible": "Marina Albuquerque",
+  "technicalOpinionCrea": "CREA-PE 123456",
+  "inspectedEquipments": [
+    {
+      "equipmentId": "uuid",
+      "sector": "Sala 01",
+      "systemType": "Unidade Interna e Externa",
+      "currentSituation": "Unidade externa queimada"
+    }
+  ]
+}
+```
+
+Limites: responsável 180, registro 100, tipo de sistema 180, local 160 e situação 500 caracteres.
+Os campos são sanitizados. O backend valida UUID único, equipamento ativo e pertencente ao mesmo
+cliente. `OperationDetail` retorna `technicalOpinionResponsible`, `technicalOpinionCrea`,
+`systemTypeSnapshot` e `currentSituationSnapshot`.
+
+O Blueprint retorna a tabela com `Nº`, `MODELO / CAPACIDADE`, `TIPO DE SISTEMA`,
+`LOCAL DE INSTALAÇÃO` e `SITUAÇÃO ATUAL`. A seção Solicitante contém razão social, documento,
+contato e endereço sem criar payload paralelo.
+
 ## DC-03 — conteúdo oficial de TECHNICAL_OPINION
 
 `POST /api/v1/operations` e `PATCH /api/v1/operations/:id` aceitam aditivamente:
@@ -11,7 +39,12 @@
   "technicalOpinionAnalysis": "Análise em múltiplos parágrafos (até 30.000 caracteres)",
   "technicalOpinionConclusion": "Conclusão técnica (até 20.000 caracteres)",
   "inspectedEquipments": [
-    { "equipmentId": "uuid", "sector": "Sala de máquinas" }
+    {
+      "equipmentId": "uuid",
+      "sector": "Sala de máquinas",
+      "systemType": "Unidade Interna e Externa",
+      "currentSituation": "Operação comprometida"
+    }
   ]
 }
 ```
@@ -32,7 +65,8 @@ Ordem de `sections`: `technical-opinion-identification` →
 configurada.
 
 Não são emitidos checklist, materiais, fotos, QR, timeline, Assignment ou documentos relacionados.
-A tabela usa `EQUIPAMENTO`, `MARCA`, `MODELO`, `CAPACIDADE`, `SÉRIE` e `LOCAL`.
+A tabela usa `Nº`, `MODELO / CAPACIDADE`, `TIPO DE SISTEMA`, `LOCAL DE INSTALAÇÃO` e
+`SITUAÇÃO ATUAL`.
 
 ## WORK_ORDER — origem e Blueprint consolidados
 
@@ -4788,6 +4822,7 @@ de marca/modelo/capacidade/tag/série. Respostas detalhadas retornam `maintenanc
 `OPERATION_REFERENCE_PERIOD_INVALID`.
 
 Endpoints do Document Engine não mudaram; o Preview inclui as novas seções quando os dados existem.
+
 # Maintenance checklist template catalog
 
 Base path: `/api/v1/maintenance-checklist-templates`.

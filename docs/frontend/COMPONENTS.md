@@ -1,5 +1,14 @@
 # COMPONENTS — Frontend
 
+## DC-03.1 — `InspectedEquipmentSelector`
+
+No modo `technicalOpinion`, o seletor exibe um editor por equipamento para tipo de sistema, local
+de instalação e situação atual. Os campos são snapshots da Operation e não alteram o cadastro do
+equipamento. O mesmo componente permanece simplificado nos demais modelos.
+
+`RequesterSummary` confirma no passo Origem os dados reais do Customer que serão resolvidos pelo
+DocumentContext, sem duplicá-los no payload da Operation.
+
 ## DC-03
 
 - `ReportWorkflowDrawer`: orquestra os campos dedicados do Laudo e usa o primeiro equipamento
@@ -17,10 +26,10 @@ outros tipos documentais.
 
 ## Refinamento TECHNICAL_REPORT
 
-| Componente       | Alteração                                                                 |
-| ---------------- | ------------------------------------------------------------------------- |
-| `DocumentViewer` | cabeçalho em duas linhas, com colunas independentes e dados sem colisão   |
-| `ContentStep`    | seleção múltipla apresentada como `Equipamentos`, sem alterar o contrato  |
+| Componente       | Alteração                                                                |
+| ---------------- | ------------------------------------------------------------------------ |
+| `DocumentViewer` | cabeçalho em duas linhas, com colunas independentes e dados sem colisão  |
+| `ContentStep`    | seleção múltipla apresentada como `Equipamentos`, sem alterar o contrato |
 
 ## Refinamento documental
 
@@ -596,11 +605,13 @@ Tipos:
 - `ReportWorkflowDrawer` / `ContentStep`: em `TECHNICAL_REPORT`, coleta competência, enum de
   manutenção, listas semanal/semestral e equipamentos/setores. Apenas persiste o payload da
   Operation; não monta PDF ou snapshots.
+
 # Components added/extended — Technical Report workflow
 
 - `MultiSelect`: reusable searchable multi-selection with selected chips, keyboard-focusable search, empty state, and bounded dropdown scrolling.
 - `ReportWorkflowDrawer`: equipment selection and structured maintenance checklist now live exclusively in Content; Evidence gates image upload to PMOC.
 - `MaintenanceChecklistsPage` / `ChecklistEditor`: paginated catalog, filters, create/edit drawer, and confirmed soft deactivation.
+
 # Work Order workflow components
 
 - `ReportWorkflowDrawer`: seletor de origem `EXISTING | NEW`, criação de Operation DRAFT e fluxo

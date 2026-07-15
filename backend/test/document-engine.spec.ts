@@ -387,6 +387,8 @@ describe('DocumentEngine foundation', () => {
       'As evidências visuais demonstram perda de isolamento dielétrico e comprometimento mecânico.\n\nA recuperação não apresenta segurança técnica nem viabilidade econômica.';
     operation.technicalOpinionConclusion =
       'Conclui-se pela substituição integral das unidades afetadas, com descarte ambientalmente adequado.';
+    operation.technicalOpinionResponsible = 'Marina Albuquerque';
+    operation.technicalOpinionCrea = 'CREA-PE 123456';
     operation.inspectedEquipments = [
       {
         id: 'inspection-1',
@@ -398,6 +400,8 @@ describe('DocumentEngine foundation', () => {
         capacitySnapshot: '18.000 BTU/h',
         tagSnapshot: 'EQ-01',
         serialSnapshot: 'SN-001',
+        systemTypeSnapshot: 'Unidade Interna e Externa',
+        currentSituationSnapshot: 'Unidade externa queimada',
         equipment: { id: 'equipment-1', name: 'Evaporadora 01', type: 'SPLIT' },
       },
       {
@@ -410,6 +414,8 @@ describe('DocumentEngine foundation', () => {
         capacitySnapshot: '24.000 BTU/h',
         tagSnapshot: 'EQ-02',
         serialSnapshot: 'SN-002',
+        systemTypeSnapshot: 'Sistema de expansão direta',
+        currentSituationSnapshot: 'Compressor sem funcionamento',
         equipment: { id: 'equipment-2', name: 'Condensadora 02', type: 'CONDENSER' },
       },
     ];
@@ -507,13 +513,27 @@ describe('DocumentEngine foundation', () => {
     );
     expect(identification).toContain('Marina Albuquerque');
     expect(identification).toContain('CREA-PE 123456');
+    expect(identification).toContain('Data da vistoria');
+    const requester = JSON.stringify(
+      built.sections.find((section) => section.id === 'technical-opinion-requester'),
+    );
+    expect(requester).toContain('Razão Social');
+    expect(requester).toContain('Documento (CNPJ/CPF)');
+    expect(requester).toContain('Ana');
     const equipmentTable = built.sections
       .find((section) => section.id === 'technical-opinion-equipments')
       ?.components.find((component) => component.kind === 'table');
     expect(
       equipmentTable?.kind === 'table' ? equipmentTable.columns.map((column) => column.label) : [],
-    ).toEqual(['EQUIPAMENTO', 'MARCA', 'MODELO', 'CAPACIDADE', 'SÉRIE', 'LOCAL']);
+    ).toEqual([
+      'Nº',
+      'MODELO / CAPACIDADE',
+      'TIPO DE SISTEMA',
+      'LOCAL DE INSTALAÇÃO',
+      'SITUAÇÃO ATUAL',
+    ]);
     expect(equipmentTable?.kind === 'table' ? equipmentTable.rows : []).toHaveLength(2);
+    expect(JSON.stringify(equipmentTable)).toContain('Unidade externa queimada');
     const signatures = built.sections
       .find((section) => section.id === 'signature')
       ?.components.find((component) => component.kind === 'signature');
@@ -1508,6 +1528,12 @@ function operationContext(
       serviceDescription: null,
       technicalDiagnosis: null,
       technicalRecommendations: null,
+      technicalOpinionObjective: null,
+      technicalOpinionConditions: null,
+      technicalOpinionAnalysis: null,
+      technicalOpinionConclusion: null,
+      technicalOpinionResponsible: null,
+      technicalOpinionCrea: null,
       referenceMonth: null,
       referenceYear: null,
       maintenanceType: null,
@@ -1529,7 +1555,15 @@ function operationContext(
             state: 'PE',
           },
         ],
-        contacts: [{ name: 'Ana', phone: '+55 81 98888-0000' }],
+        email: 'contato@hospital.local',
+        contacts: [
+          {
+            name: 'Ana',
+            role: 'Gestora de manutenção',
+            phone: '+55 81 98888-0000',
+            email: 'ana@hospital.local',
+          },
+        ],
       },
       address: null,
       equipment: {

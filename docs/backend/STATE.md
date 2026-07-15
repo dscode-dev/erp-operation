@@ -1,5 +1,19 @@
 # Backend State
 
+## DC-03.1 — enriquecimento do Laudo Técnico (15/07/2026)
+
+- A seção Solicitante passou a usar os dados já resolvidos no DocumentContext: nome fantasia,
+  razão social, CNPJ/CPF, contato principal e endereço completo.
+- Operation recebeu snapshots de `technicalOpinionResponsible` e `technicalOpinionCrea`,
+  preenchidos pelo wizard e usados na identificação do Laudo com fallback compatível para a
+  assinatura institucional configurada.
+- `OperationInspectedEquipment` recebeu snapshots de tipo de sistema e situação atual. A tabela
+  certificada agora usa Nº, Modelo/Capacidade, Tipo de Sistema, Local de Instalação e Situação Atual.
+- Migration: `20260715100000_technical_opinion_requester_responsibility_equipment`.
+- Preview e PDF continuam derivados do mesmo Blueprint; nenhum endpoint ou renderer foi criado.
+- Runtime PostgreSQL: `LDO-000024`, dois equipamentos, PDF válido com 23.423 bytes e registro
+  confirmado no catálogo `/documents`.
+
 ## DC-03 — certificação do Laudo Técnico (14/07/2026)
 
 - `TECHNICAL_OPINION` foi especializado no fluxo oficial Context → Builder → Blueprint →
@@ -2637,6 +2651,7 @@ Bloqueadores externos ainda abertos:
 Veredito:
 
 - `ORBIT_RELEASE_CANDIDATE_NOT_READY`.
+
 # Closure — Technical Report Creation UX (2026-07-14)
 
 - Added the organization-scoped `MaintenanceChecklistTemplate` catalog and migration `20260714143000_maintenance_checklist_template_catalog`.

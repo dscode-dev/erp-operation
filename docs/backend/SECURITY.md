@@ -1,5 +1,14 @@
 # Security
 
+## DC-03.1 — integridade dos dados técnicos
+
+- Responsável/CREA e detalhes de inspeção possuem limites explícitos e sanitização pelos DTOs.
+- Equipamentos continuam validados como ativos, únicos e pertencentes ao cliente da Operation.
+- Tipo de sistema e situação são snapshots para a emissão; o Renderer não consulta cadastros e
+  não aceita HTML.
+- Dados do solicitante vêm exclusivamente do Customer autorizado no DocumentContext; nenhuma chave
+  de storage ou dado binário foi adicionado aos contratos públicos.
+
 ## DC-03 — segurança documental do Laudo Técnico
 
 - Campos passam pela whitelist global, trim, validação de tipo e limites de 20/30 mil caracteres;
@@ -8,8 +17,9 @@
   ou Storage, e Renderer não interpreta política de assinatura.
 - Fotos e QR não são resolvidos para `TECHNICAL_OPINION`, reduzindo exposição e I/O; respostas não
   publicam paths ou `storageKey`, e auditoria não recebe Base64.
-- Responsável Técnico e CREA derivam somente de assinatura institucional ativa configurada.
-  FIXED/HYBRID falham de forma segura quando assinatura ou imagem não existe.
+- Responsável Técnico e CREA usam snapshots explícitos da Operation, com fallback para assinatura
+  institucional ativa configurada. FIXED/HYBRID falham de forma segura quando assinatura ou imagem
+  obrigatória não existe.
 - JWT, RBAC, rate limit, auditoria, stale detection e download exclusivo pelo backend permanecem.
 
 ## Work Order criada pela Central de Relatórios
@@ -1814,6 +1824,7 @@ Notifications:
 
 AppSec dedicado: 12 suites / 38 testes aprovados, além dos gates PostgreSQL de integração e
 concorrência.
+
 # Maintenance checklist catalog security
 
 The catalog is scoped to the installation Organization in every query. Reads require OWNER, MANAGER, or VIEWER; mutations require OWNER or MANAGER. UUID parsing, DTO allow-list validation, input length limits, control-character removal, global throttling, conflict handling, and audit events are applied. Deactivation is soft, preventing catalog cleanup from changing historical Operation and document snapshots.

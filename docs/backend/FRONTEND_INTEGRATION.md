@@ -1,5 +1,16 @@
 # Frontend Integration
 
+## DC-03.1 — responsabilidade técnica e detalhamento dos equipamentos
+
+No passo Conteúdo do Laudo, colete `technicalOpinionResponsible` e `technicalOpinionCrea`. Para
+cada item de `inspectedEquipments`, além do UUID, envie `sector` como local de instalação,
+`systemType` e `currentSituation`. O wizard bloqueia o avanço quando esses campos estão vazios; o
+backend permanece a autoridade de validação relacional e limites.
+
+Não monte dados do solicitante no frontend. Razão social, CNPJ/CPF, contato principal e endereço
+são resolvidos pelo DocumentContext a partir do cliente selecionado e aparecem no mesmo Blueprint
+consumido por Preview e PDF.
+
 ## DC-03 — fluxo do Laudo Técnico
 
 Na Central de Relatórios, crie/atualize uma Operation `DRAFT` com os quatro campos
@@ -7,7 +18,7 @@ Na Central de Relatórios, crie/atualize uma Operation `DRAFT` com os quatro cam
 selecionado; a tabela autoritativa é `inspectedEquipments`.
 
 Use somente `DocumentViewer` com `{ operationId, type: "TECHNICAL_OPINION" }`. O frontend não
-monta introdução, tabela, CREA, assinatura ou seção. A origem seleciona cliente, endereço e
+monta introdução, tabela, assinatura ou seção. A origem seleciona cliente, endereço e
 responsável; os equipamentos múltiplos e o conteúdo ficam na etapa Conteúdo; a terceira etapa
 coleta somente assinatura quando exigida.
 
@@ -2230,6 +2241,7 @@ No workflow `/reports`: carregue equipamentos por `GET /equipments?customerId=..
 O `DocumentViewer` deve consumir `header.corporate`; não monte cabeçalho ou tabela no browser. Campos
 novos podem ser nulos/vazios em operações antigas. Os modos suportados são `WEEKLY`, `MONTHLY`,
 `QUARTERLY`, `SEMIANNUAL`, `ANNUAL` e `CORRECTIVE`.
+
 # Technical Report checklist integration
 
 Load reusable activities with `GET /api/v1/maintenance-checklist-templates?maintenanceType=SEMIANNUAL&active=true&page=1&limit=100`. The catalog ID is a selection aid only: when saving the report, send snapshots through the existing Operation `maintenanceChecklist` payload (`maintenanceType`, `description`, `executed`, `observations`). This guarantees that later catalog changes do not alter historical reports.

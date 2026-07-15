@@ -1,14 +1,44 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { PrismaClient, Role } from '@prisma/client';
+import * as argon2 from 'argon2';
+import { randomBytes } from 'node:crypto';
+import { writeFile } from 'node:fs/promises';
 
 if (process.env.ORBIT_RUNTIME_VERIFY !== 'true') throw new Error('Set ORBIT_RUNTIME_VERIFY=true.');
 const apiBase = process.env.ORBIT_RUNTIME_API ?? 'http://127.0.0.1:4000/api/v1';
+const outputDir = process.env.ORBIT_RUNTIME_OUTPUT_DIR ?? '/private/tmp';
+const databaseUrl = new URL(process.env.DATABASE_URL ?? '');
 if (!/^http:\/\/(127\.0\.0\.1|localhost):/.test(apiBase) || process.env.NODE_ENV === 'production') {
   throw new Error('DC-03 runtime verification is local-only.');
 }
+if (!['127.0.0.1', 'localhost', 'postgres'].includes(databaseUrl.hostname)) {
+  throw new Error('DC-03 runtime fixture requires a local PostgreSQL database.');
+}
 
-const credentials = JSON.parse(
-  await readFile('/private/tmp/orbit-runtime-06-1-credentials.json', 'utf8'),
-);
+const prisma = new PrismaClient();
+const credentials = {
+  email: 'runtime.dc03@orbit.local',
+  password: `Dc03!${randomBytes(18).toString('base64url')}`,
+};
+await prisma.user.upsert({
+  where: { email: credentials.email },
+  create: {
+    email: credentials.email,
+    username: 'runtimedc03',
+    name: 'Runtime DC-03',
+    passwordHash: await argon2.hash(credentials.password),
+    role: Role.OWNER,
+    isActive: true,
+    mustChangePassword: false,
+  },
+  update: {
+    passwordHash: await argon2.hash(credentials.password),
+    role: Role.OWNER,
+    isActive: true,
+    disabledAt: null,
+    mustChangePassword: false,
+  },
+});
+await prisma.$disconnect();
 async function request(path, init = {}) {
   const response = await fetch(`${apiBase}${path}`, {
     ...init,
@@ -29,7 +59,8 @@ const login = await request('/auth/login', {
 });
 const headers = { authorization: `Bearer ${login.accessToken}` };
 const operationPage = await request('/operations?page=1&limit=20', { headers });
-const sourceSummary = operationPage.items.find((item) => item.customer?.id) ?? operationPage.items[0];
+const sourceSummary =
+  operationPage.items.find((item) => item.customer?.id) ?? operationPage.items[0];
 if (!sourceSummary) throw new Error('No Operation is available as a local DC-03 source.');
 const source = await request(`/operations/${sourceSummary.id}`, { headers });
 const equipmentPage = await request(
@@ -69,6 +100,9 @@ const onePixelPng =
 const inspectedEquipments = equipmentPage.items.slice(0, 5).map((equipment, index) => ({
   equipmentId: equipment.id,
   sector: equipment.address?.name || equipment.location || `Setor ${index + 1}`,
+  systemType: index % 2 === 0 ? 'Unidade Interna e Externa' : 'Sistema de expansão direta',
+  currentSituation:
+    index % 2 === 0 ? 'Unidade externa queimada' : 'Componentes elétricos comprometidos',
 }));
 const created = await request('/operations', {
   method: 'POST',
@@ -88,15 +122,16 @@ const created = await request('/operations', {
       'As evidências visuais e o grau de dano térmico demonstram comprometimento dos componentes elétricos, mecânicos e do isolamento dielétrico.\n\nA recuperação das unidades afetadas não oferece segurança operacional nem viabilidade econômica, sendo tecnicamente inadequado o reaproveitamento.',
     technicalOpinionConclusion:
       'Conclui-se pela substituição integral dos equipamentos afetados. Recomenda-se remoção e descarte ambientalmente adequado, seguidos de novo dimensionamento e instalação conforme as normas técnicas aplicáveis.',
+    technicalOpinionResponsible: institutional.name,
+    technicalOpinionCrea: institutional.professionalCouncil,
     signatureData: `data:image/png;base64,${onePixelPng}`,
     signedAt: new Date().toISOString(),
   }),
 });
 
-const preview = await request(
-  `/documents/operations/${created.id}/TECHNICAL_OPINION/preview`,
-  { headers },
-);
+const preview = await request(`/documents/operations/${created.id}/TECHNICAL_OPINION/preview`, {
+  headers,
+});
 const expectedSections = [
   'technical-opinion-identification',
   'technical-opinion-requester',
@@ -111,7 +146,12 @@ const sectionIds = preview.sections.map((section) => section.id);
 if (JSON.stringify(sectionIds) !== JSON.stringify(expectedSections)) {
   throw new Error(`Unexpected TECHNICAL_OPINION sections: ${JSON.stringify(sectionIds)}.`);
 }
-for (const forbidden of ['materials-consumed', 'related-documents', 'equipment', 'assignment-history']) {
+for (const forbidden of [
+  'materials-consumed',
+  'related-documents',
+  'equipment',
+  'assignment-history',
+]) {
   if (sectionIds.includes(forbidden)) throw new Error(`Forbidden section present: ${forbidden}.`);
 }
 const serialized = JSON.stringify(preview);
@@ -122,7 +162,8 @@ for (const required of [
   'isolamento dielétrico',
   'substituição integral',
 ]) {
-  if (!serialized.includes(required)) throw new Error(`Required DC-03 content missing: ${required}`);
+  if (!serialized.includes(required))
+    throw new Error(`Required DC-03 content missing: ${required}`);
 }
 const equipmentTable = preview.sections
   .find((section) => section.id === 'technical-opinion-equipments')
@@ -130,15 +171,22 @@ const equipmentTable = preview.sections
 if (
   !equipmentTable ||
   JSON.stringify(equipmentTable.columns.map((column) => column.label)) !==
-    JSON.stringify(['EQUIPAMENTO', 'MARCA', 'MODELO', 'CAPACIDADE', 'SÉRIE', 'LOCAL'])
+    JSON.stringify([
+      'Nº',
+      'MODELO / CAPACIDADE',
+      'TIPO DE SISTEMA',
+      'LOCAL DE INSTALAÇÃO',
+      'SITUAÇÃO ATUAL',
+    ])
 ) {
   throw new Error('Technical Opinion equipment table contract is invalid.');
 }
 
-const rendered = await request(
-  `/documents/operations/${created.id}/TECHNICAL_OPINION/render`,
-  { method: 'POST', headers, body: '{}' },
-);
+const rendered = await request(`/documents/operations/${created.id}/TECHNICAL_OPINION/render`, {
+  method: 'POST',
+  headers,
+  body: '{}',
+});
 const download = await request(`/documents/${rendered.id}/download`, { headers });
 const pdf = Buffer.from(download.contentBase64, 'base64');
 if (pdf.subarray(0, 5).toString('ascii') !== '%PDF-') {
@@ -168,7 +216,7 @@ const evidence = {
   pdfBytes: pdf.length,
   repositoryConfirmed: true,
 };
-await writeFile('/private/tmp/orbit-dc03-preview.json', JSON.stringify(preview, null, 2));
-await writeFile('/private/tmp/orbit-dc03-technical-opinion.pdf', pdf);
-await writeFile('/private/tmp/orbit-dc03-evidence.json', JSON.stringify(evidence, null, 2));
+await writeFile(`${outputDir}/orbit-dc03-preview.json`, JSON.stringify(preview, null, 2));
+await writeFile(`${outputDir}/orbit-dc03-technical-opinion.pdf`, pdf);
+await writeFile(`${outputDir}/orbit-dc03-evidence.json`, JSON.stringify(evidence, null, 2));
 console.log(JSON.stringify(evidence, null, 2));

@@ -690,6 +690,8 @@ export type OperationInspectedEquipment = {
   capacitySnapshot?: string | null;
   tagSnapshot?: string | null;
   serialSnapshot?: string | null;
+  systemTypeSnapshot?: string | null;
+  currentSituationSnapshot?: string | null;
   equipment?: { id: string; name: string; type: EquipmentType };
 };
 
@@ -757,6 +759,8 @@ export type OperationDetail = Omit<OperationSummary, 'equipment'> & {
   technicalOpinionConditions: string | null;
   technicalOpinionAnalysis: string | null;
   technicalOpinionConclusion: string | null;
+  technicalOpinionResponsible: string | null;
+  technicalOpinionCrea: string | null;
   referenceMonth: number | null;
   referenceYear: number | null;
   maintenanceType: OperationMaintenanceType | null;
@@ -794,11 +798,18 @@ export type CreateOperationPayload = {
   technicalOpinionConditions?: string | null;
   technicalOpinionAnalysis?: string | null;
   technicalOpinionConclusion?: string | null;
+  technicalOpinionResponsible?: string | null;
+  technicalOpinionCrea?: string | null;
   referenceMonth?: number | null;
   referenceYear?: number | null;
   maintenanceType?: OperationMaintenanceType | null;
   maintenanceChecklist?: OperationMaintenanceChecklistItem[];
-  inspectedEquipments?: Array<{ equipmentId: string; sector: string }>;
+  inspectedEquipments?: Array<{
+    equipmentId: string;
+    sector: string;
+    systemType?: string | null;
+    currentSituation?: string | null;
+  }>;
   signatureData?: string | null;
   signedAt?: string | null;
   photos?: { dataUrl: string; caption?: string | null }[];

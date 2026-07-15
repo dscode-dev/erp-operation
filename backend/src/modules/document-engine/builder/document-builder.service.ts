@@ -637,6 +637,11 @@ export class DocumentBuilderService {
     const { operation } = context;
     const address = operation.address ?? operation.customer.addresses[0] ?? null;
     const responsible = context.signature.institutionalSignatures[0] ?? null;
+    const primaryContact = operation.customer.contacts[0] ?? null;
+    const responsibleName =
+      operation.technicalOpinionResponsible ?? responsible?.name ?? 'Não informado';
+    const professionalCouncil =
+      operation.technicalOpinionCrea ?? responsible?.professionalCouncil ?? 'Não informado';
     const inspectionDate =
       operation.startedAt ??
       operation.completedAt ??
@@ -653,9 +658,12 @@ export class DocumentBuilderService {
         components: [
           this.metadata('technical-opinion-identification-metadata', [
             ['Número do Laudo', documentNumber],
-            ['Data', this.dateOnly(generatedAt)],
-            ['Responsável Técnico', responsible?.name ?? 'Não configurado'],
-            ['CREA', responsible?.professionalCouncil ?? 'Não configurado'],
+            ['Tipo de documento', 'Laudo Técnico'],
+            ['Data de emissão', this.dateOnly(generatedAt)],
+            ['Data da vistoria', this.dateOnly(inspectionDate)],
+            ['Situação', operation.status],
+            ['Responsável Técnico', responsibleName],
+            ['CREA / Registro profissional', professionalCouncil],
           ]),
         ],
       },
@@ -665,7 +673,25 @@ export class DocumentBuilderService {
         critical: true,
         components: [
           this.metadata('technical-opinion-requester-metadata', [
-            ['Cliente', operation.customer.tradeName ?? operation.customer.name],
+            ['Solicitante', operation.customer.tradeName ?? operation.customer.name],
+            ['Razão Social', operation.customer.name],
+            [
+              'Documento (CNPJ/CPF)',
+              operation.customer.cnpj ?? operation.customer.cpf ?? 'Não informado',
+            ],
+            [
+              'Contato',
+              this.clean(
+                [
+                  primaryContact?.name,
+                  primaryContact?.role,
+                  primaryContact?.phone ?? operation.customer.phone,
+                  primaryContact?.email ?? operation.customer.email,
+                ]
+                  .filter(Boolean)
+                  .join(' · ') || 'Não informado',
+              ),
+            ],
             ['Endereço completo', address ? this.address(address) : 'Não informado'],
           ]),
         ],
@@ -740,26 +766,34 @@ export class DocumentBuilderService {
     const rows =
       inspected.length > 0
         ? inspected.map((item, index) => ({
-            equipment: this.clean(item.equipment.name || `Equipamento ${index + 1}`),
-            brand: this.clean(item.brandSnapshot ?? '—'),
-            model: this.clean(item.modelSnapshot ?? '—'),
-            capacity: this.clean(item.capacitySnapshot ?? '—'),
-            serial: this.clean(item.serialSnapshot ?? '—'),
+            number: String(index + 1).padStart(2, '0'),
+            modelCapacity: this.clean(
+              [item.capacitySnapshot, item.modelSnapshot].filter(Boolean).join(' – ') ||
+                item.equipment.name ||
+                'Não informado',
+            ),
+            systemType: this.clean(
+              item.systemTypeSnapshot ?? this.equipmentTypeLabel(item.equipment.type),
+            ),
             location: this.clean(item.sector),
+            currentSituation: this.clean(item.currentSituationSnapshot ?? 'Não informada'),
           }))
         : operation.equipment
           ? [
               {
-                equipment: this.clean(operation.equipment.name),
-                brand: this.clean(operation.equipment.manufacturer ?? '—'),
-                model: this.clean(operation.equipment.model ?? '—'),
-                capacity: this.clean(operation.equipment.capacity ?? '—'),
-                serial: this.clean(operation.equipment.serialNumber ?? '—'),
+                number: '01',
+                modelCapacity: this.clean(
+                  [operation.equipment.capacity, operation.equipment.model]
+                    .filter(Boolean)
+                    .join(' – ') || operation.equipment.name,
+                ),
+                systemType: this.clean(this.equipmentTypeLabel(operation.equipment.type)),
                 location: this.clean(
                   operation.equipment.address?.name ??
                     operation.address?.name ??
                     operation.equipment.name,
                 ),
+                currentSituation: 'Não informada',
               },
             ]
           : [];
@@ -773,12 +807,11 @@ export class DocumentBuilderService {
           id: 'technical-opinion-equipments-table',
           kind: 'table',
           columns: [
-            { key: 'equipment', label: 'EQUIPAMENTO', width: 0.22 },
-            { key: 'brand', label: 'MARCA', width: 0.14 },
-            { key: 'model', label: 'MODELO', width: 0.16 },
-            { key: 'capacity', label: 'CAPACIDADE', width: 0.16 },
-            { key: 'serial', label: 'SÉRIE', width: 0.16 },
-            { key: 'location', label: 'LOCAL', width: 0.16 },
+            { key: 'number', label: 'Nº', width: 0.07 },
+            { key: 'modelCapacity', label: 'MODELO / CAPACIDADE', width: 0.25 },
+            { key: 'systemType', label: 'TIPO DE SISTEMA', width: 0.23 },
+            { key: 'location', label: 'LOCAL DE INSTALAÇÃO', width: 0.2 },
+            { key: 'currentSituation', label: 'SITUAÇÃO ATUAL', width: 0.25 },
           ],
           rows,
         },
@@ -1827,6 +1860,21 @@ export class DocumentBuilderService {
       .map((line) => line.replace(/^\s*[-•*]\s*/, '').trim())
       .filter(Boolean)
       .map((line) => this.clean(line));
+  }
+
+  private equipmentTypeLabel(value: string): string {
+    const labels: Record<string, string> = {
+      SPLIT: 'Split',
+      CONDENSER: 'Unidade condensadora',
+      EVAPORATOR: 'Unidade evaporadora',
+      CHILLER: 'Chiller',
+      AIR_HANDLER: 'Unidade de tratamento de ar',
+      SOLAR_INVERTER: 'Inversor solar',
+      ELECTRICAL_PANEL: 'Painel elétrico',
+      GENERATOR: 'Gerador',
+      OTHER: 'Outro sistema',
+    };
+    return labels[value] ?? value;
   }
 
   private date(value: Date | string | null): string {

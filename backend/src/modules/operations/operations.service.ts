@@ -80,6 +80,8 @@ type InspectedEquipmentSnapshot = {
   capacitySnapshot: string | null;
   tagSnapshot: string | null;
   serialSnapshot: string | null;
+  systemTypeSnapshot: string | null;
+  currentSituationSnapshot: string | null;
 };
 
 @Injectable()
@@ -186,6 +188,8 @@ export class OperationsService {
           technicalOpinionConditions: dto.technicalOpinionConditions ?? null,
           technicalOpinionAnalysis: dto.technicalOpinionAnalysis ?? null,
           technicalOpinionConclusion: dto.technicalOpinionConclusion ?? null,
+          technicalOpinionResponsible: dto.technicalOpinionResponsible ?? null,
+          technicalOpinionCrea: dto.technicalOpinionCrea ?? null,
           referenceMonth: dto.referenceMonth ?? null,
           referenceYear: dto.referenceYear ?? null,
           maintenanceType: dto.maintenanceType ?? null,
@@ -349,6 +353,12 @@ export class OperationsService {
           ...(dto.technicalOpinionConclusion !== undefined
             ? { technicalOpinionConclusion: dto.technicalOpinionConclusion }
             : {}),
+          ...(dto.technicalOpinionResponsible !== undefined
+            ? { technicalOpinionResponsible: dto.technicalOpinionResponsible }
+            : {}),
+          ...(dto.technicalOpinionCrea !== undefined
+            ? { technicalOpinionCrea: dto.technicalOpinionCrea }
+            : {}),
           ...(dto.referenceMonth !== undefined ? { referenceMonth: dto.referenceMonth } : {}),
           ...(dto.referenceYear !== undefined ? { referenceYear: dto.referenceYear } : {}),
           ...(dto.maintenanceType !== undefined ? { maintenanceType: dto.maintenanceType } : {}),
@@ -454,7 +464,12 @@ export class OperationsService {
 
   private async resolveInspectedEquipments(
     customerId: string,
-    items?: Array<{ equipmentId: string; sector: string }>,
+    items?: Array<{
+      equipmentId: string;
+      sector: string;
+      systemType?: string;
+      currentSituation?: string;
+    }>,
   ): Promise<InspectedEquipmentSnapshot[]> {
     if (!items?.length) return [];
     const uniqueIds = [...new Set(items.map((item) => item.equipmentId))];
@@ -495,6 +510,8 @@ export class OperationsService {
         capacitySnapshot: equipment.capacity,
         tagSnapshot: equipment.tag,
         serialSnapshot: equipment.serialNumber,
+        systemTypeSnapshot: item.systemType || null,
+        currentSituationSnapshot: item.currentSituation || null,
       };
     });
   }

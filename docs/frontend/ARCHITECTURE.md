@@ -1,5 +1,11 @@
 # ARCHITECTURE — Frontend
 
+## DC-03.1 — snapshots autorais do Laudo
+
+O wizard persiste `technicalOpinionResponsible`, `technicalOpinionCrea` e os campos
+`systemType/currentSituation` de cada equipamento na Operation. A Platform não combina dados do
+cliente nem monta tabela: DocumentContext e Builder produzem o Blueprint único para Preview/PDF.
+
 ## DC-03
 
 ```text
@@ -866,9 +872,11 @@ identidade corporativa.
 
 O workflow persiste primeiro os dados documentais na Operation e só então solicita Preview. Assim,
 regenerações não dependem de estado React ou de campos técnicos que mudem depois da emissão.
+
 # Technical Report form architecture
 
 Catalog entries are fetched through `maintenanceChecklistTemplatesApi`. The UI uses their IDs only while selecting; it sends immutable description/type/execution/observation snapshots through the existing Operation API. Equipment choices similarly map to `inspectedEquipments[]`. This keeps DocumentContext and the official Document Engine unchanged and prevents the renderer from querying mutable catalogs.
+
 # Work Order creation architecture
 
 A OS independente não é uma entidade local: o frontend cria uma Operation DRAFT e usa o documento

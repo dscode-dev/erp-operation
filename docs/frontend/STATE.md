@@ -1,5 +1,15 @@
 # STATE — Frontend
 
+## DC-03.1 — wizard enriquecido do Laudo Técnico
+
+- O passo Conteúdo coleta Responsável Técnico e CREA/registro profissional.
+- A Origem exibe um resumo somente leitura de razão social, documento, contato e endereço do
+  solicitante selecionado.
+- Cada equipamento recebe Tipo de Sistema, Local de Instalação e Situação Atual no seletor
+  múltiplo oficial.
+- O wizard valida os campos antes de persistir a Operation. Solicitante continua resolvido pelo
+  backend e Preview/PDF permanecem no DocumentViewer oficial.
+
 ## DC-03 — Laudo Técnico
 
 - A Central de Relatórios coleta conteúdo próprio do `TECHNICAL_OPINION`: objetivo, condições
@@ -886,12 +896,14 @@ Validação:
 
 - `npm run lint` passou com 2 warnings preexistentes;
 - `npm run build` passou.
+
 # Closure — Technical Report Creation UX (2026-07-14)
 
 - Central de Relatórios now selects Technical Report equipment only in Content through a searchable multi-select; Origin no longer exposes the ambiguous single-equipment field.
 - Weekly/semiannual free-text syntax was replaced with the persistent checklist catalog, structured execution toggles, and per-item observations.
 - Added `/maintenance-checklists` for catalog management and inline creation for OWNER/MANAGER.
 - Technical Report image upload was removed from the workflow; PMOC keeps the existing secure image flow.
+
 # Work Order wizard closure — 14/07/2026
 
 - O wizard da Central permite escolher Operation existente ou criar a OS do zero.

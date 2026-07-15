@@ -26,6 +26,7 @@ import {
   useQuery,
   type Customer,
   type CustomerAddress,
+  type CustomerDetail,
   type DocumentCatalogItem,
   type DocumentConfiguration,
   type DocumentKind,
@@ -102,6 +103,8 @@ type WorkflowForm = {
   analysis: string;
   recommendations: string;
   conclusion: string;
+  technicalResponsible: string;
+  technicalCrea: string;
   reference: string;
   amount: string;
   receivedFrom: string;
@@ -118,7 +121,12 @@ type WorkflowForm = {
     executed: boolean;
     observations: string;
   }>;
-  inspectedEquipments: Array<{ equipmentId: string; sector: string }>;
+  inspectedEquipments: Array<{
+    equipmentId: string;
+    sector: string;
+    systemType: string;
+    currentSituation: string;
+  }>;
 };
 
 const emptyForm: WorkflowForm = {
@@ -136,6 +144,8 @@ const emptyForm: WorkflowForm = {
   analysis: '',
   recommendations: '',
   conclusion: '',
+  technicalResponsible: '',
+  technicalCrea: '',
   reference: '',
   amount: '',
   receivedFrom: '',
@@ -395,6 +405,7 @@ function ReportWorkflowDrawer({
   const [form, setForm] = useState<WorkflowForm>(emptyForm);
   const [operation, setOperation] = useState<OperationDetail | null>(null);
   const [addresses, setAddresses] = useState<CustomerAddress[]>([]);
+  const [selectedCustomer, setSelectedCustomer] = useState<CustomerDetail | null>(null);
   const [equipments, setEquipments] = useState<EquipmentSummary[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -441,6 +452,7 @@ function ReportWorkflowDrawer({
     if (!form.customerId) {
       setAddresses([]);
       setEquipments([]);
+      setSelectedCustomer(null);
       return;
     }
     const controller = new AbortController();
@@ -454,6 +466,7 @@ function ReportWorkflowDrawer({
       }),
     ])
       .then(([customer, equipmentPage]) => {
+        setSelectedCustomer(customer);
         setAddresses(customer.addresses);
         setEquipments(equipmentPage.items);
       })
@@ -499,6 +512,8 @@ function ReportWorkflowDrawer({
               siteConditions: detail.technicalOpinionConditions ?? '',
               analysis: detail.technicalOpinionAnalysis ?? '',
               conclusion: detail.technicalOpinionConclusion ?? '',
+              technicalResponsible: detail.technicalOpinionResponsible ?? '',
+              technicalCrea: detail.technicalOpinionCrea ?? '',
             }
           : {}),
         checklist: detail.checklist
@@ -521,6 +536,8 @@ function ReportWorkflowDrawer({
         inspectedEquipments: detail.inspectedEquipments.map((item) => ({
           equipmentId: item.equipmentId,
           sector: item.sector,
+          systemType: item.systemTypeSnapshot ?? '',
+          currentSituation: item.currentSituationSnapshot ?? '',
         })),
       }));
     } catch (cause) {
@@ -566,6 +583,21 @@ function ReportWorkflowDrawer({
           throw new Error('Escolha se deseja usar uma Operation ou criar a OS do zero.');
         if (!form.customerId || !form.operatorId)
           throw new Error('Cliente e responsável são obrigatórios.');
+        if (type === 'TECHNICAL_OPINION') {
+          if (!form.technicalResponsible.trim() || !form.technicalCrea.trim())
+            throw new Error('Responsável Técnico e CREA/registro profissional são obrigatórios.');
+          if (form.inspectedEquipments.length === 0)
+            throw new Error('Selecione ao menos um equipamento para o Laudo Técnico.');
+          if (
+            form.inspectedEquipments.some(
+              (item) =>
+                !item.sector.trim() || !item.systemType.trim() || !item.currentSituation.trim(),
+            )
+          )
+            throw new Error(
+              'Informe tipo de sistema, local de instalação e situação atual de todos os equipamentos.',
+            );
+        }
         const content = contentFor(type, form);
         if (detail) {
           detail = await operationApi.updateOperation(detail.id, content);
@@ -695,6 +727,7 @@ function ReportWorkflowDrawer({
           pmocs={pmocs.data?.items ?? []}
           addresses={addresses}
           equipments={equipments}
+          selectedCustomer={selectedCustomer}
           onSet={set}
           onWorkOrderSource={selectWorkOrderSource}
           onOperation={selectOperation}
@@ -735,6 +768,7 @@ function OriginStep({
   pmocs,
   addresses,
   equipments,
+  selectedCustomer,
   onSet,
   onWorkOrderSource,
   onOperation,
@@ -748,6 +782,7 @@ function OriginStep({
   pmocs: PmocPlan[];
   addresses: CustomerAddress[];
   equipments: EquipmentSummary[];
+  selectedCustomer: CustomerDetail | null;
   onSet: <K extends keyof WorkflowForm>(key: K, value: WorkflowForm[K]) => void;
   onWorkOrderSource: (source: 'EXISTING' | 'NEW') => void;
   onOperation: (id: string) => void;
@@ -849,81 +884,149 @@ function OriginStep({
       </div>
     );
   return (
-    <div className="grid gap-4 md:grid-cols-2">
-      {type === 'PMOC' && (
-        <Field label="Plano PMOC">
-          <select value={form.pmocId} onChange={(event) => void onPmoc(event.target.value)}>
-            <option value="">Selecione…</option>
-            {pmocs.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.customer?.tradeName ?? item.customer?.name ?? item.id} ·{' '}
-                {item.contractNumber ?? 'Sem contrato'}
-              </option>
-            ))}
-          </select>
-        </Field>
-      )}
-      <Field label="Cliente">
-        <select
-          value={form.customerId}
-          disabled={type === 'PMOC'}
-          onChange={(event) => {
-            onSet('customerId', event.target.value);
-            onSet('addressId', '');
-            onSet('equipmentId', '');
-            onSet('inspectedEquipments', []);
-          }}
-        >
-          <option value="">Selecione…</option>
-          {customers.map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.tradeName ?? item.name}
-            </option>
-          ))}
-        </select>
-      </Field>
-      <Field label="Endereço">
-        <select value={form.addressId} onChange={(event) => onSet('addressId', event.target.value)}>
-          <option value="">Endereço principal</option>
-          {addresses.map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.name ?? 'Endereço'} · {item.street ?? 'logradouro não informado'}
-            </option>
-          ))}
-        </select>
-      </Field>
-      {type !== 'TECHNICAL_REPORT' && type !== 'TECHNICAL_OPINION' && (
-        <Field label="Equipamento">
+    <div className="space-y-4">
+      <div className="grid gap-4 md:grid-cols-2">
+        {type === 'PMOC' && (
+          <Field label="Plano PMOC">
+            <select value={form.pmocId} onChange={(event) => void onPmoc(event.target.value)}>
+              <option value="">Selecione…</option>
+              {pmocs.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.customer?.tradeName ?? item.customer?.name ?? item.id} ·{' '}
+                  {item.contractNumber ?? 'Sem contrato'}
+                </option>
+              ))}
+            </select>
+          </Field>
+        )}
+        <Field label="Cliente">
           <select
-            value={form.equipmentId}
+            value={form.customerId}
             disabled={type === 'PMOC'}
-            onChange={(event) => onSet('equipmentId', event.target.value)}
+            onChange={(event) => {
+              onSet('customerId', event.target.value);
+              onSet('addressId', '');
+              onSet('equipmentId', '');
+              onSet('inspectedEquipments', []);
+            }}
           >
-            <option value="">Sem equipamento</option>
-            {equipments.map((item) => (
+            <option value="">Selecione…</option>
+            {customers.map((item) => (
               <option key={item.id} value={item.id}>
-                {item.name} · {item.tag}
+                {item.tradeName ?? item.name}
               </option>
             ))}
           </select>
         </Field>
-      )}
-      <Field label="Responsável">
-        <select
-          value={form.operatorId}
-          onChange={(event) => onSet('operatorId', event.target.value)}
-        >
-          <option value="">Selecione…</option>
-          {users
-            .filter((item) => item.isActive)
-            .map((item) => (
+        <Field label="Endereço">
+          <select
+            value={form.addressId}
+            onChange={(event) => onSet('addressId', event.target.value)}
+          >
+            <option value="">Endereço principal</option>
+            {addresses.map((item) => (
               <option key={item.id} value={item.id}>
-                {item.name} · {item.role}
+                {item.name ?? 'Endereço'} · {item.street ?? 'logradouro não informado'}
               </option>
             ))}
-        </select>
-      </Field>
+          </select>
+        </Field>
+        {type !== 'TECHNICAL_REPORT' && type !== 'TECHNICAL_OPINION' && (
+          <Field label="Equipamento">
+            <select
+              value={form.equipmentId}
+              disabled={type === 'PMOC'}
+              onChange={(event) => onSet('equipmentId', event.target.value)}
+            >
+              <option value="">Sem equipamento</option>
+              {equipments.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name} · {item.tag}
+                </option>
+              ))}
+            </select>
+          </Field>
+        )}
+        <Field label="Responsável">
+          <select
+            value={form.operatorId}
+            onChange={(event) => onSet('operatorId', event.target.value)}
+          >
+            <option value="">Selecione…</option>
+            {users
+              .filter((item) => item.isActive)
+              .map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name} · {item.role}
+                </option>
+              ))}
+          </select>
+        </Field>
+      </div>
+      {type === 'TECHNICAL_OPINION' && selectedCustomer && (
+        <RequesterSummary customer={selectedCustomer} addressId={form.addressId} />
+      )}
     </div>
+  );
+}
+
+function RequesterSummary({
+  customer,
+  addressId,
+}: {
+  customer: CustomerDetail;
+  addressId: string;
+}) {
+  const contact = customer.contacts.find((item) => item.isPrimary) ?? customer.contacts[0] ?? null;
+  const address =
+    customer.addresses.find((item) => item.id === addressId) ??
+    customer.addresses.find((item) => item.isPrimary) ??
+    customer.addresses[0] ??
+    null;
+  const addressText = address
+    ? [
+        address.street,
+        address.number,
+        address.complement,
+        address.district,
+        address.city && address.state ? `${address.city}/${address.state}` : address.city,
+      ]
+        .filter(Boolean)
+        .join(' · ')
+    : 'Não informado';
+  const contactText = [
+    contact?.name,
+    contact?.role,
+    contact?.phone ?? customer.phone,
+    contact?.email ?? customer.email,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  return (
+    <section className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-muted)]/40 p-4">
+      <h3 className="text-sm font-semibold">Dados do solicitante no Laudo</h3>
+      <p className="mt-1 text-caption">
+        Informações carregadas do cadastro do cliente e utilizadas pelo Preview e PDF.
+      </p>
+      <dl className="mt-3 grid gap-3 text-sm md:grid-cols-2">
+        <div>
+          <dt className="text-caption">Razão Social</dt>
+          <dd>{customer.name}</dd>
+        </div>
+        <div>
+          <dt className="text-caption">Documento (CNPJ/CPF)</dt>
+          <dd>{customer.cnpj ?? customer.cpf ?? 'Não informado'}</dd>
+        </div>
+        <div>
+          <dt className="text-caption">Contato</dt>
+          <dd>{contactText || 'Não informado'}</dd>
+        </div>
+        <div>
+          <dt className="text-caption">Endereço</dt>
+          <dd>{addressText}</dd>
+        </div>
+      </dl>
+    </section>
   );
 }
 
@@ -1091,7 +1194,32 @@ function ContentStep({
   if (type === 'TECHNICAL_OPINION')
     return (
       <div className="space-y-5">
-        <InspectedEquipmentSelector form={form} equipments={equipments} onSet={onSet} />
+        <section className="space-y-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] p-4">
+          <div>
+            <h3 className="text-sm font-semibold">Responsabilidade técnica</h3>
+            <p className="text-caption">
+              Estes dados identificam o profissional responsável no Preview e no PDF do Laudo.
+            </p>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Text
+              label="Responsável Técnico"
+              value={form.technicalResponsible}
+              onChange={(value) => onSet('technicalResponsible', value)}
+            />
+            <Text
+              label="CREA / Registro profissional"
+              value={form.technicalCrea}
+              onChange={(value) => onSet('technicalCrea', value)}
+            />
+          </div>
+        </section>
+        <InspectedEquipmentSelector
+          form={form}
+          equipments={equipments}
+          technicalOpinion
+          onSet={onSet}
+        />
         <Area
           label="Objetivo do Laudo"
           value={form.objective}
@@ -1292,10 +1420,12 @@ function ContentStep({
 function InspectedEquipmentSelector({
   form,
   equipments,
+  technicalOpinion = false,
   onSet,
 }: {
   form: WorkflowForm;
   equipments: EquipmentSummary[];
+  technicalOpinion?: boolean;
   onSet: <K extends keyof WorkflowForm>(key: K, value: WorkflowForm[K]) => void;
 }) {
   return (
@@ -1329,6 +1459,8 @@ function InspectedEquipmentSelector({
                 current ?? {
                   equipmentId,
                   sector: equipment?.address?.name || equipment?.name || 'Não informado',
+                  systemType: technicalOpinion ? equipmentTypeLabel(equipment?.type) : '',
+                  currentSituation: '',
                 }
               );
             }),
@@ -1345,12 +1477,32 @@ function InspectedEquipmentSelector({
         return (
           <div
             key={item.equipmentId}
-            className="grid gap-2 rounded-[var(--radius-md)] bg-[var(--color-muted)]/50 p-3 md:grid-cols-[1fr_260px_auto] md:items-center"
+            className={`grid gap-3 rounded-[var(--radius-md)] bg-[var(--color-muted)]/50 p-3 ${
+              technicalOpinion ? 'md:grid-cols-2' : 'md:grid-cols-[1fr_260px_auto] md:items-center'
+            }`}
           >
-            <span className="text-sm">
+            <span className={`text-sm ${technicalOpinion ? 'md:col-span-2' : ''}`}>
               <strong>{equipment.name}</strong> · {equipment.manufacturer ?? 'Marca não informada'}{' '}
               · {equipment.model ?? 'Modelo não informado'}
             </span>
+            {technicalOpinion && (
+              <input
+                aria-label={`Tipo de sistema de ${equipment.name}`}
+                value={item.systemType}
+                onChange={(event) =>
+                  onSet(
+                    'inspectedEquipments',
+                    form.inspectedEquipments.map((current) =>
+                      current.equipmentId === item.equipmentId
+                        ? { ...current, systemType: event.target.value }
+                        : current,
+                    ),
+                  )
+                }
+                placeholder="Tipo de sistema"
+                className="h-9 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm"
+              />
+            )}
             <input
               aria-label={`Setor de ${equipment.name}`}
               value={item.sector}
@@ -1364,9 +1516,27 @@ function InspectedEquipmentSelector({
                   ),
                 )
               }
-              placeholder="Setor/ambiente"
+              placeholder={technicalOpinion ? 'Local de instalação' : 'Setor/ambiente'}
               className="h-9 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm"
             />
+            {technicalOpinion && (
+              <input
+                aria-label={`Situação atual de ${equipment.name}`}
+                value={item.currentSituation}
+                onChange={(event) =>
+                  onSet(
+                    'inspectedEquipments',
+                    form.inspectedEquipments.map((current) =>
+                      current.equipmentId === item.equipmentId
+                        ? { ...current, currentSituation: event.target.value }
+                        : current,
+                    ),
+                  )
+                }
+                placeholder="Situação atual"
+                className="h-9 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm"
+              />
+            )}
             <button
               type="button"
               aria-label={`Remover ${equipment.name}`}
@@ -1378,7 +1548,7 @@ function InspectedEquipmentSelector({
                   ),
                 )
               }
-              className="rounded-md p-2 text-[var(--color-muted-foreground)] hover:bg-[var(--color-card)] hover:text-[var(--color-danger)]"
+              className={`rounded-md p-2 text-[var(--color-muted-foreground)] hover:bg-[var(--color-card)] hover:text-[var(--color-danger)] ${technicalOpinion ? 'justify-self-end' : ''}`}
             >
               <X className="h-4 w-4" />
             </button>
@@ -1485,6 +1655,8 @@ function contentFor(type: DocumentKind, form: WorkflowForm) {
       technicalOpinionConditions: form.siteConditions,
       technicalOpinionAnalysis: form.analysis,
       technicalOpinionConclusion: form.conclusion,
+      technicalOpinionResponsible: form.technicalResponsible,
+      technicalOpinionCrea: form.technicalCrea,
       inspectedEquipments: form.inspectedEquipments,
     };
   if (type === 'TECHNICAL_REPORT')
@@ -1526,6 +1698,21 @@ function operationTypeFor(
   type: DocumentKind,
 ): 'PREVENTIVA' | 'CORRETIVA' | 'INSTALACAO' | 'PROJETO' {
   return type === 'PMOC' ? 'PREVENTIVA' : type === 'TECHNICAL_OPINION' ? 'CORRETIVA' : 'PROJETO';
+}
+function equipmentTypeLabel(type?: EquipmentSummary['type']): string {
+  if (!type) return '';
+  const labels: Record<EquipmentSummary['type'], string> = {
+    SPLIT: 'Split',
+    CONDENSER: 'Unidade condensadora',
+    EVAPORATOR: 'Unidade evaporadora',
+    CHILLER: 'Chiller',
+    AIR_HANDLER: 'Unidade de tratamento de ar',
+    SOLAR_INVERTER: 'Inversor solar',
+    ELECTRICAL_PANEL: 'Painel elétrico',
+    GENERATOR: 'Gerador',
+    OTHER: 'Outro sistema',
+  };
+  return labels[type];
 }
 function message(cause: unknown) {
   return cause instanceof ApiClientError || cause instanceof Error

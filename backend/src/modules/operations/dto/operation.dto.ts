@@ -55,6 +55,16 @@ export class OperationMaintenanceChecklistItemDto {
 export class OperationInspectedEquipmentDto {
   @IsUUID('4') equipmentId!: string;
   @Transform(({ value }) => trim(value)) @IsString() @MaxLength(160) sector!: string;
+  @IsOptional()
+  @Transform(({ value }) => trim(value))
+  @IsString()
+  @MaxLength(180)
+  systemType?: string;
+  @IsOptional()
+  @Transform(({ value }) => trim(value))
+  @IsString()
+  @MaxLength(500)
+  currentSituation?: string;
 }
 
 export class CreateOperationDto {
@@ -132,6 +142,16 @@ export class CreateOperationDto {
   @IsString()
   @MaxLength(20000)
   technicalOpinionConclusion?: string;
+  @IsOptional()
+  @Transform(({ value }) => trim(value))
+  @IsString()
+  @MaxLength(180)
+  technicalOpinionResponsible?: string;
+  @IsOptional()
+  @Transform(({ value }) => trim(value))
+  @IsString()
+  @MaxLength(100)
+  technicalOpinionCrea?: string;
   @IsOptional() @IsString() @MaxLength(2_000_000) signatureData?: string;
   @IsOptional() @IsDateString() signedAt?: string;
   @IsOptional()
@@ -210,6 +230,16 @@ export class UpdateOperationDto {
   @IsString()
   @MaxLength(20000)
   technicalOpinionConclusion?: string;
+  @IsOptional()
+  @Transform(({ value }) => trim(value))
+  @IsString()
+  @MaxLength(180)
+  technicalOpinionResponsible?: string;
+  @IsOptional()
+  @Transform(({ value }) => trim(value))
+  @IsString()
+  @MaxLength(100)
+  technicalOpinionCrea?: string;
   @IsOptional() @IsString() @MaxLength(2_000_000) signatureData?: string;
   @IsOptional() @IsDateString() signedAt?: string;
   @IsOptional()

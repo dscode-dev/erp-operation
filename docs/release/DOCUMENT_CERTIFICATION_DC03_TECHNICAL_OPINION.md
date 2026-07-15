@@ -2,6 +2,18 @@
 
 Data: 14/07/2026
 
+## Refinamento DC-03.1 — 15/07/2026
+
+- Solicitante enriquecido com razão social, CNPJ/CPF, contato principal e endereço.
+- Identificação enriquecida com tipo, emissão, vistoria, situação, responsável e CREA/registro.
+- Wizard passou a persistir responsabilidade técnica própria do Laudo.
+- Equipamentos passaram a registrar tipo de sistema, local e situação atual por snapshot.
+- Tabela oficial: Nº, Modelo/Capacidade, Tipo de Sistema, Local de Instalação e Situação Atual.
+- Migration `20260715100000_technical_opinion_requester_responsibility_equipment`.
+- Runtime `LDO-000024`: dois equipamentos, assinatura HYBRID, PDF `%PDF-` com 23.423 bytes e
+  presença confirmada em `/documents`. A comparação visual confirmou a nova identificação,
+  solicitante e tabela na primeira página do PDF.
+
 ## 1. Document Analysis
 
 O PDF de referência possui duas páginas A4 e uma composição técnica linear: título, identificação

@@ -1,5 +1,10 @@
 # ROUTES — Frontend
 
+## `/reports` — DC-03.1
+
+O workflow `TECHNICAL_OPINION` coleta responsabilidade técnica e dados específicos de inspeção por
+equipamento. Não há rota nova; Preview, Render e Download permanecem no Drawer/DocumentViewer.
+
 ## DC-03
 
 `/reports` inicia o Laudo Técnico em quatro etapas: Origem → Conteúdo → Assinatura → Preview.
@@ -437,9 +442,11 @@ Nenhuma rota nova foi criada.
 - `/reports`: workflow do Relatório de Visita Técnica com competência, manutenção, checklists e
   equipamentos filtrados pelo cliente; Preview/Render/Download oficiais.
 - `/settings`: inscrição estadual e telefones alimentam o Corporate Header de todos os documentos.
+
 # `/maintenance-checklists`
 
 Persistent library of maintenance activities used by the Technical Report workflow. OWNER and MANAGER can create, edit, and deactivate; VIEWER can read. OPERATOR is denied. The route consumes only `/api/v1/maintenance-checklist-templates`.
+
 # `/reports` — Ordem de Serviço
 
 O card Ordem de Serviço abre um wizard com origem por Operation concluída ou preenchimento novo. O

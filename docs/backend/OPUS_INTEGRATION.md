@@ -1,18 +1,31 @@
 # OPUS Frontend Integration
 
+## DC-03.1 — campos adicionais do Laudo
+
+| Campo UI            | Campo API                                |
+| ------------------- | ---------------------------------------- |
+| Responsável Técnico | `technicalOpinionResponsible`            |
+| CREA/registro       | `technicalOpinionCrea`                   |
+| Tipo de sistema     | `inspectedEquipments[].systemType`       |
+| Local de instalação | `inspectedEquipments[].sector`           |
+| Situação atual      | `inspectedEquipments[].currentSituation` |
+
+Solicitante é hidratado integralmente pelo backend. Não replique razão social, documento ou
+contatos no payload da Operation e não monte a tabela fora do `DocumentViewer`.
+
 ## DC-03 — TECHNICAL_OPINION
 
-| Campo UI                        | Campo API                    |
-| ------------------------------- | ---------------------------- |
-| Objetivo do Laudo               | `technicalOpinionObjective`  |
-| Condições, uma por linha        | `technicalOpinionConditions` |
-| Análise técnica                 | `technicalOpinionAnalysis`   |
-| Conclusão técnica               | `technicalOpinionConclusion` |
-| Equipamentos e setor/local      | `inspectedEquipments[]`      |
+| Campo UI                   | Campo API                    |
+| -------------------------- | ---------------------------- |
+| Objetivo do Laudo          | `technicalOpinionObjective`  |
+| Condições, uma por linha   | `technicalOpinionConditions` |
+| Análise técnica            | `technicalOpinionAnalysis`   |
+| Conclusão técnica          | `technicalOpinionConclusion` |
+| Equipamentos e setor/local | `inspectedEquipments[]`      |
 
 Não reutilize `reportedIssue`, `technicalDiagnosis`, `serviceDescription`, `observations`,
 checklist ou fotos para montar o Laudo. Preserve a ordem recebida e use tabela fixa com quebra de
-palavras. Responsável/CREA e assinaturas já chegam resolvidos; não acesse Storage nem interprete
+palavras. Responsável/CREA, dados do solicitante e assinaturas já chegam resolvidos; não acesse Storage nem interprete
 `SignatureMode`.
 
 ## WORK_ORDER — QR textual
@@ -1808,6 +1821,7 @@ PDF real; para emissão use sempre `operationId + WORK_ORDER`.
 - O frontend não envia marca/modelo/capacidade; o backend é a autoridade dos snapshots.
 - Preview/PDF usam o mesmo Blueprint; `header.corporate` contém a identificação renderizável.
 - Campos novos são opcionais; não use fallback fake.
+
 # Technical Report workflow closure (2026-07-14)
 
 - Equipment selection belongs exclusively to the Content step and maps to `inspectedEquipments[]`.
@@ -1815,6 +1829,7 @@ PDF real; para emissão use sempre `operationId + WORK_ORDER`.
 - OWNER/MANAGER may create catalog entries; VIEWER is read-only; OPERATOR has no catalog endpoint access.
 - Do not persist catalog IDs in the Operation payload and do not render catalog data directly in a document.
 - The report workflow exposes image upload only for PMOC.
+
 # Work Order independent creation closure — 14/07/2026
 
 - O wizard possui `EXISTING` e `NEW`; `NEW` cria Operation DRAFT oficial.
