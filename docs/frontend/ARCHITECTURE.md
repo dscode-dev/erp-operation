@@ -920,3 +920,15 @@ o contexto; PMOC pode reutilizar a API com `workflow=PMOC`.
 `PmocPlan → MaintenanceExecution → Operation → DocumentContext → DocumentBuilder → Blueprint →
 DocumentViewer/PdfEngine`. Platform e Operator editam somente a Operation atribuída. Procedimentos
 e dados técnicos são snapshots; o frontend não calcula conformidade nem monta documentos.
+
+## Narrativa estruturada do Laudo Técnico
+
+`TechnicalCatalogSelector → *Items[]` e `Area → texto principal` são persistidos na mesma
+Operation, porém em campos independentes. O Document Engine recebe snapshots completos pelo
+DocumentContext e compõe parágrafo + lista no único Blueprint usado por Preview e PDF.
+
+## PMOC a partir da Ordem de Serviço
+
+`Operation/WORK_ORDER → POST /pmoc → MaintenancePlan + PmocPlan → MaintenanceExecution →
+Operation de execução → Document Engine`. O frontend apenas extrai o contexto e envia o contrato;
+nome, integridade, unicidade e relacionamento são decididos pelo backend.

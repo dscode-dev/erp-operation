@@ -381,12 +381,20 @@ describe('DocumentEngine foundation', () => {
     const operation = context.operation as Record<string, unknown>;
     operation.technicalOpinionObjective =
       'Avaliar tecnicamente os danos térmicos observados nos sistemas de climatização.';
+    operation.technicalOpinionObjectiveItems = [
+      'Verificar a integridade dos componentes elétricos',
+      'Determinar a viabilidade técnica de recuperação',
+    ];
     operation.technicalOpinionConditions =
       '- Carcaças com deformação térmica severa\n- Componentes elétricos carbonizados\n- Linhas frigorígenas comprometidas';
     operation.technicalOpinionAnalysis =
       'As evidências visuais demonstram perda de isolamento dielétrico e comprometimento mecânico.\n\nA recuperação não apresenta segurança técnica nem viabilidade econômica.';
     operation.technicalOpinionConclusion =
       'Conclui-se pela substituição integral das unidades afetadas, com descarte ambientalmente adequado.';
+    operation.technicalOpinionConclusionItems = [
+      'Equipamentos sem condição segura de operação',
+      'Substituição integral tecnicamente recomendada',
+    ];
     operation.technicalOpinionRecommendations =
       '- Substituição preventiva\n- Monitoramento periódico';
     operation.technicalOpinionResponsible = 'Marina Albuquerque';
@@ -537,6 +545,26 @@ describe('DocumentEngine foundation', () => {
     ]);
     expect(equipmentTable?.kind === 'table' ? equipmentTable.rows : []).toHaveLength(2);
     expect(JSON.stringify(equipmentTable)).toContain('Unidade externa queimada');
+    const objectiveComponents =
+      built.sections.find((section) => section.id === 'technical-opinion-objective')?.components ??
+      [];
+    expect(objectiveComponents.map((component) => component.kind)).toEqual([
+      'paragraph',
+      'list',
+    ]);
+    expect(JSON.stringify(objectiveComponents)).toContain(
+      'Determinar a viabilidade técnica de recuperação',
+    );
+    const conclusionComponents =
+      built.sections.find((section) => section.id === 'technical-opinion-conclusion')?.components ??
+      [];
+    expect(conclusionComponents.map((component) => component.kind)).toEqual([
+      'paragraph',
+      'list',
+    ]);
+    expect(JSON.stringify(conclusionComponents)).toContain(
+      'Substituição integral tecnicamente recomendada',
+    );
     const signatures = built.sections
       .find((section) => section.id === 'signature')
       ?.components.find((component) => component.kind === 'signature');
@@ -1576,9 +1604,11 @@ function operationContext(
       technicalDiagnosis: null,
       technicalRecommendations: null,
       technicalOpinionObjective: null,
+      technicalOpinionObjectiveItems: [],
       technicalOpinionConditions: null,
       technicalOpinionAnalysis: null,
       technicalOpinionConclusion: null,
+      technicalOpinionConclusionItems: [],
       technicalOpinionRecommendations: null,
       technicalOpinionResponsible: null,
       technicalOpinionCrea: null,

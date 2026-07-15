@@ -4993,3 +4993,44 @@ de 40 caracteres, 1–7 áreas e 1–6 workflows, sem duplicidade. Clientes anti
 O equipamento deve estar ativo e pertencer ao cliente da Operation. A resposta informa
 `signatureCaptured`, mas nunca retorna `signatureData`. Preview, Render e Download continuam nos
 contratos oficiais do Document Engine.
+
+## Laudo Técnico — Objetivo e Conclusão estruturados
+
+`POST /api/v1/operations` e `PATCH /api/v1/operations/:id` aceitam, de forma aditiva:
+
+```json
+{
+  "technicalOpinionObjective": "Esclarecimento principal do responsável técnico.",
+  "technicalOpinionObjectiveItems": ["Item predefinido complementar"],
+  "technicalOpinionConclusion": "Conclusão fundamentada do responsável técnico.",
+  "technicalOpinionConclusionItems": ["Resultado predefinido complementar"]
+}
+```
+
+Cada coleção aceita até 50 strings de 500 caracteres. A resposta de Operation retorna as duas
+coleções. Os campos textuais existentes permanecem compatíveis e continuam sendo o conteúdo
+principal do documento.
+
+## PMOC — criação a partir de Ordem de Serviço
+
+`POST /api/v1/pmoc` mantém o contrato existente e aceita o campo aditivo:
+
+```json
+{
+  "sourceOperationId": "uuid-da-operation-concluida",
+  "customerId": "uuid-do-cliente",
+  "equipmentId": "uuid-do-equipamento-principal",
+  "equipmentIds": ["uuid-do-equipamento"],
+  "responsibleTechnician": "Responsável extraído da OS",
+  "startDate": "2026-07-15",
+  "endDate": "2027-07-15",
+  "recurrenceRule": { "frequency": "MONTHLY", "interval": 1 }
+}
+```
+
+Response `201`: `PmocPlan` completo, incluindo `sourceOperationId`, `sourceOperation` e
+`maintenancePlan.name` no padrão `PMOC · {cliente} · {número da OS}`.
+
+Erros específicos: `404 OPERATION_NOT_FOUND`, `400 PMOC_INVALID_RELATIONSHIP` para cliente ou
+equipamentos incompatíveis, `409 PMOC_INVALID_RELATIONSHIP` para OS não concluída e
+`409 PMOC_SOURCE_OPERATION_CONFLICT` quando a OS já originou um plano.

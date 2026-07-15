@@ -809,9 +809,11 @@ export type OperationDetail = Omit<OperationSummary, 'equipment'> & {
   technicalDiagnosis: string | null;
   technicalRecommendations: string | null;
   technicalOpinionObjective: string | null;
+  technicalOpinionObjectiveItems: string[];
   technicalOpinionConditions: string | null;
   technicalOpinionAnalysis: string | null;
   technicalOpinionConclusion: string | null;
+  technicalOpinionConclusionItems: string[];
   technicalOpinionRecommendations: string | null;
   technicalOpinionResponsible: string | null;
   technicalOpinionCrea: string | null;
@@ -862,9 +864,11 @@ export type CreateOperationPayload = {
   technicalDiagnosis?: string | null;
   technicalRecommendations?: string | null;
   technicalOpinionObjective?: string | null;
+  technicalOpinionObjectiveItems?: string[];
   technicalOpinionConditions?: string | null;
   technicalOpinionAnalysis?: string | null;
   technicalOpinionConclusion?: string | null;
+  technicalOpinionConclusionItems?: string[];
   technicalOpinionRecommendations?: string | null;
   technicalOpinionResponsible?: string | null;
   technicalOpinionCrea?: string | null;
@@ -1013,6 +1017,7 @@ export type PmocPlan = {
   customerId: string;
   equipmentId: string;
   maintenancePlanId: string;
+  sourceOperationId: string | null;
   responsibleTechnician: string;
   artNumber: string | null;
   contractNumber: string | null;
@@ -1025,6 +1030,12 @@ export type PmocPlan = {
   customer?: Pick<Customer, 'id' | 'name' | 'tradeName'>;
   equipment?: Pick<EquipmentSummary, 'id' | 'name' | 'tag' | 'type' | 'status'>;
   maintenancePlan?: MaintenancePlan & { executions?: MaintenanceExecution[] };
+  sourceOperation?: {
+    id: string;
+    number: number;
+    status: OperationStatus;
+    documents: Array<Pick<OperationDocument, 'id' | 'number' | 'status'>>;
+  } | null;
   equipments?: Array<{
     equipmentId: string;
     equipment: Pick<EquipmentSummary, 'id' | 'name' | 'tag' | 'type' | 'status'>;

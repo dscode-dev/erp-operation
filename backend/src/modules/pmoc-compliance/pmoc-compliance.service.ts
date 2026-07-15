@@ -41,9 +41,38 @@ export interface PmocAuditContext {
 
 type PmocPayload = Prisma.PmocPlanGetPayload<{ include: typeof PMOC_INCLUDE }>;
 
+const PMOC_SOURCE_OPERATION_INCLUDE = {
+  customer: { select: { id: true, name: true, tradeName: true } },
+  operator: { select: { id: true, name: true, isActive: true } },
+  equipment: { select: { id: true } },
+  inspectedEquipments: { select: { equipmentId: true } },
+  documents: {
+    where: { type: DocumentTemplateType.WORK_ORDER },
+    select: { id: true, number: true, status: true },
+    orderBy: { createdAt: 'asc' as const },
+    take: 1,
+  },
+} satisfies Prisma.OperationInclude;
+
+type PmocSourceOperation = Prisma.OperationGetPayload<{
+  include: typeof PMOC_SOURCE_OPERATION_INCLUDE;
+}>;
+
 const PMOC_INCLUDE = {
   organization: { select: { id: true, legalName: true, tradeName: true } },
   customer: { select: { id: true, name: true, tradeName: true } },
+  sourceOperation: {
+    select: {
+      id: true,
+      number: true,
+      status: true,
+      documents: {
+        where: { type: DocumentTemplateType.WORK_ORDER },
+        select: { id: true, number: true, status: true },
+        take: 1,
+      },
+    },
+  },
   equipment: { select: { id: true, name: true, tag: true, type: true, status: true } },
   maintenancePlan: {
     include: {
@@ -142,12 +171,32 @@ export class PmocComplianceService implements ComplianceEvaluator<{
     const equipment = await this.equipmentForCustomerOrThrow(dto.equipmentId, dto.customerId);
     const equipmentIds = this.unique([dto.equipmentId, ...(dto.equipmentIds ?? [])]);
     await this.equipmentsForCustomerOrThrow(equipmentIds, dto.customerId);
+    const sourceOperation = dto.sourceOperationId
+      ? await this.sourceOperationOrThrow(dto.sourceOperationId, dto.customerId, equipmentIds)
+      : null;
 
-    return this.prisma.$transaction(async (tx) => {
+    if (dto.sourceOperationId) {
+      const existingSource = await this.prisma.pmocPlan.findUnique({
+        where: { sourceOperationId: dto.sourceOperationId },
+        select: { id: true },
+      });
+      if (existingSource) this.throwSourceOperationConflict();
+    }
+
+    const planName = sourceOperation
+      ? this.pmocPlanName(
+          sourceOperation.customer.tradeName ?? sourceOperation.customer.name,
+          sourceOperation.documents[0]?.number ??
+            `OS-${String(sourceOperation.number).padStart(6, '0')}`,
+        )
+      : `PMOC · ${equipment.name}`;
+
+    try {
+      return await this.prisma.$transaction(async (tx) => {
       const maintenancePlan = await tx.maintenancePlan.create({
         data: {
           equipmentId: dto.equipmentId,
-          name: `PMOC · ${equipment.name}`,
+          name: planName,
           description: dto.observations ? this.clean(dto.observations) : 'Plano PMOC operacional',
           type: MaintenancePlanType.PREVENTIVE,
           active: dto.active ?? true,
@@ -170,6 +219,7 @@ export class PmocComplianceService implements ComplianceEvaluator<{
           customerId: dto.customerId,
           equipmentId: dto.equipmentId,
           maintenancePlanId: maintenancePlan.id,
+          sourceOperationId: dto.sourceOperationId ?? null,
           responsibleTechnician: this.clean(dto.responsibleTechnician),
           artNumber: dto.artNumber ? this.clean(dto.artNumber) : null,
           contractNumber: dto.contractNumber ? this.clean(dto.contractNumber) : null,
@@ -191,7 +241,11 @@ export class PmocComplianceService implements ComplianceEvaluator<{
           actorId: actor.id,
           type: AssetLifecycleEventType.PMOC_CREATED,
           description: `PMOC created for ${equipment.name}`,
-          metadata: { customerId: dto.customerId, maintenancePlanId: maintenancePlan.id },
+          metadata: {
+            customerId: dto.customerId,
+            maintenancePlanId: maintenancePlan.id,
+            sourceOperationId: dto.sourceOperationId ?? null,
+          },
         },
         context,
       );
@@ -201,10 +255,21 @@ export class PmocComplianceService implements ComplianceEvaluator<{
           customerId: dto.customerId,
           equipmentId: dto.equipmentId,
           maintenancePlanId: maintenancePlan.id,
+          sourceOperationId: dto.sourceOperationId ?? null,
         }),
       });
       return this.withCompliance(pmoc);
-    });
+      });
+    } catch (error) {
+      if (
+        dto.sourceOperationId &&
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        this.throwSourceOperationConflict();
+      }
+      throw error;
+    }
   }
 
   async update(
@@ -627,6 +692,68 @@ export class PmocComplianceService implements ComplianceEvaluator<{
         HttpStatus.BAD_REQUEST,
       );
     }
+  }
+
+  private async sourceOperationOrThrow(
+    operationId: string,
+    customerId: string,
+    equipmentIds: string[],
+  ): Promise<PmocSourceOperation> {
+    const operation = await this.prisma.operation.findUnique({
+      where: { id: operationId },
+      include: PMOC_SOURCE_OPERATION_INCLUDE,
+    });
+    if (!operation) {
+      throw new ApplicationException(
+        ERROR_CODES.OPERATION_NOT_FOUND,
+        'Source Work Order was not found',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    if (operation.status !== 'COMPLETED') {
+      throw new ApplicationException(
+        ERROR_CODES.PMOC_INVALID_RELATIONSHIP,
+        'Only a completed Work Order can originate a PMOC plan',
+        HttpStatus.CONFLICT,
+      );
+    }
+    if (operation.customerId !== customerId) {
+      throw new ApplicationException(
+        ERROR_CODES.PMOC_INVALID_RELATIONSHIP,
+        'Source Work Order and PMOC must belong to the same customer',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const operationEquipmentIds = new Set([
+      ...(operation.equipmentId ? [operation.equipmentId] : []),
+      ...operation.inspectedEquipments.map((item) => item.equipmentId),
+    ]);
+    if (
+      operationEquipmentIds.size === 0 ||
+      equipmentIds.some((equipmentId) => !operationEquipmentIds.has(equipmentId))
+    ) {
+      throw new ApplicationException(
+        ERROR_CODES.PMOC_INVALID_RELATIONSHIP,
+        'PMOC equipments must be present in the source Work Order',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    return operation;
+  }
+
+  private pmocPlanName(customerName: string, workOrderNumber: string): string {
+    const prefix = 'PMOC · ';
+    const suffix = ` · ${this.clean(workOrderNumber)}`;
+    const customerLimit = Math.max(1, 140 - prefix.length - suffix.length);
+    return `${prefix}${this.clean(customerName).slice(0, customerLimit)}${suffix}`;
+  }
+
+  private throwSourceOperationConflict(): never {
+    throw new ApplicationException(
+      ERROR_CODES.PMOC_SOURCE_OPERATION_CONFLICT,
+      'A PMOC plan already exists for this Work Order',
+      HttpStatus.CONFLICT,
+    );
   }
 
   private assertPmocEquipments(pmoc: PmocPayload, equipmentIds: string[]): void {

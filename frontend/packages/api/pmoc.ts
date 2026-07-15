@@ -2,6 +2,25 @@
 import { api } from "./client";
 import type { Paginated, PmocPlan, PmocStats } from "@erp/types";
 
+export type CreatePmocPayload = {
+  sourceOperationId?: string;
+  customerId: string;
+  equipmentId: string;
+  equipmentIds?: string[];
+  responsibleTechnician: string;
+  artNumber?: string;
+  contractNumber?: string;
+  startDate: string;
+  endDate: string;
+  observations?: string;
+  priority?: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+  recurrenceRule: {
+    frequency: "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY" | "INTERVAL_DAYS" | "INTERVAL_MONTHS";
+    interval?: number;
+  };
+  active?: boolean;
+};
+
 export type ListPmocParams = {
   page?: number;
   limit?: number;
@@ -22,4 +41,8 @@ export function listPmoc(params?: ListPmocParams): Promise<Paginated<PmocPlan>> 
 
 export function getPmoc(id: string, opts?: { signal?: AbortSignal }): Promise<PmocPlan> {
   return api.get<PmocPlan>(`/pmoc/${id}`, opts);
+}
+
+export function createPmoc(payload: CreatePmocPayload): Promise<PmocPlan> {
+  return api.post<PmocPlan>("/pmoc", payload);
 }

@@ -703,9 +703,10 @@ export class DocumentBuilderService {
         id: 'technical-opinion-objective',
         title: 'Objetivo',
         critical: true,
-        components: this.technicalProse(
+        components: this.technicalStatementWithItems(
           'technical-opinion-objective',
           operation.technicalOpinionObjective,
+          operation.technicalOpinionObjectiveItems,
           'Objetivo do Laudo Técnico não informado.',
         ),
       },
@@ -765,9 +766,10 @@ export class DocumentBuilderService {
         id: 'technical-opinion-conclusion',
         title: 'Conclusão',
         critical: true,
-        components: this.technicalProse(
+        components: this.technicalStatementWithItems(
           'technical-opinion-conclusion',
           operation.technicalOpinionConclusion,
+          operation.technicalOpinionConclusionItems,
           'Conclusão técnica não informada.',
         ),
       },
@@ -1916,6 +1918,25 @@ export class DocumentBuilderService {
       text: this.clean(paragraph),
       keepTogether: true,
     }));
+  }
+
+  /** Renders the technician's authored statement first and catalog snapshots as a complement. */
+  private technicalStatementWithItems(
+    id: string,
+    statement: string | null,
+    selectedItems: string[],
+    fallback: string,
+  ): DocumentBlueprintComponent[] {
+    const components = this.technicalProse(id, statement, fallback);
+    const items = selectedItems.map((item) => this.clean(item)).filter(Boolean);
+    if (items.length > 0) {
+      components.push({
+        id: `${id}-complementary-items`,
+        kind: 'list',
+        items,
+      });
+    }
+    return components;
   }
 
   private lines(value: string | null): string[] {

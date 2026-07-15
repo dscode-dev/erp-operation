@@ -1,4 +1,11 @@
-import { MaintenanceExecutionStatus, MaintenancePlanType, Role } from '@prisma/client';
+import {
+  DocumentTemplateType,
+  MaintenanceExecutionStatus,
+  MaintenancePlanType,
+  OperationStatus,
+  OperationType,
+  Role,
+} from '@prisma/client';
 import { ERROR_CODES } from '../../src/shared/constants/error-codes.constants';
 import { createCustomerGraph, createMaintenanceFixture, createOperation, createOrganization, prisma } from '../integration/helpers';
 import {
@@ -113,6 +120,56 @@ describe('AppSec Maintenance Planning and PMOC closure', () => {
     });
     expect(mismatchedEquipment.status).toBe(400);
     expect(errorCode(mismatchedEquipment)).toBe(ERROR_CODES.PMOC_INVALID_RELATIONSHIP);
+  });
+
+  it('creates one traceable PMOC from a completed Work Order and derives its official name', async () => {
+    const graph = await createCustomerGraph();
+    const customer = await prisma.customer.findUniqueOrThrow({ where: { id: graph.customerId } });
+    const operation = await prisma.operation.create({
+      data: {
+        customerId: graph.customerId,
+        addressId: graph.addressId,
+        equipmentId: graph.equipmentId,
+        operatorId: owner.user.id,
+        type: OperationType.PREVENTIVA,
+        status: OperationStatus.COMPLETED,
+        completedAt: new Date('2026-07-15T10:00:00.000Z'),
+        checklist: [],
+        documents: {
+          create: {
+            type: DocumentTemplateType.WORK_ORDER,
+            number: 'OS-009999',
+          },
+        },
+      },
+    });
+    const payload = {
+      sourceOperationId: operation.id,
+      customerId: graph.customerId,
+      equipmentId: graph.equipmentId,
+      equipmentIds: [graph.equipmentId],
+      responsibleTechnician: owner.user.name,
+      startDate: '2026-07-15',
+      endDate: '2027-07-15',
+      recurrenceRule: { frequency: 'MONTHLY', interval: 1 },
+    };
+
+    const created = await authPost(owner, '/api/v1/pmoc').send(payload);
+    expect(created.status).toBe(201);
+    const createdPlan = created.body as {
+      data: { sourceOperationId: string; maintenancePlan: { name: string } };
+    };
+    expect(createdPlan.data.sourceOperationId).toBe(operation.id);
+    expect(createdPlan.data.maintenancePlan.name).toBe(
+      `PMOC · ${customer.tradeName ?? customer.name} · OS-009999`,
+    );
+
+    const duplicate = await authPost(owner, '/api/v1/pmoc').send(payload);
+    expect(duplicate.status).toBe(409);
+    expect(errorCode(duplicate)).toBe(ERROR_CODES.PMOC_SOURCE_OPERATION_CONFLICT);
+    await expect(
+      prisma.pmocPlan.count({ where: { sourceOperationId: operation.id } }),
+    ).resolves.toBe(1);
   });
 
   it('blocks PMOC environment relationship confusion across PMOC scope', async () => {

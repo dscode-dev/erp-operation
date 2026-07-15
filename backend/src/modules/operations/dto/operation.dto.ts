@@ -22,6 +22,10 @@ import {
 } from 'class-validator';
 
 const trim = (value: unknown): unknown => (typeof value === 'string' ? value.trim() : value);
+const trimStringArray = (value: unknown): unknown =>
+  Array.isArray(value)
+    ? (value as unknown[]).map((item) => (typeof item === 'string' ? item.trim() : item))
+    : value;
 
 export class ListOperationsQueryDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) page = 1;
@@ -135,6 +139,13 @@ export class CreateOperationDto {
   @MaxLength(20000)
   technicalOpinionObjective?: string;
   @IsOptional()
+  @Transform(({ value }) => trimStringArray(value))
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsString({ each: true })
+  @MaxLength(500, { each: true })
+  technicalOpinionObjectiveItems?: string[];
+  @IsOptional()
   @Transform(({ value }) => trim(value))
   @IsString()
   @MaxLength(20000)
@@ -149,6 +160,13 @@ export class CreateOperationDto {
   @IsString()
   @MaxLength(20000)
   technicalOpinionConclusion?: string;
+  @IsOptional()
+  @Transform(({ value }) => trimStringArray(value))
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsString({ each: true })
+  @MaxLength(500, { each: true })
+  technicalOpinionConclusionItems?: string[];
   @IsOptional()
   @Transform(({ value }) => trim(value))
   @IsString()
@@ -230,6 +248,13 @@ export class UpdateOperationDto {
   @MaxLength(20000)
   technicalOpinionObjective?: string;
   @IsOptional()
+  @Transform(({ value }) => trimStringArray(value))
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsString({ each: true })
+  @MaxLength(500, { each: true })
+  technicalOpinionObjectiveItems?: string[];
+  @IsOptional()
   @Transform(({ value }) => trim(value))
   @IsString()
   @MaxLength(20000)
@@ -244,6 +269,13 @@ export class UpdateOperationDto {
   @IsString()
   @MaxLength(20000)
   technicalOpinionConclusion?: string;
+  @IsOptional()
+  @Transform(({ value }) => trimStringArray(value))
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsString({ each: true })
+  @MaxLength(500, { each: true })
+  technicalOpinionConclusionItems?: string[];
   @IsOptional()
   @Transform(({ value }) => trim(value))
   @IsString()

@@ -1872,3 +1872,17 @@ mesmo fora do resultado contextual atual.
 - Operator preenche a execução vinculada usando `YES | NO | NOT_APPLICABLE`, fotos e assinatura.
 - A API nunca retorna a imagem coletada; use `signatureCaptured` para o estado visual.
 - Preview/PDF são sempre o tipo `PMOC` no DocumentViewer oficial.
+
+## Laudo Técnico — contrato narrativo
+
+No wizard de `TECHNICAL_OPINION`, mantenha o parecer livre em
+`technicalOpinionObjective`/`technicalOpinionConclusion` e os itens selecionados nos arrays
+`technicalOpinionObjectiveItems`/`technicalOpinionConclusionItems`. Os arrays são snapshots e
+devem ser reenviados ao editar; não reconstrua o texto principal a partir deles.
+
+## PMOC sem plano prévio
+
+Na Central de Relatórios, quando não houver plano ativo, ofereça a seleção de uma OS concluída e
+chame `POST /pmoc` com `sourceOperationId`. O backend retorna o plano já nomeado e com a execução
+inicial. Se houver `409 PMOC_SOURCE_OPERATION_CONFLICT`, recarregue a lista e selecione o plano já
+existente em vez de repetir a criação.

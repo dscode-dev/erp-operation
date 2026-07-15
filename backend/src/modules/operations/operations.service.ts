@@ -200,9 +200,11 @@ export class OperationsService {
           technicalDiagnosis: dto.technicalDiagnosis ?? null,
           technicalRecommendations: dto.technicalRecommendations ?? null,
           technicalOpinionObjective: dto.technicalOpinionObjective ?? null,
+          technicalOpinionObjectiveItems: dto.technicalOpinionObjectiveItems ?? [],
           technicalOpinionConditions: dto.technicalOpinionConditions ?? null,
           technicalOpinionAnalysis: dto.technicalOpinionAnalysis ?? null,
           technicalOpinionConclusion: dto.technicalOpinionConclusion ?? null,
+          technicalOpinionConclusionItems: dto.technicalOpinionConclusionItems ?? [],
           technicalOpinionRecommendations: dto.technicalOpinionRecommendations ?? null,
           technicalOpinionResponsible: dto.technicalOpinionResponsible ?? null,
           technicalOpinionCrea: dto.technicalOpinionCrea ?? null,
@@ -368,6 +370,9 @@ export class OperationsService {
           ...(dto.technicalOpinionObjective !== undefined
             ? { technicalOpinionObjective: dto.technicalOpinionObjective }
             : {}),
+          ...(dto.technicalOpinionObjectiveItems !== undefined
+            ? { technicalOpinionObjectiveItems: dto.technicalOpinionObjectiveItems }
+            : {}),
           ...(dto.technicalOpinionConditions !== undefined
             ? { technicalOpinionConditions: dto.technicalOpinionConditions }
             : {}),
@@ -376,6 +381,9 @@ export class OperationsService {
             : {}),
           ...(dto.technicalOpinionConclusion !== undefined
             ? { technicalOpinionConclusion: dto.technicalOpinionConclusion }
+            : {}),
+          ...(dto.technicalOpinionConclusionItems !== undefined
+            ? { technicalOpinionConclusionItems: dto.technicalOpinionConclusionItems }
             : {}),
           ...(dto.technicalOpinionRecommendations !== undefined
             ? { technicalOpinionRecommendations: dto.technicalOpinionRecommendations }

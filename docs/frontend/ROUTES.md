@@ -479,3 +479,13 @@ modo novo cria uma Operation DRAFT oficial e segue Preview → Render → Downlo
 - `/operator/services/:id`: preenchimento PMOC aparece somente quando a Operation atribuída está
   ligada a uma `MaintenanceExecution` de PMOC.
 - `/documentos`: recebe o documento PMOC oficial após renderização.
+
+## Laudo Técnico
+
+- `/reports`: no workflow `TECHNICAL_OPINION`, Objetivo e Conclusão possuem texto técnico principal
+  e seleção de itens complementares persistidos separadamente.
+
+## PMOC
+
+- `/reports`: o passo Origem lista planos ativos e permite que OWNER/MANAGER criem um plano a
+  partir de uma Ordem de Serviço concluída sem sair do wizard.

@@ -62,6 +62,10 @@ export class ListPmocQueryDto {
 }
 
 export class CreatePmocPlanDto {
+  @IsOptional()
+  @IsUUID('4')
+  sourceOperationId?: string;
+
   @IsUUID('4')
   customerId!: string;
 

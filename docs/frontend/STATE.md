@@ -945,3 +945,16 @@ Status: concluído.
   resultado Sim/Não/N.A., fotos e identificação do cliente signatário.
 - O detalhe da Assignment no Operator reconhece execuções PMOC e permite preenchimento em campo.
 - Preview, Render e Download permanecem no DocumentViewer; não há PDF ou preview local.
+
+## Laudo Técnico — Objetivo e Conclusão (2026-07-15)
+
+- O wizard separa o esclarecimento técnico livre das escolhas predefinidas.
+- O texto livre é obrigatório e principal; escolhas aparecem como lista complementar no documento.
+- Edição de laudos preserva os arrays retornados pela Operation, sem concatená-los ao parecer.
+
+## PMOC — criação pelo wizard (2026-07-15)
+
+- A Central de Relatórios não bloqueia mais quando não há plano PMOC.
+- OWNER/MANAGER selecionam uma OS concluída e criam/selecionam o plano no mesmo passo.
+- Cliente, equipamentos, responsável e número da OS são derivados dos dados oficiais.
+- A execução inicial do plano é reutilizada na emissão para evitar duplicidade.

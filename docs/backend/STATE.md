@@ -2709,3 +2709,21 @@ Status: concluído.
 - O Builder PMOC produz identificação, operação, equipamentos, ambientes, referência legal textual,
   checklist por equipamento, materiais, fotos, observações e assinaturas do template.
 - Migration: `20260715193000_pmoc_document_certification`.
+
+## Laudo Técnico — narrativa principal e itens complementares (2026-07-15)
+
+- Objetivo e Conclusão agora separam o esclarecimento livre do responsável técnico dos itens
+  predefinidos selecionados no catálogo.
+- Novos snapshots em `Operation`: `technicalOpinionObjectiveItems[]` e
+  `technicalOpinionConclusionItems[]`; o Builder não consulta o catálogo durante a emissão.
+- O Blueprint renderiza primeiro o texto técnico principal e depois uma lista complementar.
+- Migration: `20260715213000_technical_opinion_statement_items`.
+
+## PMOC originado por Ordem de Serviço (2026-07-15)
+
+- `PmocPlan.sourceOperationId` registra a OS/Operation de origem com unicidade.
+- `POST /api/v1/pmoc` aceita `sourceOperationId`; o backend valida Operation concluída, cliente e
+  equipamentos e deriva `MaintenancePlan.name` no padrão `PMOC · Cliente · Número da OS`.
+- Uma mesma OS não pode originar dois planos PMOC.
+- O wizard reutiliza a execução inicial planejada do novo plano, evitando ocorrências duplicadas.
+- Migration: `20260715223000_pmoc_source_operation`.

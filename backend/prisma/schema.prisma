@@ -796,9 +796,11 @@ model Operation {
   technicalDiagnosis              String?                             @map("technical_diagnosis") @db.Text
   technicalRecommendations        String?                             @map("technical_recommendations") @db.Text
   technicalOpinionObjective       String?                             @map("technical_opinion_objective") @db.Text
+  technicalOpinionObjectiveItems  String[]                            @default([]) @map("technical_opinion_objective_items")
   technicalOpinionConditions      String?                             @map("technical_opinion_conditions") @db.Text
   technicalOpinionAnalysis        String?                             @map("technical_opinion_analysis") @db.Text
   technicalOpinionConclusion      String?                             @map("technical_opinion_conclusion") @db.Text
+  technicalOpinionConclusionItems String[]                            @default([]) @map("technical_opinion_conclusion_items")
   technicalOpinionRecommendations String?                             @map("technical_opinion_recommendations") @db.Text
   technicalOpinionResponsible     String?                             @map("technical_opinion_responsible") @db.VarChar(180)
   technicalOpinionCrea            String?                             @map("technical_opinion_crea") @db.VarChar(100)
@@ -826,6 +828,7 @@ model Operation {
   budgets                         Budget[]
   maintenanceChecklistItems       OperationMaintenanceChecklistItem[]
   inspectedEquipments             OperationInspectedEquipment[]
+  sourcePmocPlans                 PmocPlan[]                          @relation("PmocSourceOperation")
 
   @@index([customerId, createdAt])
   @@index([equipmentId, createdAt])
@@ -1090,6 +1093,7 @@ model PmocPlan {
   customerId            String              @map("customer_id") @db.Uuid
   equipmentId           String              @map("equipment_id") @db.Uuid
   maintenancePlanId     String              @unique @map("maintenance_plan_id") @db.Uuid
+  sourceOperationId     String?             @unique @map("source_operation_id") @db.Uuid
   responsibleTechnician String              @map("responsible_technician") @db.VarChar(150)
   artNumber             String?             @map("art_number") @db.VarChar(80)
   contractNumber        String?             @map("contract_number") @db.VarChar(80)
@@ -1103,6 +1107,7 @@ model PmocPlan {
   customer              Customer            @relation(fields: [customerId], references: [id], onDelete: Cascade)
   equipment             Equipment           @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
   maintenancePlan       MaintenancePlan     @relation(fields: [maintenancePlanId], references: [id], onDelete: Cascade)
+  sourceOperation       Operation?          @relation("PmocSourceOperation", fields: [sourceOperationId], references: [id], onDelete: SetNull)
   environments          PmocEnvironment[]
   equipments            PmocPlanEquipment[]
 

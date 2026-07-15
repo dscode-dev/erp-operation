@@ -100,13 +100,16 @@ type WorkflowForm = {
   equipmentId: string;
   operatorId: string;
   pmocId: string;
+  pmocSourceOperationId: string;
   objective: string;
+  objectiveItems: string[];
   diagnosis: string;
   siteConditions: string;
   observations: string;
   analysis: string;
   recommendations: string;
   conclusion: string;
+  conclusionItems: string[];
   technicalResponsible: string;
   technicalCrea: string;
   technicalSignatureId: string;
@@ -146,13 +149,16 @@ const emptyForm: WorkflowForm = {
   equipmentId: '',
   operatorId: '',
   pmocId: '',
+  pmocSourceOperationId: '',
   objective: '',
+  objectiveItems: [],
   diagnosis: '',
   siteConditions: '',
   observations: '',
   analysis: '',
   recommendations: '',
   conclusion: '',
+  conclusionItems: [],
   technicalResponsible: '',
   technicalCrea: '',
   technicalSignatureId: '',
@@ -420,6 +426,7 @@ function ReportWorkflowDrawer({
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerDetail | null>(null);
   const [equipments, setEquipments] = useState<EquipmentSummary[]>([]);
   const [busy, setBusy] = useState(false);
+  const [creatingPmoc, setCreatingPmoc] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const customers = useQuery<Paginated<Customer>>(
     (signal) => customersApi.listCustomers({ page: 1, limit: 100, signal }),
@@ -525,9 +532,11 @@ function ReportWorkflowDrawer({
         ...(type === 'TECHNICAL_OPINION'
           ? {
               objective: detail.technicalOpinionObjective ?? '',
+              objectiveItems: detail.technicalOpinionObjectiveItems ?? [],
               siteConditions: detail.technicalOpinionConditions ?? '',
               analysis: detail.technicalOpinionAnalysis ?? '',
               conclusion: detail.technicalOpinionConclusion ?? '',
+              conclusionItems: detail.technicalOpinionConclusionItems ?? [],
               recommendations: detail.technicalOpinionRecommendations ?? '',
               technicalResponsible: detail.technicalOpinionResponsible ?? '',
               technicalCrea: detail.technicalOpinionCrea ?? '',
@@ -564,27 +573,83 @@ function ReportWorkflowDrawer({
     }
   }
 
+  function applyPmocPlan(plan: PmocPlan) {
+    setForm((current) => ({
+      ...current,
+      pmocId: plan.id,
+      customerId: plan.customerId,
+      equipmentId: plan.equipmentId,
+      inspectedEquipments: (plan.equipments?.length
+        ? plan.equipments
+        : [{ equipmentId: plan.equipmentId, equipment: plan.equipment }]
+      ).map((item) => ({
+        equipmentId: item.equipmentId,
+        sector: item.equipment?.name ?? 'Não informado',
+        systemType: '',
+        currentSituation: '',
+      })),
+      objective: `Execução do plano PMOC ${plan.maintenancePlan?.name ?? plan.contractNumber ?? plan.id}`,
+      observations: plan.observations ?? current.observations,
+    }));
+  }
+
   async function selectPmoc(id: string) {
     set('pmocId', id);
-    const plan = pmocs.data?.items.find((item) => item.id === id);
-    if (plan)
-      setForm((current) => ({
-        ...current,
-        pmocId: id,
-        customerId: plan.customerId,
-        equipmentId: plan.equipmentId,
-        inspectedEquipments: (plan.equipments?.length
-          ? plan.equipments
-          : [{ equipmentId: plan.equipmentId, equipment: plan.equipment }]
-        ).map((item) => ({
-          equipmentId: item.equipmentId,
-          sector: item.equipment?.name ?? 'Não informado',
-          systemType: '',
-          currentSituation: '',
-        })),
-        objective: `Execução do plano PMOC ${plan.contractNumber ?? plan.id}`,
-        observations: plan.observations ?? current.observations,
-      }));
+    if (!id) return;
+    try {
+      const plan =
+        pmocs.data?.items.find((item) => item.id === id) ?? (await pmocApi.getPmoc(id));
+      applyPmocPlan(plan);
+    } catch (cause) {
+      setError(message(cause));
+    }
+  }
+
+  async function createPmocFromWorkOrder() {
+    if (!form.pmocSourceOperationId) {
+      setError('Selecione uma Ordem de Serviço concluída.');
+      return;
+    }
+    setCreatingPmoc(true);
+    setError(null);
+    try {
+      const source = await operationApi.getOperation(form.pmocSourceOperationId);
+      if (!source.customer?.id || !source.operator?.name)
+        throw new Error('A Ordem de Serviço não possui cliente e responsável válidos.');
+      const equipmentIds = [
+        ...new Set([
+          ...source.inspectedEquipments.map((item) => item.equipmentId),
+          ...(source.equipment?.id ? [source.equipment.id] : []),
+        ]),
+      ];
+      if (equipmentIds.length === 0)
+        throw new Error('A Ordem de Serviço não possui equipamentos para originar o PMOC.');
+      const start = new Date(source.completedAt ?? source.scheduledFor ?? new Date());
+      const end = new Date(start);
+      end.setUTCFullYear(end.getUTCFullYear() + 1);
+      const osNumber =
+        source.documents.find((document) => document.type === 'WORK_ORDER')?.number ??
+        `OS-${String(source.number).padStart(6, '0')}`;
+      const created = await pmocApi.createPmoc({
+        sourceOperationId: source.id,
+        customerId: source.customer.id,
+        equipmentId: equipmentIds[0],
+        equipmentIds,
+        responsibleTechnician: source.operator.name,
+        startDate: start.toISOString().slice(0, 10),
+        endDate: end.toISOString().slice(0, 10),
+        observations: `Plano PMOC originado da ${osNumber}.`,
+        priority: 'HIGH',
+        recurrenceRule: { frequency: 'MONTHLY', interval: 1 },
+        active: true,
+      });
+      applyPmocPlan(created);
+      pmocs.refetch();
+    } catch (cause) {
+      setError(message(cause));
+    } finally {
+      setCreatingPmoc(false);
+    }
   }
 
   async function createChecklistTemplate(description: string) {
@@ -616,6 +681,10 @@ function ReportWorkflowDrawer({
             throw new Error('Responsável Técnico e CREA/registro profissional são obrigatórios.');
           if (form.inspectedEquipments.length === 0)
             throw new Error('Selecione ao menos um equipamento para o Laudo Técnico.');
+          if (!form.objective.trim() || !form.conclusion.trim())
+            throw new Error(
+              'Informe o esclarecimento principal do técnico para o objetivo e a conclusão.',
+            );
           if (
             form.inspectedEquipments.some(
               (item) =>
@@ -652,15 +721,18 @@ function ReportWorkflowDrawer({
             ...content,
           });
           if (type === 'PMOC') {
-            const pmoc = pmocs.data?.items.find((item) => item.id === form.pmocId);
-            if (!pmoc) throw new Error('Selecione um plano PMOC ativo.');
-            const execution = await maintenanceApi.createMaintenanceExecution(
-              pmoc.maintenancePlanId,
-              {
+            const pmoc =
+              pmocs.data?.items.find((item) => item.id === form.pmocId) ??
+              (await pmocApi.getPmoc(form.pmocId));
+            const plannedExecution = pmoc.maintenancePlan?.executions?.find(
+              (item) => item.status === 'PLANNED' && !item.operationId,
+            );
+            const execution =
+              plannedExecution ??
+              (await maintenanceApi.createMaintenanceExecution(pmoc.maintenancePlanId, {
                 scheduledAt: new Date().toISOString(),
                 notes: 'Emissão iniciada pela Central de Relatórios',
-              },
-            );
+              }));
             await maintenanceApi.updateMaintenanceExecution(execution.id, {
               operationId: detail.id,
               status: 'LINKED',
@@ -704,8 +776,9 @@ function ReportWorkflowDrawer({
           {step < 2 && (
             <button
               type="button"
+              disabled={creatingPmoc || (type === 'PMOC' && step === 0 && !form.pmocId)}
               onClick={() => setStep(step + 1)}
-              className="h-9 rounded-[var(--radius-md)] bg-[var(--color-primary)] px-4 text-sm text-[var(--color-primary-foreground)]"
+              className="h-9 rounded-[var(--radius-md)] bg-[var(--color-primary)] px-4 text-sm text-[var(--color-primary-foreground)] disabled:opacity-50"
             >
               Continuar
             </button>
@@ -767,6 +840,9 @@ function ReportWorkflowDrawer({
           onWorkOrderSource={selectWorkOrderSource}
           onOperation={selectOperation}
           onPmoc={selectPmoc}
+          canCreatePmoc={hasRole('OWNER', 'MANAGER')}
+          creatingPmoc={creatingPmoc}
+          onCreatePmoc={createPmocFromWorkOrder}
         />
       )}
       {step === 1 && (
@@ -809,6 +885,9 @@ function OriginStep({
   onWorkOrderSource,
   onOperation,
   onPmoc,
+  canCreatePmoc,
+  creatingPmoc,
+  onCreatePmoc,
 }: {
   type: DocumentKind;
   form: WorkflowForm;
@@ -823,6 +902,9 @@ function OriginStep({
   onWorkOrderSource: (source: 'EXISTING' | 'NEW') => void;
   onOperation: (id: string) => void;
   onPmoc: (id: string) => void;
+  canCreatePmoc: boolean;
+  creatingPmoc: boolean;
+  onCreatePmoc: () => void;
 }) {
   if (type === 'WORK_ORDER')
     return (
@@ -923,17 +1005,60 @@ function OriginStep({
     <div className="space-y-4">
       <div className="grid gap-4 md:grid-cols-2">
         {type === 'PMOC' && (
-          <Field label="Plano PMOC">
-            <select value={form.pmocId} onChange={(event) => void onPmoc(event.target.value)}>
-              <option value="">Selecione…</option>
-              {pmocs.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.customer?.tradeName ?? item.customer?.name ?? item.id} ·{' '}
-                  {item.contractNumber ?? 'Sem contrato'}
-                </option>
-              ))}
-            </select>
-          </Field>
+          <div className="space-y-3 md:col-span-2">
+            <Field label="Plano PMOC">
+              <select value={form.pmocId} onChange={(event) => void onPmoc(event.target.value)}>
+                <option value="">Selecione…</option>
+                {pmocs.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.maintenancePlan?.name ??
+                      `${item.customer?.tradeName ?? item.customer?.name ?? item.id} · ${item.contractNumber ?? 'PMOC'}`}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            {pmocs.length === 0 && (
+              <p className="rounded-[var(--radius-md)] border border-amber-500/30 bg-amber-500/10 p-3 text-sm">
+                Nenhum plano PMOC ativo foi encontrado. Crie o primeiro a partir de uma Ordem de
+                Serviço concluída.
+              </p>
+            )}
+            {canCreatePmoc && (
+              <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-muted)]/30 p-4">
+                <h3 className="text-sm font-semibold">Criar plano a partir de uma OS</h3>
+                <p className="mt-1 text-caption">
+                  Cliente, equipamentos, responsável e número serão extraídos da Ordem de Serviço.
+                </p>
+                <div className="mt-3 grid gap-2 md:grid-cols-[1fr_auto]">
+                  <select
+                    value={form.pmocSourceOperationId}
+                    onChange={(event) => onSet('pmocSourceOperationId', event.target.value)}
+                    className="h-10 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm"
+                  >
+                    <option value="">Selecione a Ordem de Serviço…</option>
+                    {operations.map((item) => {
+                      const number =
+                        item.documents.find((document) => document.type === 'WORK_ORDER')?.number ??
+                        `OS-${String(item.number).padStart(6, '0')}`;
+                      return (
+                        <option key={item.id} value={item.id}>
+                          {number} · {item.customer?.name ?? 'Cliente não informado'}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  <button
+                    type="button"
+                    disabled={creatingPmoc || !form.pmocSourceOperationId}
+                    onClick={onCreatePmoc}
+                    className="h-10 rounded-[var(--radius-md)] bg-[var(--color-primary)] px-4 text-sm font-medium text-[var(--color-primary-foreground)] disabled:opacity-50"
+                  >
+                    {creatingPmoc ? 'Criando…' : 'Criar e selecionar'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         )}
         <Field label="Cliente">
           <select
@@ -1287,14 +1412,18 @@ function ContentStep({
             areas={contextualAreas}
             workflow="TECHNICAL_OPINION"
             label="Objetivo"
-            values={catalogLines(form.objective)}
-            onChange={(values) => onSet('objective', values.join('\n'))}
+            values={form.objectiveItems}
+            onChange={(values) => onSet('objectiveItems', values)}
           />
           <Area
-            label="Objetivo — edição textual completa"
+            label="Esclarecimento técnico sobre o objetivo"
             value={form.objective}
             onChange={(value) => onSet('objective', value)}
           />
+          <p className="text-xs text-[var(--color-muted-foreground)]">
+            O texto acima será o conteúdo principal; os itens selecionados serão exibidos abaixo em
+            uma lista complementar.
+          </p>
         </section>
         <section className="space-y-2">
           <h3 className="text-sm font-semibold">Condições observadas</h3>
@@ -1340,14 +1469,17 @@ function ContentStep({
             areas={contextualAreas}
             workflow="TECHNICAL_OPINION"
             label="Conclusão"
-            values={catalogLines(form.conclusion)}
-            onChange={(values) => onSet('conclusion', values.join('\n'))}
+            values={form.conclusionItems}
+            onChange={(values) => onSet('conclusionItems', values)}
           />
           <Area
-            label="Conclusão — edição textual completa"
+            label="Conclusão e esclarecimento do responsável técnico"
             value={form.conclusion}
             onChange={(value) => onSet('conclusion', value)}
           />
+          <p className="text-xs text-[var(--color-muted-foreground)]">
+            A conclusão livre é obrigatória e permanece em destaque antes dos itens predefinidos.
+          </p>
         </section>
       </div>
     );
@@ -1854,9 +1986,11 @@ function contentFor(type: DocumentKind, form: WorkflowForm) {
       checklist: [],
       photos: [],
       technicalOpinionObjective: form.objective,
+      technicalOpinionObjectiveItems: form.objectiveItems,
       technicalOpinionConditions: form.siteConditions,
       technicalOpinionAnalysis: form.analysis,
       technicalOpinionConclusion: form.conclusion,
+      technicalOpinionConclusionItems: form.conclusionItems,
       technicalOpinionRecommendations: form.recommendations,
       technicalOpinionResponsible: form.technicalResponsible,
       technicalOpinionCrea: form.technicalCrea,

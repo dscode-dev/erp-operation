@@ -2287,3 +2287,23 @@ tipo `PMOC`.
 
 Estados de UX: `EM PREENCHIMENTO` antes da conclusão; `NÃO ASSINADO` após conclusão sem coleta;
 `ASSINADO` quando `signatureCaptured=true`.
+
+## Laudo Técnico — composição de Objetivo e Conclusão
+
+- Use `technicalOpinionObjective` e `technicalOpinionConclusion` para o texto livre principal do
+  responsável técnico.
+- Envie as escolhas do catálogo separadamente em `technicalOpinionObjectiveItems[]` e
+  `technicalOpinionConclusionItems[]`.
+- Não concatene seleções e texto livre. Preview e PDF exibem o parágrafo primeiro e a lista depois.
+- Ao editar uma Operation antiga, as coleções podem estar vazias; preserve o texto existente.
+
+## Criar PMOC a partir de uma OS
+
+1. Liste Operations concluídas e identifique o documento `WORK_ORDER` em `documents[]`.
+2. Obtenha o detalhe da Operation para extrair cliente, operador e `inspectedEquipments[]`.
+3. Envie `POST /pmoc` com `sourceOperationId` e os campos derivados.
+4. Use o `PmocPlan` retornado imediatamente; não aguarde a atualização da listagem.
+5. Ao iniciar a emissão, reutilize uma execução `PLANNED` sem `operationId`; crie outra somente se
+   nenhuma estiver disponível.
+
+Somente OWNER e MANAGER visualizam a ação de criação. O backend continua sendo a autoridade.

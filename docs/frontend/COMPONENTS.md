@@ -647,3 +647,15 @@ Tipos:
   equipamento, fotos, identificação e assinatura do cliente; persiste pela Operation oficial.
 - `InspectedEquipmentSelector`, `MultiSelect`, `PhotoInput`, `SignaturePad` e `DocumentViewer`
   foram reutilizados, sem componentes paralelos de documento.
+
+### Laudo Técnico — seleção + narrativa
+
+- `TechnicalCatalogSelector` mantém Objetivos e Conclusões predefinidos em arrays próprios.
+- `Area` recebe o esclarecimento autoral do técnico e explica visualmente que a lista é
+  complementar. Nenhum componente novo de preview foi criado.
+
+### Criador de PMOC no `OriginStep`
+
+- Reutiliza os selects, estados de erro e botões do wizard.
+- Exibe estado vazio quando não há plano e permite `Criar e selecionar` a partir de uma OS.
+- Não cria modal, agenda, preview ou componente documental paralelo.

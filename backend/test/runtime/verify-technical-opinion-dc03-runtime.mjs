@@ -116,12 +116,20 @@ const created = await request('/operations', {
     inspectedEquipments,
     technicalOpinionObjective:
       'Avaliar as condições dos sistemas de climatização afetados por dano térmico e determinar a viabilidade técnica de recuperação.',
+    technicalOpinionObjectiveItems: [
+      'Verificar a integridade dos componentes elétricos',
+      'Determinar a viabilidade técnica de recuperação',
+    ],
     technicalOpinionConditions:
       '- Carcaças metálicas com deformação térmica severa\n- Componentes elétricos e eletrônicos carbonizados\n- Linhas frigorígenas e interligações comprometidas\n- Unidades internas com resíduos de fuligem',
     technicalOpinionAnalysis:
       'As evidências visuais e o grau de dano térmico demonstram comprometimento dos componentes elétricos, mecânicos e do isolamento dielétrico.\n\nA recuperação das unidades afetadas não oferece segurança operacional nem viabilidade econômica, sendo tecnicamente inadequado o reaproveitamento.',
     technicalOpinionConclusion:
       'Conclui-se pela substituição integral dos equipamentos afetados. Recomenda-se remoção e descarte ambientalmente adequado, seguidos de novo dimensionamento e instalação conforme as normas técnicas aplicáveis.',
+    technicalOpinionConclusionItems: [
+      'Equipamentos sem condição segura de operação',
+      'Substituição integral tecnicamente recomendada',
+    ],
     technicalOpinionRecommendations:
       '- Substituição preventiva\n- Monitoramento periódico\n- Revisão completa',
     technicalOpinionResponsible: institutional.name,
@@ -148,6 +156,14 @@ const expectedSections = [
 const sectionIds = preview.sections.map((section) => section.id);
 if (JSON.stringify(sectionIds) !== JSON.stringify(expectedSections)) {
   throw new Error(`Unexpected TECHNICAL_OPINION sections: ${JSON.stringify(sectionIds)}.`);
+}
+for (const sectionId of ['technical-opinion-objective', 'technical-opinion-conclusion']) {
+  const componentKinds =
+    preview.sections.find((section) => section.id === sectionId)?.components.map((item) => item.kind) ??
+    [];
+  if (JSON.stringify(componentKinds) !== JSON.stringify(['paragraph', 'list'])) {
+    throw new Error(`${sectionId} must render the authored paragraph before complementary items.`);
+  }
 }
 for (const forbidden of [
   'materials-consumed',

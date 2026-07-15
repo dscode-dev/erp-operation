@@ -1863,3 +1863,22 @@ The catalog is scoped to the installation Organization in every query. Reads req
 - Respostas de Operation não expõem assinatura base64; storage keys não entram em auditoria.
 - Checklist, fotos e assinatura integram o fingerprint; mudança posterior torna o render stale.
 - A Lei nº 13.589/2018 é somente referência textual, sem inferência de conformidade jurídica.
+
+## Laudo Técnico — snapshots de catálogo
+
+- Itens de Objetivo e Conclusão passam pela validação global, com limite de 50 itens e 500
+  caracteres por item.
+- O texto livre mantém limite de 20.000 caracteres e é tratado pelo Renderer como texto, nunca HTML.
+- O Builder usa apenas snapshots validados da Operation; não realiza consulta ao catálogo durante
+  Preview/PDF e não expõe identificadores internos adicionais.
+
+## PMOC originado por OS
+
+- Criação permanece restrita a OWNER/MANAGER.
+- A OS deve existir, estar concluída e pertencer ao mesmo cliente.
+- Todos os equipamentos enviados devem constar como principal ou inspecionados na OS e pertencer
+  ao cliente.
+- `sourceOperationId` é único no banco; precheck e tratamento de `P2002` protegem contra criação
+  concorrente duplicada.
+- Auditoria e Lifecycle registram a referência da Operation de origem sem armazenar documentos ou
+  dados binários duplicados.
