@@ -38,26 +38,26 @@ const MODE_COPY: Record<Mode, { eyebrow: string; title: string; description: str
   operation: {
     eyebrow: "Operação",
     title: "Nova operação",
-    description: "Cria uma Operation real no backend. A OS rascunho nasce automaticamente.",
+    description: "Cadastre um novo atendimento operacional. A Ordem de Serviço será preparada automaticamente.",
     success: "Operação criada com sucesso.",
   },
   schedule: {
     eyebrow: "Agenda",
     title: "Novo agendamento",
-    description: "Não existe domínio dedicado de Agenda; este fluxo cria uma Operation agendada real.",
-    success: "Agendamento registrado como Operation.",
+    description: "Programe um atendimento e defina o operador responsável.",
+    success: "Agendamento registrado com sucesso.",
   },
   service: {
     eyebrow: "Serviços",
     title: "Novo serviço",
-    description: "Serviços são uma visão operacional de Operations. Nenhum Service paralelo é criado.",
-    success: "Serviço criado como Operation.",
+    description: "Cadastre o serviço com cliente, escopo e responsável.",
+    success: "Serviço criado com sucesso.",
   },
   "work-order": {
     eyebrow: "Ordem de Serviço",
     title: "Nova OS",
-    description: "Toda OS nasce de uma Operation; o backend gera o documento rascunho automaticamente.",
-    success: "Operation criada e OS rascunho gerada.",
+    description: "Preencha os dados necessários para criar e gerenciar a Ordem de Serviço.",
+    success: "Ordem de Serviço preparada com sucesso.",
   },
 };
 
@@ -205,14 +205,14 @@ export function OperationCreationDrawer({
         )}
         {operatorId && (
           <div className="rounded-[var(--radius-md)] border border-[var(--color-info)]/30 bg-[var(--color-info)]/10 px-3 py-2 text-sm text-[var(--color-info)]">
-            O backend criará a Assignment para o operador selecionado e manterá a trilha de auditoria.
+            O atendimento será encaminhado ao operador selecionado e todo o histórico será preservado.
           </div>
         )}
         {error && <div className="rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 px-3 py-2 text-sm text-[var(--color-danger)]">{error}</div>}
         {created ? (
           <div className="rounded-[var(--radius-lg)] border border-[var(--color-success)]/30 bg-[var(--color-success)]/10 p-5 text-[var(--color-success)]">
             <div className="flex items-center gap-2 font-semibold"><Check className="h-5 w-5" /> {copy.success}</div>
-            <p className="mt-2 text-sm">Número da Operation: #{String(created.number).padStart(6, "0")}. A OS rascunho fica disponível nos documentos da operação.</p>
+            <p className="mt-2 text-sm">Atendimento #{String(created.number).padStart(6, "0")}. A Ordem de Serviço fica disponível na área de documentos.</p>
           </div>
         ) : (
           <>
@@ -226,7 +226,7 @@ export function OperationCreationDrawer({
             {step === 1 && (
               <div className="space-y-3">
                 <EquipmentSelect customerId={customerId} value={equipmentId} onChange={setEquipmentId} />
-                <p className="text-caption">Equipamento é opcional, mas recomendado para timeline, lifecycle e documentos.</p>
+                <p className="text-caption">Vincular o equipamento mantém o histórico técnico e os documentos do atendimento organizados.</p>
               </div>
             )}
             {step === 2 && (

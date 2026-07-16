@@ -265,7 +265,7 @@ export default function ReportCenterPage() {
         <PageHeader
           eyebrow="Gestão"
           title="Central de Relatórios"
-          description="Emissão oficial de documentos pelo Document Engine. Modelos são administrados separadamente em Cadastros."
+          description="Emita e acompanhe os documentos oficiais. Os modelos são administrados separadamente em Cadastros."
         />
 
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -1047,7 +1047,7 @@ function ReportWorkflowDrawer({
       initialValues={pmocWorkOrderPrefill ?? undefined}
       submitOperation={submitPmocWorkOrder}
       submitLabel="Confirmar e gerar OS"
-      contextNotice="Dados preenchidos a partir do PMOC e da Execution Request. Revise e confirme; a OS será criada pelo workflow oficial de Operations."
+      contextNotice="Dados preenchidos a partir do PMOC e da execução programada. Revise e confirme; a Ordem de Serviço ficará disponível para gerenciamento normalmente."
       onClose={() => setPmocWorkOrderOpen(false)}
     />
     </>
@@ -1297,8 +1297,8 @@ function OriginStep({
                       )
                     }
                   >
-                    <option value="MANUAL">Manual — revisão no wizard</option>
-                    <option value="AUTO">Automática — Scheduler</option>
+                    <option value="MANUAL">Manual — revisar antes de gerar</option>
+                    <option value="AUTO">Automática — conforme programação</option>
                     <option value="PAUSED">Pausada</option>
                   </select>
                 </Field>

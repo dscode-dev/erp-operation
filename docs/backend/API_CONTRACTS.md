@@ -1,5 +1,35 @@
 # API Contracts
 
+## PMOC UX-02 — nome e escopo estruturado
+
+### `GET /api/v1/pmoc/name-suggestion?customerId=:uuid`
+
+Roles: `OWNER`, `MANAGER`.
+
+```json
+{
+  "success": true,
+  "data": {
+    "name": "PMOC · Hospital Santa Maria · PMOC-000018",
+    "provisionalNumber": 18
+  }
+}
+```
+
+O número é uma indicação de UX. Sem personalização, `POST /pmoc` deve omitir `name`; o backend
+grava o nome definitivo após o autoincremento transacional.
+
+### `POST /api/v1/pmoc` e `PATCH /api/v1/pmoc/:id`
+
+Campo aditivo: `scopeCatalogIds: string[]` (1 a 50 UUIDs únicos). Todos devem ser `PLAN_SCOPE`,
+ativos, não removidos e da organização. A resposta adiciona `scopes[].technicalCatalog` e mantém
+`coverage` como snapshot. Item inválido retorna `400 TECHNICAL_CATALOG_NOT_FOUND`.
+
+### `PATCH /api/v1/pmoc/execution-requests/:id/reschedule`
+
+Contrato preservado. Altera somente a request informada e sua `MaintenanceExecution`; mantém
+`executionNumber`, periodicidade e demais execuções.
+
 ## PMOC Foundation — Bloco 3
 
 ### Dashboard e calendário
@@ -5190,3 +5220,28 @@ Response `201`: `PmocPlan` completo, incluindo `number` e `maintenancePlan.name`
 `sourceOperationId` não pertence ao contrato. A futura OS é uma Operation oficial vinculada por
 `MaintenanceExecution.operationId`. Atualização e remoção lógica continuam em `PATCH /pmoc/:id` e
 `DELETE /pmoc/:id`.
+
+## PMOC UX-01 — cobertura e tipos de serviço
+
+- `POST /api/v1/pmoc` e `PATCH /api/v1/pmoc/:id` aceitam `equipmentIds: UUID[]` (1–50, únicos) e
+  `serviceTypes: OperationType[]` (até 4, únicos).
+- `POST /api/v1/operations` e `PATCH /api/v1/operations/:id` aceitam `serviceTypes`.
+- Valores oficiais: `PREVENTIVA`, `CORRETIVA`, `INSTALACAO`, `PROJETO`.
+- O primeiro tipo é o principal; omissão mantém o contrato singular anterior.
+
+```json
+{
+  "customerId": "uuid",
+  "equipmentId": "uuid-principal",
+  "equipmentIds": ["uuid-principal", "uuid-secundario"],
+  "defaultOperationType": "PREVENTIVA",
+  "serviceTypes": ["PREVENTIVA", "CORRETIVA"],
+  "signatureOverrideId": "uuid-assinatura-opcional"
+}
+```
+
+O prefill e a OS gerada retornam `serviceTypes[]` e `inspectedEquipments[]` completos. Equipamento
+inativo, removido ou de outro cliente retorna `400 PMOC_INVALID_RELATIONSHIP`.
+
+O override não altera o Template. Em Preview/Render PMOC, substitui as assinaturas institucionais
+somente em `FIXED`/`HYBRID`; não é renderizado em `NONE`/`COLLECTED`.

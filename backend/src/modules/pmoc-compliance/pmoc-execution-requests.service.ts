@@ -1034,6 +1034,7 @@ export class PmocExecutionRequestsService {
       equipmentId: plan.equipmentId,
       operatorId,
       type: plan.defaultOperationType,
+      serviceTypes: plan.serviceTypes.length ? plan.serviceTypes : [plan.defaultOperationType],
       status: reviewed?.status ?? OperationStatus.DRAFT,
       scheduledFor: scheduledFor.toISOString(),
       checklist:

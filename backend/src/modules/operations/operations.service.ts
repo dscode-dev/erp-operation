@@ -1,5 +1,5 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import { DocumentTemplateType, Prisma, Role } from '@prisma/client';
+import { DocumentTemplateType, OperationType, Prisma, Role } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import {
   STORAGE_PROVIDER_TOKEN,
@@ -74,6 +74,7 @@ const OPERATION_INCLUDE = {
               number: true,
               periodicity: true,
               generationMode: true,
+              serviceTypes: true,
               responsibleTechnician: true,
               contractNumber: true,
               artNumber: true,
@@ -211,6 +212,7 @@ export class OperationsService {
           equipmentId: dto.equipmentId ?? null,
           operatorId: assignment.operatorId,
           type: dto.type,
+          serviceTypes: this.operationTypes(dto.type, dto.serviceTypes),
           status: dto.status ?? 'DRAFT',
           scheduledFor: dto.scheduledFor ? new Date(dto.scheduledFor) : null,
           startedAt: dto.startedAt ? new Date(dto.startedAt) : null,
@@ -342,7 +344,15 @@ export class OperationsService {
   ): Promise<unknown> {
     const existing = await this.prisma.operation.findUnique({
       where: { id },
-      select: { id: true, customerId: true, operatorId: true, referenceMonth: true, referenceYear: true },
+      select: {
+        id: true,
+        customerId: true,
+        operatorId: true,
+        type: true,
+        serviceTypes: true,
+        referenceMonth: true,
+        referenceYear: true,
+      },
     });
     if (!existing)
       throw new ApplicationException(
@@ -376,6 +386,9 @@ export class OperationsService {
         where: { id },
         data: {
           ...(dto.status ? { status: dto.status } : {}),
+          ...(dto.serviceTypes !== undefined
+            ? { serviceTypes: this.operationTypes(existing.type, dto.serviceTypes) }
+            : {}),
           ...(dto.startedAt ? { startedAt: new Date(dto.startedAt) } : {}),
           ...(dto.completedAt ? { completedAt: new Date(dto.completedAt) } : {}),
           ...(dto.checklist ? { checklist: this.normalizeChecklist(dto.checklist) } : {}),
@@ -515,6 +528,10 @@ export class OperationsService {
       done: item.done,
       note: item.note ?? null,
     }));
+  }
+
+  private operationTypes(primary: OperationType, values?: OperationType[]): OperationType[] {
+    return [...new Set([primary, ...(values ?? [])])];
   }
 
   private validateReferencePeriod(month?: number, year?: number): void {

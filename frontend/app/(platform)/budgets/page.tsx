@@ -139,7 +139,7 @@ export default function BudgetsPage() {
       <PageHeader
         eyebrow="Comercial"
         title="Central de Orçamentos"
-        description="Orçamentos comerciais reais, com snapshots de preço gerados pelo backend."
+        description="Orçamentos comerciais com preços preservados no momento da criação."
         actions={
           <Gate roles={["OWNER", "MANAGER"]}>
             <button onClick={() => setCreateOpen(true)} className={primaryBtn}>
@@ -337,7 +337,7 @@ function BudgetSummary({ budget }: { budget: Budget }) {
 }
 
 function BudgetItems({ budget }: { budget: Budget }) {
-  if (budget.items.length === 0) return <EmptyState icon={ShoppingCart} title="Sem itens" description="O backend não retornou itens para este orçamento." />;
+  if (budget.items.length === 0) return <EmptyState icon={ShoppingCart} title="Sem itens" description="Este orçamento não possui itens cadastrados." />;
   return (
     <div className="overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)]">
       <table className="w-full text-sm">
@@ -371,7 +371,7 @@ function BudgetHistory({ budgetId }: { budgetId: string }) {
   if (history.loading && !history.data) return <SkeletonList rows={5} />;
   if (history.error && !history.data) return <ErrorState error={history.error} onRetry={history.refetch} />;
   const items = history.data?.items ?? [];
-  if (items.length === 0) return <EmptyState icon={History} title="Sem histórico" description="Nenhum evento retornado pelo backend." />;
+  if (items.length === 0) return <EmptyState icon={History} title="Sem histórico" description="Nenhuma atualização foi registrada para este orçamento." />;
   return (
     <ol className="space-y-3">
       {items.map((item) => <BudgetHistoryRow key={item.id} item={item} />)}

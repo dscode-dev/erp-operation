@@ -1,5 +1,15 @@
 # ARCHITECTURE — Frontend
 
+## PMOC UX-02
+
+- O browser não persiste agenda nem títulos de escopo: envia IDs de catálogo e solicita
+  reagendamento de uma Execution Request oficial.
+- A sugestão de nome é auxiliar; quando não editada, o frontend omite `name` e delega ao backend o
+  número definitivo, evitando divergência concorrente.
+- O Wizard apenas orquestra APIs existentes. A cadeia permanece `PmocPlan → ExecutionRequest →
+  Operation → Assignment → MaintenanceExecution → Document Engine`.
+- Política de assinatura continua vindo de `DocumentConfiguration`; nenhum modo é decidido no UI.
+
 ## PMOC Foundation — Bloco 3
 
 ```text
@@ -976,3 +986,16 @@ DocumentContext e compõe parágrafo + lista no único Blueprint usado por Previ
 `PmocPlan numerado → MaintenancePlan → MaintenanceExecution → Operation oficial → WORK_ORDER →
 Document Engine`. A criação/gestão do plano usa `pmocApi`; a OS usa `operationApi` e permanece uma
 Operation normal. Não existe fluxo documental, agenda ou entidade de OS paralela.
+
+## PMOC UX-01
+
+```text
+PmocPlan(equipmentIds, serviceTypes, signatureOverrideId)
+  → ExecutionRequest → Operation(inspectedEquipments, serviceTypes)
+  → Assignment → MaintenanceExecution
+  → DocumentContext(template policy + PMOC override)
+  → Blueprint único → Preview/PDF
+```
+
+O frontend apresenta; o backend valida e propaga. O `DocumentContext` é a única camada que resolve
+assinaturas e o Operator consulta a configuração oficial para decidir a UX de coleta.

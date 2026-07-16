@@ -1,5 +1,17 @@
 # STATE — Frontend
 
+## PMOC UX-02 — Wizard profissional
+
+- Wizard reorganizado em Identificação, Cobertura, Planejamento, Execução, Documento e Confirmação.
+- Nome sugerido acompanha o cliente somente até a primeira edição manual; depois não é sobrescrito.
+- Escopos são MultiSelect pesquisável alimentado por `PLAN_SCOPE`, com acesso ao CRUD oficial e
+  atualização imediata da lista. Equipamentos e tipos de serviço continuam múltiplos.
+- Planejamento mostra projeção das próximas datas; o detalhe permite editar cada request pendente
+  preservando número, histórico e demais ocorrências.
+- Resumo final permite voltar diretamente a qualquer seção e evidencia campos obrigatórios,
+  opcionais, somente leitura e a política documental em linguagem de negócio.
+- Runtime real confirmou criação, edição, OS, Assignment, Preview, PDF e repositório documental.
+
 ## PMOC Foundation — Bloco 3
 
 - Dashboard PMOC possui oito indicadores reais, calendário mensal de Execution Requests e listas
@@ -1004,3 +1016,12 @@ Status: concluído.
 - O PMOC recebe número próprio; nenhuma OS é usada como origem.
 - Ao continuar a emissão, uma Operation/OS oficial é criada e vinculada à execução planejada do
   PMOC, permanecendo disponível nos fluxos operacionais normais.
+
+## PMOC UX-01 — 2026-07-16
+
+- O wizard usa `MultiSelect` para equipamentos ativos do cliente e múltiplos `OperationType`.
+- A etapa de assinatura segue o Template: `NONE`, `FIXED`, `COLLECTED` ou `HYBRID`.
+- A assinatura institucional é somente leitura; “Alterar assinatura somente deste PMOC” persiste
+  `signatureOverrideId` sem modificar o Template.
+- O Operator consulta a mesma política e não exibe coleta em `NONE`/`FIXED`.
+- Platform, Agenda, Relatórios e Operator usam mensagens orientadas ao negócio.

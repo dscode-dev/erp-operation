@@ -130,7 +130,7 @@ export default function AgendaPage() {
         </select>
         <span className="ml-auto text-caption inline-flex items-center gap-2">
           {assignments.loading && <span className="h-3 w-3 rounded-full border-2 border-[var(--color-primary)] border-t-transparent animate-spin" />}
-          {!assignments.loading && `${totalEvents} assignment(s)`}
+          {!assignments.loading && `${totalEvents} atendimento(s)`}
         </span>
       </div>
 
@@ -203,7 +203,7 @@ export default function AgendaPage() {
       )}
 
       {/* Event drawer */}
-      <Drawer open={selected !== null} onClose={() => setSelected(null)} eyebrow="Assignment" title={selected ? `OP-${String(selected.operation.number).padStart(6, "0")}` : ""} width="max-w-md">
+      <Drawer open={selected !== null} onClose={() => setSelected(null)} eyebrow="Atendimento" title={selected ? `OP-${String(selected.operation.number).padStart(6, "0")}` : ""} width="max-w-md">
         {selected && (
           <div className="space-y-4">
             <StatusPill status={ASSIGNMENT_STATUS_PILL[selected.status]} label={ASSIGNMENT_STATUS_LABEL[selected.status]} />

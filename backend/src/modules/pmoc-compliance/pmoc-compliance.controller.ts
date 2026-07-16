@@ -24,6 +24,7 @@ import {
   GeneratePmocWorkOrderDto,
   ListPmocExecutionRequestsQueryDto,
   ListPmocQueryDto,
+  PmocNameSuggestionQueryDto,
   PmocDashboardQueryDto,
   ReschedulePmocExecutionRequestDto,
   RunPmocSchedulerQueryDto,
@@ -52,6 +53,14 @@ export class PmocComplianceController {
   @Get('pmoc')
   list(@Query() query: ListPmocQueryDto): Promise<unknown> {
     return this.pmoc.list(query);
+  }
+
+  @Roles(Role.OWNER, Role.MANAGER)
+  @Get('pmoc/name-suggestion')
+  nameSuggestion(
+    @Query() query: PmocNameSuggestionQueryDto,
+  ): Promise<{ name: string; provisionalNumber: number }> {
+    return this.pmoc.nameSuggestion(query.customerId);
   }
 
   @Roles(Role.OWNER, Role.MANAGER)

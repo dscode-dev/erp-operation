@@ -11,12 +11,14 @@ import { StatusPill } from "@erp/ui/status-pill";
 import { DocumentViewer } from "@erp/ui/documents/document-viewer";
 import { SignaturePad } from "@erp/ui/documents/signature-pad";
 import { PhotoInput, type CapturedPhoto } from "@erp/ui/photo-input";
-import { assignmentsApi, inventoryApi, operationApi, useQuery, type Assignment, type InventoryItem, type OperationDetail, type OperationDocument, type OperationPart, type Product } from "@erp/api";
+import { assignmentsApi, documentsApi, inventoryApi, operationApi, useQuery, type Assignment, type InventoryItem, type OperationDetail, type OperationDocument, type OperationPart, type Product } from "@erp/api";
+import type { DocumentConfiguration, SignatureMode } from "@erp/types";
 import {
   ASSIGNMENT_STATUS_LABEL,
   ASSIGNMENT_STATUS_PILL,
   assignmentTime,
 } from "@erp/ui/assignments/assignment-shared";
+import { serviceTypeLabel } from "@operator/lib/service-types";
 
 const workflow = [
   { label: "Aceitar", icon: CheckCircle2 },
@@ -49,12 +51,12 @@ export default function OperatorServiceDetail() {
     try {
       if (action === "accept") await assignmentsApi.acceptAssignment(assignment.data.id);
       if (action === "start") await assignmentsApi.startAssignment(assignment.data.id);
-      if (action === "complete") await assignmentsApi.completeAssignment(assignment.data.id, "Concluído pelo Operator PWA");
+      if (action === "complete") await assignmentsApi.completeAssignment(assignment.data.id, "Concluído pelo operador em campo");
       if (action === "reject") await assignmentsApi.rejectAssignment(assignment.data.id, "Recusado pelo operador");
       assignment.refetch();
       history.refetch();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Não foi possível atualizar a Assignment.");
+      setError(err instanceof Error ? err.message : "Não foi possível atualizar o atendimento.");
     } finally {
       setBusy(null);
     }
@@ -71,7 +73,7 @@ export default function OperatorServiceDetail() {
       ) : assignment.error && !assignment.data ? (
         <ErrorState error={assignment.error} onRetry={assignment.refetch} />
       ) : !assignment.data ? (
-        <EmptyState icon={ClipboardCheck} title="Assignment não encontrada" description="A ordem não está mais disponível." />
+        <EmptyState icon={ClipboardCheck} title="Ordem não encontrada" description="A ordem não está mais disponível." />
       ) : (
         <AssignmentWorkflow
           assignment={assignment.data}
@@ -116,11 +118,20 @@ function AssignmentWorkflow({
   const op = assignment.operation;
   const operation = useQuery((signal) => operationApi.getOperation(op.id, { signal }), [op.id]);
   const [document, setDocument] = useState<OperationDocument | null>(null);
+  const isPmoc = Boolean(op.maintenanceExecution?.plan.pmocPlan);
+  const pmocConfiguration = useQuery<DocumentConfiguration | null>(
+    (signal) => isPmoc ? documentsApi.getConfigurationByType("PMOC", { signal }) : Promise.resolve(null),
+    [isPmoc],
+  );
   const address = op.address
     ? `${op.address.street ?? ""}${op.address.number ? `, ${op.address.number}` : ""} · ${op.address.city ?? "cidade não informada"}/${op.address.state ?? "UF"}`
     : "Endereço não informado";
   const pmoc = op.maintenanceExecution?.plan.pmocPlan;
   const pmocExecution = op.maintenanceExecution?.pmocExecutionRequest;
+  const pmocSignatureMode = pmocConfiguration.data?.defaultTemplate?.signatureMode ?? "NONE";
+  const visibleWorkflow = isPmoc && (pmocSignatureMode === "NONE" || pmocSignatureMode === "FIXED")
+    ? workflow.filter((item) => item.label !== "Assinatura")
+    : workflow;
   return (
     <>
       <header className="space-y-3">
@@ -139,8 +150,8 @@ function AssignmentWorkflow({
 
       <section className="rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 space-y-3">
         <InfoRow icon={MapPin} label="Endereço" value={address} />
-        <InfoRow icon={Package} label="Equipamento" value={op.equipment?.name ?? "Sem equipamento vinculado"} />
-        <InfoRow icon={ClipboardCheck} label="Tipo / status da Operation" value={`${op.type} · ${op.status}`} />
+        <InfoRow icon={Package} label="Equipamentos" value={operation.data?.inspectedEquipments.map((item) => item.equipment?.name).filter(Boolean).join(", ") || pmoc?.equipments.map((item) => item.equipment.name).join(", ") || op.equipment?.name || "Sem equipamento vinculado"} />
+        <InfoRow icon={ClipboardCheck} label="Tipos de serviço" value={(op.serviceTypes?.length ? op.serviceTypes : [op.type]).map(serviceTypeLabel).join(" · ")} />
         <InfoRow icon={Clock} label="Data do agendamento" value={op.scheduledFor ? assignmentTime(op.scheduledFor) : "Não agendado"} />
       </section>
 
@@ -150,11 +161,13 @@ function AssignmentWorkflow({
             <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-primary)]">Plano PMOC</p>
             <h2 className="mt-1 font-semibold">PMOC-{String(pmoc.number).padStart(6, "0")} · Execução {String(pmocExecution?.executionNumber ?? 0).padStart(3, "0")}</h2>
           </div>
-          <InfoRow icon={CalendarClock} label="Periodicidade" value={pmoc.periodicity} />
+          <InfoRow icon={CalendarClock} label="Periodicidade" value={periodicityLabel(pmoc.periodicity)} />
           <InfoRow icon={ClipboardCheck} label="Responsável técnico" value={pmoc.responsibleTechnician} />
           <InfoRow icon={Package} label="Equipamentos cobertos" value={pmoc.equipments.map((item) => item.equipment.name).join(", ") || "Equipamento principal"} />
-          <InfoRow icon={PenLine} label="Assinatura do cliente" value={operation.data?.signatureCaptured ? "Coletada" : "Pendente para esta execução"} />
-          <InfoRow icon={FileText} label="Documento PMOC" value={op.documents.some((item) => item.type === "PMOC") ? "Disponível na seção Documentos" : "Será emitido pelo Document Engine após o preenchimento"} />
+          {pmocSignatureMode === "COLLECTED" || pmocSignatureMode === "HYBRID" ? (
+            <InfoRow icon={PenLine} label="Assinatura do cliente" value={operation.data?.signatureCaptured ? "Coletada" : "Pendente para esta execução"} />
+          ) : null}
+          <InfoRow icon={FileText} label="Documento PMOC" value={op.documents.some((item) => item.type === "PMOC") ? "Disponível na seção Documentos" : "Será emitido após o preenchimento"} />
         </section>
       )}
 
@@ -172,10 +185,10 @@ function AssignmentWorkflow({
       </section>
 
       <section className="space-y-2">
-        <h2 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)]">Checklist da Operation</h2>
+        <h2 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)]">Checklist do atendimento</h2>
         <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
           {op.checklist.length === 0 ? (
-            <p className="text-sm text-[var(--color-muted-foreground)]">Nenhum checklist definido para esta Operation.</p>
+            <p className="text-sm text-[var(--color-muted-foreground)]">Nenhum checklist definido para este atendimento.</p>
           ) : (
             <ul className="space-y-2">
               {op.checklist.map((item, index) => (
@@ -195,7 +208,7 @@ function AssignmentWorkflow({
       </section>
 
       {operation.data?.maintenanceExecution?.plan.pmocPlan && (
-        <PmocFieldExecution operation={operation.data} onSaved={operation.refetch} />
+        <PmocFieldExecution operation={operation.data} signatureMode={pmocSignatureMode} configurationLoading={pmocConfiguration.loading} onSaved={operation.refetch} />
       )}
 
       <section className="space-y-2">
@@ -229,10 +242,10 @@ function AssignmentWorkflow({
       </section>
 
       <section className="space-y-2">
-        <h2 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)]">Documentos da Operation</h2>
+        <h2 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)]">Documentos do atendimento</h2>
         <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
           {op.documents.length === 0 ? (
-            <p className="text-sm text-[var(--color-muted-foreground)]">Nenhum documento disponível para esta Operation.</p>
+            <p className="text-sm text-[var(--color-muted-foreground)]">Nenhum documento disponível para este atendimento.</p>
           ) : (
             <div className="grid gap-2">
               {op.documents.map((doc) => (
@@ -252,7 +265,7 @@ function AssignmentWorkflow({
       <section className="space-y-2">
         <h2 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)]">Recursos de campo</h2>
         <div className="grid grid-cols-2 gap-2">
-          {workflow.map(({ label, icon: Icon }) => (
+          {visibleWorkflow.map(({ label, icon: Icon }) => (
             <div key={label} className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-3">
               <Icon className="mb-2 h-5 w-5 text-[var(--color-primary)]" />
               <div className="text-sm font-medium">{label}</div>
@@ -265,7 +278,7 @@ function AssignmentWorkflow({
       </section>
 
       <section className="space-y-2">
-        <h2 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)]">Timeline da Assignment</h2>
+        <h2 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)]">Histórico do atendimento</h2>
         <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
           {historyLoading && history.length === 0 ? (
             <SkeletonList rows={3} />
@@ -308,7 +321,7 @@ function AssignmentWorkflow({
   );
 }
 
-function PmocFieldExecution({ operation, onSaved }: { operation: OperationDetail; onSaved: () => void }) {
+function PmocFieldExecution({ operation, signatureMode, configurationLoading, onSaved }: { operation: OperationDetail; signatureMode: SignatureMode; configurationLoading: boolean; onSaved: () => void }) {
   const [items, setItems] = useState(operation.maintenanceChecklistItems);
   const [photos, setPhotos] = useState<CapturedPhoto[]>([]);
   const [signature, setSignature] = useState<string | null>(null);
@@ -316,6 +329,7 @@ function PmocFieldExecution({ operation, onSaved }: { operation: OperationDetail
   const [signerRole, setSignerRole] = useState(operation.customerSignerRole ?? "");
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const collectsClientSignature = signatureMode === "COLLECTED" || signatureMode === "HYBRID";
 
   async function save() {
     setBusy(true);
@@ -332,10 +346,12 @@ function PmocFieldExecution({ operation, onSaved }: { operation: OperationDetail
           observations: item.observations,
         })),
         photos: encodedPhotos,
-        signatureData: signature,
-        customerSignerName: signature ? signerName : undefined,
-        customerSignerRole: signature ? signerRole : undefined,
-        signedAt: signature ? new Date().toISOString() : undefined,
+        ...(collectsClientSignature ? {
+          signatureData: signature,
+          customerSignerName: signature ? signerName : undefined,
+          customerSignerRole: signature ? signerRole : undefined,
+          signedAt: signature ? new Date().toISOString() : undefined,
+        } : {}),
       });
       setPhotos([]);
       setFeedback("Execução PMOC salva. O Preview foi invalidado e refletirá os novos dados.");
@@ -349,7 +365,7 @@ function PmocFieldExecution({ operation, onSaved }: { operation: OperationDetail
 
   return (
     <section className="space-y-4 rounded-[var(--radius-xl)] border border-[var(--color-primary)]/30 bg-[var(--color-card)] p-4">
-      <div><p className="text-caption">Execução vinculada</p><h2 className="font-semibold">PMOC em campo</h2><p className="text-xs text-[var(--color-muted-foreground)]">Preencha os procedimentos por equipamento, evidências e assinatura do cliente.</p></div>
+      <div><p className="text-caption">Atendimento programado</p><h2 className="font-semibold">PMOC em campo</h2><p className="text-xs text-[var(--color-muted-foreground)]">Preencha os procedimentos por equipamento e registre as evidências do atendimento.</p></div>
       <div className="space-y-3">
         {items.length === 0 ? <p className="text-sm text-[var(--color-muted-foreground)]">Nenhum procedimento foi preparado para esta execução.</p> : items.map((item, index) => (
           <div key={item.id ?? index} className="space-y-2 rounded-[var(--radius-lg)] border border-[var(--color-border)] p-3">
@@ -363,10 +379,9 @@ function PmocFieldExecution({ operation, onSaved }: { operation: OperationDetail
         ))}
       </div>
       <PhotoInput photos={photos} onChange={setPhotos} />
-      <div className="grid gap-2"><input value={signerName} onChange={(event) => setSignerName(event.target.value)} placeholder="Nome do cliente/responsável" className="h-11 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-3 text-sm" /><input value={signerRole} onChange={(event) => setSignerRole(event.target.value)} placeholder="Função ou vínculo" className="h-11 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-3 text-sm" /></div>
-      <SignaturePad onChange={setSignature} onConfirm={setSignature} />
+      {configurationLoading ? <SkeletonCard /> : collectsClientSignature ? <div className="space-y-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] p-3"><p className="text-sm font-medium">Assinatura do cliente</p><div className="grid gap-2"><input value={signerName} onChange={(event) => setSignerName(event.target.value)} placeholder="Nome do cliente/responsável" className="h-11 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-3 text-sm" /><input value={signerRole} onChange={(event) => setSignerRole(event.target.value)} placeholder="Função ou vínculo" className="h-11 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-3 text-sm" /></div><SignaturePad onChange={setSignature} onConfirm={setSignature} /></div> : signatureMode === "FIXED" ? <p className="rounded-[var(--radius-md)] bg-[var(--color-muted)] px-3 py-2 text-sm text-[var(--color-muted-foreground)]">A assinatura institucional definida no modelo será aplicada automaticamente ao documento.</p> : null}
       {feedback && <p className="text-sm text-[var(--color-muted-foreground)]">{feedback}</p>}
-      <button type="button" disabled={busy || (Boolean(signature) && !signerName.trim())} onClick={() => void save()} className="h-12 w-full rounded-[var(--radius-lg)] bg-[var(--color-primary)] text-sm font-semibold text-white disabled:opacity-50">{busy ? "Salvando…" : "Salvar execução PMOC"}</button>
+      <button type="button" disabled={busy || configurationLoading || (collectsClientSignature && Boolean(signature) && !signerName.trim())} onClick={() => void save()} className="h-12 w-full rounded-[var(--radius-lg)] bg-[var(--color-primary)] text-sm font-semibold text-white disabled:opacity-50">{busy ? "Salvando…" : "Salvar atendimento PMOC"}</button>
     </section>
   );
 }
@@ -378,6 +393,10 @@ function fileDataUrl(file: File): Promise<string> {
     reader.onerror = () => reject(reader.error ?? new Error("Falha ao ler a foto"));
     reader.readAsDataURL(file);
   });
+}
+
+function periodicityLabel(value: string): string {
+  return ({ MONTHLY: "Mensal", BIMONTHLY: "Bimestral", QUARTERLY: "Trimestral", SEMIANNUAL: "Semestral", ANNUAL: "Anual", CUSTOM: "Personalizada" } as Record<string, string>)[value] ?? "Conforme programação";
 }
 
 function InfoRow({ icon: Icon, label, value }: { icon: typeof MapPin; label: string; value: string }) {

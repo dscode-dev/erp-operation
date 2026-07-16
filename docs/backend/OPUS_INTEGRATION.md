@@ -1,5 +1,13 @@
 # OPUS Frontend Integration
 
+## PMOC UX-02
+
+- Nome: `GET /pmoc/name-suggestion?customerId=<uuid>`; omita `name` na criação se não personalizado.
+- Escopo: consultar Catálogo com `type=PLAN_SCOPE` e enviar seleção em `scopeCatalogIds`.
+- “Outros” é item oficial; valores novos usam o CRUD existente e ficam disponíveis após refetch.
+- Data pontual: `PATCH /pmoc/execution-requests/:id/reschedule`; não alterar periodicidade nem criar
+  request substituta no frontend.
+
 ## PMOC Foundation — Bloco 3
 
 Não calcule métricas localmente. `PmocStats` fornece todos os cards, calendário e listas; cada
@@ -1935,3 +1943,12 @@ Na Central de Relatórios, ofereça `Criar novo PMOC` e `Selecionar PMOC existen
 criado diretamente por `POST /pmoc`, recebe número próprio e não depende de Operation. Ao avançar,
 crie a Operation/OS oficial e vincule-a à execução planejada. Para planos existentes, exponha
 edição e remoção lógica pelos endpoints já oficiais.
+
+## PMOC UX-01 — implementação frontend
+
+- Wizard único: `PmocPlanWizard`.
+- Equipamentos e tipos: `MultiSelect` → `equipmentIds[]`/`serviceTypes[]`.
+- Assinaturas: consultar configuração PMOC; nunca inferir modo no cliente.
+- Override: enviar apenas `signatureOverrideId`, sem alterar o modelo.
+- Operator: coleta apenas em `COLLECTED`/`HYBRID`; `FIXED` é institucional; `NONE` não tem etapa.
+- OS e documento permanecem nos endpoints oficiais de Operations, Assignments e Document Engine.

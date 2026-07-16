@@ -18,6 +18,7 @@ export type CreatePmocPayload = {
   customerId: string;
   equipmentId: string;
   equipmentIds?: string[];
+  scopeCatalogIds?: string[];
   coverage?: string;
   periodicity?: PmocPeriodicity;
   generationMode?: PmocGenerationMode;
@@ -25,6 +26,7 @@ export type CreatePmocPayload = {
   defaultTechnicianId?: string;
   defaultAddressId?: string;
   defaultOperationType?: OperationType;
+  serviceTypes?: OperationType[];
   defaultEstimatedDurationMinutes?: number;
   defaultOperationObservations?: string;
   signatureOverrideId?: string;
@@ -46,6 +48,7 @@ export type UpdatePmocPayload = Partial<
   Pick<
     CreatePmocPayload,
     | "equipmentIds"
+    | "scopeCatalogIds"
     | "responsibleTechnician"
     | "startDate"
     | "endDate"
@@ -57,6 +60,7 @@ export type UpdatePmocPayload = Partial<
     | "name"
     | "defaultAddressId"
     | "defaultOperationType"
+    | "serviceTypes"
     | "defaultEstimatedDurationMinutes"
     | "defaultOperationObservations"
   >
@@ -96,6 +100,13 @@ export function listPmoc(params?: ListPmocParams): Promise<Paginated<PmocPlan>> 
 
 export function getPmoc(id: string, opts?: { signal?: AbortSignal }): Promise<PmocPlan> {
   return api.get<PmocPlan>(`/pmoc/${id}`, opts);
+}
+
+export function getNameSuggestion(
+  customerId: string,
+  opts?: { signal?: AbortSignal },
+): Promise<{ name: string; provisionalNumber: number }> {
+  return api.get('/pmoc/name-suggestion', { query: { customerId }, signal: opts?.signal });
 }
 
 export function createPmoc(payload: CreatePmocPayload): Promise<PmocPlan> {

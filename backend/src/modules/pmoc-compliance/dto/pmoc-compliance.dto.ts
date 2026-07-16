@@ -8,6 +8,7 @@ import {
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
+  ArrayMinSize,
   ArrayUnique,
   IsArray,
   IsBoolean,
@@ -68,6 +69,11 @@ export class ListPmocQueryDto {
   active?: boolean;
 }
 
+export class PmocNameSuggestionQueryDto {
+  @IsUUID('4')
+  customerId!: string;
+}
+
 export class PmocDashboardQueryDto {
   @IsOptional()
   @IsDateString()
@@ -90,10 +96,19 @@ export class CreatePmocPlanDto {
 
   @IsOptional()
   @IsArray()
+  @ArrayMinSize(1)
   @ArrayUnique()
   @ArrayMaxSize(50)
   @IsUUID('4', { each: true })
   equipmentIds?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayUnique()
+  @ArrayMaxSize(50)
+  @IsUUID('4', { each: true })
+  scopeCatalogIds?: string[];
 
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(5000)
   coverage?: string;
@@ -115,6 +130,13 @@ export class CreatePmocPlanDto {
 
   @IsOptional() @IsEnum(OperationType)
   defaultOperationType?: OperationType;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @ArrayMaxSize(4)
+  @IsEnum(OperationType, { each: true })
+  serviceTypes?: OperationType[];
 
   @IsOptional() @Type(() => Number) @IsInt() @Min(15) @Max(10080)
   defaultEstimatedDurationMinutes?: number;
@@ -176,10 +198,19 @@ export class UpdatePmocPlanDto {
 
   @IsOptional()
   @IsArray()
+  @ArrayMinSize(1)
   @ArrayUnique()
   @ArrayMaxSize(50)
   @IsUUID('4', { each: true })
   equipmentIds?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayUnique()
+  @ArrayMaxSize(50)
+  @IsUUID('4', { each: true })
+  scopeCatalogIds?: string[];
 
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(5000)
   coverage?: string | null;
@@ -201,6 +232,13 @@ export class UpdatePmocPlanDto {
 
   @IsOptional() @IsEnum(OperationType)
   defaultOperationType?: OperationType;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @ArrayMaxSize(4)
+  @IsEnum(OperationType, { each: true })
+  serviceTypes?: OperationType[];
 
   @IsOptional() @Type(() => Number) @IsInt() @Min(15) @Max(10080)
   defaultEstimatedDurationMinutes?: number | null;

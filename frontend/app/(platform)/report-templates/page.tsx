@@ -109,7 +109,7 @@ export default function ReportTemplatesPage() {
       <PageHeader
         eyebrow="Documentos"
         title="Modelos de Documentos"
-        description="Biblioteca profissional dos modelos usados pelo Document Engine. A emissão e o PDF continuam sob responsabilidade exclusiva do backend."
+        description="Biblioteca profissional dos modelos usados na emissão dos documentos oficiais."
         actions={
           <div className="flex flex-wrap items-center justify-end gap-2">
             <select
@@ -163,7 +163,7 @@ export default function ReportTemplatesPage() {
           }
         />
       ) : cards.length === 0 ? (
-        <EmptyState icon={LibraryBig} title="Nenhum modelo disponível" description="A biblioteca será exibida assim que os modelos oficiais existirem no backend." />
+        <EmptyState icon={LibraryBig} title="Nenhum modelo disponível" description="A biblioteca será exibida assim que os modelos oficiais forem cadastrados." />
       ) : (
         <div className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -225,7 +225,7 @@ export default function ReportTemplatesPage() {
       <ConfirmDialog
         open={Boolean(deleteTarget)}
         title="Remover modelo?"
-        description="Esta ação usa o endpoint oficial de templates e respeita as proteções do backend. Modelos de sistema não podem ser removidos."
+        description="Modelos obrigatórios do sistema não podem ser removidos."
         confirmLabel="Remover"
         danger
         onClose={() => setDeleteTarget(null)}

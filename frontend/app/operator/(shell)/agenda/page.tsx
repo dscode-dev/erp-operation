@@ -29,7 +29,7 @@ export default function OperatorAgendaPage() {
     <div className="px-4 pt-4 pb-24 space-y-4">
       <header>
         <h1 className="text-[22px] font-semibold tracking-tight">Agenda de campo</h1>
-        <p className="text-caption">Visão cronológica das suas Assignments reais.</p>
+        <p className="text-caption">Visão cronológica das suas atividades programadas.</p>
       </header>
 
       {assignments.loading && !assignments.data ? (
@@ -37,7 +37,7 @@ export default function OperatorAgendaPage() {
       ) : assignments.error && !assignments.data ? (
         <ErrorState error={assignments.error} onRetry={assignments.refetch} />
       ) : groups.length === 0 ? (
-        <EmptyState icon={Calendar} title="Sem compromissos" description="Nenhuma Assignment agendada." />
+        <EmptyState icon={Calendar} title="Sem compromissos" description="Nenhuma atividade agendada." />
       ) : (
         <div className="space-y-5">
           {groups.map(([day, items]) => (

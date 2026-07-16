@@ -23,6 +23,14 @@ const actor = {
 const context = { requestId: 'request-1', ip: '127.0.0.1', userAgent: 'jest' };
 
 describe('TechnicalCatalogsService', () => {
+  it('publishes PLAN_SCOPE through the official catalog type registry', () => {
+    const service = new TechnicalCatalogsService({} as never);
+    expect(service.types()).toContainEqual({
+      value: TechnicalCatalogType.PLAN_SCOPE,
+      label: 'Escopos de plano',
+    });
+  });
+
   it('keeps catalog mutations restricted to OWNER and MANAGER', () => {
     const mutationMethods = ['create', 'update', 'reorder', 'remove'] as const;
     for (const method of mutationMethods) {

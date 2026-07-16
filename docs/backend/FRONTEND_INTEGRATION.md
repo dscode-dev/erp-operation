@@ -1,5 +1,16 @@
 # Frontend Integration
 
+## PMOC UX-02
+
+- Consultar `GET /pmoc/name-suggestion` ao selecionar cliente. Atualizar o campo apenas enquanto
+  não houver edição manual; se continuar automático, omitir `name` no `POST /pmoc`.
+- Carregar escopos com `GET /technical-catalogs?type=PLAN_SCOPE&workflow=PMOC&includeGeneral=true&active=true`
+  e enviar IDs em `scopeCatalogIds`; títulos nunca são fonte de verdade do frontend.
+- Novos escopos usam exclusivamente o CRUD do Catálogo Técnico. Reconsultar para reutilização
+  imediata no Wizard.
+- Exibir `plan.scopes[].technicalCatalog.title`, com `coverage` apenas como fallback histórico.
+- Reagendar pelo endpoint oficial da request; nunca recalcular a agenda no browser.
+
 ## PMOC Foundation — Bloco 3
 
 - Dashboard: consuma somente `GET /pmoc/stats`. Não conte requests nem classifique atrasos no
@@ -2365,3 +2376,13 @@ Após escolher/criar o PMOC, a emissão cria uma Operation oficial. O backend ge
 `WORK_ORDER` padrão e o frontend vincula a Operation à execução `PLANNED` do MaintenancePlan. Essa
 OS deve ser tratada como qualquer outra em Agenda, Operações, Ordens e Operator. Somente
 OWNER/MANAGER administram o plano.
+
+## PMOC UX-01
+
+- Use `equipmentIds[]` como seleção múltipla oficial e `serviceTypes[]` com `OperationType`.
+- Mantenha `defaultOperationType` como o primeiro tipo para compatibilidade.
+- O prefill já entrega `inspectedEquipments[]` e `serviceTypes[]`; não reconstrua o escopo.
+- Consulte `GET /documents/configuration/types/PMOC`: `NONE` oculta assinatura; `FIXED` mostra a
+  institucional em leitura; `COLLECTED` mostra coleta; `HYBRID` mostra ambas.
+- `signatureOverrideId` pertence ao PMOC e nunca deve causar PATCH no Template.
+- Não apresente nomes de entidades, estados ou serviços internos ao usuário.

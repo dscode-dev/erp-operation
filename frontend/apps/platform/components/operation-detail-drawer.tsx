@@ -210,14 +210,14 @@ function AssignmentSection({
   return (
     <section className="space-y-2">
       <div className="flex items-center justify-between gap-2">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)]">Assignment</h3>
+        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)]">Responsável pelo atendimento</h3>
         {assignment && <StatusChip tone="info">{ASSIGNMENT_STATUS_LABEL[assignment.status]}</StatusChip>}
       </div>
       <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
         {loading && !assignment ? (
           <SkeletonList rows={2} />
         ) : !assignment ? (
-          <p className="text-sm text-[var(--color-muted-foreground)]">Esta Operation ainda não possui Assignment.</p>
+          <p className="text-sm text-[var(--color-muted-foreground)]">Nenhum operador foi designado para este atendimento.</p>
         ) : (
           <div className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-3">

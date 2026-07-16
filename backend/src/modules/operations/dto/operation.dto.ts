@@ -8,6 +8,7 @@ import { Transform, Type } from 'class-transformer';
 import {
   IsArray,
   ArrayMaxSize,
+  ArrayUnique,
   IsBoolean,
   IsDateString,
   IsEnum,
@@ -84,6 +85,12 @@ export class CreateOperationDto {
   @IsOptional() @IsUUID('4') equipmentId?: string;
   @IsOptional() @IsUUID('4') operatorId?: string;
   @IsEnum(OperationType) type!: OperationType;
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @ArrayMaxSize(4)
+  @IsEnum(OperationType, { each: true })
+  serviceTypes?: OperationType[];
   @IsOptional() @IsEnum(OperationStatus) status?: OperationStatus;
   @IsOptional() @IsDateString() scheduledFor?: string;
   @IsOptional() @IsDateString() startedAt?: string;
@@ -194,6 +201,12 @@ export class CreateOperationDto {
 }
 
 export class UpdateOperationDto {
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @ArrayMaxSize(4)
+  @IsEnum(OperationType, { each: true })
+  serviceTypes?: OperationType[];
   @IsOptional() @IsEnum(OperationStatus) status?: OperationStatus;
   @IsOptional() @IsDateString() startedAt?: string;
   @IsOptional() @IsDateString() completedAt?: string;

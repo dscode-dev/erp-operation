@@ -183,7 +183,7 @@ export default function ProdutosPage() {
       <PageHeader
         eyebrow="Operação"
         title="Produtos, Estoque e Preços"
-        description="Catálogo técnico, estoque físico, fornecedores, movimentações e preços reais do backend."
+        description="Catálogo técnico, estoque físico, fornecedores, movimentações e preços atualizados."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Gate roles={["OWNER", "MANAGER"]}>

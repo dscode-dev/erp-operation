@@ -55,6 +55,20 @@ const DOCUMENT_CONTEXT_OPERATION_INCLUDE = {
         include: {
           pmocPlan: {
             include: {
+              signatureOverride: {
+                select: {
+                  id: true,
+                  name: true,
+                  title: true,
+                  professionalCouncil: true,
+                  department: true,
+                  imageStorageKey: true,
+                  mimeType: true,
+                  fileSize: true,
+                  active: true,
+                  deletedAt: true,
+                },
+              },
               environments: {
                 orderBy: { name: 'asc' as const },
                 take: 20,
@@ -290,7 +304,13 @@ export class DocumentContextService {
     }
 
     const template = configuration.defaultTemplate;
-    const signature = await this.resolveSignature(template, operation);
+    const signature = await this.resolveSignature(
+      template,
+      operation,
+      type === DocumentTemplateType.PMOC
+        ? operation.maintenanceExecution?.plan.pmocPlan?.signatureOverride
+        : null,
+    );
     const usesOperationPhotos =
       type !== DocumentTemplateType.TECHNICAL_REPORT &&
       type !== DocumentTemplateType.TECHNICAL_OPINION;
@@ -478,16 +498,28 @@ export class DocumentContextService {
   private async resolveSignature(
     template: DocumentConfigurationTemplate | null,
     operation: DocumentContextOperation | null,
+    institutionalOverride: {
+      id: string;
+      name: string;
+      title: string;
+      professionalCouncil: string | null;
+      department: string | null;
+      imageStorageKey: string | null;
+      mimeType: string | null;
+      fileSize: number | null;
+      active: boolean;
+      deletedAt: Date | null;
+    } | null = null,
   ): Promise<DocumentSignatureContext> {
     const mode = template?.signatureMode ?? SignatureMode.NONE;
     const executionSignature = this.resolveExecutionSignature(operation);
-    const acceptsExecutionSignatures = mode !== SignatureMode.FIXED;
+    const acceptsExecutionSignatures =
+      mode === SignatureMode.COLLECTED || mode === SignatureMode.HYBRID;
     const clientEnabled = Boolean(
       acceptsExecutionSignatures &&
       (template?.executionSignatureClient ||
         mode === SignatureMode.COLLECTED ||
-        mode === SignatureMode.HYBRID ||
-        (mode === SignatureMode.NONE && executionSignature)),
+        mode === SignatureMode.HYBRID),
     );
     const executionSignatures: DocumentSignatureContext['executionSignatures'] = [
       ...(clientEnabled
@@ -533,13 +565,7 @@ export class DocumentContextService {
         : []),
     ];
     const executionSignatureApplies = executionSignatures.length > 0;
-    const effectiveMode = executionSignatureApplies
-      ? mode === SignatureMode.NONE
-        ? SignatureMode.COLLECTED
-        : mode === SignatureMode.FIXED
-          ? SignatureMode.HYBRID
-          : mode
-      : mode;
+    const effectiveMode = mode;
     const requiresSignature = Boolean(
       (template?.requiresSignature && effectiveMode !== SignatureMode.NONE) ||
       executionSignatureApplies,
@@ -582,10 +608,11 @@ export class DocumentContextService {
       };
     }
 
-    const configured =
-      template?.institutionalSignatures
-        ?.map((link) => link.signature)
-        .filter((signature) => signature.active && !signature.deletedAt) ?? [];
+    const configured = institutionalOverride
+      ? [institutionalOverride].filter((signature) => signature.active && !signature.deletedAt)
+      : (template?.institutionalSignatures
+          ?.map((link) => link.signature)
+          .filter((signature) => signature.active && !signature.deletedAt) ?? []);
     const signatures =
       configured.length > 0 ? configured : template?.signature ? [template.signature] : [];
     if (signatures.length === 0) {

@@ -49,7 +49,7 @@ export default function DocumentosPage() {
   ];
   const resetPage = <T,>(setter: (value: T) => void) => (value: T) => { setter(value); setPage(1); };
   return <div className="space-y-6 max-w-[1500px]">
-    <PageHeader eyebrow="Document Engine" title="Central de documentos" description="Repositório oficial de todos os documentos emitidos pelo Orbit." />
+    <PageHeader eyebrow="Documentos" title="Central de documentos" description="Repositório oficial de todos os documentos emitidos pelo Orbit." />
     <FilterBar search={search} onSearch={resetPage(setSearch)} searchPlaceholder="Número, cliente ou equipamento…">
       <Select label="Cliente" value={customerId} onChange={resetPage(setCustomerId)} options={options.customers} />
       <Select label="Equipamento" value={equipmentId} onChange={resetPage(setEquipmentId)} options={options.equipments} />

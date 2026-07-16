@@ -1080,7 +1080,7 @@ describe('DocumentEngine foundation', () => {
     );
   });
 
-  it('hydrates collected execution signatures into the official document context', async () => {
+  it('keeps NONE authoritative even when legacy execution signature data exists', async () => {
     const now = new Date('2026-07-10T12:00:00.000Z');
     const operation = (
       operationContext(DocumentTemplateType.WORK_ORDER) as unknown as {
@@ -1152,13 +1152,11 @@ describe('DocumentEngine foundation', () => {
       .flatMap((section) => section.components)
       .find((component) => component.kind === 'signature');
 
-    expect(created.signature.requiresSignature).toBe(true);
-    expect(created.signature.signatureMode).toBe('COLLECTED');
-    expect(created.signature.collectedSignature?.image?.contentBase64).toBe(ONE_PIXEL_PNG);
-    expect(signature).toBeDefined();
-    expect(
-      signature && 'signatures' in signature ? signature.signatures[0]?.image?.contentBase64 : null,
-    ).toBe(ONE_PIXEL_PNG);
+    expect(created.signature.requiresSignature).toBe(false);
+    expect(created.signature.signatureMode).toBe('NONE');
+    expect(created.signature.collectedSignature).toBeNull();
+    expect(created.signature.executionSignatures).toEqual([]);
+    expect(signature).toBeUndefined();
   });
 
   it('resolves the exact institutional signature configured by the WORK_ORDER template', async () => {
@@ -1236,6 +1234,40 @@ describe('DocumentEngine foundation', () => {
       name: institutional.name,
     });
     expect(component && 'signatures' in component ? component.signatures : []).toHaveLength(1);
+  });
+
+  it('uses a PMOC institutional override without mutating or selecting another template signature', async () => {
+    const templateSignature = {
+      id: '7db71471-0cf4-4414-8d06-83eb9c1917c1', name: 'Assinatura do modelo', title: 'Diretoria',
+      professionalCouncil: null, department: 'Diretoria', imageStorageKey: 'signatures/template.png',
+      mimeType: 'image/png', fileSize: 68, active: true, deletedAt: null,
+    };
+    const override = {
+      id: '7db71471-0cf4-4414-8d06-83eb9c1917c2', name: 'Responsável do PMOC', title: 'Engenheira Mecânica',
+      professionalCouncil: 'CREA-PE 456', department: 'Engenharia', imageStorageKey: 'signatures/pmoc.png',
+      mimeType: 'image/png', fileSize: 68, active: true, deletedAt: null,
+    };
+    const service = new DocumentContextService(
+      {} as never,
+      {} as never,
+      { resolveSignature: jest.fn().mockResolvedValue({ storageKey: override.imageStorageKey, mimeType: 'image/png', fileSize: 68, contentBase64: ONE_PIXEL_PNG }) } as never,
+    );
+    const result = await (service as unknown as {
+      resolveSignature: (template: unknown, operation: null, institutionalOverride: unknown) => Promise<{ signatureId: string | null; institutionalSignatures: Array<{ id: string; name: string }> }>;
+    }).resolveSignature({
+      requiresSignature: true,
+      signatureMode: 'FIXED',
+      signature: templateSignature,
+      institutionalSignatures: [{ position: 0, signature: templateSignature }],
+      executionSignatureClient: false,
+      executionSignatureTechnician: false,
+      executionSignatureOperator: false,
+    }, null, override);
+
+    expect(result.signatureId).toBe(override.id);
+    expect(result.institutionalSignatures).toEqual([
+      expect.objectContaining({ id: override.id, name: override.name }),
+    ]);
   });
 
   it('hydrates persisted operation photos into image blueprint components', async () => {

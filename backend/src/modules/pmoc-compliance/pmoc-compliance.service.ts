@@ -15,6 +15,7 @@ import {
   PmocPeriodicity,
   Prisma,
   Role,
+  TechnicalCatalogType,
 } from '@prisma/client';
 import {
   PMOC_AUDIT_ACTIONS,
@@ -118,6 +119,14 @@ const PMOC_INCLUDE = {
     include: {
       equipment: {
         select: { id: true, name: true, tag: true, type: true, status: true, customerId: true },
+      },
+    },
+    orderBy: { createdAt: 'asc' as const },
+  },
+  scopes: {
+    include: {
+      technicalCatalog: {
+        select: { id: true, type: true, title: true, description: true, active: true },
       },
     },
     orderBy: { createdAt: 'asc' as const },
@@ -260,6 +269,18 @@ export class PmocComplianceService implements ComplianceEvaluator<{
     return { ...this.withCompliance(pmoc), overview: analytics.get(pmoc.id) };
   }
 
+  async nameSuggestion(
+    customerId: string,
+  ): Promise<{ name: string; provisionalNumber: number }> {
+    const customer = await this.customerForPmocOrThrow(customerId);
+    const aggregate = await this.prisma.pmocPlan.aggregate({ _max: { number: true } });
+    const provisionalNumber = (aggregate._max.number ?? 0) + 1;
+    return {
+      name: this.pmocPlanName(customer.tradeName ?? customer.name, provisionalNumber),
+      provisionalNumber,
+    };
+  }
+
   async create(
     dto: CreatePmocPlanDto,
     actor: AuthenticatedUser,
@@ -277,6 +298,11 @@ export class PmocComplianceService implements ComplianceEvaluator<{
     const equipment = await this.equipmentForCustomerOrThrow(dto.equipmentId, dto.customerId);
     const equipmentIds = this.unique([dto.equipmentId, ...(dto.equipmentIds ?? [])]);
     await this.equipmentsForCustomerOrThrow(equipmentIds, dto.customerId);
+    const serviceTypes = this.operationTypes(
+      dto.defaultOperationType ?? OperationType.PREVENTIVA,
+      dto.serviceTypes,
+    );
+    const scopes = await this.planScopesOrThrow(dto.scopeCatalogIds, organization.id);
     await this.validateDefaults(
       dto.defaultOperatorId,
       dto.defaultTechnicianId,
@@ -312,13 +338,18 @@ export class PmocComplianceService implements ComplianceEvaluator<{
           customerId: dto.customerId,
           equipmentId: dto.equipmentId,
           maintenancePlanId: maintenancePlan.id,
-          coverage: dto.coverage ? this.clean(dto.coverage) : null,
+          coverage: scopes.length
+            ? scopes.map((scope) => scope.title).join(', ')
+            : dto.coverage
+              ? this.clean(dto.coverage)
+              : null,
           periodicity,
           generationMode: dto.generationMode ?? PmocGenerationMode.MANUAL,
           defaultOperatorId: dto.defaultOperatorId ?? null,
           defaultTechnicianId: dto.defaultTechnicianId ?? null,
           defaultAddressId: dto.defaultAddressId ?? null,
           defaultOperationType: dto.defaultOperationType ?? OperationType.PREVENTIVA,
+          serviceTypes,
           defaultEstimatedDurationMinutes: dto.defaultEstimatedDurationMinutes ?? null,
           defaultOperationObservations: dto.defaultOperationObservations
             ? this.clean(dto.defaultOperationObservations)
@@ -341,6 +372,13 @@ export class PmocComplianceService implements ComplianceEvaluator<{
           equipments: {
             create: equipmentIds.map((equipmentId) => ({ equipmentId })),
           },
+          ...(scopes.length
+            ? {
+                scopes: {
+                  create: scopes.map((scope) => ({ technicalCatalogId: scope.id })),
+                },
+              }
+            : {}),
         },
         select: { id: true, number: true },
       });
@@ -471,7 +509,7 @@ export class PmocComplianceService implements ComplianceEvaluator<{
     this.recurrence.validate(recurrenceRule);
     const equipmentIds =
       dto.equipmentIds !== undefined
-        ? this.unique([existing.equipmentId, ...dto.equipmentIds])
+        ? this.unique(dto.equipmentIds)
         : null;
     if (equipmentIds) await this.equipmentsForCustomerOrThrow(equipmentIds, existing.customerId);
     await this.validateDefaults(
@@ -480,6 +518,17 @@ export class PmocComplianceService implements ComplianceEvaluator<{
       dto.signatureOverrideId ?? undefined,
     );
     await this.validateAddress(dto.defaultAddressId ?? undefined, existing.customerId);
+    const serviceTypes =
+      dto.serviceTypes !== undefined || dto.defaultOperationType !== undefined
+        ? this.operationTypes(
+            dto.defaultOperationType ?? existing.defaultOperationType,
+            dto.serviceTypes ?? existing.serviceTypes,
+          )
+        : null;
+    const scopes =
+      dto.scopeCatalogIds !== undefined
+        ? await this.planScopesOrThrow(dto.scopeCatalogIds, existing.organizationId)
+        : null;
 
     return this.prisma.$transaction(async (tx) => {
       await tx.maintenancePlan.update({
@@ -492,6 +541,7 @@ export class PmocComplianceService implements ComplianceEvaluator<{
             : {}),
           ...(dto.startDate ? { firstExecution: startDate, nextExecution: startDate } : {}),
           ...(dto.active !== undefined ? { active: dto.active } : {}),
+          ...(equipmentIds ? { equipmentId: equipmentIds[0] } : {}),
         },
       });
       if (equipmentIds) {
@@ -501,12 +551,21 @@ export class PmocComplianceService implements ComplianceEvaluator<{
           skipDuplicates: true,
         });
       }
+      if (scopes) {
+        await tx.pmocPlanScope.deleteMany({ where: { pmocPlanId: id } });
+        await tx.pmocPlanScope.createMany({
+          data: scopes.map((scope) => ({ pmocPlanId: id, technicalCatalogId: scope.id })),
+          skipDuplicates: true,
+        });
+      }
       const pmoc = await tx.pmocPlan.update({
         where: { id },
         data: {
-          ...(dto.coverage !== undefined
-            ? { coverage: dto.coverage ? this.clean(dto.coverage) : null }
-            : {}),
+          ...(scopes
+            ? { coverage: scopes.map((scope) => scope.title).join(', ') }
+            : dto.coverage !== undefined
+              ? { coverage: dto.coverage ? this.clean(dto.coverage) : null }
+              : {}),
           ...(dto.periodicity ? { periodicity: dto.periodicity } : {}),
           ...(dto.generationMode ? { generationMode: dto.generationMode } : {}),
           ...(dto.defaultOperatorId !== undefined
@@ -519,6 +578,8 @@ export class PmocComplianceService implements ComplianceEvaluator<{
           ...(dto.defaultOperationType !== undefined
             ? { defaultOperationType: dto.defaultOperationType }
             : {}),
+          ...(serviceTypes ? { serviceTypes } : {}),
+          ...(equipmentIds ? { equipmentId: equipmentIds[0] } : {}),
           ...(dto.defaultEstimatedDurationMinutes !== undefined
             ? { defaultEstimatedDurationMinutes: dto.defaultEstimatedDurationMinutes }
             : {}),
@@ -589,7 +650,11 @@ export class PmocComplianceService implements ComplianceEvaluator<{
       if (dto.applyDefaultsToPendingExecutions) {
         historyActions.push(PmocHistoryAction.DEFAULTS_PROPAGATED);
       }
-      if (dto.coverage !== undefined || dto.equipmentIds !== undefined) {
+      if (
+        dto.coverage !== undefined ||
+        dto.equipmentIds !== undefined ||
+        dto.scopeCatalogIds !== undefined
+      ) {
         historyActions.push(PmocHistoryAction.COVERAGE_CHANGED);
       }
       await tx.pmocHistory.createMany({
@@ -1308,7 +1373,7 @@ export class PmocComplianceService implements ComplianceEvaluator<{
     customerId: string,
   ): Promise<void> {
     const equipments = await this.prisma.equipment.findMany({
-      where: { id: { in: equipmentIds } },
+      where: { id: { in: equipmentIds }, isActive: true, disabledAt: null },
       select: { id: true, customerId: true },
     });
     if (equipments.length !== equipmentIds.length) {
@@ -1349,6 +1414,33 @@ export class PmocComplianceService implements ComplianceEvaluator<{
     const suffix = ` · PMOC-${String(pmocNumber).padStart(6, '0')}`;
     const customerLimit = Math.max(1, 140 - prefix.length - suffix.length);
     return `${prefix}${this.clean(customerName).slice(0, customerLimit)}${suffix}`;
+  }
+
+  private async planScopesOrThrow(
+    ids: string[] | undefined,
+    organizationId: string,
+  ): Promise<Array<{ id: string; title: string }>> {
+    if (!ids?.length) return [];
+    const uniqueIds = this.unique(ids);
+    const scopes = await this.prisma.technicalCatalog.findMany({
+      where: {
+        id: { in: uniqueIds },
+        organizationId,
+        type: TechnicalCatalogType.PLAN_SCOPE,
+        active: true,
+        deletedAt: null,
+      },
+      select: { id: true, title: true },
+      orderBy: [{ sortOrder: 'asc' }, { title: 'asc' }],
+    });
+    if (scopes.length !== uniqueIds.length) {
+      throw new ApplicationException(
+        ERROR_CODES.TECHNICAL_CATALOG_NOT_FOUND,
+        'Every PMOC scope must be an active PLAN_SCOPE catalog item from this organization',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    return scopes;
   }
 
   private periodicityFromRule(rule?: RecurrenceRuleDto): PmocPeriodicity {
@@ -1476,6 +1568,18 @@ export class PmocComplianceService implements ComplianceEvaluator<{
 
   private unique(values: string[]): string[] {
     return [...new Set(values)];
+  }
+
+  private operationTypes(primary: OperationType, values?: OperationType[]): OperationType[] {
+    const normalized = [...new Set([primary, ...(values ?? [])])];
+    if (normalized.length > 4) {
+      throw new ApplicationException(
+        ERROR_CODES.VALIDATION_ERROR,
+        'A PMOC can use at most four official Operation types',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    return normalized;
   }
 
   private page<T>(items: T[], page: number, limit: number, total: number): PaginatedResponse<T> {

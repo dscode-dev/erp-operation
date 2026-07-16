@@ -1,5 +1,12 @@
 # ROUTES — Frontend
 
+## PMOC UX-02
+
+- `/pmoc`: abre o Wizard profissional de criação.
+- `/pmoc/:id`: aba Execuções permite editar uma data individual sem alterar o plano inteiro.
+- `/maintenance-checklists?type=PLAN_SCOPE`: abre diretamente os escopos oficiais do plano; novos
+  itens são reutilizados pelo Wizard após “Atualizar lista”.
+
 ## PMOC Foundation — Bloco 3
 
 - `/pmoc`: dashboard operacional, calendário, próximas/últimas execuções e planos paginados.
@@ -513,3 +520,10 @@ modo novo cria uma Operation DRAFT oficial e segue Preview → Render → Downlo
 
 - `/reports`: o passo Origem permite criar PMOC independente ou selecionar/administrar um plano
   existente. A OS oficial é criada somente depois do PMOC e vinculada à sua execução.
+
+## PMOC UX-01
+
+- `/pmoc`: criação com múltiplos equipamentos/tipos e política do Template.
+- `/pmoc/:id`: cobertura, serviços e programação com labels de negócio.
+- `/operator/services/:id`: todos os equipamentos/tipos; coleta somente quando exigida.
+- `/reports`: preserva o mesmo wizard e a geração oficial da OS.

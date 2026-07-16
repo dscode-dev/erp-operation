@@ -47,7 +47,7 @@ export function PmocOperationalCalendar({
       <header className="flex items-center justify-between gap-3 border-b border-[var(--color-border)] px-4 py-3">
         <div>
           <h2 className="font-semibold">Calendário operacional</h2>
-          <p className="text-caption">Execution Requests oficiais · {items.length} no período</p>
+          <p className="text-caption">Ordens programadas · {items.length} no período</p>
         </div>
         <div className="flex items-center gap-1">
           <button type="button" aria-label="Mês anterior" className={navButton} onClick={() => onMonthChange(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1))}><ChevronLeft className="h-4 w-4" /></button>

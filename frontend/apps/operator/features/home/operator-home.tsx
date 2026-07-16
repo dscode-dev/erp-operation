@@ -63,7 +63,7 @@ export function OperatorHome() {
       ) : assignments.error && !assignments.data ? (
         <ErrorState error={assignments.error} onRetry={assignments.refetch} />
       ) : items.length === 0 ? (
-        <EmptyState icon={Wrench} title="Sem atividades atribuídas" description="Quando uma Operation for atribuída, ela aparecerá aqui." />
+        <EmptyState icon={Wrench} title="Sem atividades atribuídas" description="Quando uma Ordem de Serviço for atribuída, ela aparecerá aqui." />
       ) : (
         <>
           {ongoing.length > 0 && (

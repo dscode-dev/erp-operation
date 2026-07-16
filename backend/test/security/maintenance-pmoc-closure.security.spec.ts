@@ -1,4 +1,4 @@
-import { MaintenanceExecutionStatus, MaintenancePlanType, Role } from '@prisma/client';
+import { EquipmentStatus, EquipmentType, MaintenanceExecutionStatus, MaintenancePlanType, OperationType, Role, TechnicalCatalogType, TechnicalCatalogWorkflow } from '@prisma/client';
 import { ERROR_CODES } from '../../src/shared/constants/error-codes.constants';
 import { createCustomerGraph, createMaintenanceFixture, createOperation, createOrganization, prisma } from '../integration/helpers';
 import {
@@ -139,6 +139,92 @@ describe('AppSec Maintenance Planning and PMOC closure', () => {
     expect(createdPlan.data.maintenancePlan.name).not.toContain('OS-');
   });
 
+  it('suggests the official name and persists only valid structured scope catalogs', async () => {
+    const graph = await createCustomerGraph();
+    const organization = await prisma.organization.findFirstOrThrow();
+    const scope = await prisma.technicalCatalog.create({
+      data: {
+        organizationId: organization.id,
+        type: TechnicalCatalogType.PLAN_SCOPE,
+        title: `Sala técnica ${Date.now()}`,
+        workflows: [TechnicalCatalogWorkflow.PMOC],
+      },
+    });
+    const unrelated = await prisma.technicalCatalog.create({
+      data: {
+        organizationId: organization.id,
+        type: TechnicalCatalogType.OBJECTIVE,
+        title: `Objetivo ${Date.now()}`,
+      },
+    });
+
+    const suggestion = await authGet(
+      owner,
+      `/api/v1/pmoc/name-suggestion?customerId=${graph.customerId}`,
+    );
+    expect(suggestion.status).toBe(200);
+    expect((suggestion.body as { data: { name: string } }).data.name).toContain('PMOC-');
+
+    const payload = {
+      customerId: graph.customerId,
+      equipmentId: graph.equipmentId,
+      equipmentIds: [graph.equipmentId],
+      responsibleTechnician: owner.user.name,
+      startDate: '2026-08-15',
+      endDate: '2027-08-15',
+    };
+    const invalid = await authPost(owner, '/api/v1/pmoc').send({
+      ...payload,
+      scopeCatalogIds: [unrelated.id],
+    });
+    expect(invalid.status).toBe(400);
+    expect(errorCode(invalid)).toBe(ERROR_CODES.TECHNICAL_CATALOG_NOT_FOUND);
+
+    const created = await authPost(owner, '/api/v1/pmoc').send({
+      ...payload,
+      scopeCatalogIds: [scope.id],
+    });
+    expect(created.status).toBe(201);
+    expect((created.body as { data: { coverage: string; scopes: Array<{ technicalCatalogId: string }> } }).data)
+      .toMatchObject({ coverage: scope.title, scopes: [{ technicalCatalogId: scope.id }] });
+  });
+
+  it('replaces PMOC equipment coverage without leaving the MaintenancePlan primary out of sync', async () => {
+    const graph = await createCustomerGraph();
+    const replacement = await prisma.equipment.create({
+      data: {
+        customerId: graph.customerId,
+        addressId: graph.addressId,
+        type: EquipmentType.SPLIT,
+        status: EquipmentStatus.ACTIVE,
+        name: 'Equipamento substituto PMOC',
+        tag: `PMOC-REPLACE-${Date.now()}`,
+        qrCode: `PMOC-REPLACE-QR-${Date.now()}`,
+        isActive: true,
+      },
+    });
+    const created = await authPost(owner, '/api/v1/pmoc').send({
+      customerId: graph.customerId,
+      equipmentId: graph.equipmentId,
+      equipmentIds: [graph.equipmentId],
+      responsibleTechnician: owner.user.name,
+      startDate: '2026-07-15',
+      endDate: '2027-07-15',
+    });
+    const plan = (created.body as { data: { id: string; maintenancePlanId: string } }).data;
+    const updated = await authPatch(owner, `/api/v1/pmoc/${plan.id}`).send({
+      equipmentIds: [replacement.id],
+    });
+    expect(updated.status).toBe(200);
+    expect((updated.body as { data: { equipmentId: string; equipments: Array<{ equipmentId: string }> } }).data).toMatchObject({
+      equipmentId: replacement.id,
+      equipments: [{ equipmentId: replacement.id }],
+    });
+    await expect(prisma.maintenancePlan.findUniqueOrThrow({ where: { id: plan.maintenancePlanId } })).resolves.toMatchObject({
+      equipmentId: replacement.id,
+    });
+  });
+
   it('links a standard manageable Work Order only after the PMOC execution exists', async () => {
     const graph = await createCustomerGraph();
     const pmocResponse = await authPost(owner, '/api/v1/pmoc').send({
@@ -185,10 +271,23 @@ describe('AppSec Maintenance Planning and PMOC closure', () => {
 
   it('generates a PMOC Work Order through the official workflow with history and notifications', async () => {
     const graph = await createCustomerGraph();
+    const secondEquipment = await prisma.equipment.create({
+      data: {
+        customerId: graph.customerId,
+        addressId: graph.addressId,
+        type: EquipmentType.SPLIT,
+        status: EquipmentStatus.ACTIVE,
+        name: 'Split complementar PMOC',
+        tag: `PMOC-${Date.now()}`,
+        qrCode: `PMOC-QR-${Date.now()}`,
+        isActive: true,
+      },
+    });
     const created = await authPost(owner, '/api/v1/pmoc').send({
       customerId: graph.customerId,
       equipmentId: graph.equipmentId,
-      equipmentIds: [graph.equipmentId],
+      equipmentIds: [graph.equipmentId, secondEquipment.id],
+      serviceTypes: [OperationType.PREVENTIVA, OperationType.CORRETIVA],
       responsibleTechnician: owner.user.name,
       periodicity: 'QUARTERLY',
       generationMode: 'MANUAL',
@@ -212,8 +311,12 @@ describe('AppSec Maintenance Planning and PMOC closure', () => {
         equipmentId: graph.equipmentId,
         operatorId: operator.user.id,
         type: 'PREVENTIVA',
+        serviceTypes: ['PREVENTIVA', 'CORRETIVA'],
       },
     });
+    expect((prefill.body as { data: { inspectedEquipments: Array<{ equipmentId: string }> } }).data.inspectedEquipments.map((item) => item.equipmentId)).toEqual(
+      expect.arrayContaining([graph.equipmentId, secondEquipment.id]),
+    );
 
     const generated = await authPost(
       owner,
@@ -233,6 +336,17 @@ describe('AppSec Maintenance Planning and PMOC closure', () => {
     expect(generatedRequest.data.operation.operator.id).toBe(operator.user.id);
 
     const operationId = generatedRequest.data.operation.id;
+    const generatedOperation = await prisma.operation.findUniqueOrThrow({
+      where: { id: operationId },
+      include: { inspectedEquipments: true },
+    });
+    expect(generatedOperation.serviceTypes).toEqual([
+      OperationType.PREVENTIVA,
+      OperationType.CORRETIVA,
+    ]);
+    expect(generatedOperation.inspectedEquipments.map((item) => item.equipmentId)).toEqual(
+      expect.arrayContaining([graph.equipmentId, secondEquipment.id]),
+    );
     expect(generatedRequest.data.generatedOperationId).toBe(operationId);
     await expect(prisma.assignment.findUnique({ where: { operationId } })).resolves.toMatchObject({
       assignedTo: operator.user.id,

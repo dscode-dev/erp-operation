@@ -1,5 +1,20 @@
 # Backend State
 
+## PMOC UX-02 — refinamento profissional (2026-07-16)
+
+- `TechnicalCatalogType.PLAN_SCOPE` estrutura o escopo usando o Catálogo Técnico oficial;
+  `PmocPlanScope` associa planos e itens sem duplicar CRUD ou taxonomia.
+- `coverage` permanece como snapshot textual compatível, derivado dos títulos selecionados; os
+  contratos aceitam `scopeCatalogIds` e validam tipo, atividade e organização no backend.
+- `GET /api/v1/pmoc/name-suggestion?customerId=...` oferece sugestão provisória. Sem edição manual,
+  o backend recalcula o nome definitivo após reservar o número oficial.
+- O reagendamento individual permanece no `PmocExecutionRequest`: preserva identidade, número,
+  `MaintenanceExecution`, histórico e auditoria sem alterar periodicidade ou demais requests.
+- Migrations aditivas `20260716223000_pmoc_ux02_plan_scope` e
+  `20260716223100_pmoc_ux02_plan_scope_catalog`; 15 escopos padrão por organização.
+- Runtime real validou Catálogo → PMOC → ExecutionRequest → Operation → Assignment → Document
+  Engine, PDF de 18.957 bytes e presença em `/documentos`.
+
 ## PMOC Foundation — Bloco 3 (2026-07-16)
 
 - `GET /pmoc/stats` tornou-se a projeção operacional oficial do dashboard: planos ativos, pausados
@@ -2815,3 +2830,20 @@ Status: concluído.
   históricos, preservando o número próprio e o limite de 140 caracteres do plano.
 - A OS continua sendo criada pelo domínio oficial de Operations e permanece gerenciável em toda a
   plataforma.
+
+## PMOC UX-01 — fluxos fundamentais (2026-07-16)
+
+Status: implementado e validado em PostgreSQL/Docker.
+
+- `PmocPlan` e `Operation` receberam `serviceTypes OperationType[]`; o tipo principal continua em
+  `defaultOperationType`/`type` para retrocompatibilidade. Não foi criado enum paralelo.
+- A seleção oficial continua em `PmocPlanEquipment`. Na edição, `equipmentIds` substitui a
+  cobertura e o primeiro item sincroniza o campo principal legado.
+- A cadeia `PmocPlan → ExecutionRequest → Operation → Assignment → MaintenanceExecution` preserva
+  equipamentos em `inspectedEquipments` e tipos em `serviceTypes`.
+- `DocumentContextService` resolve `signatureOverrideId` somente para PMOC. Builder e Renderer
+  continuam sem acesso a banco ou Storage.
+- O Template é autoritativo: `NONE`/`FIXED` ignoram assinatura de execução; `COLLECTED` coleta a
+  execução; `HYBRID` combina institucional e execução.
+- Migration aditiva `20260716210000_pmoc_ux01_service_types`, com backfill pelos tipos principais.
+- Nenhum endpoint, renderer, wizard, scheduler, documento ou domínio paralelo foi criado.

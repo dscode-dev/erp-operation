@@ -40,6 +40,7 @@ const TYPE_LABELS: Record<TechnicalCatalogType, string> = {
   SITE_CONDITION: 'Condições Observadas',
   CONCLUSION: 'Conclusões',
   RECOMMENDATION: 'Recomendações',
+  PLAN_SCOPE: 'Escopos de plano',
 };
 
 const AREA_LABELS: Record<TechnicalCatalogArea, string> = {

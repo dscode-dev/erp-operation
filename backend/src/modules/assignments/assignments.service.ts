@@ -52,6 +52,7 @@ const ASSIGNMENT_INCLUDE = {
                   number: true,
                   periodicity: true,
                   generationMode: true,
+                  serviceTypes: true,
                   responsibleTechnician: true,
                   contractNumber: true,
                   artNumber: true,

@@ -1,5 +1,15 @@
 # Security
 
+## PMOC UX-02 — controles de integridade
+
+- `scopeCatalogIds` valida UUID, unicidade e limite de 50; só aceita `PLAN_SCOPE` ativo, não
+  removido e da organização. IDs incompatíveis são rejeitados antes da transação.
+- `PmocPlanScope` possui unique constraint por plano/item e FKs restritivas.
+- A sugestão de nome é restrita a `OWNER`/`MANAGER` e não reserva sequência; o nome definitivo sem
+  personalização é calculado após a criação.
+- Reagendamento segue restrito a `PENDING`/`FAILED`, dentro da vigência, sem colisão de data, com
+  atualização transacional, histórico append-only e auditoria.
+
 ## PMOC Foundation — Bloco 3
 
 - Dashboard, overview e timeline são projeções read-only sob o RBAC existente; nenhuma permissão de
@@ -1939,3 +1949,13 @@ The catalog is scoped to the installation Organization in every query. Reads req
 - PMOC não aceita `sourceOperationId`. A OS é criada posteriormente pelo endpoint oficial de
   Operations e ligada por `MaintenanceExecution.operationId`.
 - Auditoria e Lifecycle continuam registrando plano, número e relacionamentos sem binários.
+
+## PMOC UX-01 — integridade e assinatura
+
+- DTOs limitam equipamentos a 50 UUIDs únicos e tipos a 4 enums oficiais únicos.
+- Todos os equipamentos são validados como ativos, não removidos e do cliente do PMOC.
+- `signatureOverrideId` é resolvido exclusivamente no `DocumentContextService`; não expõe path,
+  storage key ou binário.
+- `NONE`/`FIXED` descartam assinatura coletada na composição. Dados legados não promovem a política.
+- `COLLECTED`/`HYBRID` preservam as validações binárias e de tamanho de Operations.
+- PostgreSQL cobre RBAC, relacionamento cruzado e propagação de dois equipamentos/dois tipos.

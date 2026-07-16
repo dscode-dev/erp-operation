@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Calendar, ClipboardList, Users, User } from "lucide-react";
+import { Home, ClipboardList, Users, User } from "lucide-react";
 import { cn } from "@erp/utils";
 
 const items = [

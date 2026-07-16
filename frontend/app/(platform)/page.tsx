@@ -131,7 +131,7 @@ export default function PlatformHome() {
       <DashboardSection title="Resumo executivo">
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
           <MetricLink href="/agenda"><MetricCard label="Operações hoje" value={formatNumber(todayAssignments.length)} delta="agenda operacional" icon="CalendarClock" /></MetricLink>
-          <MetricLink href="/operacoes?status=IN_PROGRESS"><MetricCard label="Em execução" value={formatNumber(inProgress)} delta="assignments" trend={inProgress > 0 ? "up" : "flat"} icon="Activity" /></MetricLink>
+          <MetricLink href="/operacoes?status=IN_PROGRESS"><MetricCard label="Em execução" value={formatNumber(inProgress)} delta="atendimentos" trend={inProgress > 0 ? "up" : "flat"} icon="Activity" /></MetricLink>
           <MetricLink href="/operacoes"><MetricCard label="Aguardando aceite" value={formatNumber(awaitingAcceptance)} delta="ação do operador" trend={awaitingAcceptance > 0 ? "down" : "flat"} icon="Clock" /></MetricLink>
           {canSeeFinancial ? (
             <MetricLink href="/financial"><MetricCard label="Saldo atual" value={formatCurrencyBRL(Number(financial.data?.currentBalance ?? 0))} delta="financial core" icon="Wallet" /></MetricLink>
@@ -255,7 +255,7 @@ function OperationsToday({
         ))}
       </div>
       {todayAssignments.length === 0 ? (
-        <EmptyState icon={CalendarClock} title="Sem agenda operacional hoje" description="Nenhuma Assignment agendada para hoje foi retornada no conjunto consultado." />
+        <EmptyState icon={CalendarClock} title="Sem agenda operacional hoje" description="Nenhum atendimento foi agendado para hoje." />
       ) : (
         <ul className="divide-y divide-[var(--color-border)] rounded-[var(--radius-lg)] border border-[var(--color-border)]">
           {todayAssignments.slice(0, 7).map((assignment) => (
@@ -436,7 +436,7 @@ function buildAttentionItems(input: {
   pmoc: PmocStats | null;
 }): AttentionItem[] {
   const items: AttentionItem[] = [];
-  if (input.overdueAssignments.length > 0) items.push({ id: "assignments-overdue", severity: "critical", domain: "Operação", title: `${input.overdueAssignments.length} assignments atrasadas`, context: "Há atividades com horário anterior ao atual sem conclusão.", href: "/operacoes" });
+  if (input.overdueAssignments.length > 0) items.push({ id: "assignments-overdue", severity: "critical", domain: "Operação", title: `${input.overdueAssignments.length} atendimentos atrasados`, context: "Há atividades com horário anterior ao atual sem conclusão.", href: "/operacoes" });
   if (input.awaitingToday.length > 0) items.push({ id: "assignments-awaiting", severity: "warning", domain: "Operação", title: `${input.awaitingToday.length} atividades sem aceite hoje`, context: "Operadores ainda precisam aceitar atividades agendadas.", href: "/agenda" });
   const overdueFinancial = input.financial ? Number(input.financial.overdue.receivable) + Number(input.financial.overdue.payable) : 0;
   if (overdueFinancial > 0) items.push({ id: "financial-overdue", severity: "critical", domain: "Financeiro", title: "Lançamentos vencidos", context: formatCurrencyBRL(overdueFinancial), href: "/financial" });

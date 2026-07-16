@@ -91,7 +91,7 @@ export default function FinancialPage() {
       permission="canFinancial"
       fallback={
         <div className="max-w-[1440px]">
-          <PageHeader eyebrow="Financeiro" title="Financeiro" description="Acesso restrito pelo backend." />
+          <PageHeader eyebrow="Financeiro" title="Financeiro" description="Você não possui permissão para acessar esta área." />
           <ErrorState error={{ message: "Seu perfil não possui permissão financeira." }} />
         </div>
       }

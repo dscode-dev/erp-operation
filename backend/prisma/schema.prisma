@@ -97,6 +97,7 @@ enum TechnicalCatalogType {
   SITE_CONDITION
   CONCLUSION
   RECOMMENDATION
+  PLAN_SCOPE
 }
 
 enum TechnicalCatalogArea {
@@ -865,6 +866,7 @@ model Operation {
   equipmentId                     String?                             @map("equipment_id") @db.Uuid
   operatorId                      String                              @map("operator_id") @db.Uuid
   type                            OperationType
+  serviceTypes                    OperationType[]                     @default([]) @map("service_types")
   status                          OperationStatus                     @default(DRAFT)
   scheduledFor                    DateTime?                           @map("scheduled_for") @db.Timestamptz(3)
   startedAt                       DateTime?                           @map("started_at") @db.Timestamptz(3)
@@ -955,6 +957,7 @@ model TechnicalCatalog {
   createdAt       DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(3)
   organization    Organization               @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  pmocPlanScopes  PmocPlanScope[]
 
   @@index([organizationId, type, active, sortOrder], map: "technical_catalog_lookup_idx")
   @@index([organizationId, maintenanceType, active], map: "technical_catalog_maintenance_idx")
@@ -1184,6 +1187,7 @@ model PmocPlan {
   defaultTechnicianId             String?                @map("default_technician_id") @db.Uuid
   defaultAddressId                String?                @map("default_address_id") @db.Uuid
   defaultOperationType            OperationType          @default(PREVENTIVA) @map("default_operation_type")
+  serviceTypes                    OperationType[]         @default([]) @map("service_types")
   defaultEstimatedDurationMinutes Int?                   @map("default_estimated_duration_minutes")
   defaultOperationObservations    String?                @map("default_operation_observations") @db.Text
   signatureOverrideId             String?                @map("signature_override_id") @db.Uuid
@@ -1216,6 +1220,7 @@ model PmocPlan {
   signatureOverride               Signature?             @relation(fields: [signatureOverrideId], references: [id], onDelete: SetNull)
   environments                    PmocEnvironment[]
   equipments                      PmocPlanEquipment[]
+  scopes                          PmocPlanScope[]
   executionRequests               PmocExecutionRequest[]
   history                         PmocHistory[]
 
@@ -1229,6 +1234,19 @@ model PmocPlan {
   @@index([defaultAddressId])
   @@index([signatureOverrideId])
   @@map("pmoc_plans")
+}
+
+model PmocPlanScope {
+  id                 String           @id @default(uuid()) @db.Uuid
+  pmocPlanId         String           @map("pmoc_plan_id") @db.Uuid
+  technicalCatalogId String           @map("technical_catalog_id") @db.Uuid
+  createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  pmocPlan           PmocPlan         @relation(fields: [pmocPlanId], references: [id], onDelete: Cascade)
+  technicalCatalog   TechnicalCatalog @relation(fields: [technicalCatalogId], references: [id], onDelete: Restrict)
+
+  @@unique([pmocPlanId, technicalCatalogId], map: "pmoc_plan_scope_plan_catalog_uq")
+  @@index([technicalCatalogId], map: "pmoc_plan_scope_catalog_idx")
+  @@map("pmoc_plan_scopes")
 }
 
 model PmocExecutionRequest {

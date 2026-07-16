@@ -18,7 +18,7 @@ export default function OperatorServices() {
     <div className="px-4 pt-4 pb-24 space-y-6">
       <header>
         <h1 className="text-[22px] font-semibold tracking-tight">Minhas ordens</h1>
-        <p className="text-[var(--color-muted-foreground)] text-sm">Assignments reais atribuídos a você.</p>
+        <p className="text-[var(--color-muted-foreground)] text-sm">Ordens de Serviço atribuídas a você.</p>
       </header>
 
       {assignments.loading && !assignments.data ? (

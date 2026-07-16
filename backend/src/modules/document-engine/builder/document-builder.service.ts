@@ -882,6 +882,12 @@ export class DocumentBuilderService {
           ['Contato do cliente', contact ? `${contact.name}${contact.phone ? ` · ${contact.phone}` : ''}` : (operation.customer.phone ?? '—')],
           ['Vigência', `${this.date(pmoc.startDate)} a ${this.date(pmoc.endDate)}`],
           ['Periodicidade', this.maintenanceTypeLabel(operation.maintenanceType ?? 'MONTHLY')],
+          [
+            'Tipos de serviço',
+            (operation.serviceTypes?.length ? operation.serviceTypes : [operation.type])
+              .map((type) => this.operationTypeLabel(type))
+              .join(' · '),
+          ],
         ])],
       },
       this.inspectedEquipmentSection(operation, 'pmoc'),
@@ -1959,6 +1965,16 @@ export class DocumentBuilderService {
       ELECTRICAL_PANEL: 'Painel elétrico',
       GENERATOR: 'Gerador',
       OTHER: 'Outro sistema',
+    };
+    return labels[value] ?? value;
+  }
+
+  private operationTypeLabel(value: string): string {
+    const labels: Record<string, string> = {
+      PREVENTIVA: 'Manutenção preventiva',
+      CORRETIVA: 'Manutenção corretiva',
+      INSTALACAO: 'Instalação',
+      PROJETO: 'Projeto / inspeção técnica',
     };
     return labels[value] ?? value;
   }

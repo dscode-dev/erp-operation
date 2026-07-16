@@ -603,7 +603,7 @@ function SignaturesSection({
     <SectionCard
       title="Assinaturas"
       icon={PenLine}
-      description="Assinaturas fixas reutilizáveis por templates. Imagens ficam no storage do backend."
+      description="Assinaturas institucionais reutilizáveis nos modelos de documentos e armazenadas com segurança."
       action={
         canEdit ? (
           <button

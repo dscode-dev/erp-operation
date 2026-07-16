@@ -67,7 +67,10 @@ export default function TechnicalCatalogsPage() {
     [],
   );
   useEffect(() => {
-    if (!selectedType && types.data?.[0]) setSelectedType(types.data[0].value);
+    if (selectedType || !types.data?.length) return;
+    const requested = new URLSearchParams(window.location.search).get('type');
+    const matched = types.data.find((item) => item.value === requested);
+    setSelectedType(matched?.value ?? types.data[0].value);
   }, [selectedType, types.data]);
   const catalogs = useQuery<Paginated<TechnicalCatalog>>(
     (signal) =>

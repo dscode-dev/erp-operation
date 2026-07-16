@@ -287,8 +287,14 @@ export type DocumentConfiguration = {
     OrganizationSettings,
     'id' | 'language' | 'timezone' | 'currency' | 'documentPrefix'
   >;
-  defaultTemplate: (DocumentTemplate & { signature?: Signature | null }) | null;
-  templates: Array<DocumentTemplate & { signature?: Signature | null }>;
+  defaultTemplate: (DocumentTemplate & {
+    signature?: Signature | null;
+    institutionalSignatures?: Array<{ position: number; signature: Signature }>;
+  }) | null;
+  templates: Array<DocumentTemplate & {
+    signature?: Signature | null;
+    institutionalSignatures?: Array<{ position: number; signature: Signature }>;
+  }>;
 };
 
 export type AssetWithContent = {
@@ -713,7 +719,8 @@ export type TechnicalCatalogType =
   | 'OBJECTIVE'
   | 'SITE_CONDITION'
   | 'CONCLUSION'
-  | 'RECOMMENDATION';
+  | 'RECOMMENDATION'
+  | 'PLAN_SCOPE';
 
 export type TechnicalCatalogArea =
   | 'GENERAL'
@@ -786,6 +793,7 @@ export type OperationSummary = {
   id: string;
   number: number;
   type: OperationType;
+  serviceTypes: OperationType[];
   status: OperationStatus;
   customer: { id: string; name: string } | null;
   equipment: { id: string; name: string } | null;
@@ -863,6 +871,7 @@ export type CreateOperationPayload = {
   /** Delegates the resulting Operation/Assignment when allowed by backend RBAC. */
   operatorId?: string | null;
   type: OperationType;
+  serviceTypes?: OperationType[];
   status?: OperationStatus;
   scheduledFor?: string | null;
   startedAt?: string | null;
@@ -1050,6 +1059,11 @@ export type PmocPlan = {
   defaultTechnicianId: string | null;
   defaultAddressId: string | null;
   defaultOperationType: OperationType;
+  serviceTypes: OperationType[];
+  scopes?: Array<{
+    technicalCatalogId: string;
+    technicalCatalog: Pick<TechnicalCatalog, 'id' | 'type' | 'title' | 'description' | 'active'>;
+  }>;
   defaultEstimatedDurationMinutes: number | null;
   defaultOperationObservations: string | null;
   signatureOverrideId: string | null;

@@ -1,5 +1,15 @@
 # COMPONENTS — Frontend
 
+## PMOC UX-02
+
+- `PmocPlanWizard`: seis etapas contextuais, sugestão de nome protegida contra overwrite, escopo
+  catalogado, projeção de recorrência, política documental e resumo navegável.
+- `MultiSelect`: reutilizado para equipamentos, escopos e tipos de serviço; pesquisa e chips evitam
+  listas extensas no corpo do Wizard.
+- `RescheduleDrawer`: inicia com a data atual da request, trata erros e comunica explicitamente o
+  caráter pontual da alteração.
+- A tela de Catálogo Técnico reconhece `?type=PLAN_SCOPE`, permitindo abertura direta pelo Wizard.
+
 ## PMOC Foundation — Bloco 3
 
 | Componente | Responsabilidade |
@@ -696,3 +706,11 @@ Tipos:
 - Possui dois modos: criação independente e seleção/gestão de plano existente.
 - Reutiliza `MultiSelect` para equipamentos e os endpoints oficiais de create/update/delete.
 - Não cria modal, agenda, preview ou componente documental paralelo.
+
+### PMOC UX-01
+
+- `PmocPlanWizard`: seleção múltipla, obrigatoriedade visual, programação amigável e assinatura
+  governada pelo Template.
+- `MultiSelect`: reutilizado para equipamentos e `OperationType`.
+- `SignatureCard`: assinatura institucional e metadados profissionais em leitura.
+- `PmocFieldExecution`: consulta configuração PMOC e coleta cliente só em `COLLECTED`/`HYBRID`.
