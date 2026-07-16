@@ -1,4 +1,10 @@
-import { MaintenancePriority } from '@prisma/client';
+import {
+  MaintenancePriority,
+  OperationType,
+  PmocExecutionRequestStatus,
+  PmocGenerationMode,
+  PmocPeriodicity,
+} from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -18,6 +24,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { RecurrenceFrequency } from '../../maintenance-planning/dto/maintenance-planning.dto';
+import { CreateOperationDto } from '../../operations/dto/operation.dto';
 
 const trim = (value: unknown): unknown => (typeof value === 'string' ? value.trim() : value);
 
@@ -62,9 +69,8 @@ export class ListPmocQueryDto {
 }
 
 export class CreatePmocPlanDto {
-  @IsOptional()
-  @IsUUID('4')
-  sourceOperationId?: string;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MinLength(2) @MaxLength(140)
+  name?: string;
 
   @IsUUID('4')
   customerId!: string;
@@ -78,6 +84,36 @@ export class CreatePmocPlanDto {
   @ArrayMaxSize(50)
   @IsUUID('4', { each: true })
   equipmentIds?: string[];
+
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(5000)
+  coverage?: string;
+
+  @IsOptional() @IsEnum(PmocPeriodicity)
+  periodicity?: PmocPeriodicity;
+
+  @IsOptional() @IsEnum(PmocGenerationMode)
+  generationMode?: PmocGenerationMode;
+
+  @IsOptional() @IsUUID('4')
+  defaultOperatorId?: string;
+
+  @IsOptional() @IsUUID('4')
+  defaultTechnicianId?: string;
+
+  @IsOptional() @IsUUID('4')
+  defaultAddressId?: string;
+
+  @IsOptional() @IsEnum(OperationType)
+  defaultOperationType?: OperationType;
+
+  @IsOptional() @Type(() => Number) @IsInt() @Min(15) @Max(10080)
+  defaultEstimatedDurationMinutes?: number;
+
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(5000)
+  defaultOperationObservations?: string;
+
+  @IsOptional() @IsUUID('4')
+  signatureOverrideId?: string;
 
   @Transform(({ value }) => trim(value))
   @IsString()
@@ -113,9 +149,10 @@ export class CreatePmocPlanDto {
   @IsEnum(MaintenancePriority)
   priority?: MaintenancePriority;
 
+  @IsOptional()
   @ValidateNested()
   @Type(() => PmocRecurrenceRuleDto)
-  recurrenceRule!: PmocRecurrenceRuleDto;
+  recurrenceRule?: PmocRecurrenceRuleDto;
 
   @IsOptional()
   @Transform(({ value }) => value === 'true' || value === true)
@@ -124,12 +161,48 @@ export class CreatePmocPlanDto {
 }
 
 export class UpdatePmocPlanDto {
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MinLength(2) @MaxLength(140)
+  name?: string;
+
   @IsOptional()
   @IsArray()
   @ArrayUnique()
   @ArrayMaxSize(50)
   @IsUUID('4', { each: true })
   equipmentIds?: string[];
+
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(5000)
+  coverage?: string | null;
+
+  @IsOptional() @IsEnum(PmocPeriodicity)
+  periodicity?: PmocPeriodicity;
+
+  @IsOptional() @IsEnum(PmocGenerationMode)
+  generationMode?: PmocGenerationMode;
+
+  @IsOptional() @IsUUID('4')
+  defaultOperatorId?: string | null;
+
+  @IsOptional() @IsUUID('4')
+  defaultTechnicianId?: string | null;
+
+  @IsOptional() @IsUUID('4')
+  defaultAddressId?: string | null;
+
+  @IsOptional() @IsEnum(OperationType)
+  defaultOperationType?: OperationType;
+
+  @IsOptional() @Type(() => Number) @IsInt() @Min(15) @Max(10080)
+  defaultEstimatedDurationMinutes?: number | null;
+
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(5000)
+  defaultOperationObservations?: string | null;
+
+  @IsOptional() @IsBoolean()
+  applyDefaultsToPendingExecutions?: boolean;
+
+  @IsOptional() @IsUUID('4')
+  signatureOverrideId?: string | null;
 
   @IsOptional()
   @Transform(({ value }) => trim(value))
@@ -177,6 +250,45 @@ export class UpdatePmocPlanDto {
   @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
   active?: boolean;
+}
+
+export class ListPmocExecutionRequestsQueryDto {
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1)
+  page = 1;
+
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100)
+  limit = 20;
+
+  @IsOptional() @IsEnum(PmocExecutionRequestStatus)
+  status?: PmocExecutionRequestStatus;
+}
+
+export class CreatePmocExecutionRequestDto {
+  @IsOptional() @IsDateString()
+  scheduledFor?: string;
+
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(1000)
+  notes?: string;
+}
+
+export class ReschedulePmocExecutionRequestDto {
+  @IsDateString()
+  scheduledFor!: string;
+
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(1000)
+  notes?: string;
+}
+
+export class GeneratePmocWorkOrderDto {
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CreateOperationDto)
+  operation?: CreateOperationDto;
+}
+
+export class RunPmocSchedulerQueryDto {
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100)
+  limit = 25;
 }
 
 export class CreatePmocEnvironmentDto {

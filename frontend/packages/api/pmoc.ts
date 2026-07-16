@@ -1,12 +1,33 @@
 /** PMOC Compliance domain — production API. */
 import { api } from "./client";
-import type { Paginated, PmocPlan, PmocStats } from "@erp/types";
+import type {
+  CreateOperationPayload,
+  Paginated,
+  OperationType,
+  PmocExecutionRequest,
+  PmocExecutionRequestStatus,
+  PmocGenerationMode,
+  PmocHistoryItem,
+  PmocPeriodicity,
+  PmocPlan,
+  PmocStats,
+} from "@erp/types";
 
 export type CreatePmocPayload = {
-  sourceOperationId?: string;
+  name?: string;
   customerId: string;
   equipmentId: string;
   equipmentIds?: string[];
+  coverage?: string;
+  periodicity?: PmocPeriodicity;
+  generationMode?: PmocGenerationMode;
+  defaultOperatorId?: string;
+  defaultTechnicianId?: string;
+  defaultAddressId?: string;
+  defaultOperationType?: OperationType;
+  defaultEstimatedDurationMinutes?: number;
+  defaultOperationObservations?: string;
+  signatureOverrideId?: string;
   responsibleTechnician: string;
   artNumber?: string;
   contractNumber?: string;
@@ -14,11 +35,40 @@ export type CreatePmocPayload = {
   endDate: string;
   observations?: string;
   priority?: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
-  recurrenceRule: {
+  recurrenceRule?: {
     frequency: "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY" | "INTERVAL_DAYS" | "INTERVAL_MONTHS";
     interval?: number;
   };
   active?: boolean;
+};
+
+export type UpdatePmocPayload = Partial<
+  Pick<
+    CreatePmocPayload,
+    | "equipmentIds"
+    | "responsibleTechnician"
+    | "startDate"
+    | "endDate"
+    | "priority"
+    | "recurrenceRule"
+    | "active"
+    | "periodicity"
+    | "generationMode"
+    | "name"
+    | "defaultAddressId"
+    | "defaultOperationType"
+    | "defaultEstimatedDurationMinutes"
+    | "defaultOperationObservations"
+  >
+> & {
+  artNumber?: string | null;
+  contractNumber?: string | null;
+  observations?: string | null;
+  coverage?: string | null;
+  defaultOperatorId?: string | null;
+  defaultTechnicianId?: string | null;
+  signatureOverrideId?: string | null;
+  applyDefaultsToPendingExecutions?: boolean;
 };
 
 export type ListPmocParams = {
@@ -45,4 +95,57 @@ export function getPmoc(id: string, opts?: { signal?: AbortSignal }): Promise<Pm
 
 export function createPmoc(payload: CreatePmocPayload): Promise<PmocPlan> {
   return api.post<PmocPlan>("/pmoc", payload);
+}
+
+export function updatePmoc(id: string, payload: UpdatePmocPayload): Promise<PmocPlan> {
+  return api.patch<PmocPlan>(`/pmoc/${id}`, payload);
+}
+
+export function deletePmoc(id: string): Promise<{ deleted: true }> {
+  return api.delete<{ deleted: true }>(`/pmoc/${id}`);
+}
+
+export function listExecutionRequests(
+  pmocId: string,
+  params?: { page?: number; limit?: number; status?: PmocExecutionRequestStatus; signal?: AbortSignal },
+): Promise<Paginated<PmocExecutionRequest>> {
+  const { signal, ...query } = params ?? {};
+  return api.get<Paginated<PmocExecutionRequest>>(`/pmoc/${pmocId}/execution-requests`, { query, signal });
+}
+
+export function createExecutionRequest(
+  pmocId: string,
+  payload: { scheduledFor?: string; notes?: string } = {},
+): Promise<PmocExecutionRequest> {
+  return api.post<PmocExecutionRequest>(`/pmoc/${pmocId}/execution-requests`, payload);
+}
+
+export function getExecutionRequestPrefill(id: string): Promise<CreateOperationPayload> {
+  return api.get<CreateOperationPayload>(`/pmoc/execution-requests/${id}/prefill`);
+}
+
+export function generateWorkOrder(
+  id: string,
+  operation: CreateOperationPayload,
+): Promise<PmocExecutionRequest> {
+  return api.post<PmocExecutionRequest>(`/pmoc/execution-requests/${id}/generate-work-order`, { operation });
+}
+
+export function cancelExecutionRequest(id: string): Promise<PmocExecutionRequest> {
+  return api.patch<PmocExecutionRequest>(`/pmoc/execution-requests/${id}/cancel`, {});
+}
+
+export function rescheduleExecutionRequest(
+  id: string,
+  payload: { scheduledFor: string; notes?: string },
+): Promise<PmocExecutionRequest> {
+  return api.patch<PmocExecutionRequest>(`/pmoc/execution-requests/${id}/reschedule`, payload);
+}
+
+export function getHistory(pmocId: string): Promise<PmocHistoryItem[]> {
+  return api.get<PmocHistoryItem[]>(`/pmoc/${pmocId}/history`);
+}
+
+export function runScheduler(limit = 25): Promise<{ recovered: number; attempted: number; generated: number; failed: number; manualPending: number }> {
+  return api.post(`/pmoc/scheduler/run?limit=${limit}`, {});
 }

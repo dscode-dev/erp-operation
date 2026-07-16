@@ -1,11 +1,4 @@
-import {
-  DocumentTemplateType,
-  MaintenanceExecutionStatus,
-  MaintenancePlanType,
-  OperationStatus,
-  OperationType,
-  Role,
-} from '@prisma/client';
+import { MaintenanceExecutionStatus, MaintenancePlanType, Role } from '@prisma/client';
 import { ERROR_CODES } from '../../src/shared/constants/error-codes.constants';
 import { createCustomerGraph, createMaintenanceFixture, createOperation, createOrganization, prisma } from '../integration/helpers';
 import {
@@ -122,29 +115,10 @@ describe('AppSec Maintenance Planning and PMOC closure', () => {
     expect(errorCode(mismatchedEquipment)).toBe(ERROR_CODES.PMOC_INVALID_RELATIONSHIP);
   });
 
-  it('creates one traceable PMOC from a completed Work Order and derives its official name', async () => {
+  it('assigns an independent PMOC number and derives the official plan name from it', async () => {
     const graph = await createCustomerGraph();
     const customer = await prisma.customer.findUniqueOrThrow({ where: { id: graph.customerId } });
-    const operation = await prisma.operation.create({
-      data: {
-        customerId: graph.customerId,
-        addressId: graph.addressId,
-        equipmentId: graph.equipmentId,
-        operatorId: owner.user.id,
-        type: OperationType.PREVENTIVA,
-        status: OperationStatus.COMPLETED,
-        completedAt: new Date('2026-07-15T10:00:00.000Z'),
-        checklist: [],
-        documents: {
-          create: {
-            type: DocumentTemplateType.WORK_ORDER,
-            number: 'OS-009999',
-          },
-        },
-      },
-    });
     const payload = {
-      sourceOperationId: operation.id,
       customerId: graph.customerId,
       equipmentId: graph.equipmentId,
       equipmentIds: [graph.equipmentId],
@@ -157,19 +131,387 @@ describe('AppSec Maintenance Planning and PMOC closure', () => {
     const created = await authPost(owner, '/api/v1/pmoc').send(payload);
     expect(created.status).toBe(201);
     const createdPlan = created.body as {
-      data: { sourceOperationId: string; maintenancePlan: { name: string } };
+      data: { number: number; maintenancePlan: { name: string } };
     };
-    expect(createdPlan.data.sourceOperationId).toBe(operation.id);
     expect(createdPlan.data.maintenancePlan.name).toBe(
-      `PMOC · ${customer.tradeName ?? customer.name} · OS-009999`,
+      `PMOC · ${customer.tradeName ?? customer.name} · PMOC-${String(createdPlan.data.number).padStart(6, '0')}`,
     );
+    expect(createdPlan.data.maintenancePlan.name).not.toContain('OS-');
+  });
 
-    const duplicate = await authPost(owner, '/api/v1/pmoc').send(payload);
-    expect(duplicate.status).toBe(409);
-    expect(errorCode(duplicate)).toBe(ERROR_CODES.PMOC_SOURCE_OPERATION_CONFLICT);
+  it('links a standard manageable Work Order only after the PMOC execution exists', async () => {
+    const graph = await createCustomerGraph();
+    const pmocResponse = await authPost(owner, '/api/v1/pmoc').send({
+      customerId: graph.customerId,
+      equipmentId: graph.equipmentId,
+      equipmentIds: [graph.equipmentId],
+      responsibleTechnician: owner.user.name,
+      startDate: '2026-07-16',
+      endDate: '2027-07-16',
+      recurrenceRule: { frequency: 'MONTHLY', interval: 1 },
+    });
+    expect(pmocResponse.status).toBe(201);
+    const pmoc = pmocResponse.body as {
+      data: { maintenancePlan: { executions: Array<{ id: string }> } };
+    };
+    const executionId = pmoc.data.maintenancePlan.executions[0]?.id;
+    expect(executionId).toBeDefined();
+
+    const operationResponse = await authPost(owner, '/api/v1/operations').send({
+      customerId: graph.customerId,
+      addressId: graph.addressId,
+      equipmentId: graph.equipmentId,
+      operatorId: owner.user.id,
+      type: 'PREVENTIVA',
+      status: 'DRAFT',
+      inspectedEquipments: [{ equipmentId: graph.equipmentId, sector: 'Área técnica' }],
+    });
+    expect(operationResponse.status).toBe(201);
+    const operation = operationResponse.body as {
+      data: { id: string; documents: Array<{ type: string }> };
+    };
+    expect(operation.data.documents.some((document) => document.type === 'WORK_ORDER')).toBe(true);
+
+    const linked = await authPatch(owner, `/api/v1/maintenance-executions/${executionId}`).send({
+      operationId: operation.data.id,
+      status: MaintenanceExecutionStatus.LINKED,
+    });
+    expect(linked.status).toBe(200);
     await expect(
-      prisma.pmocPlan.count({ where: { sourceOperationId: operation.id } }),
+      prisma.maintenanceExecution.findUniqueOrThrow({ where: { id: executionId } }),
+    ).resolves.toMatchObject({ operationId: operation.data.id });
+    expect((await authGet(owner, `/api/v1/operations/${operation.data.id}`)).status).toBe(200);
+  });
+
+  it('generates a PMOC Work Order through the official workflow with history and notifications', async () => {
+    const graph = await createCustomerGraph();
+    const created = await authPost(owner, '/api/v1/pmoc').send({
+      customerId: graph.customerId,
+      equipmentId: graph.equipmentId,
+      equipmentIds: [graph.equipmentId],
+      responsibleTechnician: owner.user.name,
+      periodicity: 'QUARTERLY',
+      generationMode: 'MANUAL',
+      defaultOperatorId: operator.user.id,
+      coverage: 'Manutenção preventiva integral do equipamento.',
+      startDate: '2026-07-16',
+      endDate: '2027-07-16',
+    });
+    expect(created.status).toBe(201);
+    const pmoc = created.body as {
+      data: { id: string; executionRequests: Array<{ id: string }> };
+    };
+    const requestId = pmoc.data.executionRequests[0]?.id;
+    expect(requestId).toBeDefined();
+
+    const prefill = await authGet(owner, `/api/v1/pmoc/execution-requests/${requestId}/prefill`);
+    expect(prefill.status).toBe(200);
+    expect(prefill.body).toMatchObject({
+      data: {
+        customerId: graph.customerId,
+        equipmentId: graph.equipmentId,
+        operatorId: operator.user.id,
+        type: 'PREVENTIVA',
+      },
+    });
+
+    const generated = await authPost(
+      owner,
+      `/api/v1/pmoc/execution-requests/${requestId}/generate-work-order`,
+    ).send({ operation: (prefill.body as { data: Record<string, unknown> }).data });
+    expect(generated.status).toBe(201);
+    const generatedRequest = generated.body as {
+      data: {
+        status: string;
+        executionNumber: number;
+        generatedOperationId: string;
+        operation: { id: string; operator: { id: string } };
+      };
+    };
+    expect(generatedRequest.data.status).toBe('GENERATED');
+    expect(generatedRequest.data.executionNumber).toBe(1);
+    expect(generatedRequest.data.operation.operator.id).toBe(operator.user.id);
+
+    const operationId = generatedRequest.data.operation.id;
+    expect(generatedRequest.data.generatedOperationId).toBe(operationId);
+    await expect(prisma.assignment.findUnique({ where: { operationId } })).resolves.toMatchObject({
+      assignedTo: operator.user.id,
+    });
+    await expect(
+      prisma.operationDocument.findUnique({ where: { operationId_type: { operationId, type: 'WORK_ORDER' } } }),
+    ).resolves.toBeTruthy();
+    const maintenanceExecution = await prisma.maintenanceExecution.findUniqueOrThrow({
+      where: { operationId },
+    });
+    expect(maintenanceExecution.status).toBe(MaintenanceExecutionStatus.LINKED);
+    const executedAt = '2026-07-16T14:00:00.000Z';
+    const completed = await authPatch(
+      owner,
+      `/api/v1/maintenance-executions/${maintenanceExecution.id}`,
+    ).send({ status: MaintenanceExecutionStatus.COMPLETED, executedAt });
+    expect(completed.status).toBe(200);
+    await expect(prisma.pmocPlan.findUniqueOrThrow({ where: { id: pmoc.data.id } })).resolves.toMatchObject({
+      lastReservedExecutionNumber: 2,
+      lastGeneratedExecutionNumber: 1,
+      lastExecutionDate: new Date(executedAt),
+    });
+    await expect(
+      prisma.pmocExecutionRequest.findMany({
+        where: { pmocPlanId: pmoc.data.id },
+        orderBy: { executionNumber: 'asc' },
+        select: { executionNumber: true, status: true },
+      }),
+    ).resolves.toEqual([
+      { executionNumber: 1, status: 'GENERATED' },
+      { executionNumber: 2, status: 'PENDING' },
+    ]);
+    const historyResponse = await authGet(owner, `/api/v1/pmoc/${pmoc.data.id}/history`);
+    expect(historyResponse.status).toBe(200);
+    const history = historyResponse.body as {
+      data: Array<{ action: string; execution: { executionNumber: number; workOrderNumber: number; executedAt: string } | null }>;
+    };
+    const completionHistory = history.data.find((item) => item.action === 'EXECUTION_COMPLETED');
+    expect(completionHistory?.execution?.executionNumber).toBe(1);
+    expect(completionHistory?.execution?.executedAt).toBe(executedAt);
+    await expect(
+      prisma.pmocHistory.count({ where: { pmocPlanId: pmoc.data.id, operationId } }),
+    ).resolves.toBeGreaterThan(0);
+    await expect(
+      prisma.notification.count({ where: { type: 'PMOC_OS_GENERATED', entityId: pmoc.data.id } }),
+    ).resolves.toBeGreaterThan(0);
+  });
+
+  it('keeps a failed request traceable and rolls back the official Operation', async () => {
+    const graph = await createCustomerGraph();
+    const unrelated = await createCustomerGraph();
+    const created = await authPost(owner, '/api/v1/pmoc').send({
+      customerId: graph.customerId,
+      equipmentId: graph.equipmentId,
+      responsibleTechnician: owner.user.name,
+      generationMode: 'MANUAL',
+      startDate: '2026-07-16',
+      endDate: '2027-07-16',
+    });
+    const requestId = (
+      created.body as { data: { executionRequests: Array<{ id: string }> } }
+    ).data.executionRequests[0].id;
+    const before = await prisma.operation.count();
+    const failed = await authPost(
+      owner,
+      `/api/v1/pmoc/execution-requests/${requestId}/generate-work-order`,
+    ).send({
+      operation: {
+        customerId: graph.customerId,
+        addressId: unrelated.addressId,
+        equipmentId: graph.equipmentId,
+        operatorId: operator.user.id,
+        type: 'PREVENTIVA',
+      },
+    });
+    expect(failed.status).toBe(409);
+    expect(errorCode(failed)).toBe(ERROR_CODES.PMOC_GENERATION_FAILED);
+    await expect(prisma.operation.count()).resolves.toBe(before);
+    await expect(
+      prisma.pmocExecutionRequest.findUniqueOrThrow({ where: { id: requestId } }),
+    ).resolves.toMatchObject({ status: 'FAILED', operationId: null, executionNumber: 1 });
+    await expect(
+      prisma.notification.count({ where: { type: 'PMOC_OS_GENERATION_FAILED' } }),
+    ).resolves.toBeGreaterThan(0);
+
+    const retried = await authPost(
+      owner,
+      `/api/v1/pmoc/execution-requests/${requestId}/generate-work-order`,
+    ).send({});
+    expect(retried.status).toBe(201);
+    expect(retried.body).toMatchObject({
+      data: { id: requestId, status: 'GENERATED', executionNumber: 1 },
+    });
+    await expect(
+      prisma.pmocHistory.count({
+        where: { executionRequestId: requestId, action: 'REQUEST_RETRY' },
+      }),
     ).resolves.toBe(1);
+  });
+
+  it('reserves monotonic execution numbers and never reuses a cancelled number', async () => {
+    const graph = await createCustomerGraph();
+    const created = await authPost(owner, '/api/v1/pmoc').send({
+      customerId: graph.customerId,
+      equipmentId: graph.equipmentId,
+      responsibleTechnician: owner.user.name,
+      generationMode: 'MANUAL',
+      startDate: '2026-07-16',
+      endDate: '2027-07-16',
+    });
+    const pmoc = created.body as {
+      data: { id: string; executionRequests: Array<{ id: string; executionNumber: number }> };
+    };
+    expect(pmoc.data.executionRequests[0].executionNumber).toBe(1);
+    const cancelled = await authPatch(
+      owner,
+      `/api/v1/pmoc/execution-requests/${pmoc.data.executionRequests[0].id}/cancel`,
+    ).send({});
+    expect(cancelled.status).toBe(200);
+    expect(cancelled.body).toMatchObject({
+      data: { status: 'CANCELLED', executionNumber: 1 },
+    });
+
+    const [second, third] = await Promise.all([
+      authPost(owner, `/api/v1/pmoc/${pmoc.data.id}/execution-requests`).send({
+        scheduledFor: '2026-08-16T00:00:00.000Z',
+      }),
+      authPost(owner, `/api/v1/pmoc/${pmoc.data.id}/execution-requests`).send({
+        scheduledFor: '2026-09-16T00:00:00.000Z',
+      }),
+    ]);
+    expect(second.status).toBe(201);
+    expect(third.status).toBe(201);
+    expect(
+      [
+        (second.body as { data: { executionNumber: number } }).data.executionNumber,
+        (third.body as { data: { executionNumber: number } }).data.executionNumber,
+      ].sort(),
+    ).toEqual([2, 3]);
+    await expect(
+      prisma.pmocExecutionRequest.findMany({
+        where: { pmocPlanId: pmoc.data.id },
+        orderBy: { executionNumber: 'asc' },
+        select: { executionNumber: true, status: true },
+      }),
+    ).resolves.toEqual([
+      { executionNumber: 1, status: 'CANCELLED' },
+      { executionNumber: 2, status: 'PENDING' },
+      { executionNumber: 3, status: 'PENDING' },
+    ]);
+  });
+
+  it('reschedules the same execution and propagates defaults only to pending requests', async () => {
+    const graph = await createCustomerGraph();
+    const created = await authPost(owner, '/api/v1/pmoc').send({
+      name: 'PMOC operacional consolidado',
+      customerId: graph.customerId,
+      equipmentId: graph.equipmentId,
+      responsibleTechnician: operator.user.name,
+      defaultOperatorId: operator.user.id,
+      defaultTechnicianId: operator.user.id,
+      defaultOperationType: 'PREVENTIVA',
+      defaultEstimatedDurationMinutes: 180,
+      defaultOperationObservations: 'Validar parâmetros de operação.',
+      generationMode: 'MANUAL',
+      startDate: '2026-07-16',
+      endDate: '2027-07-16',
+    });
+    expect(created.status).toBe(201);
+    const pmoc = created.body as {
+      data: { id: string; executionRequests: Array<{ id: string; executionNumber: number }> };
+    };
+    const request = pmoc.data.executionRequests[0];
+    const rescheduled = await authPatch(
+      owner,
+      `/api/v1/pmoc/execution-requests/${request.id}/reschedule`,
+    ).send({ scheduledFor: '2026-08-20T12:00:00.000Z', notes: 'Cliente solicitou nova data.' });
+    expect(rescheduled.status).toBe(200);
+    expect(rescheduled.body).toMatchObject({
+      data: {
+        id: request.id,
+        executionNumber: request.executionNumber,
+        scheduledFor: '2026-08-20T12:00:00.000Z',
+      },
+    });
+
+    const updated = await authPatch(owner, `/api/v1/pmoc/${pmoc.data.id}`).send({
+      defaultOperatorId: owner.user.id,
+      defaultTechnicianId: owner.user.id,
+      responsibleTechnician: owner.user.name,
+      applyDefaultsToPendingExecutions: true,
+    });
+    expect(updated.status).toBe(200);
+    await expect(
+      prisma.pmocExecutionRequest.findUniqueOrThrow({ where: { id: request.id } }),
+    ).resolves.toMatchObject({
+      executionNumber: 1,
+      plannedOperatorId: owner.user.id,
+      plannedTechnicianId: owner.user.id,
+    });
+    await expect(
+      prisma.pmocHistory.count({
+        where: { executionRequestId: request.id, action: 'REQUEST_RESCHEDULED' },
+      }),
+    ).resolves.toBe(1);
+    await expect(
+      prisma.pmocHistory.count({
+        where: { pmocPlanId: pmoc.data.id, action: 'DEFAULTS_PROPAGATED' },
+      }),
+    ).resolves.toBe(1);
+  });
+
+  it('allows only one concurrent generation for the same Execution Request', async () => {
+    const graph = await createCustomerGraph();
+    const created = await authPost(owner, '/api/v1/pmoc').send({
+      customerId: graph.customerId,
+      equipmentId: graph.equipmentId,
+      responsibleTechnician: owner.user.name,
+      generationMode: 'MANUAL',
+      defaultOperatorId: operator.user.id,
+      startDate: '2026-07-16',
+      endDate: '2027-07-16',
+    });
+    const requestId = (
+      created.body as { data: { executionRequests: Array<{ id: string }> } }
+    ).data.executionRequests[0].id;
+    expect(
+      (
+        await authPost(
+          operator,
+          `/api/v1/pmoc/execution-requests/${requestId}/generate-work-order`,
+        ).send({})
+      ).status,
+    ).toBe(403);
+
+    const responses = await Promise.all([
+      authPost(owner, `/api/v1/pmoc/execution-requests/${requestId}/generate-work-order`).send({}),
+      authPost(owner, `/api/v1/pmoc/execution-requests/${requestId}/generate-work-order`).send({}),
+    ]);
+    expect(responses.map((response) => response.status).sort()).toEqual([201, 409]);
+    await expect(
+      prisma.operation.count({ where: { pmocExecutionRequest: { id: requestId } } }),
+    ).resolves.toBe(1);
+  });
+
+  it('runs the scheduler adapter and automatically generates due PMOC Work Orders', async () => {
+    const graph = await createCustomerGraph();
+    const created = await authPost(owner, '/api/v1/pmoc').send({
+      customerId: graph.customerId,
+      equipmentId: graph.equipmentId,
+      responsibleTechnician: owner.user.name,
+      periodicity: 'MONTHLY',
+      generationMode: 'AUTO',
+      defaultOperatorId: operator.user.id,
+      startDate: '2026-07-16',
+      endDate: '2027-07-16',
+    });
+    expect(created.status).toBe(201);
+    const pmoc = created.body as {
+      data: { id: string; executionRequests: Array<{ id: string }> };
+    };
+    const requestId = pmoc.data.executionRequests[0].id;
+
+    const scheduler = await authPost(owner, '/api/v1/pmoc/scheduler/run?limit=10').send({});
+    expect(scheduler.status).toBe(201);
+    expect(scheduler.body).toMatchObject({ data: { attempted: 1, generated: 1, failed: 0 } });
+    await expect(
+      prisma.pmocExecutionRequest.findUniqueOrThrow({ where: { id: requestId } }),
+    ).resolves.toMatchObject({ status: 'GENERATED' });
+    await expect(
+      prisma.pmocExecutionRequest.count({
+        where: { pmocPlanId: pmoc.data.id, status: 'PENDING' },
+      }),
+    ).resolves.toBe(1);
+    await expect(prisma.pmocPlan.findUniqueOrThrow({ where: { id: pmoc.data.id } })).resolves.toMatchObject({
+      lastGeneratedExecutionNumber: 1,
+      lastSchedulerStatus: 'SUCCESS',
+      lastSchedulerError: null,
+    });
   });
 
   it('blocks PMOC environment relationship confusion across PMOC scope', async () => {

@@ -10,5 +10,6 @@ import { OperationsService } from './operations.service';
   imports: [StorageModule, AssetLifecycleModule, MaintenancePlanningModule, AssignmentsModule],
   controllers: [OperationsController],
   providers: [OperationsService],
+  exports: [OperationsService],
 })
 export class OperationsModule {}

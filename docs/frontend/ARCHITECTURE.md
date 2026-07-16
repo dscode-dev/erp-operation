@@ -1,5 +1,36 @@
 # ARCHITECTURE — Frontend
 
+## PMOC Foundation — Bloco 2
+
+```text
+PmocPlanWizard
+→ PMOC + MaintenancePlan + Execution Request oficiais
+→ prefill da request
+→ OperationCreationDrawer
+→ Operations + Assignment + MaintenanceExecution existentes
+→ Document Engine existente
+```
+
+O cliente não calcula sequência, recorrência ou projeções persistidas. A responsabilidade de cada
+execução vem dos snapshots da API; defaults atualizados só são propagados quando o usuário confirma
+e o backend autoriza. A timeline é o histórico append-only retornado pelo PMOC, e o Operator apenas
+projeta o contexto recebido na Assignment/Operation.
+
+`/pmoc` substitui a criação PMOC embutida na Central de Relatórios. Isso mantém um único domínio de
+planejamento e deixa `/reports` responsável apenas por documentos.
+
+## PMOC execution identity
+
+`executionNumber` vem da API e nunca é calculado no cliente. `operation.number` representa a OS e
+não substitui a execução PMOC. Campos `last*`, `next*` e scheduler são projeções read-only; a
+Platform mantém o mesmo wizard e não persiste estado operacional paralelo.
+
+## PMOC Foundation
+
+Fluxo único: `pmocApi prefill → OperationCreationDrawer → pmocApi.generateWorkOrder → Operation`.
+O frontend não cria `MaintenanceExecution`, não liga Operation, não calcula recorrência e não produz
+documento. Scheduler, transação, histórico e Document Engine permanecem no backend.
+
 ## DC-03.1 — snapshots autorais do Laudo
 
 O wizard persiste `technicalOpinionResponsible`, `technicalOpinionCrea` e os campos
@@ -927,8 +958,8 @@ e dados técnicos são snapshots; o frontend não calcula conformidade nem monta
 Operation, porém em campos independentes. O Document Engine recebe snapshots completos pelo
 DocumentContext e compõe parágrafo + lista no único Blueprint usado por Preview e PDF.
 
-## PMOC a partir da Ordem de Serviço
+## PMOC como origem do fluxo operacional
 
-`Operation/WORK_ORDER → POST /pmoc → MaintenancePlan + PmocPlan → MaintenanceExecution →
-Operation de execução → Document Engine`. O frontend apenas extrai o contexto e envia o contrato;
-nome, integridade, unicidade e relacionamento são decididos pelo backend.
+`PmocPlan numerado → MaintenancePlan → MaintenanceExecution → Operation oficial → WORK_ORDER →
+Document Engine`. A criação/gestão do plano usa `pmocApi`; a OS usa `operationApi` e permanece uma
+Operation normal. Não existe fluxo documental, agenda ou entidade de OS paralela.

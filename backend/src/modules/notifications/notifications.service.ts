@@ -17,6 +17,7 @@ import type { ListNotificationsQueryDto } from './dto/notification.dto';
 const SAFE_ACTION_URLS = {
   operations: '/operacoes',
   budgets: '/budgets',
+  pmoc: '/reports',
 } as const;
 
 const NOTIFICATION_SELECT = {
@@ -193,6 +194,62 @@ export class NotificationsService {
         entityId: budget.id,
         actionUrl: SAFE_ACTION_URLS.budgets,
         eventKey: `budget:${budget.id}:${approved ? 'approved' : 'rejected'}`,
+      })),
+    );
+  }
+
+  async notifyPmocExecutionTx(
+    tx: Prisma.TransactionClient,
+    executionRequestId: string,
+    type:
+      | typeof NotificationType.PMOC_OS_GENERATED
+      | typeof NotificationType.PMOC_OS_GENERATION_FAILED
+      | typeof NotificationType.PMOC_EXECUTION_PENDING_MANUAL,
+  ): Promise<void> {
+    const request = await tx.pmocExecutionRequest.findUnique({
+      where: { id: executionRequestId },
+      select: {
+        id: true,
+        status: true,
+        failureReason: true,
+        operation: { select: { id: true, number: true, operatorId: true } },
+        pmocPlan: { select: { id: true, number: true, organizationId: true } },
+      },
+    });
+    if (!request) return;
+    const managers = await this.managementRecipientsTx(tx);
+    const recipients = new Set(managers);
+    if (type === NotificationType.PMOC_OS_GENERATED && request.operation?.operatorId) {
+      recipients.add(request.operation.operatorId);
+    }
+    const pmocNumber = `PMOC-${String(request.pmocPlan.number).padStart(6, '0')}`;
+    const generated = type === NotificationType.PMOC_OS_GENERATED;
+    const failed = type === NotificationType.PMOC_OS_GENERATION_FAILED;
+    await this.createManyIdempotentTx(
+      tx,
+      [...recipients].map((recipientUserId) => ({
+        organizationId: request.pmocPlan.organizationId,
+        recipientUserId,
+        type,
+        severity: generated
+          ? NotificationSeverity.SUCCESS
+          : failed
+            ? NotificationSeverity.DANGER
+            : NotificationSeverity.WARNING,
+        title: generated
+          ? 'PMOC gerou Ordem de Serviço'
+          : failed
+            ? 'Falha ao gerar OS do PMOC'
+            : 'Execução PMOC aguarda geração manual',
+        message: generated
+          ? `${pmocNumber} gerou a operação #${request.operation?.number ?? '—'}.`
+          : failed
+            ? `${pmocNumber} não gerou a OS: ${request.failureReason ?? 'falha não detalhada'}.`
+            : `${pmocNumber} possui uma execução pendente aguardando geração manual.`,
+        entityType: NotificationEntityType.PMOC,
+        entityId: request.pmocPlan.id,
+        actionUrl: generated ? SAFE_ACTION_URLS.operations : SAFE_ACTION_URLS.pmoc,
+        eventKey: `pmoc-request:${request.id}:${type.toLowerCase()}`,
       })),
     );
   }

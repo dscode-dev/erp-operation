@@ -1,5 +1,20 @@
 # ROUTES — Frontend
 
+## PMOC Foundation — Bloco 2
+
+- `/pmoc`: listagem paginada, métricas e criação profissional do plano.
+- `/pmoc/:id`: detalhe operacional com resumo, execuções e timeline.
+- `/reports`: permanece Central de Relatórios; iniciar PMOC encaminha para `/pmoc`, evitando dois
+  criadores concorrentes.
+- `/operator` e `/operator/services/:id`: exibem contexto PMOC quando a Assignment estiver ligada a
+  uma execução, sem rota ou workflow paralelo.
+
+## PMOC Foundation
+
+- `/reports`: criação/gestão do PMOC, solicitação e abertura aninhada do wizard oficial de OS.
+- `/operacoes`: rota canônica para gerenciar qualquer OS gerada pelo PMOC.
+- Nenhuma rota paralela de agenda, OS ou documento foi criada.
+
 ## `/reports` — DC-03.1
 
 O workflow `TECHNICAL_OPINION` coleta responsabilidade técnica e dados específicos de inspeção por
@@ -487,5 +502,5 @@ modo novo cria uma Operation DRAFT oficial e segue Preview → Render → Downlo
 
 ## PMOC
 
-- `/reports`: o passo Origem lista planos ativos e permite que OWNER/MANAGER criem um plano a
-  partir de uma Ordem de Serviço concluída sem sair do wizard.
+- `/reports`: o passo Origem permite criar PMOC independente ou selecionar/administrar um plano
+  existente. A OS oficial é criada somente depois do PMOC e vinculada à sua execução.

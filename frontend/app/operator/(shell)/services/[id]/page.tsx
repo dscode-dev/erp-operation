@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Camera, CheckCircle2, ClipboardCheck, Clock, FileText, MapPin, Package, PenLine, Play, XCircle } from "lucide-react";
+import { ArrowLeft, CalendarClock, Camera, CheckCircle2, ClipboardCheck, Clock, FileText, MapPin, Package, PenLine, Play, XCircle } from "lucide-react";
 import { SkeletonCard, SkeletonList } from "@erp/ui/skeletons";
 import { EmptyState } from "@erp/ui/empty-state";
 import { ErrorState } from "@erp/ui/states";
@@ -119,6 +119,8 @@ function AssignmentWorkflow({
   const address = op.address
     ? `${op.address.street ?? ""}${op.address.number ? `, ${op.address.number}` : ""} · ${op.address.city ?? "cidade não informada"}/${op.address.state ?? "UF"}`
     : "Endereço não informado";
+  const pmoc = op.maintenanceExecution?.plan.pmocPlan;
+  const pmocExecution = op.maintenanceExecution?.pmocExecutionRequest;
   return (
     <>
       <header className="space-y-3">
@@ -141,6 +143,20 @@ function AssignmentWorkflow({
         <InfoRow icon={ClipboardCheck} label="Tipo / status da Operation" value={`${op.type} · ${op.status}`} />
         <InfoRow icon={Clock} label="Data do agendamento" value={op.scheduledFor ? assignmentTime(op.scheduledFor) : "Não agendado"} />
       </section>
+
+      {pmoc && (
+        <section className="rounded-[var(--radius-xl)] border border-[var(--color-primary)]/25 bg-[var(--color-primary)]/5 p-4 space-y-3">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-primary)]">Plano PMOC</p>
+            <h2 className="mt-1 font-semibold">PMOC-{String(pmoc.number).padStart(6, "0")} · Execução {String(pmocExecution?.executionNumber ?? 0).padStart(3, "0")}</h2>
+          </div>
+          <InfoRow icon={CalendarClock} label="Periodicidade" value={pmoc.periodicity} />
+          <InfoRow icon={ClipboardCheck} label="Responsável técnico" value={pmoc.responsibleTechnician} />
+          <InfoRow icon={Package} label="Equipamentos cobertos" value={pmoc.equipments.map((item) => item.equipment.name).join(", ") || "Equipamento principal"} />
+          <InfoRow icon={PenLine} label="Assinatura do cliente" value={operation.data?.signatureCaptured ? "Coletada" : "Pendente para esta execução"} />
+          <InfoRow icon={FileText} label="Documento PMOC" value={op.documents.some((item) => item.type === "PMOC") ? "Disponível na seção Documentos" : "Será emitido pelo Document Engine após o preenchimento"} />
+        </section>
+      )}
 
       <section className="grid gap-2">
         {assignment.status === "ASSIGNED" && (

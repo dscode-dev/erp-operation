@@ -11,6 +11,8 @@ import {
 
 export function AssignmentCard({ assignment }: { assignment: Assignment }) {
   const op = assignment.operation;
+  const pmoc = op.maintenanceExecution?.plan.pmocPlan;
+  const execution = op.maintenanceExecution?.pmocExecutionRequest;
   const address = op.address
     ? `${op.address.street}, ${op.address.number} · ${op.address.city}/${op.address.state}`
     : "Endereço não informado";
@@ -24,6 +26,11 @@ export function AssignmentCard({ assignment }: { assignment: Assignment }) {
           <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)]">
             OP-{String(op.number).padStart(6, "0")}
           </div>
+          {pmoc && (
+            <div className="mt-1 text-[11px] font-semibold text-[var(--color-primary)]">
+              PMOC-{String(pmoc.number).padStart(6, "0")} · Execução {String(execution?.executionNumber ?? 0).padStart(3, "0")}
+            </div>
+          )}
           <h3 className="mt-1 text-base font-semibold leading-tight truncate">
             {op.customer?.name ?? "Cliente não informado"}
           </h3>

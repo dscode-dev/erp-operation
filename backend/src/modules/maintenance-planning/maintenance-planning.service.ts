@@ -1,5 +1,5 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { MaintenanceExecutionStatus, Prisma } from '@prisma/client';
+import { MaintenanceExecutionStatus, PmocHistoryAction, Prisma } from '@prisma/client';
 import {
   MAINTENANCE_AUDIT_ACTIONS,
   MAINTENANCE_EXECUTION_RESOURCE,
@@ -426,6 +426,35 @@ export class MaintenancePlanningService {
         ),
       },
     });
+    const pmocRequest = await tx.pmocExecutionRequest.findUnique({
+      where: { maintenanceExecutionId: execution.id },
+      select: { id: true, pmocPlanId: true, executionNumber: true, operationId: true },
+    });
+    if (pmocRequest) {
+      await tx.$executeRaw`
+        UPDATE "pmoc_plans"
+        SET
+          "last_execution_date" = GREATEST("last_execution_date", ${executedAt}),
+          "updated_at" = CURRENT_TIMESTAMP
+        WHERE "id" = ${pmocRequest.pmocPlanId}::uuid
+      `;
+      await tx.pmocHistory.createMany({
+        data: [{
+          pmocPlanId: pmocRequest.pmocPlanId,
+          executionRequestId: pmocRequest.id,
+          operationId: pmocRequest.operationId,
+          actorId,
+          action: PmocHistoryAction.EXECUTION_COMPLETED,
+          newStatus: MaintenanceExecutionStatus.COMPLETED,
+          occurredAt: executedAt,
+          metadata: {
+            executionNumber: pmocRequest.executionNumber,
+            maintenanceExecutionId: execution.id,
+          },
+        }],
+        skipDuplicates: true,
+      });
+    }
     await this.lifecycle.publishMaintenanceCompletedTx(
       tx,
       {

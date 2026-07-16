@@ -1,5 +1,42 @@
 # Security
 
+## PMOC Foundation — Bloco 2
+
+- Criação, edição, geração, reagendamento e cancelamento exigem OWNER/MANAGER; leitura segue o RBAC
+  existente. O Operator recebe somente contexto PMOC já autorizado pela Assignment/Operation.
+- Endereço deve pertencer ao mesmo cliente; operador/técnico devem existir, estar ativos e possuir
+  perfil permitido. UUIDs, duração e datas passam por DTO whitelist/validation.
+- Reagendamento aceita apenas `PENDING/FAILED`, mantém ID/número e ocorre em transação com a
+  `MaintenanceExecution`. Constraint de agenda e validação de cobertura impedem inconsistência.
+- Propagação de defaults é opt-in e limitada a solicitações futuras não geradas. Eventos
+  `REQUEST_RESCHEDULED` e `DEFAULTS_PROPAGATED`, além de AuditLog, são append-only.
+- Document Configuration é a autoridade da política de assinatura. A UI não recebe storageKey,
+  binário ou Base64 e não escolhe assinatura institucional fora do catálogo autorizado.
+- O prefill é calculado no servidor a partir dos snapshots; o frontend não pode forçar identidade,
+  sequência, projeções do scheduler nem relacionamentos cruzados.
+
+## PMOC Foundation 1.1 — integridade da sequência
+
+- O contador usa `UPDATE ... RETURNING` na transação da solicitação; `MAX()+1` não é utilizado.
+- Constraints únicas protegem `(pmoc_plan_id, execution_number)`, Operation gerada e conclusão
+  histórica única; números devem ser positivos.
+- `generatedOperationId` e o alias legado `operationId` possuem check de consistência.
+- Cancelamentos preservam request, número, histórico e AuditLog.
+- Retry exige FAILED e registra eventos/auditoria sem trocar ID ou número.
+- Projeções e scheduler não existem nos DTOs de escrita e não são controláveis pelo frontend.
+- Erros do scheduler são sanitizados e limitados a 1.000 caracteres.
+
+## PMOC Foundation — controles de geração
+
+- Somente OWNER/MANAGER alteram planos, solicitações ou executam o adapter do Scheduler.
+- Claim atômico `PENDING|FAILED → GENERATING_OS` impede geração concorrente duplicada.
+- O hook transacional de Operations reverte Operation, Assignment, Work Order e vínculos se qualquer
+  etapa falhar.
+- Cliente, endereço, equipamentos e usuários são revalidados; VIEWER não pode ser operador padrão.
+- Assinatura override precisa estar ativa e não removida; nenhuma chave de Storage é exposta.
+- Motivos persistidos são sanitizados; falhas internas inesperadas recebem mensagem genérica.
+- Requests/histórico não possuem exclusão. O Scheduler recupera leases abandonados após 15 minutos.
+
 ## DC-03.1 — integridade dos dados técnicos
 
 - Responsável/CREA e detalhes de inspeção possuem limites explícitos e sanitização pelos DTOs.
@@ -1872,13 +1909,12 @@ The catalog is scoped to the installation Organization in every query. Reads req
 - O Builder usa apenas snapshots validados da Operation; não realiza consulta ao catálogo durante
   Preview/PDF e não expõe identificadores internos adicionais.
 
-## PMOC originado por OS
+## PMOC independente da OS
 
-- Criação permanece restrita a OWNER/MANAGER.
-- A OS deve existir, estar concluída e pertencer ao mesmo cliente.
-- Todos os equipamentos enviados devem constar como principal ou inspecionados na OS e pertencer
-  ao cliente.
-- `sourceOperationId` é único no banco; precheck e tratamento de `P2002` protegem contra criação
-  concorrente duplicada.
-- Auditoria e Lifecycle registram a referência da Operation de origem sem armazenar documentos ou
-  dados binários duplicados.
+- Criação, alteração e remoção lógica permanecem restritas a OWNER/MANAGER.
+- Cliente deve estar ativo; equipamentos precisam existir, estar no mesmo cliente e são validados
+  no backend.
+- `number` é gerado pelo PostgreSQL e possui constraint única; o frontend nunca escolhe numeração.
+- PMOC não aceita `sourceOperationId`. A OS é criada posteriormente pelo endpoint oficial de
+  Operations e ligada por `MaintenanceExecution.operationId`.
+- Auditoria e Lifecycle continuam registrando plano, número e relacionamentos sem binários.

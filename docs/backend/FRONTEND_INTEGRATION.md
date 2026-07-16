@@ -1,5 +1,45 @@
 # Frontend Integration
 
+## PMOC Foundation — Bloco 2
+
+- Use `/pmoc` para listar/criar planos e `/pmoc/:id` para resumo, execuções e histórico.
+- O wizard possui quatro passos: plano/cobertura, defaults da OS, automação/primeira execução e
+  política de assinatura. As projeções exibidas no formulário são informativas; datas oficiais,
+  sequência e recorrência continuam no backend.
+- Para “Gerar primeira OS agora”, crie o PMOC, obtenha sua primeira Execution Request e abra o
+  `OperationCreationDrawer` com o prefill oficial. A confirmação usa `generate-work-order`.
+- O modo de assinatura vem de `GET /documents/configuration`; FIXED/HYBRID podem receber somente
+  um override institucional cadastrado, e COLLECTED apenas explica a coleta em campo.
+- Reagendar chama `PATCH /pmoc/execution-requests/:id/reschedule`; cancelar e gerar continuam nos
+  endpoints oficiais. Nunca crie outra request para substituir a atual.
+- Ao editar operador/técnico padrão, envie `applyDefaultsToPendingExecutions: true` somente após
+  confirmação explícita. O backend nunca altera execuções já geradas/concluídas.
+- `OperationDetail.maintenanceExecution.pmocExecutionRequest` e Assignment trazem contexto PMOC
+  pronto para a Platform e o Operator; não derive autorização ou status localmente.
+
+## PMOC Foundation — identidade das execuções
+
+- Exiba `executionNumber` com três dígitos; não derive identidade do número da OS.
+- Nunca envie número, datas projetadas ou metadata do scheduler em create/update.
+- Retry e geração manual usam o mesmo `executionRequest.id`; não crie outra solicitação.
+- Para histórico, consuma `event.execution`. OS e data executada podem ser nulas.
+- `generatedOperationId` serve para navegação; a OS continua no workflow oficial.
+
+## PMOC Foundation — fluxo operacional
+
+O PMOC deve ser criado/selecionado antes da OS. Nunca crie PMOC a partir de Operation.
+
+1. obtenha a solicitação PENDING/FAILED em `GET /pmoc/:id/execution-requests`;
+2. se necessário, crie por `POST /pmoc/:id/execution-requests`;
+3. carregue `GET /pmoc/execution-requests/:id/prefill`;
+4. abra o `OperationCreationDrawer` oficial;
+5. envie a revisão em `POST /pmoc/execution-requests/:id/generate-work-order`;
+6. use `response.operationId` para abrir a Operation/OS normal.
+
+Não chame `POST /operations` separadamente. `FAILED` pode ser revisada novamente; `GENERATED`
+nunca gera segunda OS. `signatureOverrideId` não altera o template e o frontend nunca resolve sua
+imagem.
+
 ## DC-03.1 — responsabilidade técnica e detalhamento dos equipamentos
 
 No passo Conteúdo do Laudo, colete `technicalOpinionResponsible` e `technicalOpinionCrea`. Para
@@ -2297,13 +2337,16 @@ Estados de UX: `EM PREENCHIMENTO` antes da conclusão; `NÃO ASSINADO` após con
 - Não concatene seleções e texto livre. Preview e PDF exibem o parágrafo primeiro e a lista depois.
 - Ao editar uma Operation antiga, as coleções podem estar vazias; preserve o texto existente.
 
-## Criar PMOC a partir de uma OS
+## PMOC e Ordem de Serviço
 
-1. Liste Operations concluídas e identifique o documento `WORK_ORDER` em `documents[]`.
-2. Obtenha o detalhe da Operation para extrair cliente, operador e `inspectedEquipments[]`.
-3. Envie `POST /pmoc` com `sourceOperationId` e os campos derivados.
-4. Use o `PmocPlan` retornado imediatamente; não aguarde a atualização da listagem.
-5. Ao iniciar a emissão, reutilize uma execução `PLANNED` sem `operationId`; crie outra somente se
-   nenhuma estiver disponível.
+O wizard possui dois caminhos:
 
-Somente OWNER e MANAGER visualizam a ação de criação. O backend continua sendo a autoridade.
+1. `Criar novo PMOC`: coleta cliente, equipamentos, responsável, vigência e recorrência; chama
+   `POST /pmoc`.
+2. `Selecionar PMOC existente`: carrega o plano e permite `PATCH /pmoc/:id` ou remoção lógica por
+   `DELETE /pmoc/:id`.
+
+Após escolher/criar o PMOC, a emissão cria uma Operation oficial. O backend gera o documento
+`WORK_ORDER` padrão e o frontend vincula a Operation à execução `PLANNED` do MaintenancePlan. Essa
+OS deve ser tratada como qualquer outra em Agenda, Operações, Ordens e Operator. Somente
+OWNER/MANAGER administram o plano.

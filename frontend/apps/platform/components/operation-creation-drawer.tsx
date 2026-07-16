@@ -3,7 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { Check, ChevronLeft, ChevronRight } from "lucide-react";
 import { Drawer } from "@erp/ui/drawer";
-import { ApiClientError, operationApi, type OperationDetail, type OperationType } from "@erp/api";
+import {
+  ApiClientError,
+  operationApi,
+  type CreateOperationPayload,
+  type OperationDetail,
+  type OperationType,
+} from "@erp/api";
 import {
   CustomerAddressSelect,
   CustomerSelect,
@@ -60,11 +66,19 @@ export function OperationCreationDrawer({
   mode = "operation",
   onClose,
   onCreated,
+  initialValues,
+  submitOperation,
+  submitLabel,
+  contextNotice,
 }: {
   open: boolean;
   mode?: Mode;
   onClose: () => void;
   onCreated?: (operation: OperationDetail) => void;
+  initialValues?: Partial<CreateOperationPayload>;
+  submitOperation?: (payload: CreateOperationPayload) => Promise<OperationDetail>;
+  submitLabel?: string;
+  contextNotice?: string;
 }) {
   const copy = MODE_COPY[mode];
   const [step, setStep] = useState<Step>(0);
@@ -87,20 +101,23 @@ export function OperationCreationDrawer({
   useEffect(() => {
     if (!open) return;
     setStep(0);
-    setCustomerId("");
-    setAddressId("");
-    setEquipmentId("");
-    setOperatorId("");
-    setType("PREVENTIVA");
-    setDate("");
-    setTime("");
-    setChecklist(DEFAULT_CHECKLIST);
+    setCustomerId(initialValues?.customerId ?? "");
+    setAddressId(initialValues?.addressId ?? "");
+    setEquipmentId(initialValues?.equipmentId ?? "");
+    setOperatorId(initialValues?.operatorId ?? "");
+    setType(initialValues?.type ?? "PREVENTIVA");
+    const schedule = initialValues?.scheduledFor ? localDateTime(initialValues.scheduledFor) : null;
+    setDate(schedule?.date ?? "");
+    setTime(schedule?.time ?? "");
+    setChecklist(initialValues?.checklist?.map((item) => item.label) ?? DEFAULT_CHECKLIST);
     setNewItem("");
-    setObservations("");
+    setObservations(initialValues?.observations ?? "");
+    setReportedIssue(initialValues?.reportedIssue ?? "");
+    setServiceDescription(initialValues?.serviceDescription ?? "");
     setSaving(false);
     setError(null);
     setCreated(null);
-  }, [open]);
+  }, [initialValues, open]);
 
   const scheduledFor = useMemo(() => {
     if (!date || !time) return null;
@@ -125,19 +142,23 @@ export function OperationCreationDrawer({
     setSaving(true);
     setError(null);
     try {
-      const operation = await operationApi.createOperation({
+      const payload: CreateOperationPayload = {
+        ...initialValues,
         customerId,
         addressId: addressId || null,
         equipmentId: equipmentId || null,
         type,
-        status: mode === "schedule" ? "DRAFT" : "IN_PROGRESS",
+        status: initialValues?.status ?? (mode === "schedule" ? "DRAFT" : "IN_PROGRESS"),
         scheduledFor,
         operatorId: operatorId || null,
         checklist: checklist.map((label) => ({ label, done: false })),
         observations: observations || null,
         reportedIssue: reportedIssue || null,
         serviceDescription: serviceDescription || null,
-      });
+      };
+      const operation = submitOperation
+        ? await submitOperation(payload)
+        : await operationApi.createOperation(payload);
       setCreated(operation);
       onCreated?.(operation);
     } catch (err) {
@@ -168,7 +189,7 @@ export function OperationCreationDrawer({
               </button>
             ) : (
               <button onClick={submit} disabled={saving || !canNext} className={primaryBtn}>
-                {saving ? "Criando…" : "Criar"}
+                {saving ? "Criando…" : (submitLabel ?? "Criar")}
               </button>
             )}
           </>
@@ -177,6 +198,11 @@ export function OperationCreationDrawer({
     >
       <div className="space-y-5">
         <p className="text-sm text-[var(--color-muted-foreground)]">{copy.description}</p>
+        {contextNotice && (
+          <div className="rounded-[var(--radius-md)] border border-[var(--color-primary)]/25 bg-[var(--color-primary)]/5 px-3 py-2 text-sm">
+            {contextNotice}
+          </div>
+        )}
         {operatorId && (
           <div className="rounded-[var(--radius-md)] border border-[var(--color-info)]/30 bg-[var(--color-info)]/10 px-3 py-2 text-sm text-[var(--color-info)]">
             O backend criará a Assignment para o operador selecionado e manterá a trilha de auditoria.
@@ -261,3 +287,12 @@ function Stepper({ step }: { step: Step }) {
 
 const primaryBtn = "inline-flex items-center gap-2 rounded-[var(--radius-md)] bg-[var(--color-primary)] text-[var(--color-primary-foreground)] px-3 h-9 text-sm font-medium disabled:opacity-50";
 const secondaryBtn = "inline-flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 h-9 text-sm hover:bg-[var(--color-muted)]";
+
+function localDateTime(value: string): { date: string; time: string } {
+  const date = new Date(value);
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return {
+    date: `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`,
+    time: `${pad(date.getHours())}:${pad(date.getMinutes())}`,
+  };
+}

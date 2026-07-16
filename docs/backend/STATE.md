@@ -1,5 +1,71 @@
 # Backend State
 
+## PMOC Foundation — Bloco 2 (2026-07-16)
+
+- `PmocPlan` concentra os defaults operacionais da OS: endereço, tipo, duração estimada e
+  observações, além de operador/técnico já oficiais. Esses dados alimentam o prefill do
+  `OperationCreationDrawer`; não criam Operation, Assignment ou agenda paralela.
+- Cada `PmocExecutionRequest` preserva snapshots de operador e técnico planejados. Alterar defaults
+  afeta apenas novas execuções, salvo confirmação explícita para propagar às solicitações
+  `PENDING/FAILED`; execuções geradas, canceladas ou concluídas permanecem imutáveis.
+- Reagendamento oficial reutiliza a mesma solicitação e o mesmo `executionNumber`, atualiza a
+  `MaintenanceExecution` relacionada e acrescenta histórico/auditoria append-only.
+- O detalhe de Operation/Assignment expõe contexto PMOC aditivo, permitindo que Platform e
+  Operator mostrem plano, execução, periodicidade e responsabilidade sem consultas paralelas.
+- Migration aditiva: `20260716190000_pmoc_professional_operational_defaults`.
+- Novo endpoint: `PATCH /api/v1/pmoc/execution-requests/:id/reschedule`.
+- A Central de Relatórios encaminha novas gestões PMOC para `/pmoc`; emissão e documentos
+  históricos continuam no Document Engine oficial.
+- Certificação: Prisma validate/generate, backend lint/build, 81 unitários, 8 integrações, 24 de
+  concorrência e 46 de segurança aprovados. Runtime Docker com 45 migrations, API/storage/database
+  saudáveis e 0 endereço padrão cruzado entre clientes.
+
+## PMOC Foundation — Bloco 1.1 (2026-07-16)
+
+- Cada `PmocExecutionRequest` possui `executionNumber` monotônico por PMOC, `executionYear`,
+  `generatedOperationId` e `generatedAt`; a OS mantém numeração própria e independente.
+- `PmocPlan.lastReservedExecutionNumber` é incrementado atomicamente no PostgreSQL. A constraint
+  `(pmocPlanId, executionNumber)` impede duplicação e números cancelados nunca retornam ao pool.
+- Projeções autoritativas persistidas: última execução, último número gerado, próxima execução,
+  próxima geração, última geração bem-sucedida e estado/erro/horário do scheduler.
+- Geração manual e retry alteram a solicitação já reservada; nunca criam execução substituta.
+- Conclusão de `MaintenanceExecution` atualiza `lastExecutionDate` e adiciona uma ocorrência única
+  `EXECUTION_COMPLETED` ao histórico append-only.
+- Histórico retorna projeção aditiva com execução, OS, status, datas, operador e técnico.
+- Migrations: `20260716170000_pmoc_foundation_block_1_1` e
+  `20260716171000_pmoc_completion_history_integrity`, com backfill determinístico.
+- Certificação: Prisma validate/generate/migrate aprovados; backend lint/build e 81 testes unitários;
+  8 testes de integração, 24 de concorrência, 45 de segurança e 11 cenários focados do PMOC.
+- Runtime Docker: 44 migrations sincronizadas; 5 solicitações preexistentes migradas com 0 número
+  inválido, 0 sequência duplicada e 0 referência de Operation divergente; API saudável.
+- Veredito: `ORBIT_PMOC_FOUNDATION_BLOCK_1_1_READY`.
+
+## PMOC Foundation — Bloco 1 (2026-07-16)
+
+- PMOC é oficialmente um plano preventivo especializado sobre `MaintenancePlan`; o documento PMOC
+  continua sendo consequência de uma `Operation` executada e não houve alteração no Document Engine.
+- `PmocPlan` recebeu cobertura, periodicidade oficial, modo `AUTO | MANUAL | PAUSED`, operador e
+  técnico padrão opcionais, assinatura override opcional e status operacional.
+- `PmocExecutionRequest` representa cada solicitação planejada nos estados `PENDING`,
+  `GENERATING_OS`, `GENERATED`, `FAILED` e `CANCELLED`; referências para MaintenanceExecution e
+  Operation preservam rastreabilidade sem duplicar execução.
+- `PmocHistory` é append-only e registra criação, alterações de periodicidade/operador/cobertura,
+  solicitações, falhas, cancelamentos e OS automáticas/manuais.
+- `PmocSchedulerService` é o único entry point do scheduler. Não depende de cron; um adapter futuro
+  apenas chamará `run()`.
+- Geração de OS utiliza `OperationsService` com hook transacional. Se o vínculo PMOC falhar, toda a
+  Operation, Assignment e OS rascunho são revertidas e a solicitação fica `FAILED`.
+- O RecurringEngine calcula a próxima solicitação após geração bem-sucedida. Não existe calendário,
+  agenda, Assignment ou renderer paralelo.
+- Notification Center recebeu somente os três eventos definidos: OS PMOC gerada, falha de geração
+  e execução manual pendente.
+- Migration aditiva: `20260716160000_pmoc_foundation_block_1`, com backfill de periodicidade,
+  status, solicitações e histórico para PMOCs existentes.
+- Certificação: Prisma validate/generate, lint e build aprovados; 81 testes unitários, 8 de
+  integração, 24 de concorrência, 44 de segurança e 10 cenários focados do PMOC aprovados.
+- Runtime Docker: 42 migrations aplicadas, API saudável com PostgreSQL conectado e storage
+  disponível; imagens de API e Platform reconstruídas com o código desta entrega.
+
 ## DC-03.1 — enriquecimento do Laudo Técnico (15/07/2026)
 
 - A seção Solicitante passou a usar os dados já resolvidos no DocumentContext: nome fantasia,
@@ -2719,11 +2785,15 @@ Status: concluído.
 - O Blueprint renderiza primeiro o texto técnico principal e depois uma lista complementar.
 - Migration: `20260715213000_technical_opinion_statement_items`.
 
-## PMOC originado por Ordem de Serviço (2026-07-15)
+## PMOC independente e origem da Ordem de Serviço (2026-07-16)
 
-- `PmocPlan.sourceOperationId` registra a OS/Operation de origem com unicidade.
-- `POST /api/v1/pmoc` aceita `sourceOperationId`; o backend valida Operation concluída, cliente e
-  equipamentos e deriva `MaintenancePlan.name` no padrão `PMOC · Cliente · Número da OS`.
-- Uma mesma OS não pode originar dois planos PMOC.
-- O wizard reutiliza a execução inicial planejada do novo plano, evitando ocorrências duplicadas.
-- Migration: `20260715223000_pmoc_source_operation`.
+- `PmocPlan` ganhou `number` próprio, único e autoincremental.
+- O nome oficial do `MaintenancePlan` segue `PMOC · Cliente · PMOC-000000`.
+- PMOC não referencia uma OS de origem. O fluxo correto é `PmocPlan → MaintenanceExecution →
+  Operation → WORK_ORDER`.
+- A migration corretiva `20260716090000_pmoc_own_number` remove `sourceOperationId`, introduz a
+  numeração e substitui a decisão temporária da migration `20260715223000_pmoc_source_operation`.
+- A migration `20260716123000_pmoc_plan_name_backfill` aplica o padrão de nome também aos PMOCs
+  históricos, preservando o número próprio e o limite de 140 caracteres do plano.
+- A OS continua sendo criada pelo domínio oficial de Operations e permanece gerenciável em toda a
+  plataforma.

@@ -1,5 +1,27 @@
 # COMPONENTS — Frontend
 
+## PMOC Foundation — Bloco 2
+
+| Componente | Responsabilidade |
+| --- | --- |
+| `PmocPlanWizard` | Plano, cobertura, defaults operacionais, automação e assinatura em quatro passos |
+| `PmocPlanDetailPage` | Resumo, métricas, requests, timeline append-only e ações operacionais |
+| `OperationCreationDrawer` | Revisão e confirmação da OS gerada por uma Execution Request |
+| `AssignmentCard` | Badge contextual de PMOC/execução na fila do Operator |
+
+O wizard reutiliza `MultiSelect`, APIs oficiais e configuração documental. Reagendamento e edição
+de defaults usam Drawers existentes; nenhuma timeline, recorrência, assinatura ou PDF é calculado
+no cliente.
+
+## PMOC Foundation
+
+- `OriginStep`: cobertura, periodicidade, modo AUTO/MANUAL/PAUSED, usuários padrão, assinatura
+  override e ação de geração da OS.
+- `OperationCreationDrawer`: ganhou `initialValues`, `submitOperation`, `submitLabel` e
+  `contextNotice`; continua sendo o único wizard de criação de Operation/OS.
+- A integração preserva equipamentos/checklists preenchidos pelo backend e não cria componente de
+  agenda, Assignment, Preview ou PDF.
+
 ## DC-03.1 — `InspectedEquipmentSelector`
 
 No modo `technicalOpinion`, o seletor exibe um editor por equipamento para tipo de sistema, local
@@ -657,5 +679,6 @@ Tipos:
 ### Criador de PMOC no `OriginStep`
 
 - Reutiliza os selects, estados de erro e botões do wizard.
-- Exibe estado vazio quando não há plano e permite `Criar e selecionar` a partir de uma OS.
+- Possui dois modos: criação independente e seleção/gestão de plano existente.
+- Reutiliza `MultiSelect` para equipamentos e os endpoints oficiais de create/update/delete.
 - Não cria modal, agenda, preview ou componente documental paralelo.

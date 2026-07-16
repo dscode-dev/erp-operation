@@ -3,6 +3,11 @@ import {
   DocumentTemplateType,
   MaintenancePlanType,
   MaintenancePriority,
+  PmocExecutionOrigin,
+  PmocGenerationMode,
+  PmocHistoryAction,
+  PmocOperationalStatus,
+  PmocPeriodicity,
   Prisma,
   PrismaClient,
   Role,
@@ -948,7 +953,14 @@ async function ensureDemoPmocPlans(prisma: PrismaClient): Promise<{ createdIds: 
         description: { startsWith: DEMO_MARKER },
       },
       orderBy: { createdAt: 'asc' },
-      select: { id: true },
+      select: {
+        id: true,
+        executions: {
+          orderBy: { scheduledAt: 'asc' },
+          take: 1,
+          select: { id: true, scheduledAt: true },
+        },
+      },
     });
     if (!maintenancePlan) continue;
 
@@ -958,6 +970,13 @@ async function ensureDemoPmocPlans(prisma: PrismaClient): Promise<{ createdIds: 
         customerId: equipment.customerId,
         equipmentId: equipment.id,
         maintenancePlanId: maintenancePlan.id,
+        coverage: `${DEMO_MARKER} Cobertura preventiva dos ambientes e equipamento vinculados.`,
+        periodicity: PmocPeriodicity.MONTHLY,
+        generationMode: PmocGenerationMode.MANUAL,
+        operationalStatus: PmocOperationalStatus.PENDING,
+        lastReservedExecutionNumber: maintenancePlan.executions[0] ? 1 : 0,
+        nextExecutionDate: maintenancePlan.executions[0]?.scheduledAt ?? null,
+        nextGenerationDate: maintenancePlan.executions[0]?.scheduledAt ?? null,
         responsibleTechnician: definition.responsibleTechnician,
         artNumber: definition.artNumber,
         contractNumber: definition.contractNumber,
@@ -974,6 +993,24 @@ async function ensureDemoPmocPlans(prisma: PrismaClient): Promise<{ createdIds: 
             observations: `${DEMO_MARKER} PMOC environment.`,
             equipments: { create: [{ equipmentId: equipment.id }] },
           })),
+        },
+        executionRequests: maintenancePlan.executions[0]
+          ? {
+              create: {
+                maintenanceExecutionId: maintenancePlan.executions[0].id,
+                executionNumber: 1,
+                executionYear: maintenancePlan.executions[0].scheduledAt.getUTCFullYear(),
+                scheduledFor: maintenancePlan.executions[0].scheduledAt,
+                origin: PmocExecutionOrigin.MANUAL,
+              },
+            }
+          : undefined,
+        history: {
+          create: {
+            action: PmocHistoryAction.CREATED,
+            newStatus: PmocOperationalStatus.PENDING,
+            notes: `${DEMO_MARKER} PMOC Foundation initialized.`,
+          },
         },
       },
       select: { id: true },

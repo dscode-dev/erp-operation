@@ -1,5 +1,36 @@
 # STATE — Frontend
 
+## PMOC Foundation — Bloco 2
+
+- `/pmoc` é a gestão oficial de planos e usa wizard profissional de quatro etapas com dados reais.
+- `/pmoc/:id` entrega resumo, métricas, solicitações, histórico e ações oficiais de gerar OS,
+  reagendar, cancelar e atualizar defaults.
+- A geração abre o `OperationCreationDrawer` reutilizável; não existe formulário ou Operation
+  paralela. A Central de Relatórios encaminha PMOC para o módulo oficial.
+- O Operator exibe contexto PMOC na fila e no atendimento, sem alterar Assignment ou autorização.
+- Assinatura adapta a UX ao modo retornado pela configuração documental e não contém política local.
+- Lint aprovado sem erros (um warning preexistente) e build de produção aprovado com 41 rotas;
+  `/pmoc`, `/pmoc/:id`, `/operator` e saúde da API foram verificados no runtime Docker.
+
+## PMOC Foundation — Bloco 1.1
+
+- Tipos reconhecem identidade monotônica, Operation gerada, projeções e metadata do scheduler.
+- `PmocHistoryItem.execution` concentra os dados necessários para a futura UX documental.
+- Nenhum componente, rota, ação ou comportamento visível foi adicionado.
+- O frontend continua sem autoridade para reservar número ou atualizar projeções.
+
+## PMOC Foundation — Bloco 1
+
+- O wizard gerencia cobertura, periodicidade completa, modo de geração, defaults e assinatura
+  override usando APIs reais.
+- A geração manual deixou de criar/vincular Operation diretamente em `/reports`.
+- “Gerar Ordem de Serviço” carrega o prefill da Execution Request e abre o
+  `OperationCreationDrawer` oficial; a confirmação retorna uma Operation/Assignment/OS normal.
+- O avanço para conteúdo/preview PMOC é bloqueado até existir Operation oficialmente vinculada.
+- Requests automáticas já geradas são reabertas pela Operation relacionada, sem duplicação.
+- Lint aprovado sem erros (um warning preexistente) e build de produção aprovado com 40 rotas;
+  a imagem Docker da Platform foi reconstruída com o wizard oficial atualizado.
+
 ## DC-03.1 — wizard enriquecido do Laudo Técnico
 
 - O passo Conteúdo coleta Responsável Técnico e CREA/registro profissional.
@@ -952,9 +983,10 @@ Status: concluído.
 - O texto livre é obrigatório e principal; escolhas aparecem como lista complementar no documento.
 - Edição de laudos preserva os arrays retornados pela Operation, sem concatená-los ao parecer.
 
-## PMOC — criação pelo wizard (2026-07-15)
+## PMOC — criação e gestão pelo wizard (2026-07-16)
 
-- A Central de Relatórios não bloqueia mais quando não há plano PMOC.
-- OWNER/MANAGER selecionam uma OS concluída e criam/selecionam o plano no mesmo passo.
-- Cliente, equipamentos, responsável e número da OS são derivados dos dados oficiais.
-- A execução inicial do plano é reutilizada na emissão para evitar duplicidade.
+- O passo Origem possui os fluxos `Criar novo PMOC` e `Selecionar PMOC existente`.
+- OWNER/MANAGER criam, ajustam, ativam/desativam e removem logicamente o plano sem sair do wizard.
+- O PMOC recebe número próprio; nenhuma OS é usada como origem.
+- Ao continuar a emissão, uma Operation/OS oficial é criada e vinculada à execução planejada do
+  PMOC, permanecendo disponível nos fluxos operacionais normais.

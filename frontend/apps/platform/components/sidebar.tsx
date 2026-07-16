@@ -52,6 +52,7 @@ const groups: NavGroup[] = [
     label: 'Operação',
     items: [
       { label: 'Operações', href: '/operacoes', icon: ClipboardCheck },
+      { label: 'PMOC', href: '/pmoc', icon: Calendar, roles: ['OWNER', 'MANAGER', 'VIEWER'] },
       { label: 'Documentos', href: '/documentos', icon: FileText },
     ],
   },

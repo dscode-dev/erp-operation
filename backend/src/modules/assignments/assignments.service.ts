@@ -39,6 +39,31 @@ const ASSIGNMENT_INCLUDE = {
       equipment: { select: { id: true, name: true, tag: true, type: true } },
       operator: { select: { id: true, name: true } },
       documents: { orderBy: { createdAt: 'asc' as const } },
+      maintenanceExecution: {
+        include: {
+          pmocExecutionRequest: {
+            select: { id: true, executionNumber: true, executionYear: true, status: true, origin: true },
+          },
+          plan: {
+            include: {
+              pmocPlan: {
+                select: {
+                  id: true,
+                  number: true,
+                  periodicity: true,
+                  generationMode: true,
+                  responsibleTechnician: true,
+                  contractNumber: true,
+                  artNumber: true,
+                  equipments: {
+                    select: { equipment: { select: { id: true, name: true, tag: true } } },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
     },
   },
 } satisfies Prisma.AssignmentInclude;

@@ -1,5 +1,109 @@
 # API Contracts
 
+## PMOC Foundation — Bloco 2
+
+Campos aditivos aceitos por `POST /api/v1/pmoc` e `PATCH /api/v1/pmoc/:id`:
+
+```json
+{
+  "name": "PMOC Hospital Santa Clara",
+  "defaultAddressId": "uuid opcional",
+  "defaultOperationType": "PREVENTIVA",
+  "defaultEstimatedDurationMinutes": 120,
+  "defaultOperationObservations": "Acessar a casa de máquinas pela portaria técnica",
+  "applyDefaultsToPendingExecutions": true
+}
+```
+
+`applyDefaultsToPendingExecutions` é exclusivo do PATCH e nunca é persistido. Quando verdadeiro,
+somente snapshots de solicitações `PENDING` e `FAILED` recebem os novos responsáveis. Quando
+omitido/falso, a alteração vale apenas para solicitações futuras.
+
+As respostas de plano adicionam `defaultAddress`, `defaultOperationType`,
+`defaultEstimatedDurationMinutes` e `defaultOperationObservations`. As solicitações adicionam
+`plannedOperatorId`, `plannedTechnicianId`, `plannedOperator` e `plannedTechnician`.
+
+### Reagendar solicitação PMOC
+
+`PATCH /api/v1/pmoc/execution-requests/:id/reschedule` — OWNER/MANAGER.
+
+```json
+{ "scheduledFor": "2026-08-20T12:00:00.000Z", "notes": "Reagendada com o cliente" }
+```
+
+Somente `PENDING` ou `FAILED`, dentro da cobertura do plano. A resposta é a mesma
+`PmocExecutionRequest`, preservando `id` e `executionNumber`. O backend sincroniza a
+`MaintenanceExecution`; não cria nova solicitação. Erros possíveis: 400 data/cobertura inválida,
+404 solicitação inexistente, 409 estado ou data conflitante, 403 sem papel autorizado.
+
+## PMOC Foundation — Bloco 1.1
+
+Extensão aditiva das respostas de PMOC:
+
+```json
+{
+  "lastReservedExecutionNumber": 3,
+  "lastGeneratedExecutionNumber": 2,
+  "lastExecutionDate": "2026-02-16T14:00:00.000Z",
+  "nextExecutionDate": "2026-03-15T00:00:00.000Z",
+  "nextGenerationDate": "2026-03-15T00:00:00.000Z",
+  "lastSchedulerRun": "2026-03-15T00:01:00.000Z",
+  "lastSchedulerStatus": "SUCCESS",
+  "lastSchedulerError": null,
+  "lastSuccessfulGeneration": "2026-02-15T00:01:00.000Z"
+}
+```
+
+`lastSchedulerStatus`: `NEVER_RUN | RUNNING | SUCCESS | PARTIAL_FAILURE | FAILED`.
+
+Toda `PmocExecutionRequest` inclui `executionNumber`, `executionYear`, `generatedOperationId` e
+`generatedAt`. O número é reservado pelo backend, monotônico por PMOC e não é aceito em requests.
+Cancelamento e retry preservam o número. `operationId` permanece como alias compatível e aponta
+para a mesma Operation quando a OS é gerada.
+
+`GET /api/v1/pmoc/:id/history` preserva o array de eventos e adiciona `execution` aos eventos
+associados, com `executionNumber`, `executionYear`, `workOrderNumber`, `status`, `scheduledFor`,
+`generatedAt`, `executedAt`, `operator` e `responsibleTechnician`.
+
+Não houve endpoint novo nem alteração em payload de escrita.
+
+## PMOC Foundation — Bloco 1
+
+Extensão aditiva de `POST /api/v1/pmoc` e `PATCH /api/v1/pmoc/:id`:
+
+```json
+{
+  "coverage": "Cobertura técnica do plano",
+  "periodicity": "QUARTERLY",
+  "generationMode": "MANUAL",
+  "defaultOperatorId": "uuid opcional",
+  "defaultTechnicianId": "uuid opcional",
+  "signatureOverrideId": "uuid opcional",
+  "recurrenceRule": null
+}
+```
+
+Periodicidades: `WEEKLY`, `BIWEEKLY`, `MONTHLY`, `BIMONTHLY`, `QUARTERLY`,
+`FOUR_MONTHLY`, `SEMIANNUAL`, `YEARLY`, `CUSTOM`. Apenas `CUSTOM` exige
+`recurrenceRule`; payloads legados que enviam somente a regra continuam aceitos.
+
+Endpoints:
+
+- `GET /api/v1/pmoc/:id/execution-requests?page=1&limit=20&status=PENDING` — paginação oficial.
+- `POST /api/v1/pmoc/:id/execution-requests` — body opcional `{ scheduledFor, notes }`.
+- `GET /api/v1/pmoc/execution-requests/:id` — detalhe rastreável.
+- `GET /api/v1/pmoc/execution-requests/:id/prefill` — payload do wizard oficial (OWNER/MANAGER).
+- `POST /api/v1/pmoc/execution-requests/:id/generate-work-order` — body
+  `{ "operation": CreateOperationPayload }` (OWNER/MANAGER).
+- `PATCH /api/v1/pmoc/execution-requests/:id/cancel` — somente PENDING/FAILED.
+- `GET /api/v1/pmoc/:id/history` — histórico imutável.
+- `POST /api/v1/pmoc/scheduler/run?limit=25` — retorna
+  `{ recovered, attempted, generated, failed, manualPending }`.
+
+O backend sobrescreve cliente, equipamento primário, tipo preventivo e data com valores do PMOC.
+Erros: `PMOC_EXECUTION_REQUEST_NOT_FOUND`, `PMOC_EXECUTION_REQUEST_INVALID_STATE`,
+`PMOC_EXECUTION_REQUEST_CONFLICT` e `PMOC_GENERATION_FAILED`. Falha mantém `operationId: null`.
+
 ## DC-03.1 — responsabilidade e equipamentos do TECHNICAL_OPINION
 
 Extensão aditiva de `POST /api/v1/operations` e `PATCH /api/v1/operations/:id`:
@@ -5011,26 +5115,25 @@ Cada coleção aceita até 50 strings de 500 caracteres. A resposta de Operation
 coleções. Os campos textuais existentes permanecem compatíveis e continuam sendo o conteúdo
 principal do documento.
 
-## PMOC — criação a partir de Ordem de Serviço
+## PMOC — criação independente e numeração própria
 
-`POST /api/v1/pmoc` mantém o contrato existente e aceita o campo aditivo:
+`POST /api/v1/pmoc` cria o plano antes de qualquer Ordem de Serviço:
 
 ```json
 {
-  "sourceOperationId": "uuid-da-operation-concluida",
   "customerId": "uuid-do-cliente",
   "equipmentId": "uuid-do-equipamento-principal",
   "equipmentIds": ["uuid-do-equipamento"],
-  "responsibleTechnician": "Responsável extraído da OS",
+  "responsibleTechnician": "Responsável técnico",
   "startDate": "2026-07-15",
   "endDate": "2027-07-15",
   "recurrenceRule": { "frequency": "MONTHLY", "interval": 1 }
 }
 ```
 
-Response `201`: `PmocPlan` completo, incluindo `sourceOperationId`, `sourceOperation` e
-`maintenancePlan.name` no padrão `PMOC · {cliente} · {número da OS}`.
+Response `201`: `PmocPlan` completo, incluindo `number` e `maintenancePlan.name` no padrão
+`PMOC · {cliente} · PMOC-{number com seis dígitos}`.
 
-Erros específicos: `404 OPERATION_NOT_FOUND`, `400 PMOC_INVALID_RELATIONSHIP` para cliente ou
-equipamentos incompatíveis, `409 PMOC_INVALID_RELATIONSHIP` para OS não concluída e
-`409 PMOC_SOURCE_OPERATION_CONFLICT` quando a OS já originou um plano.
+`sourceOperationId` não pertence ao contrato. A futura OS é uma Operation oficial vinculada por
+`MaintenanceExecution.operationId`. Atualização e remoção lógica continuam em `PATCH /pmoc/:id` e
+`DELETE /pmoc/:id`.

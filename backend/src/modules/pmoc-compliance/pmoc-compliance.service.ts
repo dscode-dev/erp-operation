@@ -4,12 +4,22 @@ import {
   DocumentTemplateType,
   MaintenanceExecutionStatus,
   MaintenancePlanType,
+  NotificationType,
+  OperationType,
   PmocComplianceStatus,
+  PmocExecutionOrigin,
+  PmocExecutionRequestStatus,
+  PmocGenerationMode,
+  PmocHistoryAction,
+  PmocOperationalStatus,
+  PmocPeriodicity,
   Prisma,
+  Role,
 } from '@prisma/client';
 import {
   PMOC_AUDIT_ACTIONS,
   PMOC_ENVIRONMENT_RESOURCE,
+  PMOC_EXECUTION_REQUEST_RESOURCE,
   PMOC_RESOURCE,
 } from '../../shared/constants/pmoc.constants';
 import { ERROR_CODES } from '../../shared/constants/error-codes.constants';
@@ -19,8 +29,12 @@ import { buildPaginatedResponse, type PaginatedResponse } from '../../shared/typ
 import { LifecyclePublisher } from '../asset-lifecycle/lifecycle-publisher.service';
 import { PrismaService } from '../database/prisma.service';
 import { DocumentConfigurationService } from '../document-engine/configuration/document-configuration.service';
-import { RecurrenceRuleDto } from '../maintenance-planning/dto/maintenance-planning.dto';
+import {
+  RecurrenceFrequency,
+  RecurrenceRuleDto,
+} from '../maintenance-planning/dto/maintenance-planning.dto';
 import { RecurringEngine } from '../maintenance-planning/recurring-engine.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import type {
   ComplianceEvaluationResult,
   ComplianceEvaluator,
@@ -41,38 +55,9 @@ export interface PmocAuditContext {
 
 type PmocPayload = Prisma.PmocPlanGetPayload<{ include: typeof PMOC_INCLUDE }>;
 
-const PMOC_SOURCE_OPERATION_INCLUDE = {
-  customer: { select: { id: true, name: true, tradeName: true } },
-  operator: { select: { id: true, name: true, isActive: true } },
-  equipment: { select: { id: true } },
-  inspectedEquipments: { select: { equipmentId: true } },
-  documents: {
-    where: { type: DocumentTemplateType.WORK_ORDER },
-    select: { id: true, number: true, status: true },
-    orderBy: { createdAt: 'asc' as const },
-    take: 1,
-  },
-} satisfies Prisma.OperationInclude;
-
-type PmocSourceOperation = Prisma.OperationGetPayload<{
-  include: typeof PMOC_SOURCE_OPERATION_INCLUDE;
-}>;
-
 const PMOC_INCLUDE = {
   organization: { select: { id: true, legalName: true, tradeName: true } },
   customer: { select: { id: true, name: true, tradeName: true } },
-  sourceOperation: {
-    select: {
-      id: true,
-      number: true,
-      status: true,
-      documents: {
-        where: { type: DocumentTemplateType.WORK_ORDER },
-        select: { id: true, number: true, status: true },
-        take: 1,
-      },
-    },
-  },
   equipment: { select: { id: true, name: true, tag: true, type: true, status: true } },
   maintenancePlan: {
     include: {
@@ -84,6 +69,31 @@ const PMOC_INCLUDE = {
             select: { id: true, number: true, type: true, status: true, completedAt: true },
           },
         },
+      },
+    },
+  },
+  defaultOperator: { select: { id: true, name: true, username: true, role: true } },
+  defaultTechnician: { select: { id: true, name: true, username: true, role: true } },
+  defaultAddress: true,
+  signatureOverride: {
+    select: {
+      id: true,
+      name: true,
+      title: true,
+      professionalCouncil: true,
+      department: true,
+      active: true,
+    },
+  },
+  executionRequests: {
+    orderBy: [{ scheduledFor: 'desc' as const }, { id: 'desc' as const }],
+    take: 20,
+    include: {
+      operation: { select: { id: true, number: true, type: true, status: true } },
+      plannedOperator: { select: { id: true, name: true, username: true, role: true } },
+      plannedTechnician: { select: { id: true, name: true, username: true, role: true } },
+      maintenanceExecution: {
+        select: { id: true, status: true, scheduledAt: true, executedAt: true },
       },
     },
   },
@@ -119,6 +129,7 @@ export class PmocComplianceService implements ComplianceEvaluator<{
     private readonly recurrence: RecurringEngine,
     private readonly lifecycle: LifecyclePublisher,
     private readonly documentConfiguration: DocumentConfigurationService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async list(query: ListPmocQueryDto): Promise<unknown> {
@@ -162,64 +173,72 @@ export class PmocComplianceService implements ComplianceEvaluator<{
     actor: AuthenticatedUser,
     context: PmocAuditContext,
   ): Promise<unknown> {
-    this.recurrence.validate(dto.recurrenceRule);
+    const periodicity = dto.periodicity ?? this.periodicityFromRule(dto.recurrenceRule);
+    const recurrenceRule = dto.recurrenceRule ?? this.ruleForPeriodicity(periodicity);
+    this.recurrence.validate(recurrenceRule);
     const startDate = this.dateOnly(dto.startDate);
     const endDate = this.dateOnly(dto.endDate);
     this.assertDateRange(startDate, endDate);
 
     const organization = await this.organizationOrThrow();
+    const customer = await this.customerForPmocOrThrow(dto.customerId);
     const equipment = await this.equipmentForCustomerOrThrow(dto.equipmentId, dto.customerId);
     const equipmentIds = this.unique([dto.equipmentId, ...(dto.equipmentIds ?? [])]);
     await this.equipmentsForCustomerOrThrow(equipmentIds, dto.customerId);
-    const sourceOperation = dto.sourceOperationId
-      ? await this.sourceOperationOrThrow(dto.sourceOperationId, dto.customerId, equipmentIds)
-      : null;
+    await this.validateDefaults(
+      dto.defaultOperatorId,
+      dto.defaultTechnicianId,
+      dto.signatureOverrideId,
+    );
+    await this.validateAddress(dto.defaultAddressId, dto.customerId);
 
-    if (dto.sourceOperationId) {
-      const existingSource = await this.prisma.pmocPlan.findUnique({
-        where: { sourceOperationId: dto.sourceOperationId },
-        select: { id: true },
-      });
-      if (existingSource) this.throwSourceOperationConflict();
-    }
-
-    const planName = sourceOperation
-      ? this.pmocPlanName(
-          sourceOperation.customer.tradeName ?? sourceOperation.customer.name,
-          sourceOperation.documents[0]?.number ??
-            `OS-${String(sourceOperation.number).padStart(6, '0')}`,
-        )
-      : `PMOC · ${equipment.name}`;
-
-    try {
-      return await this.prisma.$transaction(async (tx) => {
+    return this.prisma.$transaction(async (tx) => {
       const maintenancePlan = await tx.maintenancePlan.create({
         data: {
           equipmentId: dto.equipmentId,
-          name: planName,
+          name: (dto.name ? this.clean(dto.name) : `PMOC · ${customer.tradeName ?? customer.name}`).slice(0, 140),
           description: dto.observations ? this.clean(dto.observations) : 'Plano PMOC operacional',
           type: MaintenancePlanType.PREVENTIVE,
           active: dto.active ?? true,
           priority: dto.priority ?? 'HIGH',
-          recurrenceRule: dto.recurrenceRule as unknown as Prisma.InputJsonValue,
+          recurrenceRule: recurrenceRule as unknown as Prisma.InputJsonValue,
           firstExecution: startDate,
           nextExecution: startDate,
           createdBy: actor.id,
-          executions: {
-            create: {
-              scheduledAt: startDate,
-              notes: 'Execução inicial planejada gerada pelo PMOC.',
-            },
-          },
         },
       });
-      const pmoc = await tx.pmocPlan.create({
+      const maintenanceExecution = await tx.maintenanceExecution.create({
+        data: {
+          maintenancePlanId: maintenancePlan.id,
+          scheduledAt: startDate,
+          notes: 'Execução inicial planejada gerada pelo PMOC.',
+        },
+      });
+      const created = await tx.pmocPlan.create({
         data: {
           organizationId: organization.id,
           customerId: dto.customerId,
           equipmentId: dto.equipmentId,
           maintenancePlanId: maintenancePlan.id,
-          sourceOperationId: dto.sourceOperationId ?? null,
+          coverage: dto.coverage ? this.clean(dto.coverage) : null,
+          periodicity,
+          generationMode: dto.generationMode ?? PmocGenerationMode.MANUAL,
+          defaultOperatorId: dto.defaultOperatorId ?? null,
+          defaultTechnicianId: dto.defaultTechnicianId ?? null,
+          defaultAddressId: dto.defaultAddressId ?? null,
+          defaultOperationType: dto.defaultOperationType ?? OperationType.PREVENTIVA,
+          defaultEstimatedDurationMinutes: dto.defaultEstimatedDurationMinutes ?? null,
+          defaultOperationObservations: dto.defaultOperationObservations
+            ? this.clean(dto.defaultOperationObservations)
+            : null,
+          signatureOverrideId: dto.signatureOverrideId ?? null,
+          operationalStatus:
+            dto.generationMode === PmocGenerationMode.PAUSED || dto.active === false
+              ? PmocOperationalStatus.PAUSED
+              : PmocOperationalStatus.PENDING,
+          lastReservedExecutionNumber: 1,
+          nextExecutionDate: startDate,
+          nextGenerationDate: startDate,
           responsibleTechnician: this.clean(dto.responsibleTechnician),
           artNumber: dto.artNumber ? this.clean(dto.artNumber) : null,
           contractNumber: dto.contractNumber ? this.clean(dto.contractNumber) : null,
@@ -231,6 +250,59 @@ export class PmocComplianceService implements ComplianceEvaluator<{
             create: equipmentIds.map((equipmentId) => ({ equipmentId })),
           },
         },
+        select: { id: true, number: true },
+      });
+      const executionRequest = await tx.pmocExecutionRequest.create({
+        data: {
+          pmocPlanId: created.id,
+          maintenanceExecutionId: maintenanceExecution.id,
+          executionNumber: 1,
+          executionYear: startDate.getUTCFullYear(),
+          scheduledFor: startDate,
+          requestedBy: actor.id,
+          plannedOperatorId: dto.defaultOperatorId ?? null,
+          plannedTechnicianId: dto.defaultTechnicianId ?? null,
+          origin:
+            dto.generationMode === PmocGenerationMode.AUTO
+              ? PmocExecutionOrigin.AUTO
+              : PmocExecutionOrigin.MANUAL,
+        },
+      });
+      await tx.pmocHistory.createMany({
+        data: [
+          {
+            pmocPlanId: created.id,
+            actorId: actor.id,
+            action: PmocHistoryAction.CREATED,
+            newStatus:
+              dto.generationMode === PmocGenerationMode.PAUSED || dto.active === false
+                ? PmocOperationalStatus.PAUSED
+                : PmocOperationalStatus.PENDING,
+            metadata: { periodicity, generationMode: dto.generationMode ?? PmocGenerationMode.MANUAL },
+          },
+          {
+            pmocPlanId: created.id,
+            executionRequestId: executionRequest.id,
+            actorId: actor.id,
+            action:
+              dto.generationMode === PmocGenerationMode.AUTO
+                ? PmocHistoryAction.REQUEST_CREATED_AUTO
+                : PmocHistoryAction.REQUEST_CREATED_MANUAL,
+            newStatus: PmocExecutionRequestStatus.PENDING,
+            metadata: { executionNumber: 1, scheduledFor: startDate.toISOString() },
+          },
+        ],
+      });
+      await tx.maintenancePlan.update({
+        where: { id: maintenancePlan.id },
+        data: {
+          name: dto.name
+            ? this.clean(dto.name).slice(0, 140)
+            : this.pmocPlanName(customer.tradeName ?? customer.name, created.number),
+        },
+      });
+      const pmoc = await tx.pmocPlan.findUniqueOrThrow({
+        where: { id: created.id },
         include: PMOC_INCLUDE,
       });
       await this.lifecycle.publishPmocEventTx(
@@ -244,7 +316,7 @@ export class PmocComplianceService implements ComplianceEvaluator<{
           metadata: {
             customerId: dto.customerId,
             maintenancePlanId: maintenancePlan.id,
-            sourceOperationId: dto.sourceOperationId ?? null,
+            pmocNumber: pmoc.number,
           },
         },
         context,
@@ -255,21 +327,37 @@ export class PmocComplianceService implements ComplianceEvaluator<{
           customerId: dto.customerId,
           equipmentId: dto.equipmentId,
           maintenancePlanId: maintenancePlan.id,
-          sourceOperationId: dto.sourceOperationId ?? null,
+          pmocNumber: pmoc.number,
         }),
       });
-      return this.withCompliance(pmoc);
+      await tx.auditLog.create({
+        data: this.audit(
+          (dto.generationMode ?? PmocGenerationMode.MANUAL) === PmocGenerationMode.AUTO
+            ? PMOC_AUDIT_ACTIONS.EXECUTION_REQUEST_CREATED_AUTO
+            : PMOC_AUDIT_ACTIONS.EXECUTION_REQUEST_CREATED_MANUAL,
+          PMOC_EXECUTION_REQUEST_RESOURCE,
+          actor.id,
+          context,
+          {
+            pmocPlanId: pmoc.id,
+            executionRequestId: executionRequest.id,
+            executionNumber: 1,
+            scheduledFor: startDate.toISOString(),
+          },
+        ),
       });
-    } catch (error) {
       if (
-        dto.sourceOperationId &&
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002'
+        (dto.generationMode ?? PmocGenerationMode.MANUAL) === PmocGenerationMode.MANUAL &&
+        startDate.getTime() <= Date.now()
       ) {
-        this.throwSourceOperationConflict();
+        await this.notifications.notifyPmocExecutionTx(
+          tx,
+          executionRequest.id,
+          NotificationType.PMOC_EXECUTION_PENDING_MANUAL,
+        );
       }
-      throw error;
-    }
+      return this.withCompliance(pmoc);
+    });
   }
 
   async update(
@@ -282,23 +370,33 @@ export class PmocComplianceService implements ComplianceEvaluator<{
     const startDate = dto.startDate ? this.dateOnly(dto.startDate) : existing.startDate;
     const endDate = dto.endDate ? this.dateOnly(dto.endDate) : existing.endDate;
     this.assertDateRange(startDate, endDate);
+    const periodicity = dto.periodicity ?? existing.periodicity;
     const recurrenceRule =
       dto.recurrenceRule ??
-      (existing.maintenancePlan.recurrenceRule as unknown as RecurrenceRuleDto);
+      (dto.periodicity
+        ? this.ruleForPeriodicity(periodicity)
+        : (existing.maintenancePlan.recurrenceRule as unknown as RecurrenceRuleDto));
     this.recurrence.validate(recurrenceRule);
     const equipmentIds =
       dto.equipmentIds !== undefined
         ? this.unique([existing.equipmentId, ...dto.equipmentIds])
         : null;
     if (equipmentIds) await this.equipmentsForCustomerOrThrow(equipmentIds, existing.customerId);
+    await this.validateDefaults(
+      dto.defaultOperatorId ?? undefined,
+      dto.defaultTechnicianId ?? undefined,
+      dto.signatureOverrideId ?? undefined,
+    );
+    await this.validateAddress(dto.defaultAddressId ?? undefined, existing.customerId);
 
     return this.prisma.$transaction(async (tx) => {
       await tx.maintenancePlan.update({
         where: { id: existing.maintenancePlanId },
         data: {
+          ...(dto.name ? { name: this.clean(dto.name).slice(0, 140) } : {}),
           ...(dto.priority ? { priority: dto.priority } : {}),
-          ...(dto.recurrenceRule
-            ? { recurrenceRule: dto.recurrenceRule as unknown as Prisma.InputJsonValue }
+          ...(dto.recurrenceRule || dto.periodicity
+            ? { recurrenceRule: recurrenceRule as unknown as Prisma.InputJsonValue }
             : {}),
           ...(dto.startDate ? { firstExecution: startDate, nextExecution: startDate } : {}),
           ...(dto.active !== undefined ? { active: dto.active } : {}),
@@ -314,6 +412,41 @@ export class PmocComplianceService implements ComplianceEvaluator<{
       const pmoc = await tx.pmocPlan.update({
         where: { id },
         data: {
+          ...(dto.coverage !== undefined
+            ? { coverage: dto.coverage ? this.clean(dto.coverage) : null }
+            : {}),
+          ...(dto.periodicity ? { periodicity: dto.periodicity } : {}),
+          ...(dto.generationMode ? { generationMode: dto.generationMode } : {}),
+          ...(dto.defaultOperatorId !== undefined
+            ? { defaultOperatorId: dto.defaultOperatorId }
+            : {}),
+          ...(dto.defaultTechnicianId !== undefined
+            ? { defaultTechnicianId: dto.defaultTechnicianId }
+            : {}),
+          ...(dto.defaultAddressId !== undefined ? { defaultAddressId: dto.defaultAddressId } : {}),
+          ...(dto.defaultOperationType !== undefined
+            ? { defaultOperationType: dto.defaultOperationType }
+            : {}),
+          ...(dto.defaultEstimatedDurationMinutes !== undefined
+            ? { defaultEstimatedDurationMinutes: dto.defaultEstimatedDurationMinutes }
+            : {}),
+          ...(dto.defaultOperationObservations !== undefined
+            ? {
+                defaultOperationObservations: dto.defaultOperationObservations
+                  ? this.clean(dto.defaultOperationObservations)
+                  : null,
+              }
+            : {}),
+          ...(dto.signatureOverrideId !== undefined
+            ? { signatureOverrideId: dto.signatureOverrideId }
+            : {}),
+          ...(dto.generationMode === PmocGenerationMode.PAUSED || dto.active === false
+            ? { operationalStatus: PmocOperationalStatus.PAUSED }
+            : dto.generationMode === PmocGenerationMode.AUTO ||
+                dto.generationMode === PmocGenerationMode.MANUAL ||
+                dto.active === true
+              ? { operationalStatus: PmocOperationalStatus.ACTIVE }
+              : {}),
           ...(dto.responsibleTechnician !== undefined
             ? { responsibleTechnician: this.clean(dto.responsibleTechnician) }
             : {}),
@@ -331,6 +464,51 @@ export class PmocComplianceService implements ComplianceEvaluator<{
           ...(dto.active !== undefined ? { active: dto.active } : {}),
         },
         include: PMOC_INCLUDE,
+      });
+      if (
+        dto.applyDefaultsToPendingExecutions &&
+        (dto.defaultOperatorId !== undefined || dto.defaultTechnicianId !== undefined)
+      ) {
+        await tx.pmocExecutionRequest.updateMany({
+          where: {
+            pmocPlanId: id,
+            status: { in: [PmocExecutionRequestStatus.PENDING, PmocExecutionRequestStatus.FAILED] },
+          },
+          data: {
+            ...(dto.defaultOperatorId !== undefined
+              ? { plannedOperatorId: dto.defaultOperatorId }
+              : {}),
+            ...(dto.defaultTechnicianId !== undefined
+              ? { plannedTechnicianId: dto.defaultTechnicianId }
+              : {}),
+          },
+        });
+      }
+      const historyActions: PmocHistoryAction[] = [PmocHistoryAction.UPDATED];
+      if (dto.periodicity || dto.recurrenceRule) {
+        historyActions.push(PmocHistoryAction.PERIODICITY_CHANGED);
+      }
+      if (dto.defaultOperatorId !== undefined) {
+        historyActions.push(PmocHistoryAction.OPERATOR_CHANGED);
+      }
+      if (dto.defaultTechnicianId !== undefined) {
+        historyActions.push(PmocHistoryAction.TECHNICIAN_CHANGED);
+      }
+      if (dto.applyDefaultsToPendingExecutions) {
+        historyActions.push(PmocHistoryAction.DEFAULTS_PROPAGATED);
+      }
+      if (dto.coverage !== undefined || dto.equipmentIds !== undefined) {
+        historyActions.push(PmocHistoryAction.COVERAGE_CHANGED);
+      }
+      await tx.pmocHistory.createMany({
+        data: historyActions.map((action) => ({
+          pmocPlanId: id,
+          actorId: actor.id,
+          action,
+          previousStatus: existing.operationalStatus,
+          newStatus: pmoc.operationalStatus,
+          metadata: { changedFields: Object.keys(dto) },
+        })),
       });
       await this.lifecycle.publishPmocEventTx(
         tx,
@@ -353,6 +531,25 @@ export class PmocComplianceService implements ComplianceEvaluator<{
           changedFields: Object.keys(dto),
         }),
       });
+      if (dto.applyDefaultsToPendingExecutions) {
+        await tx.auditLog.create({
+          data: this.audit(
+            PMOC_AUDIT_ACTIONS.DEFAULTS_PROPAGATED,
+            PMOC_RESOURCE,
+            actor.id,
+            context,
+            {
+              pmocPlanId: id,
+              defaultOperatorId: dto.defaultOperatorId,
+              defaultTechnicianId: dto.defaultTechnicianId,
+              targetStatuses: [
+                PmocExecutionRequestStatus.PENDING,
+                PmocExecutionRequestStatus.FAILED,
+              ],
+            },
+          ),
+        });
+      }
       return this.withCompliance(pmoc);
     });
   }
@@ -363,19 +560,55 @@ export class PmocComplianceService implements ComplianceEvaluator<{
     context: PmocAuditContext,
   ): Promise<{ deleted: true }> {
     const pmoc = await this.pmocOrThrow(id);
-    await this.prisma.$transaction([
-      this.prisma.pmocPlan.update({ where: { id }, data: { active: false } }),
-      this.prisma.maintenancePlan.update({
+    await this.prisma.$transaction(async (tx) => {
+      const cancelledAt = new Date();
+      const cancellable = await tx.pmocExecutionRequest.findMany({
+        where: {
+          pmocPlanId: id,
+          status: {
+            in: [PmocExecutionRequestStatus.PENDING, PmocExecutionRequestStatus.FAILED],
+          },
+        },
+        select: { id: true, executionNumber: true },
+      });
+      await tx.pmocExecutionRequest.updateMany({
+        where: { id: { in: cancellable.map((item) => item.id) } },
+        data: { status: PmocExecutionRequestStatus.CANCELLED, cancelledAt },
+      });
+      await tx.pmocPlan.update({
+        where: { id },
+        data: {
+          active: false,
+          generationMode: PmocGenerationMode.PAUSED,
+          operationalStatus: PmocOperationalStatus.PAUSED,
+          nextExecutionDate: null,
+          nextGenerationDate: null,
+        },
+      });
+      await tx.maintenancePlan.update({
         where: { id: pmoc.maintenancePlanId },
         data: { active: false },
-      }),
-      this.prisma.auditLog.create({
+      });
+      if (cancellable.length) {
+        await tx.pmocHistory.createMany({
+          data: cancellable.map((request) => ({
+            pmocPlanId: id,
+            executionRequestId: request.id,
+            actorId: actor.id,
+            action: PmocHistoryAction.REQUEST_CANCELLED,
+            newStatus: PmocExecutionRequestStatus.CANCELLED,
+            notes: 'Solicitação cancelada pela desativação do PMOC.',
+            metadata: { executionNumber: request.executionNumber },
+          })),
+        });
+      }
+      await tx.auditLog.create({
         data: this.audit(PMOC_AUDIT_ACTIONS.DELETED, PMOC_RESOURCE, actor.id, context, {
           pmocPlanId: id,
           maintenancePlanId: pmoc.maintenancePlanId,
         }),
-      }),
-    ]);
+      });
+    });
     return { deleted: true };
   }
 
@@ -552,8 +785,34 @@ export class PmocComplianceService implements ComplianceEvaluator<{
 
   private withCompliance<T extends PmocPayload>(
     pmoc: T,
-  ): T & { compliance: ComplianceEvaluationResult } {
-    return { ...pmoc, compliance: this.evaluatePayload(pmoc) };
+  ): T & { operationalStatus: PmocOperationalStatus; compliance: ComplianceEvaluationResult } {
+    return {
+      ...pmoc,
+      operationalStatus: this.operationalStatus(pmoc),
+      compliance: this.evaluatePayload(pmoc),
+    };
+  }
+
+  private operationalStatus(pmoc: PmocPayload, now = new Date()): PmocOperationalStatus {
+    if (!pmoc.active || pmoc.generationMode === PmocGenerationMode.PAUSED) {
+      return PmocOperationalStatus.PAUSED;
+    }
+    if (pmoc.endDate < now) return PmocOperationalStatus.EXPIRED;
+    if (pmoc.executionRequests.some((request) => request.status === PmocExecutionRequestStatus.FAILED)) {
+      return PmocOperationalStatus.ERROR;
+    }
+    if (
+      pmoc.executionRequests.some(
+        (request) =>
+          request.status === PmocExecutionRequestStatus.PENDING && request.scheduledFor < now,
+      )
+    ) {
+      return PmocOperationalStatus.OVERDUE;
+    }
+    if (pmoc.executionRequests.some((request) => request.status === PmocExecutionRequestStatus.PENDING)) {
+      return PmocOperationalStatus.PENDING;
+    }
+    return PmocOperationalStatus.ACTIVE;
   }
 
   private evaluatePayload(pmoc: PmocPayload, evaluatedAt = new Date()): ComplianceEvaluationResult {
@@ -694,66 +953,120 @@ export class PmocComplianceService implements ComplianceEvaluator<{
     }
   }
 
-  private async sourceOperationOrThrow(
-    operationId: string,
+  private async customerForPmocOrThrow(
     customerId: string,
-    equipmentIds: string[],
-  ): Promise<PmocSourceOperation> {
-    const operation = await this.prisma.operation.findUnique({
-      where: { id: operationId },
-      include: PMOC_SOURCE_OPERATION_INCLUDE,
+  ): Promise<{ id: string; name: string; tradeName: string | null }> {
+    const customer = await this.prisma.customer.findFirst({
+      where: { id: customerId, isActive: true },
+      select: { id: true, name: true, tradeName: true },
     });
-    if (!operation) {
+    if (!customer) {
       throw new ApplicationException(
-        ERROR_CODES.OPERATION_NOT_FOUND,
-        'Source Work Order was not found',
+        ERROR_CODES.CUSTOMER_NOT_FOUND,
+        'Active PMOC customer was not found',
         HttpStatus.NOT_FOUND,
       );
     }
-    if (operation.status !== 'COMPLETED') {
-      throw new ApplicationException(
-        ERROR_CODES.PMOC_INVALID_RELATIONSHIP,
-        'Only a completed Work Order can originate a PMOC plan',
-        HttpStatus.CONFLICT,
-      );
-    }
-    if (operation.customerId !== customerId) {
-      throw new ApplicationException(
-        ERROR_CODES.PMOC_INVALID_RELATIONSHIP,
-        'Source Work Order and PMOC must belong to the same customer',
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-    const operationEquipmentIds = new Set([
-      ...(operation.equipmentId ? [operation.equipmentId] : []),
-      ...operation.inspectedEquipments.map((item) => item.equipmentId),
-    ]);
-    if (
-      operationEquipmentIds.size === 0 ||
-      equipmentIds.some((equipmentId) => !operationEquipmentIds.has(equipmentId))
-    ) {
-      throw new ApplicationException(
-        ERROR_CODES.PMOC_INVALID_RELATIONSHIP,
-        'PMOC equipments must be present in the source Work Order',
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-    return operation;
+    return customer;
   }
 
-  private pmocPlanName(customerName: string, workOrderNumber: string): string {
+  private pmocPlanName(customerName: string, pmocNumber: number): string {
     const prefix = 'PMOC · ';
-    const suffix = ` · ${this.clean(workOrderNumber)}`;
+    const suffix = ` · PMOC-${String(pmocNumber).padStart(6, '0')}`;
     const customerLimit = Math.max(1, 140 - prefix.length - suffix.length);
     return `${prefix}${this.clean(customerName).slice(0, customerLimit)}${suffix}`;
   }
 
-  private throwSourceOperationConflict(): never {
-    throw new ApplicationException(
-      ERROR_CODES.PMOC_SOURCE_OPERATION_CONFLICT,
-      'A PMOC plan already exists for this Work Order',
-      HttpStatus.CONFLICT,
-    );
+  private periodicityFromRule(rule?: RecurrenceRuleDto): PmocPeriodicity {
+    if (!rule) return PmocPeriodicity.MONTHLY;
+    const interval = rule.interval ?? 1;
+    if (rule.frequency === RecurrenceFrequency.WEEKLY && interval === 1) return PmocPeriodicity.WEEKLY;
+    if (rule.frequency === RecurrenceFrequency.WEEKLY && interval === 2) return PmocPeriodicity.BIWEEKLY;
+    if (rule.frequency === RecurrenceFrequency.MONTHLY && interval === 1) return PmocPeriodicity.MONTHLY;
+    if (rule.frequency === RecurrenceFrequency.MONTHLY && interval === 2) return PmocPeriodicity.BIMONTHLY;
+    if (rule.frequency === RecurrenceFrequency.MONTHLY && interval === 3) return PmocPeriodicity.QUARTERLY;
+    if (rule.frequency === RecurrenceFrequency.MONTHLY && interval === 4) return PmocPeriodicity.FOUR_MONTHLY;
+    if (rule.frequency === RecurrenceFrequency.MONTHLY && interval === 6) return PmocPeriodicity.SEMIANNUAL;
+    if (rule.frequency === RecurrenceFrequency.YEARLY && interval === 1) return PmocPeriodicity.YEARLY;
+    return PmocPeriodicity.CUSTOM;
+  }
+
+  private ruleForPeriodicity(periodicity: PmocPeriodicity): RecurrenceRuleDto {
+    const rules: Record<Exclude<PmocPeriodicity, 'CUSTOM'>, RecurrenceRuleDto> = {
+      WEEKLY: { frequency: RecurrenceFrequency.WEEKLY, interval: 1 },
+      BIWEEKLY: { frequency: RecurrenceFrequency.WEEKLY, interval: 2 },
+      MONTHLY: { frequency: RecurrenceFrequency.MONTHLY, interval: 1 },
+      BIMONTHLY: { frequency: RecurrenceFrequency.MONTHLY, interval: 2 },
+      QUARTERLY: { frequency: RecurrenceFrequency.MONTHLY, interval: 3 },
+      FOUR_MONTHLY: { frequency: RecurrenceFrequency.MONTHLY, interval: 4 },
+      SEMIANNUAL: { frequency: RecurrenceFrequency.MONTHLY, interval: 6 },
+      YEARLY: { frequency: RecurrenceFrequency.YEARLY, interval: 1 },
+    };
+    if (periodicity === PmocPeriodicity.CUSTOM) {
+      throw new ApplicationException(
+        ERROR_CODES.MAINTENANCE_RECURRENCE_INVALID,
+        'CUSTOM PMOC periodicity requires recurrenceRule',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    return rules[periodicity];
+  }
+
+  private async validateDefaults(
+    operatorId?: string,
+    technicianId?: string,
+    signatureId?: string,
+  ): Promise<void> {
+    const userIds = this.unique([operatorId, technicianId].filter((id): id is string => Boolean(id)));
+    if (userIds.length) {
+      const users = await this.prisma.user.findMany({
+        where: { id: { in: userIds }, isActive: true, disabledAt: null },
+        select: { id: true, role: true },
+      });
+      if (users.length !== userIds.length) {
+        throw new ApplicationException(
+          ERROR_CODES.USER_NOT_FOUND,
+          'PMOC default users must exist and be active',
+          HttpStatus.NOT_FOUND,
+        );
+      }
+      const operator = operatorId ? users.find((user) => user.id === operatorId) : null;
+      if (operator?.role === Role.VIEWER) {
+        throw new ApplicationException(
+          ERROR_CODES.OPERATION_OPERATOR_INVALID,
+          'Viewer cannot be the default PMOC operator',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+    }
+    if (signatureId) {
+      const signature = await this.prisma.signature.findFirst({
+        where: { id: signatureId, active: true, deletedAt: null },
+        select: { id: true },
+      });
+      if (!signature) {
+        throw new ApplicationException(
+          ERROR_CODES.SIGNATURE_NOT_FOUND,
+          'Active PMOC signature override was not found',
+          HttpStatus.NOT_FOUND,
+        );
+      }
+    }
+  }
+
+  private async validateAddress(addressId: string | undefined, customerId: string): Promise<void> {
+    if (!addressId) return;
+    const address = await this.prisma.customerAddress.findFirst({
+      where: { id: addressId, customerId },
+      select: { id: true },
+    });
+    if (!address) {
+      throw new ApplicationException(
+        ERROR_CODES.PMOC_INVALID_RELATIONSHIP,
+        'PMOC default address must belong to the selected customer',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
   }
 
   private assertPmocEquipments(pmoc: PmocPayload, equipmentIds: string[]): void {

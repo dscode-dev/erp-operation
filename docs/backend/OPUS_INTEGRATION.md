@@ -1,5 +1,36 @@
 # OPUS Frontend Integration
 
+## PMOC Foundation — Bloco 2
+
+| Fluxo | API/componente oficial |
+| --- | --- |
+| Criar plano | `pmocApi.create` via `PmocPlanWizard` |
+| Gerar OS | `getExecutionRequestPrefill` → `OperationCreationDrawer` → `generateWorkOrder` |
+| Reagendar | `rescheduleExecutionRequest(id, { scheduledFor, notes? })` |
+| Cancelar | `cancelExecutionRequest` |
+| Histórico | `getHistory`; não montar eventos localmente |
+| Assinatura | `documentsApi.getConfiguration` + assinaturas cadastradas |
+
+Use `plannedOperator/plannedTechnician` para a responsabilidade daquela execução. Defaults do
+plano não substituem snapshots históricos. Na alteração dos defaults, a opção “aplicar às futuras
+pendentes” mapeia para `applyDefaultsToPendingExecutions`; não aplique isso implicitamente.
+
+Na Central de Relatórios, a ação PMOC navega para `/pmoc`. Não reative o formulário legado: o
+relatório PMOC é consequência de Operation/Document Engine, enquanto o plano vive no domínio PMOC.
+
+## PMOC Foundation 1.1
+
+Use `executionNumber` como identidade (`001`, `002`, ...). O número da OS é somente
+`execution.workOrderNumber`. Datas e metadata do scheduler são read-only. Retry/cancelamento
+reutilizam o `executionRequest.id`; o frontend nunca reserva números.
+
+## PMOC Foundation
+
+Use `pmocApi.listExecutionRequests`, `createExecutionRequest`, `getExecutionRequestPrefill`,
+`generateWorkOrder`, `cancelExecutionRequest` e `getHistory`. “Gerar Ordem de Serviço” abre o mesmo
+`OperationCreationDrawer` usado por Operações/Agenda/OS. Não crie formulário alternativo nem ligue
+MaintenanceExecution pelo frontend.
+
 ## DC-03.1 — campos adicionais do Laudo
 
 | Campo UI            | Campo API                                |
@@ -1882,7 +1913,7 @@ devem ser reenviados ao editar; não reconstrua o texto principal a partir deles
 
 ## PMOC sem plano prévio
 
-Na Central de Relatórios, quando não houver plano ativo, ofereça a seleção de uma OS concluída e
-chame `POST /pmoc` com `sourceOperationId`. O backend retorna o plano já nomeado e com a execução
-inicial. Se houver `409 PMOC_SOURCE_OPERATION_CONFLICT`, recarregue a lista e selecione o plano já
-existente em vez de repetir a criação.
+Na Central de Relatórios, ofereça `Criar novo PMOC` e `Selecionar PMOC existente`. Um novo plano é
+criado diretamente por `POST /pmoc`, recebe número próprio e não depende de Operation. Ao avançar,
+crie a Operation/OS oficial e vincule-a à execução planejada. Para planos existentes, exponha
+edição e remoção lógica pelos endpoints já oficiais.

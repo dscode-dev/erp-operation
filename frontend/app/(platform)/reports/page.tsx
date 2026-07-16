@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   ClipboardCheck,
   FileCheck2,
@@ -13,12 +14,12 @@ import {
 } from 'lucide-react';
 import { PageHeader } from '@platform/components/page-header';
 import { Pagination } from '@platform/components/pagination';
+import { OperationCreationDrawer } from '@platform/components/operation-creation-drawer';
 import {
   ApiClientError,
   customersApi,
   documentsApi,
   equipmentsApi,
-  maintenanceApi,
   maintenanceChecklistTemplatesApi,
   operationApi,
   pmocApi,
@@ -38,6 +39,7 @@ import {
   type OperationSummary,
   type Paginated,
   type PmocPlan,
+  type CreateOperationPayload,
   type Signature,
   type TeamUser,
   type TechnicalCatalogArea,
@@ -100,7 +102,22 @@ type WorkflowForm = {
   equipmentId: string;
   operatorId: string;
   pmocId: string;
-  pmocSourceOperationId: string;
+  pmocMode: '' | 'EXISTING' | 'NEW';
+  pmocEquipmentIds: string[];
+  pmocResponsible: string;
+  pmocStartDate: string;
+  pmocEndDate: string;
+  pmocObservations: string;
+  pmocCoverage: string;
+  pmocPeriodicity: import('@erp/types').PmocPeriodicity;
+  pmocGenerationMode: import('@erp/types').PmocGenerationMode;
+  pmocDefaultOperatorId: string;
+  pmocDefaultTechnicianId: string;
+  pmocSignatureOverrideId: string;
+  pmocExecutionRequestId: string;
+  pmocRecurrenceFrequency: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY' | 'INTERVAL_DAYS' | 'INTERVAL_MONTHS';
+  pmocRecurrenceInterval: string;
+  pmocActive: boolean;
   objective: string;
   objectiveItems: string[];
   diagnosis: string;
@@ -141,6 +158,10 @@ type WorkflowForm = {
   }>;
 };
 
+const defaultPmocStart = new Date();
+const defaultPmocEnd = new Date(defaultPmocStart);
+defaultPmocEnd.setUTCFullYear(defaultPmocEnd.getUTCFullYear() + 1);
+
 const emptyForm: WorkflowForm = {
   workOrderSource: '',
   operationId: '',
@@ -149,7 +170,22 @@ const emptyForm: WorkflowForm = {
   equipmentId: '',
   operatorId: '',
   pmocId: '',
-  pmocSourceOperationId: '',
+  pmocMode: '',
+  pmocEquipmentIds: [],
+  pmocResponsible: '',
+  pmocStartDate: defaultPmocStart.toISOString().slice(0, 10),
+  pmocEndDate: defaultPmocEnd.toISOString().slice(0, 10),
+  pmocObservations: '',
+  pmocCoverage: '',
+  pmocPeriodicity: 'MONTHLY',
+  pmocGenerationMode: 'MANUAL',
+  pmocDefaultOperatorId: '',
+  pmocDefaultTechnicianId: '',
+  pmocSignatureOverrideId: '',
+  pmocExecutionRequestId: '',
+  pmocRecurrenceFrequency: 'MONTHLY',
+  pmocRecurrenceInterval: '1',
+  pmocActive: true,
   objective: '',
   objectiveItems: [],
   diagnosis: '',
@@ -178,6 +214,7 @@ const emptyForm: WorkflowForm = {
 };
 
 export default function ReportCenterPage() {
+  const router = useRouter();
   const { hasRole } = useAuth();
   const [workflow, setWorkflow] = useState<{ type: DocumentKind; operationId?: string } | null>(
     null,
@@ -251,7 +288,13 @@ export default function ReportCenterPage() {
               <button
                 key={reportType}
                 type="button"
-                onClick={() => setWorkflow({ type: reportType })}
+                onClick={() => {
+                  if (reportType === 'PMOC') {
+                    router.push('/pmoc');
+                    return;
+                  }
+                  setWorkflow({ type: reportType });
+                }}
                 className="group rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 text-left transition hover:-translate-y-0.5 hover:border-[var(--color-primary)]/50 hover:shadow-[var(--shadow-card)]"
               >
                 <span className="inline-flex rounded-[var(--radius-md)] bg-[var(--color-primary)]/10 p-2 text-[var(--color-primary)]">
@@ -427,6 +470,9 @@ function ReportWorkflowDrawer({
   const [equipments, setEquipments] = useState<EquipmentSummary[]>([]);
   const [busy, setBusy] = useState(false);
   const [creatingPmoc, setCreatingPmoc] = useState(false);
+  const [pmocWorkOrderOpen, setPmocWorkOrderOpen] = useState(false);
+  const [pmocWorkOrderPrefill, setPmocWorkOrderPrefill] =
+    useState<CreateOperationPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const customers = useQuery<Paginated<Customer>>(
     (signal) => customersApi.listCustomers({ page: 1, limit: 100, signal }),
@@ -574,9 +620,35 @@ function ReportWorkflowDrawer({
   }
 
   function applyPmocPlan(plan: PmocPlan) {
+    const recurrence = plan.maintenancePlan?.recurrenceRule as
+      | { frequency?: WorkflowForm['pmocRecurrenceFrequency']; interval?: number }
+      | undefined;
     setForm((current) => ({
       ...current,
       pmocId: plan.id,
+      pmocMode: 'EXISTING',
+      pmocEquipmentIds: (plan.equipments?.length
+        ? plan.equipments.map((item) => item.equipmentId)
+        : [plan.equipmentId]
+      ),
+      pmocResponsible: plan.responsibleTechnician,
+      pmocStartDate: plan.startDate.slice(0, 10),
+      pmocEndDate: plan.endDate.slice(0, 10),
+      pmocObservations: plan.observations ?? '',
+      pmocCoverage: plan.coverage ?? '',
+      pmocPeriodicity: plan.periodicity,
+      pmocGenerationMode: plan.generationMode,
+      pmocDefaultOperatorId: plan.defaultOperatorId ?? '',
+      pmocDefaultTechnicianId: plan.defaultTechnicianId ?? '',
+      pmocSignatureOverrideId: plan.signatureOverrideId ?? '',
+      pmocExecutionRequestId:
+        plan.executionRequests?.find((item) => item.status === 'PENDING' || item.status === 'FAILED')
+          ?.id ??
+        plan.executionRequests?.find((item) => item.status === 'GENERATED')?.id ??
+        '',
+      pmocRecurrenceFrequency: recurrence?.frequency ?? 'MONTHLY',
+      pmocRecurrenceInterval: String(recurrence?.interval ?? 1),
+      pmocActive: plan.active,
       customerId: plan.customerId,
       equipmentId: plan.equipmentId,
       inspectedEquipments: (plan.equipments?.length
@@ -591,6 +663,14 @@ function ReportWorkflowDrawer({
       objective: `Execução do plano PMOC ${plan.maintenancePlan?.name ?? plan.contractNumber ?? plan.id}`,
       observations: plan.observations ?? current.observations,
     }));
+    const generated = plan.executionRequests?.find(
+      (item) => item.status === 'GENERATED' && item.operationId,
+    );
+    if (generated?.operationId) {
+      void operationApi.getOperation(generated.operationId).then(setOperation).catch(() => undefined);
+    } else {
+      setOperation(null);
+    }
   }
 
   async function selectPmoc(id: string) {
@@ -605,43 +685,39 @@ function ReportWorkflowDrawer({
     }
   }
 
-  async function createPmocFromWorkOrder() {
-    if (!form.pmocSourceOperationId) {
-      setError('Selecione uma Ordem de Serviço concluída.');
-      return;
-    }
+  async function createPmocPlan() {
     setCreatingPmoc(true);
     setError(null);
     try {
-      const source = await operationApi.getOperation(form.pmocSourceOperationId);
-      if (!source.customer?.id || !source.operator?.name)
-        throw new Error('A Ordem de Serviço não possui cliente e responsável válidos.');
-      const equipmentIds = [
-        ...new Set([
-          ...source.inspectedEquipments.map((item) => item.equipmentId),
-          ...(source.equipment?.id ? [source.equipment.id] : []),
-        ]),
-      ];
-      if (equipmentIds.length === 0)
-        throw new Error('A Ordem de Serviço não possui equipamentos para originar o PMOC.');
-      const start = new Date(source.completedAt ?? source.scheduledFor ?? new Date());
-      const end = new Date(start);
-      end.setUTCFullYear(end.getUTCFullYear() + 1);
-      const osNumber =
-        source.documents.find((document) => document.type === 'WORK_ORDER')?.number ??
-        `OS-${String(source.number).padStart(6, '0')}`;
+      if (!form.customerId || !form.operatorId)
+        throw new Error('Selecione o cliente e o responsável pela futura Ordem de Serviço.');
+      if (form.pmocEquipmentIds.length === 0)
+        throw new Error('Selecione ao menos um equipamento controlado pelo PMOC.');
+      if (!form.pmocResponsible.trim())
+        throw new Error('Informe o responsável técnico do PMOC.');
       const created = await pmocApi.createPmoc({
-        sourceOperationId: source.id,
-        customerId: source.customer.id,
-        equipmentId: equipmentIds[0],
-        equipmentIds,
-        responsibleTechnician: source.operator.name,
-        startDate: start.toISOString().slice(0, 10),
-        endDate: end.toISOString().slice(0, 10),
-        observations: `Plano PMOC originado da ${osNumber}.`,
+        customerId: form.customerId,
+        equipmentId: form.pmocEquipmentIds[0],
+        equipmentIds: form.pmocEquipmentIds,
+        responsibleTechnician: form.pmocResponsible,
+        coverage: form.pmocCoverage || undefined,
+        periodicity: form.pmocPeriodicity,
+        generationMode: form.pmocGenerationMode,
+        defaultOperatorId: form.pmocDefaultOperatorId || undefined,
+        defaultTechnicianId: form.pmocDefaultTechnicianId || undefined,
+        signatureOverrideId: form.pmocSignatureOverrideId || undefined,
+        startDate: form.pmocStartDate,
+        endDate: form.pmocEndDate,
+        observations: form.pmocObservations || undefined,
         priority: 'HIGH',
-        recurrenceRule: { frequency: 'MONTHLY', interval: 1 },
-        active: true,
+        recurrenceRule:
+          form.pmocPeriodicity === 'CUSTOM'
+            ? {
+                frequency: form.pmocRecurrenceFrequency,
+                interval: Number(form.pmocRecurrenceInterval || 1),
+              }
+            : undefined,
+        active: form.pmocActive,
       });
       applyPmocPlan(created);
       pmocs.refetch();
@@ -650,6 +726,111 @@ function ReportWorkflowDrawer({
     } finally {
       setCreatingPmoc(false);
     }
+  }
+
+  async function updatePmocPlan() {
+    if (!form.pmocId) return;
+    setCreatingPmoc(true);
+    setError(null);
+    try {
+      const updated = await pmocApi.updatePmoc(form.pmocId, {
+        equipmentIds: form.pmocEquipmentIds,
+        responsibleTechnician: form.pmocResponsible,
+        coverage: form.pmocCoverage || null,
+        periodicity: form.pmocPeriodicity,
+        generationMode: form.pmocGenerationMode,
+        defaultOperatorId: form.pmocDefaultOperatorId || null,
+        defaultTechnicianId: form.pmocDefaultTechnicianId || null,
+        signatureOverrideId: form.pmocSignatureOverrideId || null,
+        startDate: form.pmocStartDate,
+        endDate: form.pmocEndDate,
+        observations: form.pmocObservations || null,
+        recurrenceRule:
+          form.pmocPeriodicity === 'CUSTOM'
+            ? {
+                frequency: form.pmocRecurrenceFrequency,
+                interval: Number(form.pmocRecurrenceInterval || 1),
+              }
+            : undefined,
+        active: form.pmocActive,
+      });
+      applyPmocPlan(updated);
+      pmocs.refetch();
+    } catch (cause) {
+      setError(message(cause));
+    } finally {
+      setCreatingPmoc(false);
+    }
+  }
+
+  async function deletePmocPlan() {
+    if (!form.pmocId) return;
+    if (!window.confirm('Deseja realmente remover este plano PMOC?')) return;
+    setCreatingPmoc(true);
+    setError(null);
+    try {
+      await pmocApi.deletePmoc(form.pmocId);
+      setForm((current) => ({
+        ...current,
+        pmocId: '',
+        pmocMode: '',
+        customerId: '',
+        equipmentId: '',
+        pmocEquipmentIds: [],
+        inspectedEquipments: [],
+      }));
+      pmocs.refetch();
+    } catch (cause) {
+      setError(message(cause));
+    } finally {
+      setCreatingPmoc(false);
+    }
+  }
+
+  async function openPmocWorkOrderWizard() {
+    if (!form.pmocId) return;
+    setCreatingPmoc(true);
+    setError(null);
+    try {
+      const plan = await pmocApi.getPmoc(form.pmocId);
+      const generated = plan.executionRequests?.find(
+        (item) => item.status === 'GENERATED' && item.operationId,
+      );
+      if (generated?.operationId) {
+        const detail = await operationApi.getOperation(generated.operationId);
+        setOperation(detail);
+        set('operationId', detail.id);
+        return;
+      }
+      let request = plan.executionRequests?.find(
+        (item) => item.status === 'PENDING' || item.status === 'FAILED',
+      );
+      request ??= await pmocApi.createExecutionRequest(form.pmocId, {
+        notes: 'Solicitação manual criada pela Central de Relatórios.',
+      });
+      const prefill = await pmocApi.getExecutionRequestPrefill(request.id);
+      set('pmocExecutionRequestId', request.id);
+      setPmocWorkOrderPrefill(prefill);
+      setPmocWorkOrderOpen(true);
+    } catch (cause) {
+      setError(message(cause));
+    } finally {
+      setCreatingPmoc(false);
+    }
+  }
+
+  async function submitPmocWorkOrder(payload: CreateOperationPayload): Promise<OperationDetail> {
+    if (!form.pmocExecutionRequestId) {
+      throw new Error('A solicitação de execução do PMOC não foi encontrada.');
+    }
+    const request = await pmocApi.generateWorkOrder(form.pmocExecutionRequestId, payload);
+    if (!request.operationId) throw new Error('A Ordem de Serviço não foi vinculada pelo backend.');
+    const detail = await operationApi.getOperation(request.operationId);
+    setOperation(detail);
+    set('operationId', detail.id);
+    setPmocWorkOrderOpen(false);
+    await pmocs.refetch();
+    return detail;
   }
 
   async function createChecklistTemplate(description: string) {
@@ -697,6 +878,8 @@ function ReportWorkflowDrawer({
         }
         if (type === 'PMOC') {
           if (!form.pmocId) throw new Error('Selecione um plano PMOC ativo.');
+          if (!detail)
+            throw new Error('Gere ou abra a Ordem de Serviço vinculada antes de continuar.');
           if (form.inspectedEquipments.length === 0)
             throw new Error('Selecione ao menos um equipamento controlado pelo PMOC.');
           if (form.signatureData && !form.customerSignerName.trim())
@@ -720,25 +903,6 @@ function ReportWorkflowDrawer({
             status: 'DRAFT',
             ...content,
           });
-          if (type === 'PMOC') {
-            const pmoc =
-              pmocs.data?.items.find((item) => item.id === form.pmocId) ??
-              (await pmocApi.getPmoc(form.pmocId));
-            const plannedExecution = pmoc.maintenancePlan?.executions?.find(
-              (item) => item.status === 'PLANNED' && !item.operationId,
-            );
-            const execution =
-              plannedExecution ??
-              (await maintenanceApi.createMaintenanceExecution(pmoc.maintenancePlanId, {
-                scheduledAt: new Date().toISOString(),
-                notes: 'Emissão iniciada pela Central de Relatórios',
-              }));
-            await maintenanceApi.updateMaintenanceExecution(execution.id, {
-              operationId: detail.id,
-              status: 'LINKED',
-            });
-            detail = await operationApi.getOperation(detail.id);
-          }
         }
       }
       setOperation(detail);
@@ -758,6 +922,7 @@ function ReportWorkflowDrawer({
     'Preview',
   ];
   return (
+    <>
     <Drawer
       open
       onClose={onClose}
@@ -776,7 +941,10 @@ function ReportWorkflowDrawer({
           {step < 2 && (
             <button
               type="button"
-              disabled={creatingPmoc || (type === 'PMOC' && step === 0 && !form.pmocId)}
+              disabled={
+                creatingPmoc ||
+                (type === 'PMOC' && step === 0 && (!form.pmocId || !operation))
+              }
               onClick={() => setStep(step + 1)}
               className="h-9 rounded-[var(--radius-md)] bg-[var(--color-primary)] px-4 text-sm text-[var(--color-primary-foreground)] disabled:opacity-50"
             >
@@ -833,6 +1001,7 @@ function ReportWorkflowDrawer({
           users={users.data?.items ?? []}
           operations={operations.data?.items ?? []}
           pmocs={pmocs.data?.items ?? []}
+          signatures={signatures.data?.items ?? []}
           addresses={addresses}
           equipments={equipments}
           selectedCustomer={selectedCustomer}
@@ -842,7 +1011,11 @@ function ReportWorkflowDrawer({
           onPmoc={selectPmoc}
           canCreatePmoc={hasRole('OWNER', 'MANAGER')}
           creatingPmoc={creatingPmoc}
-          onCreatePmoc={createPmocFromWorkOrder}
+          onCreatePmoc={createPmocPlan}
+          onUpdatePmoc={updatePmocPlan}
+          onDeletePmoc={deletePmocPlan}
+          onGeneratePmocWorkOrder={openPmocWorkOrderWizard}
+          pmocOperation={operation}
         />
       )}
       {step === 1 && (
@@ -868,6 +1041,16 @@ function ReportWorkflowDrawer({
         />
       )}
     </Drawer>
+    <OperationCreationDrawer
+      open={pmocWorkOrderOpen}
+      mode="work-order"
+      initialValues={pmocWorkOrderPrefill ?? undefined}
+      submitOperation={submitPmocWorkOrder}
+      submitLabel="Confirmar e gerar OS"
+      contextNotice="Dados preenchidos a partir do PMOC e da Execution Request. Revise e confirme; a OS será criada pelo workflow oficial de Operations."
+      onClose={() => setPmocWorkOrderOpen(false)}
+    />
+    </>
   );
 }
 
@@ -878,6 +1061,7 @@ function OriginStep({
   users,
   operations,
   pmocs,
+  signatures,
   addresses,
   equipments,
   selectedCustomer,
@@ -888,6 +1072,10 @@ function OriginStep({
   canCreatePmoc,
   creatingPmoc,
   onCreatePmoc,
+  onUpdatePmoc,
+  onDeletePmoc,
+  onGeneratePmocWorkOrder,
+  pmocOperation,
 }: {
   type: DocumentKind;
   form: WorkflowForm;
@@ -895,6 +1083,7 @@ function OriginStep({
   users: TeamUser[];
   operations: OperationSummary[];
   pmocs: PmocPlan[];
+  signatures: Signature[];
   addresses: CustomerAddress[];
   equipments: EquipmentSummary[];
   selectedCustomer: CustomerDetail | null;
@@ -905,6 +1094,10 @@ function OriginStep({
   canCreatePmoc: boolean;
   creatingPmoc: boolean;
   onCreatePmoc: () => void;
+  onUpdatePmoc: () => void;
+  onDeletePmoc: () => void;
+  onGeneratePmocWorkOrder: () => void;
+  pmocOperation: OperationDetail | null;
 }) {
   if (type === 'WORK_ORDER')
     return (
@@ -1005,57 +1198,249 @@ function OriginStep({
     <div className="space-y-4">
       <div className="grid gap-4 md:grid-cols-2">
         {type === 'PMOC' && (
-          <div className="space-y-3 md:col-span-2">
-            <Field label="Plano PMOC">
-              <select value={form.pmocId} onChange={(event) => void onPmoc(event.target.value)}>
-                <option value="">Selecione…</option>
-                {pmocs.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.maintenancePlan?.name ??
-                      `${item.customer?.tradeName ?? item.customer?.name ?? item.id} · ${item.contractNumber ?? 'PMOC'}`}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            {pmocs.length === 0 && (
+          <div className="order-last space-y-4 md:col-span-2">
+            <div className="grid gap-3 md:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => {
+                  onSet('pmocMode', 'NEW');
+                  onSet('pmocId', '');
+                }}
+                disabled={!canCreatePmoc}
+                className={`rounded-[var(--radius-lg)] border p-4 text-left transition disabled:opacity-50 ${form.pmocMode === 'NEW' ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5' : 'border-[var(--color-border)]'}`}
+              >
+                <strong className="block text-sm">Criar novo PMOC</strong>
+                <span className="mt-1 block text-caption">
+                  Cadastra o plano; ao continuar, o sistema cria a Operation e a OS oficial.
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onSet('pmocMode', 'EXISTING')}
+                className={`rounded-[var(--radius-lg)] border p-4 text-left transition ${form.pmocMode === 'EXISTING' ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5' : 'border-[var(--color-border)]'}`}
+              >
+                <strong className="block text-sm">Selecionar PMOC existente</strong>
+                <span className="mt-1 block text-caption">
+                  Seleciona, ajusta, desativa ou remove um plano já cadastrado.
+                </span>
+              </button>
+            </div>
+
+            {form.pmocMode === 'EXISTING' && (
+              <Field label="Plano PMOC">
+                <select value={form.pmocId} onChange={(event) => void onPmoc(event.target.value)}>
+                  <option value="">Selecione…</option>
+                  {pmocs.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.maintenancePlan?.name ??
+                        `PMOC-${String(item.number).padStart(6, '0')}`}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            )}
+
+            {form.pmocMode === 'EXISTING' && pmocs.length === 0 && (
               <p className="rounded-[var(--radius-md)] border border-amber-500/30 bg-amber-500/10 p-3 text-sm">
-                Nenhum plano PMOC ativo foi encontrado. Crie o primeiro a partir de uma Ordem de
-                Serviço concluída.
+                Nenhum plano PMOC ativo foi encontrado. Utilize “Criar novo PMOC”.
               </p>
             )}
-            {canCreatePmoc && (
-              <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-muted)]/30 p-4">
-                <h3 className="text-sm font-semibold">Criar plano a partir de uma OS</h3>
-                <p className="mt-1 text-caption">
-                  Cliente, equipamentos, responsável e número serão extraídos da Ordem de Serviço.
-                </p>
-                <div className="mt-3 grid gap-2 md:grid-cols-[1fr_auto]">
+
+            {(form.pmocMode === 'NEW' || (form.pmocMode === 'EXISTING' && form.pmocId)) && (
+              <div className="grid gap-4 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-muted)]/30 p-4 md:grid-cols-2">
+                <Field label="Responsável técnico do PMOC">
+                  <input
+                    value={form.pmocResponsible}
+                    maxLength={150}
+                    onChange={(event) => onSet('pmocResponsible', event.target.value)}
+                  />
+                </Field>
+                <Field label="Periodicidade oficial">
                   <select
-                    value={form.pmocSourceOperationId}
-                    onChange={(event) => onSet('pmocSourceOperationId', event.target.value)}
-                    className="h-10 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm"
+                    value={form.pmocPeriodicity}
+                    onChange={(event) =>
+                      onSet(
+                        'pmocPeriodicity',
+                        event.target.value as WorkflowForm['pmocPeriodicity'],
+                      )
+                    }
                   >
-                    <option value="">Selecione a Ordem de Serviço…</option>
-                    {operations.map((item) => {
-                      const number =
-                        item.documents.find((document) => document.type === 'WORK_ORDER')?.number ??
-                        `OS-${String(item.number).padStart(6, '0')}`;
-                      return (
-                        <option key={item.id} value={item.id}>
-                          {number} · {item.customer?.name ?? 'Cliente não informado'}
-                        </option>
-                      );
-                    })}
+                    <option value="WEEKLY">Semanal</option>
+                    <option value="BIWEEKLY">Quinzenal</option>
+                    <option value="MONTHLY">Mensal</option>
+                    <option value="BIMONTHLY">Bimestral</option>
+                    <option value="QUARTERLY">Trimestral</option>
+                    <option value="FOUR_MONTHLY">Quadrimestral</option>
+                    <option value="SEMIANNUAL">Semestral</option>
+                    <option value="YEARLY">Anual</option>
+                    <option value="CUSTOM">Personalizada</option>
                   </select>
-                  <button
-                    type="button"
-                    disabled={creatingPmoc || !form.pmocSourceOperationId}
-                    onClick={onCreatePmoc}
-                    className="h-10 rounded-[var(--radius-md)] bg-[var(--color-primary)] px-4 text-sm font-medium text-[var(--color-primary-foreground)] disabled:opacity-50"
+                </Field>
+                <MultiSelect
+                  label="Equipamentos controlados"
+                  options={equipments.map((item) => ({
+                    value: item.id,
+                    label: item.name,
+                    description: item.tag ?? undefined,
+                  }))}
+                  value={form.pmocEquipmentIds}
+                  onChange={(value) => onSet('pmocEquipmentIds', value)}
+                  emptyMessage="Selecione primeiro um cliente com equipamentos ativos."
+                />
+                <Field label="Modo de geração da OS">
+                  <select
+                    value={form.pmocGenerationMode}
+                    onChange={(event) =>
+                      onSet(
+                        'pmocGenerationMode',
+                        event.target.value as WorkflowForm['pmocGenerationMode'],
+                      )
+                    }
                   >
-                    {creatingPmoc ? 'Criando…' : 'Criar e selecionar'}
-                  </button>
+                    <option value="MANUAL">Manual — revisão no wizard</option>
+                    <option value="AUTO">Automática — Scheduler</option>
+                    <option value="PAUSED">Pausada</option>
+                  </select>
+                </Field>
+                <Field label="Operador padrão (opcional)">
+                  <select
+                    value={form.pmocDefaultOperatorId}
+                    onChange={(event) => onSet('pmocDefaultOperatorId', event.target.value)}
+                  >
+                    <option value="">Definir na geração</option>
+                    {users
+                      .filter((item) => item.isActive && item.role !== 'VIEWER')
+                      .map((item) => (
+                        <option key={item.id} value={item.id}>{item.name} · {item.role}</option>
+                      ))}
+                  </select>
+                </Field>
+                <Field label="Técnico padrão (opcional)">
+                  <select
+                    value={form.pmocDefaultTechnicianId}
+                    onChange={(event) => onSet('pmocDefaultTechnicianId', event.target.value)}
+                  >
+                    <option value="">Sem técnico padrão</option>
+                    {users
+                      .filter((item) => item.isActive && item.role !== 'VIEWER')
+                      .map((item) => (
+                        <option key={item.id} value={item.id}>{item.name} · {item.role}</option>
+                      ))}
+                  </select>
+                </Field>
+                <Field label="Assinatura override (opcional)">
+                  <select
+                    value={form.pmocSignatureOverrideId}
+                    onChange={(event) => onSet('pmocSignatureOverrideId', event.target.value)}
+                  >
+                    <option value="">Política oficial do Template</option>
+                    {signatures.filter((item) => item.active).map((item) => (
+                      <option key={item.id} value={item.id}>{item.name} · {item.title}</option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Início da vigência">
+                  <input
+                    type="date"
+                    value={form.pmocStartDate}
+                    onChange={(event) => onSet('pmocStartDate', event.target.value)}
+                  />
+                </Field>
+                <Field label="Fim da vigência">
+                  <input
+                    type="date"
+                    value={form.pmocEndDate}
+                    onChange={(event) => onSet('pmocEndDate', event.target.value)}
+                  />
+                </Field>
+                {form.pmocPeriodicity === 'CUSTOM' && <Field label="Recorrência personalizada">
+                  <select
+                    value={form.pmocRecurrenceFrequency}
+                    onChange={(event) =>
+                      onSet(
+                        'pmocRecurrenceFrequency',
+                        event.target.value as WorkflowForm['pmocRecurrenceFrequency'],
+                      )
+                    }
+                  >
+                    <option value="DAILY">Diária</option>
+                    <option value="WEEKLY">Semanal</option>
+                    <option value="MONTHLY">Mensal</option>
+                    <option value="YEARLY">Anual</option>
+                    <option value="INTERVAL_DAYS">Intervalo em dias</option>
+                    <option value="INTERVAL_MONTHS">Intervalo em meses</option>
+                  </select>
+                </Field>}
+                {form.pmocPeriodicity === 'CUSTOM' && <Field label="Intervalo">
+                  <input
+                    type="number"
+                    min={1}
+                    max={3650}
+                    value={form.pmocRecurrenceInterval}
+                    onChange={(event) => onSet('pmocRecurrenceInterval', event.target.value)}
+                  />
+                </Field>}
+                <div className="md:col-span-2">
+                  <Field label="Cobertura do plano">
+                    <textarea
+                      value={form.pmocCoverage}
+                      maxLength={5000}
+                      rows={3}
+                      onChange={(event) => onSet('pmocCoverage', event.target.value)}
+                    />
+                  </Field>
                 </div>
+                <Field label="Observações do plano">
+                  <input
+                    value={form.pmocObservations}
+                    maxLength={5000}
+                    onChange={(event) => onSet('pmocObservations', event.target.value)}
+                  />
+                </Field>
+                <label className="flex items-center gap-2 self-end pb-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={form.pmocActive}
+                    onChange={(event) => onSet('pmocActive', event.target.checked)}
+                  />
+                  Plano ativo
+                </label>
+                {canCreatePmoc && (
+                  <div className="flex flex-wrap justify-end gap-2 md:col-span-2">
+                    {form.pmocMode === 'EXISTING' && (
+                      <button
+                        type="button"
+                        disabled={creatingPmoc}
+                        onClick={onDeletePmoc}
+                        className="h-9 rounded-[var(--radius-md)] border border-red-500/40 px-4 text-sm text-red-700 disabled:opacity-50"
+                      >
+                        Remover plano
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      disabled={creatingPmoc}
+                      onClick={form.pmocMode === 'NEW' ? onCreatePmoc : onUpdatePmoc}
+                      className="h-9 rounded-[var(--radius-md)] bg-[var(--color-primary)] px-4 text-sm font-medium text-[var(--color-primary-foreground)] disabled:opacity-50"
+                    >
+                      {creatingPmoc
+                        ? 'Salvando…'
+                        : form.pmocMode === 'NEW'
+                          ? 'Criar PMOC'
+                          : 'Salvar ajustes'}
+                    </button>
+                    {form.pmocMode === 'EXISTING' && form.pmocId && (
+                      <button
+                        type="button"
+                        disabled={creatingPmoc || form.pmocGenerationMode === 'PAUSED'}
+                        onClick={onGeneratePmocWorkOrder}
+                        className="h-9 rounded-[var(--radius-md)] border border-[var(--color-primary)] px-4 text-sm font-medium text-[var(--color-primary)] disabled:opacity-50"
+                      >
+                        {pmocOperation ? 'Abrir Ordem de Serviço' : 'Gerar Ordem de Serviço'}
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1063,11 +1448,12 @@ function OriginStep({
         <Field label="Cliente">
           <select
             value={form.customerId}
-            disabled={type === 'PMOC'}
+            disabled={type === 'PMOC' && form.pmocMode === 'EXISTING' && Boolean(form.pmocId)}
             onChange={(event) => {
               onSet('customerId', event.target.value);
               onSet('addressId', '');
               onSet('equipmentId', '');
+              onSet('pmocEquipmentIds', []);
               onSet('inspectedEquipments', []);
             }}
           >
@@ -1092,11 +1478,10 @@ function OriginStep({
             ))}
           </select>
         </Field>
-        {type !== 'TECHNICAL_REPORT' && type !== 'TECHNICAL_OPINION' && (
+        {type !== 'TECHNICAL_REPORT' && type !== 'TECHNICAL_OPINION' && type !== 'PMOC' && (
           <Field label="Equipamento">
             <select
               value={form.equipmentId}
-              disabled={type === 'PMOC'}
               onChange={(event) => onSet('equipmentId', event.target.value)}
             >
               <option value="">Sem equipamento</option>
@@ -1111,7 +1496,16 @@ function OriginStep({
         <Field label="Responsável">
           <select
             value={form.operatorId}
-            onChange={(event) => onSet('operatorId', event.target.value)}
+            onChange={(event) => {
+              onSet('operatorId', event.target.value);
+              if (type === 'PMOC' && form.pmocMode === 'NEW') {
+                const selected = users.find((item) => item.id === event.target.value);
+                if (selected) {
+                  onSet('pmocResponsible', selected.name);
+                  onSet('pmocDefaultOperatorId', selected.id);
+                }
+              }
+            }}
           >
             <option value="">Selecione…</option>
             {users

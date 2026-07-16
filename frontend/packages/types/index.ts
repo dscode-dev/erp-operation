@@ -830,12 +830,22 @@ export type OperationDetail = Omit<OperationSummary, 'equipment'> & {
   photos: OperationPhoto[];
   documents: OperationDocument[];
   maintenanceExecution?: (MaintenanceExecution & {
+    pmocExecutionRequest?: Pick<
+      PmocExecutionRequest,
+      'id' | 'executionNumber' | 'executionYear' | 'status' | 'origin'
+    > | null;
     plan: MaintenancePlan & {
       pmocPlan?: {
         id: string;
+        number: number;
+        periodicity: PmocPeriodicity;
+        generationMode: PmocGenerationMode;
         responsibleTechnician: string;
         contractNumber: string | null;
         artNumber: string | null;
+        equipments: Array<{
+          equipment: Pick<EquipmentSummary, 'id' | 'name' | 'tag'>;
+        }>;
       } | null;
     };
   }) | null;
@@ -968,6 +978,21 @@ export type PmocComplianceStatus =
   | 'OVERDUE'
   | 'NON_COMPLIANT'
   | 'IN_PROGRESS';
+export type PmocPeriodicity =
+  | 'WEEKLY'
+  | 'BIWEEKLY'
+  | 'MONTHLY'
+  | 'BIMONTHLY'
+  | 'QUARTERLY'
+  | 'FOUR_MONTHLY'
+  | 'SEMIANNUAL'
+  | 'YEARLY'
+  | 'CUSTOM';
+export type PmocGenerationMode = 'AUTO' | 'MANUAL' | 'PAUSED';
+export type PmocOperationalStatus = 'ACTIVE' | 'PENDING' | 'OVERDUE' | 'PAUSED' | 'ERROR' | 'EXPIRED';
+export type PmocExecutionRequestStatus = 'PENDING' | 'GENERATING_OS' | 'GENERATED' | 'FAILED' | 'CANCELLED';
+export type PmocExecutionOrigin = 'AUTO' | 'MANUAL';
+export type PmocSchedulerStatus = 'NEVER_RUN' | 'RUNNING' | 'SUCCESS' | 'PARTIAL_FAILURE' | 'FAILED';
 
 export type MaintenancePlan = {
   id: string;
@@ -1013,11 +1038,31 @@ export type MaintenanceStats = {
 
 export type PmocPlan = {
   id: string;
+  number: number;
   organizationId: string;
   customerId: string;
   equipmentId: string;
   maintenancePlanId: string;
-  sourceOperationId: string | null;
+  coverage: string | null;
+  periodicity: PmocPeriodicity;
+  generationMode: PmocGenerationMode;
+  defaultOperatorId: string | null;
+  defaultTechnicianId: string | null;
+  defaultAddressId: string | null;
+  defaultOperationType: OperationType;
+  defaultEstimatedDurationMinutes: number | null;
+  defaultOperationObservations: string | null;
+  signatureOverrideId: string | null;
+  operationalStatus: PmocOperationalStatus;
+  lastReservedExecutionNumber: number;
+  lastGeneratedExecutionNumber: number;
+  lastExecutionDate: string | null;
+  nextExecutionDate: string | null;
+  nextGenerationDate: string | null;
+  lastSchedulerRun: string | null;
+  lastSchedulerStatus: PmocSchedulerStatus;
+  lastSchedulerError: string | null;
+  lastSuccessfulGeneration: string | null;
   responsibleTechnician: string;
   artNumber: string | null;
   contractNumber: string | null;
@@ -1030,12 +1075,11 @@ export type PmocPlan = {
   customer?: Pick<Customer, 'id' | 'name' | 'tradeName'>;
   equipment?: Pick<EquipmentSummary, 'id' | 'name' | 'tag' | 'type' | 'status'>;
   maintenancePlan?: MaintenancePlan & { executions?: MaintenanceExecution[] };
-  sourceOperation?: {
-    id: string;
-    number: number;
-    status: OperationStatus;
-    documents: Array<Pick<OperationDocument, 'id' | 'number' | 'status'>>;
-  } | null;
+  defaultOperator?: Pick<TeamUser, 'id' | 'name' | 'username' | 'role'> | null;
+  defaultTechnician?: Pick<TeamUser, 'id' | 'name' | 'username' | 'role'> | null;
+  defaultAddress?: CustomerAddress | null;
+  signatureOverride?: Pick<Signature, 'id' | 'name' | 'title' | 'professionalCouncil' | 'department' | 'active'> | null;
+  executionRequests?: PmocExecutionRequest[];
   equipments?: Array<{
     equipmentId: string;
     equipment: Pick<EquipmentSummary, 'id' | 'name' | 'tag' | 'type' | 'status'>;
@@ -1047,6 +1091,65 @@ export type PmocPlan = {
     pendingExecutions: number;
     overdueExecutions: number;
   };
+};
+
+export type PmocExecutionRequest = {
+  id: string;
+  pmocPlanId: string;
+  maintenanceExecutionId: string | null;
+  operationId: string | null;
+  generatedOperationId: string | null;
+  executionNumber: number;
+  executionYear: number | null;
+  status: PmocExecutionRequestStatus;
+  origin: PmocExecutionOrigin;
+  scheduledFor: string;
+  requestedBy: string | null;
+  plannedOperatorId: string | null;
+  plannedTechnicianId: string | null;
+  attemptCount: number;
+  lastAttemptAt: string | null;
+  failureReason: string | null;
+  generatedAt: string | null;
+  cancelledAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  operation?: (Pick<OperationSummary, 'id' | 'number' | 'type' | 'status'> & {
+    scheduledFor?: string | null;
+    operator?: Pick<TeamUser, 'id' | 'name' | 'username' | 'role'>;
+  }) | null;
+  maintenanceExecution?: Pick<MaintenanceExecution, 'id' | 'scheduledAt' | 'status' | 'executedAt' | 'operationId'> | null;
+  plannedOperator?: Pick<TeamUser, 'id' | 'name' | 'username' | 'role' | 'jobTitle'> | null;
+  plannedTechnician?: Pick<TeamUser, 'id' | 'name' | 'username' | 'role' | 'jobTitle'> | null;
+};
+
+export type PmocHistoryItem = {
+  id: string;
+  pmocPlanId: string;
+  executionRequestId: string | null;
+  operationId: string | null;
+  actorId: string | null;
+  action: string;
+  previousStatus: string | null;
+  newStatus: string | null;
+  notes: string | null;
+  metadata: Record<string, unknown>;
+  occurredAt: string;
+  createdAt: string;
+  execution?: {
+    executionNumber: number;
+    executionYear: number | null;
+    workOrderNumber: number | null;
+    status: PmocExecutionRequestStatus;
+    scheduledFor: string;
+    generatedAt: string | null;
+    executedAt: string | null;
+    operator: Pick<TeamUser, 'id' | 'name' | 'username' | 'role' | 'jobTitle'> | null;
+    responsibleTechnician:
+      | Pick<TeamUser, 'id' | 'name' | 'username' | 'role' | 'jobTitle'>
+      | string
+      | null;
+  } | null;
 };
 
 export type PmocStats = {

@@ -38,6 +38,11 @@ export interface OperationAuditContext {
   userAgent: string | null;
 }
 
+export type OperationCreationTransactionHook = (
+  tx: Prisma.TransactionClient,
+  operationId: string,
+) => Promise<void>;
+
 const OPERATION_INCLUDE = {
   customer: { select: { id: true, name: true, tradeName: true } },
   address: true,
@@ -58,9 +63,25 @@ const OPERATION_INCLUDE = {
   documents: { orderBy: { createdAt: 'asc' as const } },
   maintenanceExecution: {
     include: {
+      pmocExecutionRequest: {
+        select: { id: true, executionNumber: true, executionYear: true, status: true, origin: true },
+      },
       plan: {
         include: {
-          pmocPlan: { select: { id: true, responsibleTechnician: true, contractNumber: true, artNumber: true } },
+          pmocPlan: {
+            select: {
+              id: true,
+              number: true,
+              periodicity: true,
+              generationMode: true,
+              responsibleTechnician: true,
+              contractNumber: true,
+              artNumber: true,
+              equipments: {
+                select: { equipment: { select: { id: true, name: true, tag: true } } },
+              },
+            },
+          },
         },
       },
     },
@@ -160,6 +181,7 @@ export class OperationsService {
     dto: CreateOperationDto,
     actor: AuthenticatedUser,
     context: OperationAuditContext,
+    transactionHook?: OperationCreationTransactionHook,
   ): Promise<unknown> {
     await this.validateRelations(dto.customerId, dto.addressId, dto.equipmentId);
     this.validateReferencePeriod(dto.referenceMonth, dto.referenceYear);
@@ -285,6 +307,7 @@ export class OperationsService {
       );
       await this.lifecycle.publishOperationCompletedTx(tx, operation.id, actor.id, context);
       await this.maintenance.syncOperationCompletedTx(tx, operation.id, actor.id, context);
+      await transactionHook?.(tx, operation.id);
       return operation.id;
     });
 
