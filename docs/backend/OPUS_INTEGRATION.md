@@ -1,5 +1,23 @@
 # OPUS Frontend Integration
 
+## PMOC Foundation — Bloco 3
+
+Não calcule métricas localmente. `PmocStats` fornece todos os cards, calendário e listas; cada
+`PmocPlan.overview` fornece progresso e saúde. Use `indicator` diretamente:
+
+| Indicator | UX |
+| --- | --- |
+| `ON_TIME` | Em dia |
+| `DUE_SOON` | Próximo do vencimento |
+| `OVERDUE` | Atrasado |
+| `COMPLETED` | Concluído |
+| `CANCELLED` | Cancelado |
+| `FAILED` | Falha |
+
+Navegação: `pmocPlanId → /pmoc/:id`, `operation.id → OperationDetailDrawer`, `document.id →
+DocumentViewer`, `customer.id → /clientes/:id` e equipamentos para `/equipamentos/:id`.
+`PmocHistoryItem.source` informa a origem append-only; não use metadata como HTML.
+
 ## PMOC Foundation — Bloco 2
 
 | Fluxo | API/componente oficial |

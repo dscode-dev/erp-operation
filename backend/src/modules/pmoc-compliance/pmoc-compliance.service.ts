@@ -43,6 +43,7 @@ import {
   CreatePmocEnvironmentDto,
   CreatePmocPlanDto,
   ListPmocQueryDto,
+  PmocDashboardQueryDto,
   UpdatePmocEnvironmentDto,
   UpdatePmocPlanDto,
 } from './dto/pmoc-compliance.dto';
@@ -89,7 +90,23 @@ const PMOC_INCLUDE = {
     orderBy: [{ scheduledFor: 'desc' as const }, { id: 'desc' as const }],
     take: 20,
     include: {
-      operation: { select: { id: true, number: true, type: true, status: true } },
+      operation: {
+        select: {
+          id: true,
+          number: true,
+          type: true,
+          status: true,
+          completedAt: true,
+          signedAt: true,
+          operator: { select: { id: true, name: true, username: true, role: true } },
+          documents: {
+            where: { type: DocumentTemplateType.PMOC },
+            select: { id: true, number: true, status: true, renderedAt: true },
+            orderBy: [{ renderedAt: 'desc' as const }, { createdAt: 'desc' as const }],
+            take: 1,
+          },
+        },
+      },
       plannedOperator: { select: { id: true, name: true, username: true, role: true } },
       plannedTechnician: { select: { id: true, name: true, username: true, role: true } },
       maintenanceExecution: {
@@ -118,6 +135,76 @@ const PMOC_INCLUDE = {
     orderBy: [{ name: 'asc' as const }, { id: 'asc' as const }],
   },
 } satisfies Prisma.PmocPlanInclude;
+
+const PMOC_ANALYTICS_REQUEST_SELECT = {
+  id: true,
+  pmocPlanId: true,
+  executionNumber: true,
+  status: true,
+  origin: true,
+  scheduledFor: true,
+  generatedAt: true,
+  cancelledAt: true,
+  maintenanceExecution: {
+    select: { status: true, executedAt: true },
+  },
+  operation: {
+    select: {
+      id: true,
+      number: true,
+      status: true,
+      completedAt: true,
+      signedAt: true,
+      documents: {
+        where: { type: DocumentTemplateType.PMOC },
+        select: { id: true, number: true, status: true, renderedAt: true },
+        orderBy: [{ renderedAt: 'desc' as const }, { createdAt: 'desc' as const }],
+        take: 1,
+      },
+    },
+  },
+} satisfies Prisma.PmocExecutionRequestSelect;
+
+const PMOC_DASHBOARD_REQUEST_INCLUDE = {
+  pmocPlan: {
+    select: {
+      id: true,
+      number: true,
+      periodicity: true,
+      maintenancePlan: { select: { name: true } },
+      customer: { select: { id: true, name: true, tradeName: true } },
+      equipment: { select: { id: true, name: true, tag: true } },
+      equipments: {
+        select: { equipment: { select: { id: true, name: true, tag: true } } },
+        orderBy: { createdAt: 'asc' as const },
+      },
+    },
+  },
+  operation: {
+    select: {
+      id: true,
+      number: true,
+      status: true,
+      completedAt: true,
+      documents: {
+        where: { type: DocumentTemplateType.PMOC },
+        select: { id: true, number: true, status: true, renderedAt: true },
+        orderBy: [{ renderedAt: 'desc' as const }, { createdAt: 'desc' as const }],
+        take: 1,
+      },
+    },
+  },
+  maintenanceExecution: { select: { status: true, executedAt: true } },
+  plannedOperator: { select: { id: true, name: true } },
+  plannedTechnician: { select: { id: true, name: true } },
+} satisfies Prisma.PmocExecutionRequestInclude;
+
+type PmocAnalyticsRequest = Prisma.PmocExecutionRequestGetPayload<{
+  select: typeof PMOC_ANALYTICS_REQUEST_SELECT;
+}>;
+type PmocDashboardRequest = Prisma.PmocExecutionRequestGetPayload<{
+  include: typeof PMOC_DASHBOARD_REQUEST_INCLUDE;
+}>;
 
 @Injectable()
 export class PmocComplianceService implements ComplianceEvaluator<{
@@ -155,8 +242,12 @@ export class PmocComplianceService implements ComplianceEvaluator<{
       }),
       this.prisma.pmocPlan.count({ where }),
     ]);
+    const analytics = await this.analyticsForPlans(items);
     return this.page(
-      items.map((item) => this.withCompliance(item)),
+      items.map((item) => ({
+        ...this.withCompliance(item),
+        overview: analytics.get(item.id),
+      })),
       query.page,
       query.limit,
       total,
@@ -165,7 +256,8 @@ export class PmocComplianceService implements ComplianceEvaluator<{
 
   async get(id: string): Promise<unknown> {
     const pmoc = await this.pmocOrThrow(id);
-    return this.withCompliance(pmoc);
+    const analytics = await this.analyticsForPlans([pmoc]);
+    return { ...this.withCompliance(pmoc), overview: analytics.get(pmoc.id) };
   }
 
   async create(
@@ -751,35 +843,317 @@ export class PmocComplianceService implements ComplianceEvaluator<{
     return this.list({ ...query, equipmentId });
   }
 
-  async stats(): Promise<unknown> {
+  async stats(query: PmocDashboardQueryDto): Promise<unknown> {
     const now = new Date();
-    const [plans, environments, monitored] = await this.prisma.$transaction([
-      this.prisma.pmocPlan.findMany({ include: PMOC_INCLUDE }),
+    const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+    const { from, to } = this.dashboardRange(query, now);
+    const nextSevenDays = new Date(now);
+    nextSevenDays.setUTCDate(nextSevenDays.getUTCDate() + 7);
+    const requestGroups = await this.prisma.pmocExecutionRequest.groupBy({
+      by: ['status'],
+      orderBy: { status: 'asc' },
+      _count: { status: true },
+    });
+    const [
+      plans,
+      completedExecutions,
+      executionsThisMonth,
+      environments,
+      monitored,
+      calendar,
+      upcoming,
+      recent,
+      overduePlans,
+      warningPlans,
+    ] = await this.prisma.$transaction([
+      this.prisma.pmocPlan.findMany({
+        select: { id: true, active: true, generationMode: true, endDate: true },
+      }),
+      this.prisma.pmocExecutionRequest.count({
+        where: { maintenanceExecution: { status: MaintenanceExecutionStatus.COMPLETED } },
+      }),
+      this.prisma.pmocExecutionRequest.count({
+        where: { scheduledFor: { gte: monthStart, lt: monthEnd } },
+      }),
       this.prisma.pmocEnvironment.count(),
       this.prisma.pmocPlanEquipment.count(),
+      this.prisma.pmocExecutionRequest.findMany({
+        where: { scheduledFor: { gte: from, lte: to } },
+        include: PMOC_DASHBOARD_REQUEST_INCLUDE,
+        orderBy: [{ scheduledFor: 'asc' }, { executionNumber: 'asc' }],
+        take: 500,
+      }),
+      this.prisma.pmocExecutionRequest.findMany({
+        where: {
+          scheduledFor: { gte: now },
+          status: { in: [PmocExecutionRequestStatus.PENDING, PmocExecutionRequestStatus.GENERATED] },
+        },
+        include: PMOC_DASHBOARD_REQUEST_INCLUDE,
+        orderBy: [{ scheduledFor: 'asc' }, { id: 'asc' }],
+        take: 8,
+      }),
+      this.prisma.pmocExecutionRequest.findMany({
+        where: {
+          OR: [
+            { generatedAt: { not: null } },
+            { cancelledAt: { not: null } },
+            { status: PmocExecutionRequestStatus.FAILED },
+          ],
+        },
+        include: PMOC_DASHBOARD_REQUEST_INCLUDE,
+        orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+        take: 8,
+      }),
+      this.prisma.pmocExecutionRequest.findMany({
+        where: {
+          status: PmocExecutionRequestStatus.PENDING,
+          scheduledFor: { lt: now },
+        },
+        select: { pmocPlanId: true },
+        distinct: ['pmocPlanId'],
+      }),
+      this.prisma.pmocExecutionRequest.findMany({
+        where: {
+          status: PmocExecutionRequestStatus.PENDING,
+          scheduledFor: { gte: now, lte: nextSevenDays },
+        },
+        select: { pmocPlanId: true },
+        distinct: ['pmocPlanId'],
+      }),
     ]);
-    const evaluated = plans.map((plan) => this.evaluatePayload(plan, now).status);
+    const statusCount = new Map<PmocExecutionRequestStatus, number>(
+      requestGroups.map((group) => [group.status, group._count.status]),
+    );
+    const overdueIds = new Set(overduePlans.map((plan) => plan.pmocPlanId));
+    const warningIds = new Set(warningPlans.map((plan) => plan.pmocPlanId));
+    const activePlans = plans.filter(
+      (plan) =>
+        plan.active && plan.generationMode !== PmocGenerationMode.PAUSED && plan.endDate >= today,
+    );
+    const pausedPmocs = plans.filter(
+      (plan) => !plan.active || plan.generationMode === PmocGenerationMode.PAUSED,
+    ).length;
+    const expiredPmocs = plans.filter((plan) => plan.endDate < today).length;
+    const compliantPmocs = activePlans.filter(
+      (plan) => !overdueIds.has(plan.id) && !warningIds.has(plan.id),
+    ).length;
+    const pendingPmocs = new Set([...overdueIds, ...warningIds]).size;
     return {
-      activePmocs: plans.filter((plan) => plan.active).length,
-      expiredPmocs: evaluated.filter((status) => status === PmocComplianceStatus.OVERDUE).length,
-      compliantPmocs: evaluated.filter((status) => status === PmocComplianceStatus.COMPLIANT)
-        .length,
-      pendingPmocs: evaluated.filter(
-        (status) =>
-          status === PmocComplianceStatus.WARNING || status === PmocComplianceStatus.IN_PROGRESS,
-      ).length,
+      activePmocs: activePlans.length,
+      pausedPmocs,
+      expiredPmocs,
+      compliantPmocs,
+      pendingPmocs,
       environments,
       monitoredEquipments: monitored,
-      upcomingExecutions: plans.reduce(
-        (count, plan) =>
-          count +
-          plan.maintenancePlan.executions.filter(
-            (execution) =>
-              execution.status === MaintenanceExecutionStatus.PLANNED &&
-              execution.scheduledAt >= now,
-          ).length,
-        0,
+      executionsThisMonth,
+      completedExecutions,
+      pendingExecutions:
+        (statusCount.get(PmocExecutionRequestStatus.PENDING) ?? 0) +
+        (statusCount.get(PmocExecutionRequestStatus.GENERATING_OS) ?? 0),
+      cancelledExecutions: statusCount.get(PmocExecutionRequestStatus.CANCELLED) ?? 0,
+      failedExecutions: statusCount.get(PmocExecutionRequestStatus.FAILED) ?? 0,
+      upcomingExecutions: upcoming.length,
+      calendar: {
+        from: from.toISOString(),
+        to: to.toISOString(),
+        items: calendar.map((request) => this.dashboardExecution(request, now)),
+      },
+      upcoming: upcoming.map((request) => this.dashboardExecution(request, now)),
+      recent: recent.map((request) => this.dashboardExecution(request, now)),
+    };
+  }
+
+  private async analyticsForPlans(plans: PmocPayload[]): Promise<Map<string, unknown>> {
+    if (!plans.length) return new Map();
+    const requests = await this.prisma.pmocExecutionRequest.findMany({
+      where: { pmocPlanId: { in: plans.map((plan) => plan.id) } },
+      select: PMOC_ANALYTICS_REQUEST_SELECT,
+      orderBy: [{ scheduledFor: 'asc' }, { executionNumber: 'asc' }],
+    });
+    const grouped = new Map<string, PmocAnalyticsRequest[]>();
+    for (const request of requests) {
+      const current = grouped.get(request.pmocPlanId) ?? [];
+      current.push(request);
+      grouped.set(request.pmocPlanId, current);
+    }
+    return new Map(
+      plans.map((plan) => [plan.id, this.planOverview(plan, grouped.get(plan.id) ?? [])]),
+    );
+  }
+
+  private planOverview(plan: PmocPayload, requests: PmocAnalyticsRequest[]): unknown {
+    const now = new Date();
+    const expectedExecutions = this.expectedExecutionCount(plan);
+    const completed = requests.filter(
+      (request) => request.maintenanceExecution?.status === MaintenanceExecutionStatus.COMPLETED,
+    );
+    const cancelled = requests.filter(
+      (request) => request.status === PmocExecutionRequestStatus.CANCELLED,
+    );
+    const failed = requests.filter(
+      (request) => request.status === PmocExecutionRequestStatus.FAILED,
+    );
+    const overdue = requests.filter(
+      (request) =>
+        request.status === PmocExecutionRequestStatus.PENDING && request.scheduledFor < now,
+    );
+    const due = requests.filter(
+      (request) =>
+        request.scheduledFor <= now && request.status !== PmocExecutionRequestStatus.CANCELLED,
+    );
+    const delayDays = completed
+      .map((request) => {
+        const executedAt = request.maintenanceExecution?.executedAt;
+        if (!executedAt) return 0;
+        return Math.max(0, (executedAt.getTime() - request.scheduledFor.getTime()) / 86_400_000);
+      });
+    const averageDelayDays = delayDays.length
+      ? Number((delayDays.reduce((sum, value) => sum + value, 0) / delayDays.length).toFixed(1))
+      : 0;
+    const completionPercentage = due.length
+      ? Math.min(
+          100,
+          Number(
+            ((completed.filter((request) => request.scheduledFor <= now).length / due.length) * 100).toFixed(1),
+          ),
+        )
+      : 100;
+    const denominator = Math.max(requests.length, 1);
+    const score = Math.max(
+      0,
+      Math.round(
+        100 -
+          (100 - completionPercentage) * 0.25 -
+          (overdue.length / denominator) * 35 -
+          (failed.length / denominator) * 25 -
+          (cancelled.length / denominator) * 15 -
+          Math.min(averageDelayDays * 2, 25),
       ),
+    );
+    const health =
+      score >= 90
+        ? { code: 'EXCELLENT', label: 'Excelente', tone: 'success' }
+        : score >= 75
+          ? { code: 'GOOD', label: 'Boa', tone: 'success' }
+          : score >= 50
+            ? { code: 'ATTENTION', label: 'Atenção', tone: 'warning' }
+            : { code: 'CRITICAL', label: 'Crítica', tone: 'danger' };
+    const lastOperationRequest = [...requests]
+      .filter((request) => request.operation)
+      .sort((left, right) =>
+        (right.generatedAt ?? right.scheduledFor).getTime() -
+        (left.generatedAt ?? left.scheduledFor).getTime(),
+      )[0];
+    const documents = requests
+      .flatMap((request) => request.operation?.documents ?? [])
+      .filter((document) => document.renderedAt)
+      .sort((left, right) =>
+        (right.renderedAt?.getTime() ?? 0) - (left.renderedAt?.getTime() ?? 0),
+      );
+    const lastExecutedAt = completed
+      .map((request) => request.maintenanceExecution?.executedAt)
+      .filter((value): value is Date => Boolean(value))
+      .sort((left, right) => right.getTime() - left.getTime())[0] ?? null;
+    return {
+      expectedExecutions,
+      completedExecutions: completed.length,
+      remainingExecutions: Math.max(expectedExecutions - completed.length, 0),
+      pendingExecutions: requests.filter(
+        (request) =>
+          request.status === PmocExecutionRequestStatus.PENDING ||
+          request.status === PmocExecutionRequestStatus.GENERATING_OS,
+      ).length,
+      cancelledExecutions: cancelled.length,
+      failedExecutions: failed.length,
+      overdueExecutions: overdue.length,
+      completionPercentage,
+      averageDelayDays,
+      lastExecutionDate: lastExecutedAt,
+      lastOperation: lastOperationRequest?.operation ?? null,
+      lastDocument: documents[0] ?? null,
+      health: { ...health, score },
+    };
+  }
+
+  private expectedExecutionCount(plan: PmocPayload): number {
+    const rule = plan.maintenancePlan.recurrenceRule as unknown as RecurrenceRuleDto;
+    let cursor = new Date(plan.startDate);
+    let count = 0;
+    try {
+      this.recurrence.validate(rule);
+      while (cursor <= plan.endDate && count < 10_000) {
+        count += 1;
+        cursor = this.recurrence.next(rule, cursor);
+      }
+      return count;
+    } catch {
+      return Math.max(plan.lastReservedExecutionNumber, 1);
+    }
+  }
+
+  private dashboardRange(
+    query: PmocDashboardQueryDto,
+    now: Date,
+  ): { from: Date; to: Date } {
+    const from = query.from
+      ? new Date(query.from)
+      : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const to = query.to
+      ? new Date(query.to)
+      : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0, 23, 59, 59, 999));
+    if (from > to || to.getTime() - from.getTime() > 370 * 86_400_000) {
+      throw new ApplicationException(
+        ERROR_CODES.VALIDATION_ERROR,
+        'PMOC dashboard period must be valid and no longer than 370 days',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    return { from, to };
+  }
+
+  private dashboardExecution(request: PmocDashboardRequest, now: Date): unknown {
+    const completed = request.maintenanceExecution?.status === MaintenanceExecutionStatus.COMPLETED;
+    const indicator = completed
+      ? 'COMPLETED'
+      : request.status === PmocExecutionRequestStatus.CANCELLED
+        ? 'CANCELLED'
+        : request.status === PmocExecutionRequestStatus.FAILED
+          ? 'FAILED'
+          : request.scheduledFor < now
+            ? 'OVERDUE'
+            : request.scheduledFor.getTime() - now.getTime() <= 7 * 86_400_000
+              ? 'DUE_SOON'
+              : 'ON_TIME';
+    const equipments = request.pmocPlan.equipments.length
+      ? request.pmocPlan.equipments.map((item) => item.equipment)
+      : [request.pmocPlan.equipment];
+    return {
+      id: request.id,
+      pmocPlanId: request.pmocPlanId,
+      pmocNumber: `PMOC-${String(request.pmocPlan.number).padStart(6, '0')}`,
+      planName: request.pmocPlan.maintenancePlan.name,
+      customer: request.pmocPlan.customer,
+      equipments,
+      executionNumber: request.executionNumber,
+      origin: request.origin,
+      status: request.status,
+      indicator,
+      scheduledFor: request.scheduledFor,
+      generatedAt: request.generatedAt,
+      executedAt: request.maintenanceExecution?.executedAt ?? null,
+      operator: request.plannedOperator,
+      technician: request.plannedTechnician,
+      operation: request.operation
+        ? {
+            id: request.operation.id,
+            number: request.operation.number,
+            status: request.operation.status,
+          }
+        : null,
+      document: request.operation?.documents[0] ?? null,
     };
   }
 

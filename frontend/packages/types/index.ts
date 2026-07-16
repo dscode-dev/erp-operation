@@ -1091,6 +1091,33 @@ export type PmocPlan = {
     pendingExecutions: number;
     overdueExecutions: number;
   };
+  overview?: PmocPlanOverview;
+};
+
+export type PmocPlanOverview = {
+  expectedExecutions: number;
+  completedExecutions: number;
+  remainingExecutions: number;
+  pendingExecutions: number;
+  cancelledExecutions: number;
+  failedExecutions: number;
+  overdueExecutions: number;
+  completionPercentage: number;
+  averageDelayDays: number;
+  lastExecutionDate: string | null;
+  lastOperation: { id: string; number: number; status: OperationStatus } | null;
+  lastDocument: {
+    id: string;
+    number: string;
+    status: OperationDocumentStatus;
+    renderedAt: string | null;
+  } | null;
+  health: {
+    code: 'EXCELLENT' | 'GOOD' | 'ATTENTION' | 'CRITICAL';
+    label: 'Excelente' | 'Boa' | 'Atenção' | 'Crítica';
+    tone: 'success' | 'warning' | 'danger';
+    score: number;
+  };
 };
 
 export type PmocExecutionRequest = {
@@ -1117,6 +1144,12 @@ export type PmocExecutionRequest = {
   operation?: (Pick<OperationSummary, 'id' | 'number' | 'type' | 'status'> & {
     scheduledFor?: string | null;
     operator?: Pick<TeamUser, 'id' | 'name' | 'username' | 'role'>;
+    documents?: Array<{
+      id: string;
+      number: string;
+      status: OperationDocumentStatus;
+      renderedAt: string | null;
+    }>;
   }) | null;
   maintenanceExecution?: Pick<MaintenanceExecution, 'id' | 'scheduledAt' | 'status' | 'executedAt' | 'operationId'> | null;
   plannedOperator?: Pick<TeamUser, 'id' | 'name' | 'username' | 'role' | 'jobTitle'> | null;
@@ -1136,6 +1169,14 @@ export type PmocHistoryItem = {
   metadata: Record<string, unknown>;
   occurredAt: string;
   createdAt: string;
+  source?: 'PMOC' | 'ASSIGNMENT' | 'DOCUMENT' | 'AUDIT';
+  actor?: Pick<TeamUser, 'id' | 'name' | 'username' | 'role'> | null;
+  document?: {
+    id: string;
+    number: string;
+    status: OperationDocumentStatus;
+    renderedAt: string | null;
+  };
   execution?: {
     executionNumber: number;
     executionYear: number | null;
@@ -1152,14 +1193,48 @@ export type PmocHistoryItem = {
   } | null;
 };
 
+export type PmocDashboardExecution = {
+  id: string;
+  pmocPlanId: string;
+  pmocNumber: string;
+  planName: string;
+  customer: Pick<Customer, 'id' | 'name' | 'tradeName'>;
+  equipments: Array<Pick<EquipmentSummary, 'id' | 'name' | 'tag'>>;
+  executionNumber: number;
+  origin: PmocExecutionOrigin;
+  status: PmocExecutionRequestStatus;
+  indicator: 'ON_TIME' | 'DUE_SOON' | 'OVERDUE' | 'COMPLETED' | 'CANCELLED' | 'FAILED';
+  scheduledFor: string;
+  generatedAt: string | null;
+  executedAt: string | null;
+  operator: Pick<TeamUser, 'id' | 'name'> | null;
+  technician: Pick<TeamUser, 'id' | 'name'> | null;
+  operation: { id: string; number: number; status: OperationStatus } | null;
+  document: {
+    id: string;
+    number: string;
+    status: OperationDocumentStatus;
+    renderedAt: string | null;
+  } | null;
+};
+
 export type PmocStats = {
   activePmocs: number;
+  pausedPmocs: number;
   expiredPmocs: number;
   compliantPmocs: number;
   pendingPmocs: number;
   environments: number;
   monitoredEquipments: number;
   upcomingExecutions: number;
+  executionsThisMonth: number;
+  completedExecutions: number;
+  pendingExecutions: number;
+  cancelledExecutions: number;
+  failedExecutions: number;
+  calendar: { from: string; to: string; items: PmocDashboardExecution[] };
+  upcoming: PmocDashboardExecution[];
+  recent: PmocDashboardExecution[];
 };
 
 export type ReassignAssignmentPayload = {

@@ -273,6 +273,7 @@ describe('AppSec Maintenance Planning and PMOC closure', () => {
     const completionHistory = history.data.find((item) => item.action === 'EXECUTION_COMPLETED');
     expect(completionHistory?.execution?.executionNumber).toBe(1);
     expect(completionHistory?.execution?.executedAt).toBe(executedAt);
+    expect(history.data.some((item) => item.action === 'ASSIGNMENT_ASSIGNED')).toBe(true);
     await expect(
       prisma.pmocHistory.count({ where: { pmocPlanId: pmoc.data.id, operationId } }),
     ).resolves.toBeGreaterThan(0);
@@ -443,6 +444,61 @@ describe('AppSec Maintenance Planning and PMOC closure', () => {
         where: { pmocPlanId: pmoc.data.id, action: 'DEFAULTS_PROPAGATED' },
       }),
     ).resolves.toBe(1);
+  });
+
+  it('returns server-side PMOC dashboard, calendar and deterministic health projections', async () => {
+    const graph = await createCustomerGraph();
+    const created = await authPost(owner, '/api/v1/pmoc').send({
+      name: 'PMOC com inteligência operacional',
+      customerId: graph.customerId,
+      equipmentId: graph.equipmentId,
+      responsibleTechnician: operator.user.name,
+      defaultOperatorId: operator.user.id,
+      defaultTechnicianId: operator.user.id,
+      periodicity: 'MONTHLY',
+      generationMode: 'MANUAL',
+      startDate: '2026-07-16',
+      endDate: '2027-06-16',
+    });
+    expect(created.status).toBe(201);
+    const pmocId = (created.body as { data: { id: string } }).data.id;
+
+    const stats = await authGet(
+      owner,
+      '/api/v1/pmoc/stats?from=2026-07-01T00:00:00.000Z&to=2026-07-31T23:59:59.999Z',
+    );
+    expect(stats.status).toBe(200);
+    expect(stats.body).toMatchObject({
+      data: {
+        activePmocs: 1,
+        pausedPmocs: 0,
+        executionsThisMonth: 1,
+        pendingExecutions: 1,
+        calendar: {
+          items: [
+            {
+              pmocPlanId: pmocId,
+              executionNumber: 1,
+              origin: 'MANUAL',
+              planName: 'PMOC com inteligência operacional',
+            },
+          ],
+        },
+      },
+    });
+
+    const detail = await authGet(owner, `/api/v1/pmoc/${pmocId}`);
+    expect(detail.status).toBe(200);
+    expect(detail.body).toMatchObject({
+      data: {
+        overview: {
+          expectedExecutions: 12,
+          completedExecutions: 0,
+          remainingExecutions: 12,
+          health: { code: 'CRITICAL', label: 'Crítica' },
+        },
+      },
+    });
   });
 
   it('allows only one concurrent generation for the same Execution Request', async () => {

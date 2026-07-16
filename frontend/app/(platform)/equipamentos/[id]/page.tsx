@@ -13,7 +13,7 @@ import { AsyncBoundary } from "@erp/ui/states";
 import { DrawerTabs } from "@erp/ui/drawer-tabs";
 import { AssetTimeline } from "@erp/ui/assets/asset-timeline";
 import { OperationDetailDrawer } from "@platform/components/operation-detail-drawer";
-import { equipmentsApi, assetLifecycleApi, useQuery, type EquipmentDetail, type AssetLifecycleStats } from "@erp/api";
+import { equipmentsApi, assetLifecycleApi, pmocApi, useQuery, type EquipmentDetail, type AssetLifecycleStats } from "@erp/api";
 import { formatDate, formatDateTime } from "@erp/utils";
 import {
   EQUIPMENT_STATUS_LABEL,
@@ -30,6 +30,7 @@ export default function EquipamentoDetailPage({ params }: { params: Promise<{ id
   const [operationId, setOperationId] = useState<string | null>(null);
   const detail = useQuery<EquipmentDetail>((signal) => equipmentsApi.getEquipment(id, { signal }), [id]);
   const lifecycleStats = useQuery<AssetLifecycleStats>((signal) => assetLifecycleApi.getEquipmentLifecycleStats(id, { signal }), [id]);
+  const pmocs = useQuery((signal) => pmocApi.listPmoc({ equipmentId: id, page: 1, limit: 5, signal }), [id]);
 
   return (
     <div className="space-y-6 max-w-[1400px]">
@@ -135,6 +136,10 @@ export default function EquipamentoDetailPage({ params }: { params: Promise<{ id
 
               <div className="space-y-4">
                 <QrFoundation qrCode={e.qrCode} qrToken={e.qrToken} />
+
+                <InfoCard title="PMOC">
+                  {pmocs.loading && !pmocs.data ? <SkeletonCard /> : pmocs.data?.items.length ? (() => { const plan = pmocs.data.items[0]; return <div className="space-y-1"><InfoRow label="Plano vinculado" value={<Link className="font-medium text-[var(--color-primary)]" href={`/pmoc/${plan.id}`}>{plan.maintenancePlan?.name ?? `PMOC-${String(plan.number).padStart(6, "0")}`}</Link>} /><InfoRow label="Status" value={plan.operationalStatus} /><InfoRow label="Último PMOC" value={formatDate(plan.overview?.lastExecutionDate ?? plan.lastExecutionDate)} /><InfoRow label="Próximo PMOC" value={formatDate(plan.nextExecutionDate)} /><InfoRow label="Execuções" value={String(plan.overview?.expectedExecutions ?? 0)} /></div>; })() : <p className="text-sm text-[var(--color-muted-foreground)]">Equipamento sem plano PMOC vinculado.</p>}
+                </InfoCard>
 
                 <InfoCard title="Hierarquia">
                   <div className="space-y-3">

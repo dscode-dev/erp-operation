@@ -68,6 +68,16 @@ export class ListPmocQueryDto {
   active?: boolean;
 }
 
+export class PmocDashboardQueryDto {
+  @IsOptional()
+  @IsDateString()
+  from?: string;
+
+  @IsOptional()
+  @IsDateString()
+  to?: string;
+}
+
 export class CreatePmocPlanDto {
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MinLength(2) @MaxLength(140)
   name?: string;

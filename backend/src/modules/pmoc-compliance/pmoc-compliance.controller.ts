@@ -24,6 +24,7 @@ import {
   GeneratePmocWorkOrderDto,
   ListPmocExecutionRequestsQueryDto,
   ListPmocQueryDto,
+  PmocDashboardQueryDto,
   ReschedulePmocExecutionRequestDto,
   RunPmocSchedulerQueryDto,
   UpdatePmocEnvironmentDto,
@@ -43,8 +44,8 @@ export class PmocComplianceController {
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR, Role.VIEWER)
   @Get('pmoc/stats')
-  stats(): Promise<unknown> {
-    return this.pmoc.stats();
+  stats(@Query() query: PmocDashboardQueryDto): Promise<unknown> {
+    return this.pmoc.stats(query);
   }
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR, Role.VIEWER)

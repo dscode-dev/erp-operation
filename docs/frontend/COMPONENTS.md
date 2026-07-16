@@ -1,5 +1,19 @@
 # COMPONENTS — Frontend
 
+## PMOC Foundation — Bloco 3
+
+| Componente | Responsabilidade |
+| --- | --- |
+| `PmocOperationalCalendar` | projeção mensal das Execution Requests retornadas por `PmocStats` |
+| `PmocPage` | indicadores, calendário, próximas/últimas execuções e catálogo paginado |
+| `PmocDetailPage` | progresso, saúde, contexto, requests paginadas, ações e timeline |
+| `PlanCard` | saúde/progresso oficial e navegação para o plano |
+| `ExecutionList` | próximas e últimas execuções sem cálculo local |
+
+`PmocOperationalCalendar` apenas agrupa por célula visual; cor e situação vêm de `indicator`.
+`Requests` reutiliza `OperationCreationDrawer`, links do catálogo documental, confirmação e APIs
+oficiais de reagendamento/cancelamento.
+
 ## PMOC Foundation — Bloco 2
 
 | Componente | Responsabilidade |

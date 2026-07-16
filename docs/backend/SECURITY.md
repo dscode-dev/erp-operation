@@ -1,5 +1,26 @@
 # Security
 
+## PMOC Foundation — Bloco 3
+
+- Dashboard, overview e timeline são projeções read-only sob o RBAC existente; nenhuma permissão de
+  escrita foi ampliada.
+- `from/to` passam por DTO ISO-8601, ordenação fixa e limite de 370 dias/500 itens, protegendo o
+  calendário contra consultas abusivas.
+- Timeline consulta quatro fontes append-only em lote e publica somente campos selecionados. Não
+  retorna `storageKey`, Base64, paths, metadata binária, e-mail ou credenciais.
+- Cliente/equipamento permanecem validados pelas relações oficiais. A UI nunca recebe autorização
+  para alterar Request, Scheduler, Assignment ou documento por projeções.
+- Saúde é explicável: não utiliza IA, conteúdo livre, dados sensíveis nem heurística oculta.
+
+### Fórmula de saúde PMOC
+
+`completion = concluídas vencidas / requests vencidas não canceladas`, ou 100% sem request vencida.
+
+`score = 100 - 0,25 × (100 - completion) - 35 × overdue/total - 25 × failed/total - 15 × cancelled/total - min(2 × atraso_médio_dias, 25)`.
+
+O score é limitado a 0–100. Faixas: `>=90 Excelente`, `>=75 Boa`, `>=50 Atenção`, `<50 Crítica`.
+O atraso médio considera somente conclusões posteriores à data prevista; antecipações valem zero.
+
 ## PMOC Foundation — Bloco 2
 
 - Criação, edição, geração, reagendamento e cancelamento exigem OWNER/MANAGER; leitura segue o RBAC

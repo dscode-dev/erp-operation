@@ -1,5 +1,58 @@
 # API Contracts
 
+## PMOC Foundation — Bloco 3
+
+### Dashboard e calendário
+
+`GET /api/v1/pmoc/stats?from=<ISO-8601>&to=<ISO-8601>` mantém os campos anteriores e adiciona:
+
+```json
+{
+  "activePmocs": 4,
+  "pausedPmocs": 1,
+  "expiredPmocs": 1,
+  "executionsThisMonth": 8,
+  "completedExecutions": 21,
+  "pendingExecutions": 5,
+  "cancelledExecutions": 1,
+  "failedExecutions": 0,
+  "calendar": { "from": "ISO", "to": "ISO", "items": [] },
+  "upcoming": [],
+  "recent": []
+}
+```
+
+Cada item contém `pmocPlanId`, número/nome do plano, cliente, equipamentos, `executionNumber`,
+origem, status, datas, operador, técnico, OS, documento e `indicator`. Indicadores oficiais:
+`ON_TIME`, `DUE_SOON`, `OVERDUE`, `COMPLETED`, `CANCELLED`, `FAILED`. Período máximo: 370 dias;
+acima disso retorna 400. O calendário retorna no máximo 500 registros.
+
+### Overview do plano
+
+`GET /api/v1/pmoc` e `GET /api/v1/pmoc/:id` adicionam `overview`:
+
+```json
+{
+  "expectedExecutions": 12,
+  "completedExecutions": 8,
+  "remainingExecutions": 4,
+  "pendingExecutions": 1,
+  "cancelledExecutions": 1,
+  "failedExecutions": 0,
+  "overdueExecutions": 0,
+  "completionPercentage": 80,
+  "averageDelayDays": 0.5,
+  "lastExecutionDate": "ISO",
+  "lastOperation": { "id": "uuid", "number": 125, "status": "COMPLETED" },
+  "lastDocument": { "id": "uuid", "number": "PMOC-000125", "status": "READY", "renderedAt": "ISO" },
+  "health": { "code": "GOOD", "label": "Boa", "tone": "success", "score": 82 }
+}
+```
+
+`GET /api/v1/pmoc/:id/history` continua sendo array append-only e passa a incluir `source`
+(`PMOC`, `ASSIGNMENT`, `DOCUMENT`, `AUDIT`) e, quando aplicável, `document`. Eventos adicionais
+de projeção: `ASSIGNMENT_*`, `DOCUMENT_RENDERED` e `CLIENT_SIGNED`.
+
 ## PMOC Foundation — Bloco 2
 
 Campos aditivos aceitos por `POST /api/v1/pmoc` e `PATCH /api/v1/pmoc/:id`:

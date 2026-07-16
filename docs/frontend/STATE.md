@@ -1,5 +1,19 @@
 # STATE — Frontend
 
+## PMOC Foundation — Bloco 3
+
+- Dashboard PMOC possui oito indicadores reais, calendário mensal de Execution Requests e listas
+  de próximas/últimas execuções consumidas do backend.
+- Cards exibem saúde e progresso oficiais. O detalhe mostra contexto completo, ações rápidas,
+  requests paginadas, documentos/OS navegáveis e timeline multiorigem append-only.
+- Cliente e Equipamento exibem resumos PMOC baseados em `overview`; nenhum contador é derivado no
+  navegador.
+- Operator preserva o atendimento existente e mostra plano, execução, periodicidade, cliente,
+  equipamentos, checklist, assinatura e documento relacionado.
+- Nenhum calendário, documento, OS, Assignment ou estado PMOC paralelo foi criado.
+- Lint e build de produção aprovados; imagem Docker reconstruída e smoke runtime de `/pmoc` e
+  `/operator` aprovado com HTTP 200.
+
 ## PMOC Foundation — Bloco 2
 
 - `/pmoc` é a gestão oficial de planos e usa wizard profissional de quatro etapas com dados reais.

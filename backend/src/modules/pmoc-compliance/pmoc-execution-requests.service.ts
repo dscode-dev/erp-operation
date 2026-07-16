@@ -1,5 +1,6 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import {
+  DocumentTemplateType,
   MaintenanceExecutionStatus,
   NotificationType,
   OperationMaintenanceType,
@@ -47,6 +48,12 @@ const REQUEST_INCLUDE = {
       scheduledFor: true,
       completedAt: true,
       operator: { select: { id: true, name: true, username: true, role: true, jobTitle: true } },
+      documents: {
+        where: { type: DocumentTemplateType.PMOC },
+        select: { id: true, number: true, status: true, renderedAt: true },
+        orderBy: [{ renderedAt: 'desc' as const }, { createdAt: 'desc' as const }],
+        take: 1,
+      },
     },
   },
   maintenanceExecution: {
@@ -120,47 +127,142 @@ export class PmocExecutionRequestsService {
   }
 
   async history(pmocPlanId: string): Promise<unknown> {
-    await this.planOrThrow(pmocPlanId);
-    const events = await this.prisma.pmocHistory.findMany({
+    const plan = await this.planOrThrow(pmocPlanId);
+    const requests = await this.prisma.pmocExecutionRequest.findMany({
       where: { pmocPlanId },
       include: {
-        actor: { select: { id: true, name: true, username: true, role: true } },
-        operation: { select: { id: true, number: true, type: true, status: true } },
-        executionRequest: {
-          include: {
-            operation: {
-              select: {
-                id: true,
-                number: true,
-                status: true,
-                completedAt: true,
-                operator: {
-                  select: { id: true, name: true, username: true, role: true, jobTitle: true },
-                },
-              },
-            },
-            maintenanceExecution: {
-              select: { id: true, status: true, scheduledAt: true, executedAt: true },
-            },
-            plannedTechnician: {
+        operation: {
+          select: {
+            id: true,
+            number: true,
+            status: true,
+            completedAt: true,
+            operator: {
               select: { id: true, name: true, username: true, role: true, jobTitle: true },
             },
           },
         },
-        pmocPlan: {
-          select: {
-            defaultTechnician: {
-              select: { id: true, name: true, username: true, role: true, jobTitle: true },
-            },
-            responsibleTechnician: true,
-          },
+        maintenanceExecution: {
+          select: { id: true, status: true, scheduledAt: true, executedAt: true },
+        },
+        plannedTechnician: {
+          select: { id: true, name: true, username: true, role: true, jobTitle: true },
         },
       },
-      orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
+      orderBy: { executionNumber: 'asc' },
       take: 500,
     });
-    return events.map((event) => ({
+    const operationIds = requests
+      .map((request) => request.operationId)
+      .filter((id): id is string => Boolean(id));
+    const [events, assignmentEvents, documents, signatureAudits] = await this.prisma.$transaction([
+      this.prisma.pmocHistory.findMany({
+        where: { pmocPlanId },
+        include: {
+          actor: { select: { id: true, name: true, username: true, role: true } },
+          operation: { select: { id: true, number: true, type: true, status: true } },
+          executionRequest: {
+            include: {
+              operation: {
+                select: {
+                  id: true,
+                  number: true,
+                  status: true,
+                  completedAt: true,
+                  operator: {
+                    select: { id: true, name: true, username: true, role: true, jobTitle: true },
+                  },
+                },
+              },
+              maintenanceExecution: {
+                select: { id: true, status: true, scheduledAt: true, executedAt: true },
+              },
+              plannedTechnician: {
+                select: { id: true, name: true, username: true, role: true, jobTitle: true },
+              },
+            },
+          },
+          pmocPlan: {
+            select: {
+              defaultTechnician: {
+                select: { id: true, name: true, username: true, role: true, jobTitle: true },
+              },
+              responsibleTechnician: true,
+            },
+          },
+        },
+        orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
+        take: 500,
+      }),
+      this.prisma.assignmentHistory.findMany({
+        where: { operationId: { in: operationIds } },
+        include: {
+          actor: { select: { id: true, name: true, username: true, role: true } },
+          operation: { select: { id: true, number: true, type: true, status: true } },
+        },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: 500,
+      }),
+      this.prisma.operationDocument.findMany({
+        where: {
+          operationId: { in: operationIds },
+          type: DocumentTemplateType.PMOC,
+          renderedAt: { not: null },
+        },
+        select: {
+          id: true,
+          operationId: true,
+          number: true,
+          status: true,
+          renderedAt: true,
+          createdAt: true,
+        },
+        orderBy: [{ renderedAt: 'desc' }, { id: 'desc' }],
+        take: 500,
+      }),
+      this.prisma.auditLog.findMany({
+        where: {
+          resource: 'OPERATION',
+          action: 'OPERATION_UPDATED',
+          ...(operationIds.length
+            ? {
+                OR: operationIds.map((operationId) => ({
+                  metadata: { path: ['operationId'], equals: operationId },
+                })),
+              }
+            : { id: { in: [] } }),
+        },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: 500,
+      }),
+    ]);
+    const requestByOperation = new Map(
+      requests
+        .filter((request) => request.operationId)
+        .map((request) => [request.operationId as string, request]),
+    );
+    const execution = (
+      request: (typeof requests)[number] | undefined,
+    ): Record<string, unknown> | null =>
+      request
+        ? {
+            executionNumber: request.executionNumber,
+            executionYear: request.executionYear,
+            workOrderNumber: request.operation?.number ?? null,
+            status: request.status,
+            scheduledFor: request.scheduledFor,
+            generatedAt: request.generatedAt,
+            executedAt: request.maintenanceExecution?.executedAt ?? null,
+            operator: request.operation?.operator ?? null,
+            responsibleTechnician:
+              request.plannedTechnician ??
+              plan.defaultTechnician ??
+              plan.responsibleTechnician,
+          }
+        : null;
+    const official = events.map((event) => ({
       ...event,
+      source: 'PMOC',
       execution: event.executionRequest
         ? {
             executionNumber: event.executionRequest.executionNumber,
@@ -178,6 +280,89 @@ export class PmocExecutionRequestsService {
           }
         : null,
     }));
+    const assignments = assignmentEvents.map((event) => ({
+      id: `assignment:${event.id}`,
+      pmocPlanId,
+      executionRequestId: requestByOperation.get(event.operationId)?.id ?? null,
+      operationId: event.operationId,
+      actorId: event.actorId,
+      actor: event.actor,
+      operation: event.operation,
+      action: `ASSIGNMENT_${event.event}`,
+      previousStatus: event.previousStatus,
+      newStatus: event.newStatus,
+      notes: event.notes,
+      metadata: { assignmentId: event.assignmentId },
+      occurredAt: event.createdAt,
+      createdAt: event.createdAt,
+      source: 'ASSIGNMENT',
+      execution: execution(requestByOperation.get(event.operationId)),
+    }));
+    const rendered = documents.map((document) => ({
+      id: `document:${document.id}`,
+      pmocPlanId,
+      executionRequestId: document.operationId
+        ? requestByOperation.get(document.operationId)?.id ?? null
+        : null,
+      operationId: document.operationId,
+      actorId: null,
+      actor: null,
+      operation: null,
+      action: 'DOCUMENT_RENDERED',
+      previousStatus: null,
+      newStatus: document.status,
+      notes: `Documento ${document.number} emitido pelo Document Engine`,
+      metadata: { documentId: document.id, documentNumber: document.number },
+      occurredAt: document.renderedAt ?? document.createdAt,
+      createdAt: document.createdAt,
+      source: 'DOCUMENT',
+      document: {
+        id: document.id,
+        number: document.number,
+        status: document.status,
+        renderedAt: document.renderedAt,
+      },
+      execution: execution(
+        document.operationId ? requestByOperation.get(document.operationId) : undefined,
+      ),
+    }));
+    const signed = signatureAudits
+      .filter((audit) => {
+        const metadata = audit.metadata as { changedFields?: unknown } | null;
+        return Array.isArray(metadata?.changedFields) && metadata.changedFields.includes('signatureData');
+      })
+      .map((audit) => {
+        const metadata = audit.metadata as { operationId?: string } | null;
+        const operationId = metadata?.operationId ?? null;
+        return {
+          id: `signature:${audit.id}`,
+          pmocPlanId,
+          executionRequestId: operationId
+            ? requestByOperation.get(operationId)?.id ?? null
+            : null,
+          operationId,
+          actorId: audit.actor,
+          actor: null,
+          operation: null,
+          action: 'CLIENT_SIGNED',
+          previousStatus: null,
+          newStatus: 'SIGNED',
+          notes: 'Assinatura do cliente registrada na execução',
+          metadata: {},
+          occurredAt: audit.createdAt,
+          createdAt: audit.createdAt,
+          source: 'AUDIT',
+          execution: execution(
+            operationId ? requestByOperation.get(operationId) : undefined,
+          ),
+        };
+      });
+    return [...official, ...assignments, ...rendered, ...signed]
+      .sort((left, right) => {
+        const byDate = new Date(right.occurredAt).getTime() - new Date(left.occurredAt).getTime();
+        return byDate || right.id.localeCompare(left.id);
+      })
+      .slice(0, 500);
   }
 
   async create(

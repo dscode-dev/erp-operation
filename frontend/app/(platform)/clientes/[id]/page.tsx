@@ -19,6 +19,7 @@ import { OperationDetailDrawer } from "@platform/components/operation-detail-dra
 import {
   customersApi,
   equipmentsApi,
+  pmocApi,
   useQuery,
   type CustomerDetail,
   type EquipmentStatus,
@@ -48,6 +49,10 @@ export default function ClienteDetailPage({ params }: { params: Promise<{ id: st
   const detail = useQuery<CustomerDetail>((signal) => customersApi.getCustomer(id, { signal }), [id]);
   const equipments = useQuery(
     (signal) => equipmentsApi.listEquipments({ customerId: id, limit: 50, signal }),
+    [id],
+  );
+  const pmocs = useQuery(
+    (signal) => pmocApi.listPmoc({ customerId: id, active: true, page: 1, limit: 5, signal }),
     [id],
   );
 
@@ -131,6 +136,10 @@ export default function ClienteDetailPage({ params }: { params: Promise<{ id: st
               </div>
 
               <div className="space-y-4">
+                <InfoCard title="PMOC">
+                  {pmocs.loading && !pmocs.data ? <SkeletonCard /> : pmocs.data?.items.length ? (() => { const plan = pmocs.data.items[0]; return <div className="space-y-3"><InfoRow label="Plano ativo" value={<Link className="font-medium text-[var(--color-primary)]" href={`/pmoc/${plan.id}`}>{plan.maintenancePlan?.name ?? `PMOC-${String(plan.number).padStart(6, "0")}`}</Link>} /><InfoRow label="Cobertura" value={plan.coverage ?? "Não informada"} /><InfoRow label="Periodicidade" value={plan.periodicity} /><InfoRow label="Última execução" value={formatDate(plan.overview?.lastExecutionDate ?? plan.lastExecutionDate)} /><InfoRow label="Próxima execução" value={formatDate(plan.nextExecutionDate)} /><InfoRow label="Equipamentos cobertos" value={String(plan.equipments?.length ?? 1)} />{pmocs.data.pagination.total > 1 && <Link href={`/pmoc?customerId=${c.id}`} className="inline-flex text-xs font-medium text-[var(--color-primary)]">Ver todos os {pmocs.data.pagination.total} planos</Link>}</div>; })() : <p className="text-sm text-[var(--color-muted-foreground)]">Nenhum plano PMOC ativo para este cliente.</p>}
+                </InfoCard>
+
                 <InfoCard title="Dados do cliente">
                   <InfoRow label="Documento" value={<span className="font-mono text-xs">{c.cnpj ?? c.cpf ?? "—"}</span>} />
                   <InfoRow label="E-mail" value={c.email ?? "—"} />

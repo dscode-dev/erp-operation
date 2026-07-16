@@ -1,5 +1,14 @@
 # ROUTES — Frontend
 
+## PMOC Foundation — Bloco 3
+
+- `/pmoc`: dashboard operacional, calendário, próximas/últimas execuções e planos paginados.
+- `/pmoc/:id`: resumo enriquecido, Execution Requests paginadas e timeline profissional.
+- `/clientes/:id`: card PMOC com plano ativo e navegação contextual.
+- `/equipamentos/:id`: card PMOC com plano, status e execuções.
+- `/operator/services/:id`: contexto PMOC dentro do fluxo Assignment existente.
+- Navegações para `/operacoes` e `/documentos` reutilizam os drawers/viewers canônicos.
+
 ## PMOC Foundation — Bloco 2
 
 - `/pmoc`: listagem paginada, métricas e criação profissional do plano.

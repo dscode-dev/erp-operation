@@ -1,5 +1,23 @@
 # Backend State
 
+## PMOC Foundation — Bloco 3 (2026-07-16)
+
+- `GET /pmoc/stats` tornou-se a projeção operacional oficial do dashboard: planos ativos, pausados
+  e vencidos; requests previstas no mês, concluídas, pendentes, canceladas e falhas; calendário,
+  próximas e últimas execuções. Todos os indicadores são calculados no PostgreSQL/backend.
+- `GET /pmoc` e `GET /pmoc/:id` adicionam `overview` com progresso, execuções restantes, atraso
+  médio, última OS, último documento e saúde determinística do plano.
+- O histórico PMOC consolida, sem duplicar persistência, os logs append-only de `PmocHistory`,
+  `AssignmentHistory`, documentos renderizados e auditoria de assinatura da Operation.
+- Requests retornam o documento PMOC relacionado. Calendário e listas carregam cliente,
+  equipamentos, OS e documento em queries agregadas, sem N+1.
+- Período do calendário é validado e limitado a 370 dias; o retorno é limitado a 500 requests.
+- Nenhuma migration ou entidade foi necessária. Operation, Assignment, MaintenanceExecution,
+  Scheduler, Notification Center e Document Engine permanecem inalterados.
+- Certificação final: Prisma validate/generate, lint/build backend e frontend, 81 testes unitários,
+  8 de integração PostgreSQL, 24 de concorrência e 47 de segurança aprovados. Runtime Docker com
+  45 migrations sincronizadas e API, PostgreSQL e Storage saudáveis.
+
 ## PMOC Foundation — Bloco 2 (2026-07-16)
 
 - `PmocPlan` concentra os defaults operacionais da OS: endereço, tipo, duração estimada e

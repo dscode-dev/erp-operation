@@ -1,5 +1,20 @@
 # Frontend Integration
 
+## PMOC Foundation — Bloco 3
+
+- Dashboard: consuma somente `GET /pmoc/stats`. Não conte requests nem classifique atrasos no
+  frontend; `indicator` já representa a situação operacional oficial.
+- Calendário: envie `from/to` ISO do intervalo visível e agrupe visualmente `calendar.items` por
+  dia. Nunca crie eventos de agenda.
+- Cards e detalhe: use `plan.overview` para progresso, restantes, saúde, atraso, última OS e último
+  documento. `expectedExecutions` já considera a recorrência e a cobertura.
+- Cliente: `GET /pmoc?customerId=...&active=true`; Equipamento:
+  `GET /equipments/:id/pmoc` ou `GET /pmoc?equipmentId=...`. Os itens já contêm `overview`.
+- Timeline: renderize a ordem devolvida por `GET /pmoc/:id/history`; `source`, `action`, `execution`,
+  `operationId` e `document.id` permitem navegação sem interpretar metadata.
+- Pausar/retomar usa o PATCH PMOC existente com `generationMode: PAUSED` ou o modo operacional
+  escolhido. Gerar, reagendar e cancelar continuam usando os endpoints do Bloco 2.
+
 ## PMOC Foundation — Bloco 2
 
 - Use `/pmoc` para listar/criar planos e `/pmoc/:id` para resumo, execuções e histórico.

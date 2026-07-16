@@ -1,5 +1,18 @@
 # ARCHITECTURE — Frontend
 
+## PMOC Foundation — Bloco 3
+
+```text
+GET /pmoc/stats ──→ cards + calendário + próximas/últimas
+GET /pmoc/:id ───→ overview + contexto operacional
+GET /pmoc/:id/execution-requests ──→ tabela server-side paginada
+GET /pmoc/:id/history ──→ timeline append-only consolidada
+```
+
+O frontend não calcula saúde, conformidade, atraso, progresso ou status visual. O calendário é uma
+view das Execution Requests e não persiste evento. Cliente, Equipamento e Operator reutilizam as
+mesmas projeções PMOC, mantendo Operation/Assignment/MaintenanceExecution como fontes operacionais.
+
 ## PMOC Foundation — Bloco 2
 
 ```text

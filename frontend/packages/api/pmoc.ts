@@ -80,8 +80,13 @@ export type ListPmocParams = {
   signal?: AbortSignal;
 };
 
-export function getPmocStats(opts?: { signal?: AbortSignal }): Promise<PmocStats> {
-  return api.get<PmocStats>("/pmoc/stats", opts);
+export function getPmocStats(opts?: {
+  from?: string;
+  to?: string;
+  signal?: AbortSignal;
+}): Promise<PmocStats> {
+  const { signal, ...query } = opts ?? {};
+  return api.get<PmocStats>("/pmoc/stats", { query, signal });
 }
 
 export function listPmoc(params?: ListPmocParams): Promise<Paginated<PmocPlan>> {
