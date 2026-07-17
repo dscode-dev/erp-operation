@@ -252,13 +252,17 @@ export type Signature = {
   id: string;
   name: string;
   title: string;
+  profession: string | null;
   professionalCouncil: string | null;
+  registrationNumber: string | null;
   department: string | null;
   hasImage: boolean;
   mimeType: string | null;
   originalFileName: string | null;
   fileSize: number | null;
   active: boolean;
+  isDefault: boolean;
+  position: number;
   deletedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -676,6 +680,61 @@ export type OperationMaintenanceType =
   | 'ANNUAL'
   | 'CORRECTIVE';
 export type OperationDocumentStatus = 'DRAFT' | 'READY' | 'VALIDATED' | 'SENT';
+export type DocumentEditorialStatus = 'DRAFT' | 'PENDING' | 'READY' | 'STALE';
+export type DocumentHandoffOrigin = 'OPERATOR' | 'PLATFORM' | 'SYSTEM';
+
+export type DocumentHandoff = {
+  id: string;
+  operationId: string;
+  number: string;
+  type: DocumentTemplateType;
+  artifactStatus: OperationDocumentStatus;
+  editorialStatus: DocumentEditorialStatus;
+  origin: DocumentHandoffOrigin;
+  submittedAt: string | null;
+  reviewStartedAt: string | null;
+  finalizedAt: string | null;
+  renderedAt: string | null;
+  revision: number;
+  validationIssues: string[];
+  customerSignatureRequired?: boolean;
+  technicalSignatureRequired?: boolean;
+  customerSignature: null | {
+    name: string;
+    role: string | null;
+    collectedAt: string;
+    timezone: string;
+    origin: DocumentHandoffOrigin;
+    available: true;
+  };
+  technicalSignature: null | Pick<Signature, 'id' | 'name' | 'title' | 'profession' | 'professionalCouncil' | 'registrationNumber' | 'department' | 'active' | 'hasImage'>;
+  collectedBy: { id: string; name: string; role: Role } | null;
+  reviewedBy: { id: string; name: string; role: Role } | null;
+  finalizedBy: { id: string; name: string; role: Role } | null;
+  operation: null | {
+    id: string;
+    number: number;
+    status: OperationStatus;
+    customer: { id: string; name: string; tradeName: string | null };
+    operator: { id: string; name: string };
+    equipment: { id: string; name: string; tag: string } | null;
+    equipmentCount: number;
+    evidenceCount: number;
+  };
+  revisionCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type DocumentRevision = {
+  id: string;
+  revision: number;
+  action: string;
+  origin: DocumentHandoffOrigin;
+  changedFields: string[];
+  createdAt: string;
+  actor: { id: string; name: string; role: Role };
+};
 
 export type OperationChecklistItem = { label: string; done: boolean; note?: string | null };
 export type OperationMaintenanceChecklistItem = {

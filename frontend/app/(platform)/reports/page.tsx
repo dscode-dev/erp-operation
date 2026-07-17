@@ -15,6 +15,7 @@ import {
 import { PageHeader } from '@platform/components/page-header';
 import { Pagination } from '@platform/components/pagination';
 import { OperationCreationDrawer } from '@platform/components/operation-creation-drawer';
+import { DocumentHandoffInbox } from '@platform/components/document-handoff-inbox';
 import {
   ApiClientError,
   customersApi,
@@ -31,6 +32,7 @@ import {
   type CustomerDetail,
   type DocumentCatalogItem,
   type DocumentConfiguration,
+  type DocumentHandoff,
   type DocumentKind,
   type EquipmentSummary,
   type MaintenanceChecklistTemplate,
@@ -243,8 +245,8 @@ export default function ReportCenterPage() {
   const metrics = useMemo(
     () => ({
       total: documents.data?.pagination.total ?? 0,
-      ready: items.filter((item) => item.status === 'READY').length,
-      draft: items.filter((item) => item.status === 'DRAFT').length,
+      ready: items.filter((item) => item.editorialStatus === 'READY').length,
+      draft: items.filter((item) => item.editorialStatus === 'DRAFT').length,
       rendered: items.filter((item) => item.renderedAt).length,
     }),
     [documents.data, items],
@@ -311,6 +313,8 @@ export default function ReportCenterPage() {
             ))}
           </div>
         </section>
+
+        <DocumentHandoffInbox />
 
         <section className="space-y-3">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -385,7 +389,7 @@ export default function ReportCenterPage() {
                         <td>{DOCUMENT_KIND_LABEL[item.type]}</td>
                         <td>{item.customer?.name ?? '—'}</td>
                         <td>{item.equipment?.name ?? '—'}</td>
-                        <td>{item.status}</td>
+                        <td>{item.editorialStatus === 'DRAFT' ? 'Rascunho' : item.editorialStatus === 'PENDING' ? 'Pendente' : item.editorialStatus === 'READY' ? 'Pronto' : 'Desatualizado'}</td>
                         <td>{formatDate(item.renderedAt ?? item.issuedAt)}</td>
                       </tr>
                     ))}
@@ -465,6 +469,7 @@ function ReportWorkflowDrawer({
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<WorkflowForm>(emptyForm);
   const [operation, setOperation] = useState<OperationDetail | null>(null);
+  const [handoff, setHandoff] = useState<DocumentHandoff | null>(null);
   const [addresses, setAddresses] = useState<CustomerAddress[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerDetail | null>(null);
   const [equipments, setEquipments] = useState<EquipmentSummary[]>([]);
@@ -907,6 +912,20 @@ function ReportWorkflowDrawer({
       }
       setOperation(detail);
       set('operationId', detail.id);
+      let documentDraft = await documentsApi.saveHandoffDraft(detail.id, type);
+      if (form.signatureData && form.customerSignerName.trim()) {
+        documentDraft = await documentsApi.collectCustomerSignature(documentDraft.id, {
+          signerName: form.customerSignerName.trim(),
+          signerRole: form.customerSignerRole.trim() || undefined,
+          signatureData: form.signatureData,
+          collectedAt: new Date().toISOString(),
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Recife',
+        });
+      }
+      if (form.technicalSignatureId) {
+        documentDraft = await documentsApi.selectHandoffTechnicalSignature(documentDraft.id, form.technicalSignatureId);
+      }
+      setHandoff(documentDraft);
       setStep(3);
     } catch (cause) {
       setError(message(cause));
@@ -1031,14 +1050,17 @@ function ReportWorkflowDrawer({
           onSet={set}
         />
       )}
-      {step === 2 && <EvidenceStep type={type} form={form} onSet={set} />}
+      {step === 2 && <EvidenceStep type={type} form={form} signatures={signatures.data?.items ?? []} onSet={set} />}
       {step === 3 && operation && (
-        <DocumentViewer
-          source={{ operationId: operation.id, type }}
-          canRender
-          canDownload
-          onRendered={onRendered}
-        />
+        <div className="space-y-4">
+          {handoff && <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--color-border)] p-3"><div><strong>{handoff.editorialStatus === 'DRAFT' ? 'Rascunho' : handoff.editorialStatus === 'PENDING' ? 'Revisão pendente' : handoff.editorialStatus === 'READY' ? 'Pronto para emissão' : 'Desatualizado'}</strong><p className="text-caption">A criação manual utiliza o mesmo ciclo editorial das coletas do Operator.</p></div><div className="flex gap-2"><button className="h-9 rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 text-sm" onClick={async () => { try { setHandoff(await documentsApi.startHandoffReview(handoff.id)); } catch (cause) { setError(message(cause)); } }}>Salvar como pendente</button><button className="h-9 rounded-[var(--radius-md)] bg-[var(--color-primary)] px-3 text-sm text-[var(--color-primary-foreground)]" onClick={async () => { try { await documentsApi.startHandoffReview(handoff.id); setHandoff(await documentsApi.finalizeHandoffReview(handoff.id)); } catch (cause) { setError(message(cause)); } }}>Finalizar revisão</button></div></div>}
+          <DocumentViewer
+            source={handoff ? { documentId: handoff.id, operationId: operation.id, type } : { operationId: operation.id, type }}
+            canRender={handoff?.editorialStatus === 'READY'}
+            canDownload
+            onRendered={onRendered}
+          />
+        </div>
       )}
     </Drawer>
     <OperationCreationDrawer
@@ -2282,22 +2304,15 @@ function InspectedEquipmentSelector({
 function EvidenceStep({
   type,
   form,
+  signatures,
   onSet,
 }: {
   type: DocumentKind;
   form: WorkflowForm;
+  signatures: Signature[];
   onSet: <K extends keyof WorkflowForm>(key: K, value: WorkflowForm[K]) => void;
 }) {
-  if (type === 'WORK_ORDER' && form.workOrderSource === 'EXISTING')
-    return (
-      <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-muted)]/40 p-4">
-        <strong className="text-sm">Evidências da Operation</strong>
-        <p className="mt-1 text-caption">
-          Fotos e assinaturas existentes serão resolvidas pelo backend. Nenhum arquivo é duplicado
-          neste fluxo.
-        </p>
-      </div>
-    );
+  const customerSignatureRequired = ['WORK_ORDER', 'TECHNICAL_REPORT', 'BUDGET', 'PMOC'].includes(type);
   return (
     <div className="space-y-5">
       {type !== 'WORK_ORDER' && (
@@ -2307,8 +2322,8 @@ function EvidenceStep({
           onChange={(value) => onSet('checklist', value)}
         />
       )}
-      {(type === 'PMOC' || type === 'WORK_ORDER') && (
-        <Field label={type === 'PMOC' ? 'Fotos do PMOC' : 'Evidências fotográficas opcionais'}>
+      {type !== 'RECEIPT' && (
+        <Field label={type === 'PMOC' ? 'Fotos do PMOC' : 'Evidências fotográficas'}>
           <input
             type="file"
             accept="image/png,image/jpeg"
@@ -2327,9 +2342,9 @@ function EvidenceStep({
           <span className="text-caption">{form.photos.length} foto(s) selecionada(s).</span>
         </Field>
       )}
-      <div>
+      {customerSignatureRequired && <div>
         <p className="mb-2 text-sm font-medium">
-          Assinatura coletada, quando exigida pelo template
+          Assinatura do cliente
         </p>
         {type === 'PMOC' && (
           <div className="mb-3 grid gap-3 md:grid-cols-2">
@@ -2341,7 +2356,14 @@ function EvidenceStep({
           onChange={(value) => onSet('signatureData', value)}
           onConfirm={(value) => onSet('signatureData', value)}
         />
-      </div>
+      </div>}
+      <Field label="Assinatura do responsável técnico">
+        <select value={form.technicalSignatureId} onChange={(event) => onSet('technicalSignatureId', event.target.value)}>
+          <option value="">Selecione uma assinatura cadastrada…</option>
+          {signatures.map((signature) => <option key={signature.id} value={signature.id}>{signature.name} · {signature.title}{signature.isDefault ? ' · padrão' : ''}</option>)}
+        </select>
+        <span className="text-caption">Obrigatória para finalização. A escolha vale somente para este documento.</span>
+      </Field>
     </div>
   );
 }
@@ -2361,7 +2383,7 @@ function contentFor(type: DocumentKind, form: WorkflowForm) {
     }));
   const common = {
     checklist,
-    photos: type === 'PMOC' || type === 'WORK_ORDER' ? form.photos : [],
+    photos: type === 'RECEIPT' ? [] : form.photos,
     signatureData: form.signatureData,
     customerSignerName: form.signatureData ? form.customerSignerName || undefined : undefined,
     customerSignerRole: form.signatureData ? form.customerSignerRole || undefined : undefined,

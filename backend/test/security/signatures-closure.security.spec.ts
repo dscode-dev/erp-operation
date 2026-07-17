@@ -26,6 +26,7 @@ describe('AppSec Signature Domain closure', () => {
   let manager: SecurityActor;
   let operator: SecurityActor;
   let viewer: SecurityActor;
+  let organizationId: string;
 
   beforeAll(async () => {
     security = await createSecurityApp();
@@ -34,7 +35,7 @@ describe('AppSec Signature Domain closure', () => {
 
   beforeEach(async () => {
     await resetSecurityState();
-    await createOrganization();
+    organizationId = (await createOrganization()).id;
     owner = await createSecurityActor(Role.OWNER, 'sig-owner');
     manager = await createSecurityActor(Role.MANAGER, 'sig-manager');
     operator = await createSecurityActor(Role.OPERATOR, 'sig-operator');
@@ -46,7 +47,7 @@ describe('AppSec Signature Domain closure', () => {
   });
 
   it('enforces the documented signature RBAC matrix', async () => {
-    const signature = await prisma.signature.create({ data: { name: 'Diretoria', title: 'Diretor', active: true } });
+    const signature = await prisma.signature.create({ data: { organizationId, name: 'Diretoria', title: 'Diretor', active: true } });
 
     for (const actor of [owner, manager, viewer]) {
       expect((await authGet(actor, '/api/v1/signatures')).status).toBe(200);
@@ -62,7 +63,7 @@ describe('AppSec Signature Domain closure', () => {
   });
 
   it('rejects spoofed signature uploads and never stores binary data in audit metadata', async () => {
-    const signature = await prisma.signature.create({ data: { name: 'Técnico', title: 'Responsável', active: true } });
+    const signature = await prisma.signature.create({ data: { organizationId, name: 'Técnico', title: 'Responsável', active: true } });
 
     const spoof = await authPost(owner, `/api/v1/signatures/${signature.id}/upload`)
       .attach('file', Buffer.from('<svg onload="alert(1)"></svg>'), {
@@ -94,7 +95,7 @@ describe('AppSec Signature Domain closure', () => {
   });
 
   it('rejects unsafe signature/template configuration invariants early', async () => {
-    const inactive = await prisma.signature.create({ data: { name: 'Inativa', title: 'Cargo', active: false } });
+    const inactive = await prisma.signature.create({ data: { organizationId, name: 'Inativa', title: 'Cargo', active: false } });
 
     const fixedWithoutId = await authPost(owner, '/api/v1/organization/templates').send({
       type: DocumentTemplateType.WORK_ORDER,

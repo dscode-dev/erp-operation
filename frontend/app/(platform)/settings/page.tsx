@@ -766,9 +766,13 @@ function SignatureEditor({
 }) {
   const [name, setName] = useState('');
   const [title, setTitle] = useState('');
+  const [profession, setProfession] = useState('');
   const [professionalCouncil, setProfessionalCouncil] = useState('');
+  const [registrationNumber, setRegistrationNumber] = useState('');
   const [department, setDepartment] = useState('');
   const [active, setActive] = useState(true);
+  const [isDefault, setIsDefault] = useState(false);
+  const [position, setPosition] = useState(0);
   const [mode, setMode] = useState<'upload' | 'draw'>('upload');
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -781,9 +785,13 @@ function SignatureEditor({
     if (!open) return;
     setName(signature?.name ?? '');
     setTitle(signature?.title ?? '');
+    setProfession(signature?.profession ?? '');
     setProfessionalCouncil(signature?.professionalCouncil ?? '');
+    setRegistrationNumber(signature?.registrationNumber ?? '');
     setDepartment(signature?.department ?? '');
     setActive(signature?.active ?? true);
+    setIsDefault(signature?.isDefault ?? false);
+    setPosition(signature?.position ?? 0);
     setMode('upload');
     setFile(null);
     setPreview(null);
@@ -807,16 +815,24 @@ function SignatureEditor({
         ? await signaturesApi.updateSignature(signature.id, {
             name,
             title,
+            profession,
             professionalCouncil,
+            registrationNumber,
             department,
             active,
+            isDefault,
+            position,
           })
         : await signaturesApi.createSignature({
             name,
             title,
+            profession,
             professionalCouncil,
+            registrationNumber,
             department,
             active,
+            isDefault,
+            position,
           });
       const selectedFile = mode === 'draw' ? drawingFile : file;
       if (selectedFile) await signaturesApi.uploadSignatureImage(saved.id, selectedFile);
@@ -879,12 +895,15 @@ function SignatureEditor({
           </div>
           <Input label="Nome" value={name} onChange={setName} />
           <Input label="Título" value={title} onChange={setTitle} />
+          <Input label="Profissão" value={profession} onChange={setProfession} />
           <Input
             label="Conselho profissional"
             value={professionalCouncil}
             onChange={setProfessionalCouncil}
           />
+          <Input label="Número do registro" value={registrationNumber} onChange={setRegistrationNumber} />
           <Input label="Departamento" value={department} onChange={setDepartment} />
+          <Input label="Ordem de exibição" value={String(position)} onChange={(value) => setPosition(Math.max(0, Number(value) || 0))} />
           <label className="flex items-center justify-between gap-3 cursor-pointer">
             <span className="text-sm font-medium">Ativa</span>
             <input
@@ -893,6 +912,10 @@ function SignatureEditor({
               onChange={(e) => setActive(e.target.checked)}
               className="h-4 w-4 accent-[var(--color-primary)]"
             />
+          </label>
+          <label className="flex items-center justify-between gap-3 cursor-pointer">
+            <span><span className="block text-sm font-medium">Assinatura padrão</span><span className="block text-caption">Pré-selecionada nos novos documentos.</span></span>
+            <input type="checkbox" checked={isDefault} onChange={(event) => setIsDefault(event.target.checked)} className="h-4 w-4 accent-[var(--color-primary)]" />
           </label>
         </section>
 

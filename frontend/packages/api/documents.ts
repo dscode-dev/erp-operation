@@ -8,10 +8,16 @@ import type {
   OperationDocumentStatus,
   DocumentRenderResult,
   Paginated,
+  DocumentHandoff,
+  DocumentEditorialStatus,
+  DocumentHandoffOrigin,
+  DocumentRevision,
 } from "@erp/types";
 
 export type DocumentCatalogItem = {
   id: string; number: string; type: DocumentKind; status: OperationDocumentStatus;
+  editorialStatus: DocumentEditorialStatus; handoffOrigin: DocumentHandoffOrigin;
+  submittedAt: string | null; finalizedAt: string | null; revision: number;
   origin: "OPERATION" | "BUDGET"; originId: string | null;
   customer: { id: string; name: string } | null;
   equipment: { id: string; name: string; tag: string } | null;
@@ -23,6 +29,7 @@ export type DocumentCatalogItem = {
 export function listDocuments(params?: {
   page?: number; limit?: number; search?: string; type?: DocumentKind;
   status?: OperationDocumentStatus; customerId?: string; equipmentId?: string;
+  editorialStatus?: DocumentEditorialStatus;
   operatorId?: string; from?: string; to?: string; signal?: AbortSignal;
 }): Promise<Paginated<DocumentCatalogItem>> {
   const { signal, ...query } = params ?? {};
@@ -94,4 +101,55 @@ export function getConfigurationByTemplate(
   opts?: { signal?: AbortSignal },
 ): Promise<DocumentConfiguration> {
   return api.get<DocumentConfiguration>(`/documents/configuration/templates/${templateId}`, opts);
+}
+
+export function listHandoffs(params?: {
+  page?: number; limit?: number; search?: string; status?: DocumentEditorialStatus;
+  type?: DocumentKind; origin?: DocumentHandoffOrigin; customerId?: string;
+  operatorId?: string; from?: string; to?: string; missingCustomerSignature?: boolean;
+  missingTechnicalSignature?: boolean; missingEvidence?: boolean; signal?: AbortSignal;
+}): Promise<Paginated<DocumentHandoff>> {
+  const { signal, ...query } = params ?? {};
+  return api.get<Paginated<DocumentHandoff>>('/documents/handoffs', { query, signal });
+}
+
+export function saveHandoffDraft(operationId: string, type: DocumentKind): Promise<DocumentHandoff> {
+  return api.post<DocumentHandoff>('/documents/handoffs', { operationId, type });
+}
+
+export function getHandoff(documentId: string, opts?: { signal?: AbortSignal }): Promise<DocumentHandoff> {
+  return api.get<DocumentHandoff>(`/documents/${documentId}/handoff`, opts);
+}
+
+export function collectCustomerSignature(documentId: string, payload: {
+  signerName: string; signerRole?: string; signatureData: string; collectedAt?: string; timezone: string;
+}): Promise<DocumentHandoff> {
+  return api.patch<DocumentHandoff>(`/documents/${documentId}/handoff/customer-signature`, payload);
+}
+
+export function getCustomerSignatureImage(
+  documentId: string,
+  opts?: { signal?: AbortSignal },
+): Promise<DocumentDownloadResult> {
+  return api.blob(`/documents/${documentId}/handoff/customer-signature`, opts);
+}
+
+export function submitHandoff(documentId: string): Promise<DocumentHandoff> {
+  return api.post<DocumentHandoff>(`/documents/${documentId}/handoff/submit`);
+}
+
+export function startHandoffReview(documentId: string): Promise<DocumentHandoff> {
+  return api.post<DocumentHandoff>(`/documents/${documentId}/handoff/review`);
+}
+
+export function selectHandoffTechnicalSignature(documentId: string, signatureId: string): Promise<DocumentHandoff> {
+  return api.patch<DocumentHandoff>(`/documents/${documentId}/handoff/technical-signature`, { signatureId });
+}
+
+export function finalizeHandoffReview(documentId: string): Promise<DocumentHandoff> {
+  return api.post<DocumentHandoff>(`/documents/${documentId}/handoff/finalize`, { confirm: true });
+}
+
+export function getHandoffHistory(documentId: string, opts?: { signal?: AbortSignal }): Promise<DocumentRevision[]> {
+  return api.get<DocumentRevision[]>(`/documents/${documentId}/handoff/history`, opts);
 }

@@ -19,6 +19,7 @@ import {
   assignmentTime,
 } from "@erp/ui/assignments/assignment-shared";
 import { serviceTypeLabel } from "@operator/lib/service-types";
+import { FieldReportHandoff } from "@operator/features/reports/field-report-handoff";
 
 const workflow = [
   { label: "Aceitar", icon: CheckCircle2 },
@@ -209,6 +210,10 @@ function AssignmentWorkflow({
 
       {operation.data?.maintenanceExecution?.plan.pmocPlan && (
         <PmocFieldExecution operation={operation.data} signatureMode={pmocSignatureMode} configurationLoading={pmocConfiguration.loading} onSaved={operation.refetch} />
+      )}
+
+      {operation.data && (assignment.status === "ACCEPTED" || assignment.status === "STARTED" || assignment.status === "COMPLETED") && (
+        <FieldReportHandoff operation={operation.data} onSaved={operation.refetch} />
       )}
 
       <section className="space-y-2">

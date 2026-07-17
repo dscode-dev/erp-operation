@@ -724,3 +724,13 @@ Tipos:
 - `MultiSelect`: reutilizado para equipamentos e `OperationType`.
 - `SignatureCard`: assinatura institucional e metadados profissionais em leitura.
 - `PmocFieldExecution`: consulta configuração PMOC e coleta cliente só em `COLLECTED`/`HYBRID`.
+
+## Field Report Handoff 01
+
+- `FieldReportHandoff`: coleta mobile ligada à Operation/Assignment; reutiliza `MultiSelect`,
+  `PhotoInput` e `SignaturePad` e nunca emite PDF.
+- `DocumentHandoffInbox`: inbox paginada e drawer de revisão da Platform.
+- `CustomerSignaturePreview`: consome imagem binária autorizada e revoga o object URL ao desmontar.
+- `TechnicalSignaturePreview`: mostra a assinatura institucional selecionada e metadados técnicos.
+- `OperationEvidence`: resolve cada evidência pelo endpoint autorizado e apresenta legenda.
+- `DocumentViewer`: permanece o único componente de Preview/Render/Download.

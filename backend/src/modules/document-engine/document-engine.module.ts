@@ -11,6 +11,7 @@ import { DocumentMeasureService } from './measurement/document-measure.service';
 import { DefaultSignaturePolicyResolver } from './signatures/default-signature-policy.resolver';
 import { DocumentEngineController } from './document-engine.controller';
 import { DocumentEngineService } from './document-engine.service';
+import { DocumentHandoffService } from './document-handoff.service';
 import { PdfEngineService } from './pdf/pdf-engine.service';
 import { DocumentRendererService } from './renderer/document-renderer.service';
 
@@ -19,6 +20,7 @@ import { DocumentRendererService } from './renderer/document-renderer.service';
   controllers: [DocumentEngineController, DocumentConfigurationController],
   providers: [
     DocumentEngineService,
+    DocumentHandoffService,
     DocumentBuilderService,
     DocumentRendererService,
     PdfEngineService,

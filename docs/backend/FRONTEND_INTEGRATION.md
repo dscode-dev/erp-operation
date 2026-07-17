@@ -2402,3 +2402,31 @@ OWNER/MANAGER administram o plano.
   institucional em leitura; `COLLECTED` mostra coleta; `HYBRID` mostra ambas.
 - `signatureOverrideId` pertence ao PMOC e nunca deve causar PATCH no Template.
 - Não apresente nomes de entidades, estados ou serviços internos ao usuário.
+
+## Field Report Handoff 01
+
+### Fluxo Operator
+
+Na Operation atribuída, use `POST /documents/handoffs` para salvar o documento oficial, PATCH da
+Operation para conteúdo/equipamentos/evidências e o endpoint de assinatura do cliente quando a
+matriz exigir. `submit` envia para revisão; não mostre Render/Download/finalização no Operator.
+
+Matriz: OS, Visita, Orçamento e PMOC exigem cliente+técnica; Laudo exige só técnica; Recibo não é
+oferecido no Operator. PMOC continua usando o wizard/evidências existentes e exige quatro imagens.
+
+### Fluxo Platform
+
+`GET /documents/handoffs` alimenta a caixa de entrada. Ao abrir, carregue a Operation existente,
+mantenha campos editáveis, mostre evidências por `GET /operations/photos/:id`, assinatura do cliente
+pelo endpoint binário dedicado e assinatura técnica pelo endpoint autenticado de Signatures.
+Sequência: `review → editar Operation → selecionar assinatura técnica → finalize → preview → render
+→ download`.
+
+Estados de UI: `DRAFT=Rascunho`, `PENDING=Pendente`, `READY=Pronto`, `STALE=Desatualizado`. READY não
+significa que já existe PDF. STALE exige nova revisão/finalização/render e preserva o PDF anterior.
+
+### Segurança de integração
+
+Não persista Base64 recebido em estado global, não monte URL de Storage e não renderize metadata
+como HTML. Use exclusivamente os clients oficiais, cancelamento por `AbortSignal`, retry explícito e
+tratamento dos códigos de pendência retornados em `details.issues`.

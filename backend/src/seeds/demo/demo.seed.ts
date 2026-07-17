@@ -1024,6 +1024,11 @@ async function ensureDemoPmocPlans(prisma: PrismaClient): Promise<{ createdIds: 
 async function ensureDemoSignatures(
   prisma: PrismaClient,
 ): Promise<{ createdIds: string[]; imageKeys: string[] }> {
+  const organization = await prisma.organization.findFirst({
+    orderBy: { createdAt: 'asc' },
+    select: { id: true },
+  });
+  if (!organization) return { createdIds: [], imageKeys: [] };
   const definitions = [
     ['Demo Responsável Técnico', 'Responsável Técnico', 'demo-responsavel-tecnico.png'],
     ['Demo Supervisor Operacional', 'Supervisor Operacional', 'demo-supervisor-operacional.png'],
@@ -1058,6 +1063,7 @@ async function ensureDemoSignatures(
     });
     const signature = await prisma.signature.create({
       data: {
+        organizationId: organization.id,
         name,
         title,
         imageStorageKey: storageKey,

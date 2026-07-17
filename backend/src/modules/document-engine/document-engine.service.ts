@@ -65,8 +65,10 @@ export class DocumentEngineService {
     const where: Prisma.OperationDocumentWhereInput = {
       ...(query.type ? { type: query.type } : {}),
       ...(query.status ? { status: query.status } : {}),
+      ...(query.editorialStatus ? { editorialStatus: query.editorialStatus } : {}),
       ...(actor.role === Role.OWNER ? {} : { type: { notIn: [...FINANCIAL_DOCUMENT_TYPES] } }),
       ...(query.operatorId ? { operation: { operatorId: query.operatorId } } : {}),
+      ...(actor.role === Role.OPERATOR ? { operation: { operatorId: actor.id } } : {}),
       AND: [
         ...(query.from || query.to ? [{ OR: [{ renderedAt: period }, { renderedAt: null, createdAt: period }] }] : []),
         ...(query.customerId ? [{ OR: [{ operation: { customerId: query.customerId } }, { budget: { customerId: query.customerId } }] }] : []),
@@ -92,6 +94,11 @@ export class DocumentEngineService {
     ]);
     return buildPaginatedResponse(items.map((document) => ({
       id: document.id, number: document.number, type: document.type, status: document.status,
+      editorialStatus: document.editorialStatus,
+      handoffOrigin: document.handoffOrigin,
+      submittedAt: document.submittedAt,
+      finalizedAt: document.finalizedAt,
+      revision: document.revision,
       origin: document.budget ? 'BUDGET' : 'OPERATION',
       originId: document.budgetId ?? document.operationId,
       customer: document.operation?.customer ?? document.budget?.customer ?? null,
@@ -117,6 +124,7 @@ export class DocumentEngineService {
     context: DocumentAuditContext,
   ): Promise<unknown> {
     this.assertTypeAccess(type, actor);
+    await this.assertOperationAccess(operationId, actor);
     const blueprint = this.withSourceFingerprint(await this.builder.buildFromOperation(operationId, type));
     await this.audit(
       DOCUMENT_ENGINE_AUDIT_ACTIONS.DOCUMENT_PREVIEWED,
@@ -139,6 +147,7 @@ export class DocumentEngineService {
   ): Promise<unknown> {
     const document = await this.documentOrThrow(documentId);
     this.assertTypeAccess(document.type, actor);
+    await this.assertDocumentAccess(document, actor);
     if (document.budgetId) {
       const blueprint = await this.builder.buildBudget(document.budgetId);
       await this.audit(
@@ -279,7 +288,16 @@ export class DocumentEngineService {
     context: DocumentAuditContext,
   ): Promise<unknown> {
     const document = await this.documentOrThrow(documentId);
+    this.assertRenderer(actor);
     this.assertTypeAccess(document.type, actor);
+    if (document.submittedAt && document.editorialStatus !== 'READY') {
+      throw new ApplicationException(
+        ERROR_CODES.DOCUMENT_REVIEW_INCOMPLETE,
+        'Finalize a revisão antes de gerar o PDF oficial',
+        HttpStatus.CONFLICT,
+        { editorialStatus: document.editorialStatus },
+      );
+    }
     await this.assertPmocEmissionReady(document.operationId, document.type);
     try {
       if (!document.budgetId && !document.operationId) {
@@ -332,6 +350,22 @@ export class DocumentEngineService {
           );
         }
         const saved = await tx.operationDocument.findUniqueOrThrow({ where: { id: document.id } });
+        const revisioned = await tx.operationDocument.update({
+          where: { id: document.id },
+          data: { revision: { increment: 1 } },
+          select: { revision: true },
+        });
+        await tx.documentRevision.create({
+          data: {
+            documentId: document.id,
+            revision: revisioned.revision,
+            action: 'RENDERED',
+            origin: 'PLATFORM',
+            actorId: actor.id,
+            changedFields: ['renderedAt', 'storageKey', 'renderMetadata'],
+            snapshot: { renderedAt: new Date().toISOString(), fileSize: pdf.buffer.length },
+          },
+        });
         await tx.auditLog.create({
           data: this.auditInput(
             DOCUMENT_ENGINE_AUDIT_ACTIONS.DOCUMENT_RENDERED,
@@ -389,6 +423,7 @@ export class DocumentEngineService {
   ): Promise<DocumentDownload> {
     const document = await this.documentOrThrow(documentId);
     this.assertTypeAccess(document.type, actor);
+    await this.assertDocumentAccess(document, actor);
     if (!document.storageKey || !document.mimeType || !document.fileSize) {
       throw new ApplicationException(
         ERROR_CODES.DOCUMENT_DOWNLOAD_NOT_READY,
@@ -469,6 +504,28 @@ export class DocumentEngineService {
         HttpStatus.FORBIDDEN,
       );
     }
+  }
+
+  private assertRenderer(actor: AuthenticatedUser): void {
+    if (actor.role !== Role.OWNER && actor.role !== Role.MANAGER) {
+      throw new ApplicationException(
+        ERROR_CODES.FORBIDDEN,
+        'Only OWNER or MANAGER can render final documents',
+        HttpStatus.FORBIDDEN,
+      );
+    }
+  }
+
+  private async assertOperationAccess(operationId: string, actor: AuthenticatedUser): Promise<void> {
+    if (actor.role !== Role.OPERATOR) return;
+    const allowed = await this.prisma.assignment.count({ where: { operationId, assignedTo: actor.id } });
+    if (!allowed) throw new ApplicationException(ERROR_CODES.FORBIDDEN, 'Operator can only access assigned Operations', HttpStatus.FORBIDDEN);
+  }
+
+  private async assertDocumentAccess(document: OperationDocument, actor: AuthenticatedUser): Promise<void> {
+    if (actor.role !== Role.OPERATOR) return;
+    if (!document.operationId) throw new ApplicationException(ERROR_CODES.FORBIDDEN, 'Operator cannot access this document', HttpStatus.FORBIDDEN);
+    await this.assertOperationAccess(document.operationId, actor);
   }
 
   private async assertPmocEmissionReady(

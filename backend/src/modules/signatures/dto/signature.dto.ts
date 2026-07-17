@@ -41,7 +41,13 @@ export class CreateSignatureDto {
   title!: string;
 
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(120)
+  profession?: string;
+
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(120)
   professionalCouncil?: string;
+
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(80)
+  registrationNumber?: string;
 
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(120)
   department?: string;
@@ -49,6 +55,12 @@ export class CreateSignatureDto {
   @IsOptional()
   @IsBoolean()
   active?: boolean;
+
+  @IsOptional() @IsBoolean()
+  isDefault?: boolean;
+
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(1000)
+  position?: number;
 }
 
 export class UpdateSignatureDto {
@@ -65,7 +77,13 @@ export class UpdateSignatureDto {
   title?: string;
 
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(120)
+  profession?: string;
+
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(120)
   professionalCouncil?: string;
+
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(80)
+  registrationNumber?: string;
 
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(120)
   department?: string;
@@ -73,4 +91,10 @@ export class UpdateSignatureDto {
   @IsOptional()
   @IsBoolean()
   active?: boolean;
+
+  @IsOptional() @IsBoolean()
+  isDefault?: boolean;
+
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(1000)
+  position?: number;
 }

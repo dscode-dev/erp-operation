@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Post, Query, Req, Res } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query, Req, Res } from '@nestjs/common';
 import { Role } from '@prisma/client';
 import type { Response } from 'express';
 import { CurrentUser } from '../../shared/decorators/current-user.decorator';
@@ -7,6 +7,14 @@ import { Roles } from '../../shared/decorators/roles.decorator';
 import type { AuthenticatedUser } from '../../shared/types/authenticated-user.type';
 import type { RequestWithId } from '../../shared/types/request-with-id.type';
 import { DocumentEngineService, contextFromRequest } from './document-engine.service';
+import { DocumentHandoffService } from './document-handoff.service';
+import {
+  CollectCustomerSignatureDto,
+  FinalizeDocumentReviewDto,
+  ListDocumentHandoffsQueryDto,
+  SaveDocumentHandoffDto,
+  SelectTechnicalSignatureDto,
+} from './dto/document-handoff.dto';
 import {
   DocumentIdParamsDto,
   ListDocumentsQueryDto,
@@ -16,7 +24,22 @@ import {
 
 @Controller('documents')
 export class DocumentEngineController {
-  constructor(private readonly documents: DocumentEngineService) {}
+  constructor(
+    private readonly documents: DocumentEngineService,
+    private readonly handoffs: DocumentHandoffService,
+  ) {}
+
+  @Roles(Role.OWNER, Role.MANAGER)
+  @Get('handoffs')
+  listHandoffs(@Query() query: ListDocumentHandoffsQueryDto): Promise<unknown> {
+    return this.handoffs.list(query);
+  }
+
+  @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR)
+  @Post('handoffs')
+  saveHandoffDraft(@Body() body: SaveDocumentHandoffDto, @CurrentUser() actor: AuthenticatedUser, @Req() request: RequestWithId): Promise<unknown> {
+    return this.handoffs.saveDraft(body, actor, contextFromRequest(request));
+  }
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR, Role.VIEWER)
   @Get()
@@ -39,7 +62,7 @@ export class DocumentEngineController {
     );
   }
 
-  @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR)
+  @Roles(Role.OWNER, Role.MANAGER)
   @Post('operations/:operationId/:type/render')
   renderOperation(
     @Param() params: OperationDocumentParamsDto,
@@ -74,7 +97,7 @@ export class DocumentEngineController {
     return this.documents.previewDocument(params.documentId, actor, contextFromRequest(request));
   }
 
-  @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR)
+  @Roles(Role.OWNER, Role.MANAGER)
   @Post(':documentId/render')
   renderDocument(
     @Param() params: DocumentIdParamsDto,
@@ -82,6 +105,64 @@ export class DocumentEngineController {
     @Req() request: RequestWithId,
   ): Promise<unknown> {
     return this.documents.renderDocument(params.documentId, actor, contextFromRequest(request));
+  }
+
+  @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR)
+  @Get(':documentId/handoff')
+  getHandoff(@Param('documentId', new ParseUUIDPipe({ version: '4' })) documentId: string, @CurrentUser() actor: AuthenticatedUser): Promise<unknown> {
+    return this.handoffs.get(documentId, actor);
+  }
+
+  @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR)
+  @Patch(':documentId/handoff/customer-signature')
+  collectCustomerSignature(@Param('documentId', new ParseUUIDPipe({ version: '4' })) documentId: string, @Body() body: CollectCustomerSignatureDto, @CurrentUser() actor: AuthenticatedUser, @Req() request: RequestWithId): Promise<unknown> {
+    return this.handoffs.collectCustomerSignature(documentId, body, actor, contextFromRequest(request));
+  }
+
+  @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR)
+  @RawResponse()
+  @Get(':documentId/handoff/customer-signature')
+  async customerSignatureImage(
+    @Param('documentId', new ParseUUIDPipe({ version: '4' })) documentId: string,
+    @CurrentUser() actor: AuthenticatedUser,
+    @Res() response: Response,
+  ): Promise<void> {
+    const image = await this.handoffs.customerSignatureImage(documentId, actor);
+    response.setHeader('Content-Type', image.mimeType);
+    response.setHeader('Content-Disposition', `inline; filename="${image.filename}"`);
+    response.setHeader('Content-Length', String(image.content.length));
+    response.setHeader('Cache-Control', 'private, no-store');
+    response.end(image.content);
+  }
+
+  @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR)
+  @Post(':documentId/handoff/submit')
+  submitHandoff(@Param('documentId', new ParseUUIDPipe({ version: '4' })) documentId: string, @CurrentUser() actor: AuthenticatedUser, @Req() request: RequestWithId): Promise<unknown> {
+    return this.handoffs.submit(documentId, actor, contextFromRequest(request));
+  }
+
+  @Roles(Role.OWNER, Role.MANAGER)
+  @Post(':documentId/handoff/review')
+  startReview(@Param('documentId', new ParseUUIDPipe({ version: '4' })) documentId: string, @CurrentUser() actor: AuthenticatedUser, @Req() request: RequestWithId): Promise<unknown> {
+    return this.handoffs.startReview(documentId, actor, contextFromRequest(request));
+  }
+
+  @Roles(Role.OWNER, Role.MANAGER)
+  @Patch(':documentId/handoff/technical-signature')
+  selectTechnicalSignature(@Param('documentId', new ParseUUIDPipe({ version: '4' })) documentId: string, @Body() body: SelectTechnicalSignatureDto, @CurrentUser() actor: AuthenticatedUser, @Req() request: RequestWithId): Promise<unknown> {
+    return this.handoffs.selectTechnicalSignature(documentId, body.signatureId, actor, contextFromRequest(request));
+  }
+
+  @Roles(Role.OWNER, Role.MANAGER)
+  @Post(':documentId/handoff/finalize')
+  finalizeReview(@Param('documentId', new ParseUUIDPipe({ version: '4' })) documentId: string, @Body() _body: FinalizeDocumentReviewDto, @CurrentUser() actor: AuthenticatedUser, @Req() request: RequestWithId): Promise<unknown> {
+    return this.handoffs.finalize(documentId, actor, contextFromRequest(request));
+  }
+
+  @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR)
+  @Get(':documentId/handoff/history')
+  handoffHistory(@Param('documentId', new ParseUUIDPipe({ version: '4' })) documentId: string, @CurrentUser() actor: AuthenticatedUser): Promise<unknown> {
+    return this.handoffs.history(documentId, actor);
   }
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR, Role.VIEWER)

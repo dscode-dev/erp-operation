@@ -509,13 +509,13 @@ describe('DocumentEngine foundation', () => {
       'technical-opinion-analysis',
       'technical-opinion-recommendations',
       'technical-opinion-conclusion',
+      'photos-evidencias-fotograficas',
       'signature',
     ]);
     expect(sectionIds).not.toEqual(
       expect.arrayContaining([
         'materials-consumed',
         'related-documents',
-        'photos-evidencias-fotograficas',
         'checklist-evidencias-e-verificacoes-consideradas',
       ]),
     );
@@ -891,6 +891,7 @@ describe('DocumentEngine foundation', () => {
       'checklist-checklist-complementar',
       'visit-recommendations',
       'observations-observacoes-finais',
+      'photos-evidencias-fotograficas',
       'signature',
     ]);
     const diagnosis = built.sections.find((section) => section.id === 'visit-diagnosis');
@@ -907,7 +908,7 @@ describe('DocumentEngine foundation', () => {
     ).toBe(true);
     expect(
       rendered.pages.flatMap((page) => page.elements).filter((element) => element.type === 'image'),
-    ).toHaveLength(2);
+    ).toHaveLength(3);
     expect(pdf.buffer.subarray(0, 5).toString('latin1')).toBe('%PDF-');
     expect(pdf.pageCount).toBe(rendered.pages.length);
   });
@@ -1426,6 +1427,8 @@ describe('DocumentEngine foundation', () => {
       $transaction: jest.fn(async (callback: (tx: unknown) => Promise<void>) =>
         callback({
           operation: { update: transactionOperationUpdate },
+          operationDocument: { updateMany: jest.fn(), findMany: jest.fn().mockResolvedValue([]), update: jest.fn() },
+          documentRevision: { create: jest.fn() },
           auditLog: { create: jest.fn() },
         }),
       ),

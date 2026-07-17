@@ -114,7 +114,27 @@ const DOCUMENT_CONTEXT_OPERATION_INCLUDE = {
     },
   },
   photos: { orderBy: { createdAt: 'asc' as const } },
-  documents: { orderBy: { createdAt: 'asc' as const } },
+  documents: {
+    orderBy: { createdAt: 'asc' as const },
+    include: {
+      technicalSignature: {
+        select: {
+          id: true,
+          name: true,
+          title: true,
+          profession: true,
+          professionalCouncil: true,
+          registrationNumber: true,
+          department: true,
+          imageStorageKey: true,
+          mimeType: true,
+          fileSize: true,
+          active: true,
+          deletedAt: true,
+        },
+      },
+    },
+  },
   maintenanceChecklistItems: {
     orderBy: [{ maintenanceType: 'asc' as const }, { position: 'asc' as const }],
     include: { equipment: { select: { id: true, name: true, tag: true } } },
@@ -202,7 +222,9 @@ export interface DocumentSignatureContext {
     id: string;
     name: string;
     title: string;
+    profession: string | null;
     professionalCouncil: string | null;
+    registrationNumber: string | null;
     department: string | null;
     image: ResolvedDocumentAsset;
   }>;
@@ -304,16 +326,16 @@ export class DocumentContextService {
     }
 
     const template = configuration.defaultTemplate;
+    const handoff = operation.documents.find((document) => document.type === type) ?? null;
     const signature = await this.resolveSignature(
       template,
       operation,
       type === DocumentTemplateType.PMOC
         ? operation.maintenanceExecution?.plan.pmocPlan?.signatureOverride
         : null,
+      handoff,
     );
-    const usesOperationPhotos =
-      type !== DocumentTemplateType.TECHNICAL_REPORT &&
-      type !== DocumentTemplateType.TECHNICAL_OPINION;
+    const usesOperationPhotos = true;
     const usesEquipmentQr =
       type !== DocumentTemplateType.TECHNICAL_REPORT &&
       type !== DocumentTemplateType.TECHNICAL_OPINION &&
@@ -510,7 +532,15 @@ export class DocumentContextService {
       active: boolean;
       deletedAt: Date | null;
     } | null = null,
+    handoff: DocumentContextOperation['documents'][number] | null = null,
   ): Promise<DocumentSignatureContext> {
+    if (
+      operation &&
+      handoff &&
+      (handoff.submittedAt || handoff.technicalSignatureId || handoff.technicalSignatureSnapshot)
+    ) {
+      return this.resolveHandoffSignatures(operation, handoff);
+    }
     const mode = template?.signatureMode ?? SignatureMode.NONE;
     const executionSignature = this.resolveExecutionSignature(operation);
     const acceptsExecutionSignatures =
@@ -646,7 +676,9 @@ export class DocumentContextService {
         id: signature.id,
         name: signature.name,
         title: signature.title,
+        profession: null,
         professionalCouncil: signature.professionalCouncil ?? null,
+        registrationNumber: null,
         department: signature.department ?? null,
         image: await this.assets.resolveSignature(signature.imageStorageKey!, {
           mimeType: signature.mimeType!,
@@ -669,6 +701,111 @@ export class DocumentContextService {
       institutionalSignatures,
       collectedSignature,
       executionSignatures,
+    };
+  }
+
+  private async resolveHandoffSignatures(
+    operation: DocumentContextOperation,
+    handoff: DocumentContextOperation['documents'][number],
+  ): Promise<DocumentSignatureContext> {
+    const customerRequired = ([
+      DocumentTemplateType.WORK_ORDER,
+      DocumentTemplateType.TECHNICAL_REPORT,
+      DocumentTemplateType.BUDGET,
+      DocumentTemplateType.PMOC,
+    ] as DocumentTemplateType[]).includes(handoff.type);
+    const customer = this.signatureSnapshot(handoff.customerSignatureSnapshot);
+    const technical = this.signatureSnapshot(handoff.technicalSignatureSnapshot);
+    const collectedImage = customer
+      ? await this.assets.resolveSignature(customer.storageKey, {
+          mimeType: customer.mimeType,
+          fileSize: customer.fileSize,
+        })
+      : this.resolveExecutionSignature(operation)?.image ?? null;
+    const technicalSource = technical ??
+      (handoff.technicalSignature?.imageStorageKey && handoff.technicalSignature.mimeType && handoff.technicalSignature.fileSize
+        ? {
+            id: handoff.technicalSignature.id,
+            name: handoff.technicalSignature.name,
+            title: handoff.technicalSignature.title,
+            profession: handoff.technicalSignature.profession,
+            professionalCouncil: handoff.technicalSignature.professionalCouncil,
+            registrationNumber: handoff.technicalSignature.registrationNumber,
+            department: handoff.technicalSignature.department,
+            storageKey: handoff.technicalSignature.imageStorageKey,
+            mimeType: handoff.technicalSignature.mimeType,
+            fileSize: handoff.technicalSignature.fileSize,
+          }
+        : null);
+    const institutional = technicalSource
+      ? [{
+          id: technicalSource.id ?? handoff.technicalSignatureId ?? `snapshot:${handoff.id}`,
+          name: technicalSource.name,
+          title: technicalSource.title ?? '',
+          profession: technicalSource.profession ?? null,
+          professionalCouncil: technicalSource.professionalCouncil ?? null,
+          registrationNumber: technicalSource.registrationNumber ?? null,
+          department: technicalSource.department ?? null,
+          image: await this.assets.resolveSignature(technicalSource.storageKey, {
+            mimeType: technicalSource.mimeType,
+            fileSize: technicalSource.fileSize,
+          }),
+        }]
+      : [];
+    const collected = customerRequired
+      ? {
+          label: 'Assinatura do cliente/responsável',
+          name: customer?.name ?? operation.customerSignerName ?? null,
+          title: customer?.title ?? operation.customerSignerRole ?? null,
+          signedAt: customer?.collectedAt ?? operation.signedAt?.toISOString() ?? null,
+          caption: collectedImage ? 'Assinatura coletada na execução' : 'Assinatura do cliente pendente',
+          image: collectedImage,
+        }
+      : null;
+    const mode = customerRequired ? SignatureMode.HYBRID : SignatureMode.FIXED;
+    return {
+      requiresSignature: true,
+      signatureMode: mode,
+      signatureId: institutional[0]?.id ?? null,
+      fixedSignature: institutional[0]
+        ? { id: institutional[0].id, name: institutional[0].name, title: institutional[0].title, image: institutional[0].image }
+        : null,
+      institutionalSignatures: institutional,
+      collectedSignature: collected,
+      executionSignatures: collected
+        ? [{ role: 'client', label: collected.label, name: collected.name, title: collected.title, signedAt: collected.signedAt, caption: collected.caption, image: collected.image }]
+        : [],
+    };
+  }
+
+  private signatureSnapshot(value: Prisma.JsonValue | null): {
+    id?: string;
+    name: string;
+    title?: string | null;
+    profession?: string | null;
+    professionalCouncil?: string | null;
+    registrationNumber?: string | null;
+    department?: string | null;
+    storageKey: string;
+    mimeType: string;
+    fileSize: number;
+    collectedAt?: string;
+  } | null {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    const item = value as Record<string, Prisma.JsonValue>;
+    if (typeof item.name !== 'string' || typeof item.storageKey !== 'string' || typeof item.mimeType !== 'string' || typeof item.fileSize !== 'number') return null;
+    return {
+      id: typeof item.id === 'string' ? item.id : undefined,
+      name: item.name,
+      title: typeof item.title === 'string' ? item.title : null,
+      profession: typeof item.profession === 'string' ? item.profession : null,
+      professionalCouncil: typeof item.professionalCouncil === 'string' ? item.professionalCouncil : null,
+      registrationNumber: typeof item.registrationNumber === 'string' ? item.registrationNumber : null,
+      department: typeof item.department === 'string' ? item.department : null,
+      storageKey: item.storageKey,
+      mimeType: item.mimeType,
+      fileSize: item.fileSize,
+      collectedAt: typeof item.collectedAt === 'string' ? item.collectedAt : undefined,
     };
   }
 

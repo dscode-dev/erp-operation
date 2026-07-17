@@ -32,12 +32,16 @@ const SIGNATURE_SELECT = {
   id: true,
   name: true,
   title: true,
+  profession: true,
   professionalCouncil: true,
+  registrationNumber: true,
   department: true,
   mimeType: true,
   originalFileName: true,
   fileSize: true,
   active: true,
+  isDefault: true,
+  position: true,
   deletedAt: true,
   createdAt: true,
   updatedAt: true,
@@ -79,7 +83,7 @@ export class SignaturesService {
       this.prisma.signature.findMany({
         where,
         select: SIGNATURE_INTERNAL_SELECT,
-        orderBy: [{ active: 'desc' }, { name: 'asc' }],
+        orderBy: [{ active: 'desc' }, { isDefault: 'desc' }, { position: 'asc' }, { name: 'asc' }],
         skip: (query.page - 1) * query.limit,
         take: query.limit,
       }),
@@ -98,13 +102,21 @@ export class SignaturesService {
     context: SignatureAuditContext,
   ): Promise<SignatureResponse> {
     return this.prisma.$transaction(async (tx) => {
+      const organization = await tx.organization.findFirst({ orderBy: { createdAt: 'asc' }, select: { id: true } });
+      if (!organization) throw new ApplicationException(ERROR_CODES.ORGANIZATION_NOT_FOUND, 'Organization was not found', HttpStatus.NOT_FOUND);
+      if (dto.isDefault) await tx.signature.updateMany({ where: { organizationId: organization.id, isDefault: true }, data: { isDefault: false } });
       const created = await tx.signature.create({
         data: {
+          organizationId: organization.id,
           name: this.clean(dto.name),
           title: this.clean(dto.title),
+          profession: dto.profession ? this.clean(dto.profession) : null,
           professionalCouncil: dto.professionalCouncil ? this.clean(dto.professionalCouncil) : null,
+          registrationNumber: dto.registrationNumber ? this.clean(dto.registrationNumber) : null,
           department: dto.department ? this.clean(dto.department) : null,
           active: dto.active ?? true,
+          isDefault: dto.isDefault ?? false,
+          position: dto.position ?? 0,
         },
         select: SIGNATURE_INTERNAL_SELECT,
       });
@@ -125,14 +137,20 @@ export class SignaturesService {
   ): Promise<SignatureResponse> {
     await this.signatureOrThrow(id, { includeDeleted: false });
     return this.prisma.$transaction(async (tx) => {
+      const current = await tx.signature.findUniqueOrThrow({ where: { id }, select: { organizationId: true } });
+      if (dto.isDefault) await tx.signature.updateMany({ where: { organizationId: current.organizationId, isDefault: true, id: { not: id } }, data: { isDefault: false } });
       const updated = await tx.signature.update({
         where: { id },
         data: {
           ...(dto.name !== undefined ? { name: this.clean(dto.name) } : {}),
           ...(dto.title !== undefined ? { title: this.clean(dto.title) } : {}),
+          ...(dto.profession !== undefined ? { profession: this.clean(dto.profession) || null } : {}),
           ...(dto.professionalCouncil !== undefined ? { professionalCouncil: this.clean(dto.professionalCouncil) || null } : {}),
+          ...(dto.registrationNumber !== undefined ? { registrationNumber: this.clean(dto.registrationNumber) || null } : {}),
           ...(dto.department !== undefined ? { department: this.clean(dto.department) || null } : {}),
           ...(dto.active !== undefined ? { active: dto.active } : {}),
+          ...(dto.isDefault !== undefined ? { isDefault: dto.isDefault } : {}),
+          ...(dto.position !== undefined ? { position: dto.position } : {}),
         },
         select: SIGNATURE_INTERNAL_SELECT,
       });

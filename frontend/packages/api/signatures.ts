@@ -13,9 +13,13 @@ export type ListSignaturesParams = {
 export type SignaturePayload = {
   name: string;
   title: string;
+  profession?: string;
   professionalCouncil?: string;
+  registrationNumber?: string;
   department?: string;
   active?: boolean;
+  isDefault?: boolean;
+  position?: number;
 };
 
 export function listSignatures(params?: ListSignaturesParams): Promise<Paginated<Signature>> {

@@ -1962,3 +1962,16 @@ edição e remoção lógica pelos endpoints já oficiais.
 - Override: enviar apenas `signatureOverrideId`, sem alterar o modelo.
 - Operator: coleta apenas em `COLLECTED`/`HYBRID`; `FIXED` é institucional; `NONE` não tem etapa.
 - OS e documento permanecem nos endpoints oficiais de Operations, Assignments e Document Engine.
+
+## Field Report Handoff 01 — contrato para UI
+
+- Operator: `FieldReportHandoff` está em `/operator/services/:assignmentId`; salva Operation e o
+  handoff oficial, coleta assinatura conforme a matriz e somente envia para revisão.
+- Platform: `DocumentHandoffInbox` está em `/reports`; oferece filtros, revisão completa, evidências,
+  previews reais de assinatura, seleção técnica e `DocumentViewer` após READY.
+- Repositório: `/documentos` usa `editorialStatus` e mostra `v{version} · r{revision}`.
+- Nunca derive autorização no frontend. Operator sem Assignment recebe 403; render/finalização pelo
+  Operator recebem 403 mesmo com chamadas diretas.
+- Não reutilize `signatureMode` para novos handoffs. Os campos legados permanecem apenas para
+  compatibilidade histórica e layout do template.
+- Clientes devem remover qualquer emissão PDF mobile/local; o único caminho é o Document Engine.

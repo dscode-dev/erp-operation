@@ -178,6 +178,30 @@ enum SignatureMode {
   HYBRID
 }
 
+enum DocumentEditorialStatus {
+  DRAFT
+  PENDING
+  READY
+  STALE
+}
+
+enum DocumentHandoffOrigin {
+  OPERATOR
+  PLATFORM
+  SYSTEM
+}
+
+enum DocumentRevisionAction {
+  DRAFT_SAVED
+  SUBMITTED
+  REVIEW_STARTED
+  REVIEW_UPDATED
+  TECHNICAL_SIGNATURE_SELECTED
+  FINALIZED
+  MARKED_STALE
+  RENDERED
+}
+
 enum AssetLifecycleEventType {
   INSTALLATION
   INSPECTION
@@ -388,6 +412,9 @@ enum NotificationType {
   PMOC_OS_GENERATED
   PMOC_OS_GENERATION_FAILED
   PMOC_EXECUTION_PENDING_MANUAL
+  DOCUMENT_SUBMITTED
+  DOCUMENT_READY
+  DOCUMENT_STALE
 }
 
 enum NotificationSeverity {
@@ -403,6 +430,7 @@ enum NotificationEntityType {
   BUDGET
   MAINTENANCE
   PMOC
+  DOCUMENT
 }
 
 model SystemSetting {
@@ -471,6 +499,10 @@ model User {
   pmocPlannedTechnicianFor PmocExecutionRequest[] @relation("PmocPlannedTechnician")
   pmocExecutionRequests    PmocExecutionRequest[] @relation("PmocExecutionRequestActor")
   pmocHistoryEvents        PmocHistory[]          @relation("PmocHistoryActor")
+  documentsCollected      OperationDocument[]    @relation("DocumentCollectedBy")
+  documentsReviewed       OperationDocument[]    @relation("DocumentReviewedBy")
+  documentsFinalized      OperationDocument[]    @relation("DocumentFinalizedBy")
+  documentRevisions       DocumentRevision[]
 
   @@map("users")
 }
@@ -525,6 +557,7 @@ model Organization {
   purchaseOrders      PurchaseOrder[]
   notifications       Notification[]
   technicalCatalogs   TechnicalCatalog[]
+  signatures          Signature[]
 
   @@map("organizations")
 }
@@ -590,22 +623,30 @@ model DocumentTemplate {
 
 model Signature {
   id                  String                      @id @default(uuid()) @db.Uuid
+  organizationId      String                      @map("organization_id") @db.Uuid
   name                String                      @db.VarChar(120)
   title               String                      @db.VarChar(120)
+  profession          String?                     @db.VarChar(120)
   professionalCouncil String?                     @map("professional_council") @db.VarChar(120)
+  registrationNumber  String?                     @map("registration_number") @db.VarChar(80)
   department          String?                     @db.VarChar(120)
   imageStorageKey     String?                     @unique @map("image_storage_key") @db.VarChar(255)
   mimeType            String?                     @map("mime_type") @db.VarChar(100)
   originalFileName    String?                     @map("original_file_name") @db.VarChar(255)
   fileSize            Int?                        @map("file_size")
   active              Boolean                     @default(true)
+  isDefault           Boolean                     @default(false) @map("is_default")
+  position            Int                         @default(0)
   deletedAt           DateTime?                   @map("deleted_at") @db.Timestamptz(3)
   createdAt           DateTime                    @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt           DateTime                    @updatedAt @map("updated_at") @db.Timestamptz(3)
   templates           DocumentTemplate[]
   templateLinks       DocumentTemplateSignature[]
   pmocOverrides       PmocPlan[]
+  organization        Organization                @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  selectedDocuments   OperationDocument[]         @relation("DocumentTechnicalSignature")
 
+  @@index([organizationId, active, position])
   @@index([active, name])
   @@index([deletedAt])
   @@map("signatures")
@@ -1063,6 +1104,20 @@ model OperationDocument {
   type            DocumentTemplateType
   number          String                  @db.VarChar(40)
   status          OperationDocumentStatus @default(DRAFT)
+  editorialStatus DocumentEditorialStatus @default(DRAFT) @map("editorial_status")
+  handoffOrigin   DocumentHandoffOrigin    @default(SYSTEM) @map("handoff_origin")
+  collectedById  String?                  @map("collected_by_id") @db.Uuid
+  submittedAt     DateTime?                @map("submitted_at") @db.Timestamptz(3)
+  reviewedById   String?                  @map("reviewed_by_id") @db.Uuid
+  reviewStartedAt DateTime?               @map("review_started_at") @db.Timestamptz(3)
+  finalizedById  String?                  @map("finalized_by_id") @db.Uuid
+  finalizedAt    DateTime?                @map("finalized_at") @db.Timestamptz(3)
+  technicalSignatureId String?            @map("technical_signature_id") @db.Uuid
+  technicalSignatureSnapshot Json?        @map("technical_signature_snapshot")
+  customerSignatureSnapshot  Json?        @map("customer_signature_snapshot")
+  collectionSnapshot Json?                @map("collection_snapshot")
+  validationIssues Json                   @default("[]") @map("validation_issues")
+  revision        Int                     @default(0)
   storageKey      String?                 @unique @map("storage_key") @db.VarChar(255)
   mimeType        String?                 @map("mime_type") @db.VarChar(100)
   fileSize        Int?                    @map("file_size")
@@ -1073,12 +1128,39 @@ model OperationDocument {
   operation       Operation?              @relation(fields: [operationId], references: [id], onDelete: Cascade)
   budget          Budget?                 @relation(fields: [budgetId], references: [id], onDelete: SetNull)
   lifecycleEvents AssetLifecycleEvent[]
+  collectedBy     User?                   @relation("DocumentCollectedBy", fields: [collectedById], references: [id], onDelete: SetNull)
+  reviewedBy      User?                   @relation("DocumentReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  finalizedBy     User?                   @relation("DocumentFinalizedBy", fields: [finalizedById], references: [id], onDelete: SetNull)
+  technicalSignature Signature?           @relation("DocumentTechnicalSignature", fields: [technicalSignatureId], references: [id], onDelete: SetNull)
+  revisions       DocumentRevision[]
 
   @@unique([operationId, type])
   @@index([budgetId])
   @@index([type, status])
   @@index([renderedAt])
+  @@index([editorialStatus, submittedAt])
+  @@index([handoffOrigin, editorialStatus, updatedAt])
+  @@index([technicalSignatureId])
   @@map("operation_documents")
+}
+
+model DocumentRevision {
+  id            String                 @id @default(uuid()) @db.Uuid
+  documentId    String                 @map("document_id") @db.Uuid
+  revision      Int
+  action        DocumentRevisionAction
+  origin        DocumentHandoffOrigin
+  actorId       String                 @map("actor_id") @db.Uuid
+  changedFields String[]               @default([]) @map("changed_fields")
+  snapshot      Json
+  createdAt     DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  document      OperationDocument      @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  actor         User                   @relation(fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@unique([documentId, revision])
+  @@index([documentId, createdAt])
+  @@index([actorId, createdAt])
+  @@map("document_revisions")
 }
 
 model AssetLifecycleEvent {

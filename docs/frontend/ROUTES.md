@@ -536,3 +536,10 @@ modo novo cria uma Operation DRAFT oficial e segue Preview → Render → Downlo
 - `/pmoc/:id`: cobertura, serviços e programação com labels de negócio.
 - `/operator/services/:id`: todos os equipamentos/tipos; coleta somente quando exigida.
 - `/reports`: preserva o mesmo wizard e a geração oficial da OS.
+
+## Field Report Handoff 01
+
+- `/operator/services/:id`: coleta e submissão dos cinco tipos documentais permitidos ao Operator.
+- `/reports`: caixa de entrada, filtros, revisão e emissão por OWNER/MANAGER.
+- `/documentos`: repositório oficial com estado editorial, versão/revisão e Viewer oficial.
+- Nenhuma rota nova de PDF, preview, PMOC, OS ou assinatura foi criada.

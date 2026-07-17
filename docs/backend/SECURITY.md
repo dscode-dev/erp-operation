@@ -1974,3 +1974,22 @@ The catalog is scoped to the installation Organization in every query. Reads req
 - `NONE`/`FIXED` descartam assinatura coletada na composição. Dados legados não promovem a política.
 - `COLLECTED`/`HYBRID` preservam as validações binárias e de tamanho de Operations.
 - PostgreSQL cobre RBAC, relacionamento cruzado e propagação de dois equipamentos/dois tipos.
+
+## Field Report Handoff 01 — segurança
+
+- Operator é autorizado pelo `Assignment.assignedTo`; não pode consultar coleta alheia, selecionar
+  assinatura técnica, finalizar ou renderizar. OWNER/MANAGER são os únicos revisores/emissores.
+- `RECEIPT` e tipos não previstos são bloqueados no handoff mobile. Restrições financeiras do
+  Document Engine permanecem ativas.
+- Assinaturas de cliente aceitam somente data URL PNG/JPEG, assinatura binária válida e até 2 MiB;
+  o nome físico é UUID e todo acesso ocorre via `DocumentAssetResolver`/StorageProvider.
+- Listagens e detalhes não retornam Base64, `storageKey`, bucket, path ou URL permanente. A prévia do
+  cliente usa resposta binária autenticada, sem cache; a técnica reutiliza endpoint autenticado.
+- A assinatura técnica final é copiada e hasheada em snapshot. Desativar/alterar o cadastro depois
+  da emissão não altera o documento histórico.
+- Constraint parcial garante uma assinatura ativa padrão por organização. Relações com usuários e
+  assinatura usam FKs restritivas/SET NULL conforme preservação histórica.
+- `DocumentRevision` e `AuditLog` são append-only. Alterações após render marcam STALE; o artefato
+  anterior não é promovido como atual.
+- Testes PostgreSQL confirmam RBAC/IDOR, matriz documental, validação binária, rollback e
+  concorrência. Rate limiting global continua cobrindo uploads e ações sensíveis.

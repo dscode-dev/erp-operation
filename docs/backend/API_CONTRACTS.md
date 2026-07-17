@@ -5294,3 +5294,80 @@ inativo, removido ou de outro cliente retorna `400 PMOC_INVALID_RELATIONSHIP`.
 
 O override não altera o Template. Em Preview/Render PMOC, substitui as assinaturas institucionais
 somente em `FIXED`/`HYBRID`; não é renderizado em `NONE`/`COLLECTED`.
+
+## Field Report Handoff 01
+
+Todos os contratos abaixo usam `/api/v1`, envelope padrão e UUID v4. Operator só acessa documentos
+da Operation atribuída a ele; OWNER/MANAGER administram a revisão.
+
+### `GET /documents/handoffs`
+
+OWNER/MANAGER. Query paginada: `page`, `limit`, `search`, `status`, `type`, `origin`, `customerId`,
+`operatorId`, `from`, `to`, `missingCustomerSignature`, `missingTechnicalSignature`,
+`missingEvidence`. Retorna `items[]` com documento, Operation, cliente, operador, quantidades,
+assinaturas sanitizadas, pendências, origem, estado editorial e revisão.
+
+### `POST /documents/handoffs`
+
+```json
+{ "operationId": "uuid", "type": "WORK_ORDER" }
+```
+
+Tipos Operator: `WORK_ORDER`, `TECHNICAL_REPORT`, `TECHNICAL_OPINION`, `BUDGET`, `PMOC`. Cria ou
+atualiza idempotentemente o documento `(operationId,type)` em DRAFT. `RECEIPT` pelo Operator retorna
+`403 DOCUMENT_HANDOFF_NOT_ALLOWED`.
+
+### `GET /documents/:documentId/handoff`
+
+Retorna detalhes da coleta/revisão. Nunca retorna `storageKey`, path, bucket ou Base64.
+
+### `PATCH /documents/:documentId/handoff/customer-signature`
+
+```json
+{
+  "signerName": "Responsável local",
+  "signerRole": "Contratante",
+  "signatureData": "data:image/png;base64,...",
+  "collectedAt": "2026-07-17T15:00:00.000Z",
+  "timezone": "America/Recife"
+}
+```
+
+Aceita PNG/JPEG binariamente válidos, até 2 MiB. Persiste imagem no Storage e snapshot com hash,
+ator, data, timezone e origem. `400 VALIDATION_ERROR` para conteúdo inválido.
+
+### `GET /documents/:documentId/handoff/customer-signature`
+
+OWNER/MANAGER ou Operator atribuído. Resposta binária `image/png|image/jpeg`, `Content-Disposition:
+inline` e `Cache-Control: private, no-store`. Não expõe identificadores internos do Storage.
+
+### `POST /documents/:documentId/handoff/submit`
+
+Operator atribuído ou gestão. Valida matriz de assinatura e, para PMOC, mínimo de quatro evidências.
+Retorna DRAFT submetido. Erros: `409 DOCUMENT_CUSTOMER_SIGNATURE_REQUIRED`,
+`409 PMOC_EVIDENCE_REQUIRED`.
+
+### Revisão
+
+- `POST /documents/:id/handoff/review`: OWNER/MANAGER; muda para PENDING.
+- `PATCH /documents/:id/handoff/technical-signature` com `{ "signatureId": "uuid" }`: exige
+  assinatura ativa com imagem; a escolha vale somente para o documento.
+- `POST /documents/:id/handoff/finalize` com `{ "confirm": true }`: valida pendências, copia a
+  imagem técnica para snapshot imutável e muda para READY.
+- `GET /documents/:id/handoff/history`: histórico crescente de `revision`, `action`, `origin`, ator,
+  campos alterados e timestamp.
+
+Erros comuns: `403 FORBIDDEN`, `404 DOCUMENT_NOT_FOUND`, `409 SIGNATURE_IMAGE_REQUIRED`,
+`409 DOCUMENT_REVIEW_INCOMPLETE` com `details.issues[]`.
+
+### Preview, render e repositório
+
+`GET /documents/:id/preview` permanece compatível. `POST /documents/:id/render` é exclusivo de
+OWNER/MANAGER e, para handoff submetido, requer READY. `GET /documents/:id/download` permanece
+autorizado e binário. `GET /documents` aceita `editorialStatus` e retorna também `handoffOrigin`,
+`submittedAt`, `finalizedAt` e `revision`. Alterações relevantes após emissão marcam STALE.
+
+### Assinaturas técnicas
+
+Create/PATCH de `/signatures` aceitam adicionalmente `profession`, `registrationNumber`,
+`isDefault` e `position`. Existe no máximo uma assinatura ativa padrão por organização.

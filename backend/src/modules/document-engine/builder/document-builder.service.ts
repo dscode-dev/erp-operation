@@ -1015,11 +1015,7 @@ export class DocumentBuilderService {
   private evidenceAndRelatedSections(context: DocumentContext): DocumentSection[] {
     const { operation } = context;
     const sections: DocumentSection[] = [];
-    if (
-      context.configuration.type !== DocumentTemplateType.TECHNICAL_REPORT &&
-      context.configuration.type !== DocumentTemplateType.TECHNICAL_OPINION &&
-      operation.photos.length > 0
-    ) {
+    if (operation.photos.length > 0) {
       sections.push(this.photosSection(context, 'Evidências fotográficas'));
     }
     const relatedDocuments = operation.documents.filter(
@@ -1712,26 +1708,6 @@ export class DocumentBuilderService {
     if (!signature.requiresSignature || signature.signatureMode === SignatureMode.NONE) return null;
 
     const signatures: Extract<DocumentBlueprintComponent, { kind: 'signature' }>['signatures'] = [];
-    for (const institutional of signature.institutionalSignatures) {
-      signatures.push({
-        id: institutional.id,
-        role: 'fixed',
-        label: 'Responsável técnico',
-        name: this.clean(institutional.name),
-        title: this.clean(
-          [institutional.title, institutional.professionalCouncil, institutional.department]
-            .filter(Boolean)
-            .join(' · '),
-        ),
-        signedAt: institutionalSignedAt,
-        caption: 'Responsável técnico',
-        image: {
-          mimeType: institutional.image.mimeType,
-          fileSize: institutional.image.fileSize,
-          contentBase64: institutional.image.contentBase64,
-        },
-      });
-    }
     for (const execution of signature.executionSignatures) {
       signatures.push({
         id: `execution-signature-${execution.role}`,
@@ -1748,6 +1724,32 @@ export class DocumentBuilderService {
               contentBase64: execution.image.contentBase64,
             }
           : null,
+      });
+    }
+    for (const institutional of signature.institutionalSignatures) {
+      signatures.push({
+        id: institutional.id,
+        role: 'fixed',
+        label: 'Responsável técnico',
+        name: this.clean(institutional.name),
+        title: this.clean(
+          [
+            institutional.profession,
+            institutional.title,
+            institutional.professionalCouncil,
+            institutional.registrationNumber,
+            institutional.department,
+          ]
+            .filter(Boolean)
+            .join(' · '),
+        ),
+        signedAt: institutionalSignedAt,
+        caption: 'Responsável técnico',
+        image: {
+          mimeType: institutional.image.mimeType,
+          fileSize: institutional.image.fileSize,
+          contentBase64: institutional.image.contentBase64,
+        },
       });
     }
 

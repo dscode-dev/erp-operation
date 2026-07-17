@@ -1,5 +1,5 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import { DocumentTemplateType, OperationType, Prisma, Role } from '@prisma/client';
+import { DocumentHandoffOrigin, DocumentRevisionAction, DocumentTemplateType, OperationType, Prisma, Role } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import {
   STORAGE_PROVIDER_TOKEN,
@@ -461,6 +461,46 @@ export class OperationsService {
             : {}),
         },
       });
+      if (Object.keys(dto).some((field) => field !== 'status' || dto.status !== undefined)) {
+        await tx.operationDocument.updateMany({
+          where: { operationId: id, submittedAt: { not: null }, renderedAt: null },
+          data: { editorialStatus: 'PENDING' },
+        });
+        await tx.operationDocument.updateMany({
+          where: { operationId: id, submittedAt: { not: null }, renderedAt: { not: null } },
+          data: { editorialStatus: 'STALE' },
+        });
+        const affectedDocuments = await tx.operationDocument.findMany({
+          where: { operationId: id, submittedAt: { not: null } },
+          select: { id: true, renderedAt: true },
+        });
+        for (const document of affectedDocuments) {
+          const revisioned = await tx.operationDocument.update({
+            where: { id: document.id },
+            data: { revision: { increment: 1 } },
+            select: { revision: true, editorialStatus: true },
+          });
+          await tx.documentRevision.create({
+            data: {
+              documentId: document.id,
+              revision: revisioned.revision,
+              action: document.renderedAt
+                ? DocumentRevisionAction.MARKED_STALE
+                : DocumentRevisionAction.REVIEW_UPDATED,
+              origin:
+                actor.role === Role.OPERATOR
+                  ? DocumentHandoffOrigin.OPERATOR
+                  : DocumentHandoffOrigin.PLATFORM,
+              actorId: actor.id,
+              changedFields: Object.keys(dto),
+              snapshot: {
+                editorialStatus: revisioned.editorialStatus,
+                operationId: id,
+              },
+            },
+          });
+        }
+      }
       if (dto.maintenanceChecklist !== undefined) {
         await tx.operationMaintenanceChecklistItem.deleteMany({ where: { operationId: id } });
         if (dto.maintenanceChecklist.length > 0) {

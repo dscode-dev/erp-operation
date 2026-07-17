@@ -1009,3 +1009,18 @@ PmocPlan(equipmentIds, serviceTypes, signatureOverrideId)
 
 O frontend apresenta; o backend valida e propaga. O `DocumentContext` é a única camada que resolve
 assinaturas e o Operator consulta a configuração oficial para decidir a UX de coleta.
+
+## Field Report Handoff 01
+
+```text
+Operator / Operation atribuída
+  → conteúdo + equipamentos + evidências + assinatura do cliente
+  → OperationDocument(DRAFT, origin=OPERATOR) + DocumentRevision
+  → Platform Inbox → revisão(PENDING) → assinatura técnica → READY
+  → DocumentContext(snapshot cliente + snapshot técnico)
+  → Blueprint único → Preview → Render → PDF → /documentos
+```
+
+O estado editorial é independente do artefato. Edições posteriores produzem STALE e nova revisão,
+sem apagar PDF nem histórico. Componentes de UI não consultam Storage, não calculam políticas de
+assinatura e não geram documentos localmente.

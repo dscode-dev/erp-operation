@@ -2866,3 +2866,25 @@ Status: implementado e validado em PostgreSQL/Docker.
   execução; `HYBRID` combina institucional e execução.
 - Migration aditiva `20260716210000_pmoc_ux01_service_types`, com backfill pelos tipos principais.
 - Nenhum endpoint, renderer, wizard, scheduler, documento ou domínio paralelo foi criado.
+
+## FIELD REPORT HANDOFF 01 — 2026-07-17
+
+- `OperationDocument` passou a representar também o estado editorial `DRAFT | PENDING | READY |
+  STALE`, sem confundi-lo com o estado do artefato PDF. `DocumentRevision` preserva alterações em
+  histórico append-only.
+- O fluxo oficial é `Operation → Assignment → MaintenanceExecution → DocumentContext → Builder →
+  Blueprint → Renderer → PdfEngine → Storage → /documentos`; não foi criado pipeline paralelo.
+- Operator prepara `WORK_ORDER`, `TECHNICAL_REPORT`, `TECHNICAL_OPINION`, `BUDGET` e `PMOC` somente
+  quando possui o Assignment. `RECEIPT` permanece fora da coleta mobile. Render/finalização são
+  exclusivos de OWNER/MANAGER.
+- A assinatura do cliente é obrigatória para OS, visita, orçamento e PMOC; Laudo e Recibo recebem
+  apenas assinatura técnica. Imagens ficam no Storage e respostas comuns expõem só metadados.
+- Assinaturas técnicas agora pertencem à organização, aceitam profissão/registro/ordem/default e
+  são copiadas para snapshot imutável ao finalizar. O legado `SignatureMode` continua disponível
+  para documentos históricos; o novo handoff usa a matriz oficial por tipo.
+- Inbox de revisão, evidências, assinaturas reais, complementação técnica, finalização e Viewer
+  oficial foram integrados à Central de Relatórios. `/documentos` exibe estado editorial e revisão.
+- Migration aditiva: `20260717150000_field_report_handoff_01`; backfill marca documentos já
+  renderizados como READY e associa assinaturas existentes à organização única da instalação.
+- Runtime certificado para OS, Visita, Laudo, Orçamento, PMOC e compatibilidade de Recibo. PMOC
+  preservou 2 equipamentos, 4 evidências, duas assinaturas e a cadeia oficial.

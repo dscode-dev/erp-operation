@@ -1037,3 +1037,17 @@ Status: concluído.
   `signatureOverrideId` sem modificar o Template.
 - O Operator consulta a mesma política e não exibe coleta em `NONE`/`FIXED`.
 - Platform, Agenda, Relatórios e Operator usam mensagens orientadas ao negócio.
+
+## FIELD REPORT HANDOFF 01 — 2026-07-17
+
+- `/operator/services/:id` ganhou coleta de relatório orientada a campo para OS, Visita, Laudo,
+  Orçamento e PMOC, com múltiplos equipamentos, conteúdo, evidências, assinatura e envio. Não há
+  Render/Download no Operator.
+- `/reports` ganhou a caixa “Relatórios recebidos”, revisão pré-preenchida, conteúdo editável,
+  galeria de evidências, assinatura do cliente real, seletor/prévia da assinatura técnica e Viewer
+  oficial após READY.
+- O wizard manual da Platform persiste no mesmo handoff, respeita a matriz de assinaturas e permite
+  salvar PENDING ou finalizar READY sem remover fluxos anteriores.
+- `/documentos` usa estado editorial e exibe revisão junto da versão.
+- Runtime visual aprovado em Platform, Operator e repositório; screenshots registrados no relatório
+  de release.
