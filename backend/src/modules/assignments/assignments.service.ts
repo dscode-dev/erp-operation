@@ -8,6 +8,7 @@ import {
 } from '@prisma/client';
 import { ASSIGNMENT_AUDIT_ACTIONS, ASSIGNMENT_RESOURCE } from '../../shared/constants/assignments.constants';
 import { ERROR_CODES } from '../../shared/constants/error-codes.constants';
+import { PMOC_MIN_PROCEDURE_IMAGES } from '../../shared/constants/pmoc.constants';
 import { ApplicationException } from '../../shared/exceptions/application.exception';
 import type { AuthenticatedUser } from '../../shared/types/authenticated-user.type';
 import { buildPaginatedResponse } from '../../shared/types/pagination.types';
@@ -275,6 +276,33 @@ export class AssignmentsService {
     actor: AuthenticatedUser,
     context: AssignmentAuditContext,
   ): Promise<AssignmentPayload> {
+    const assignment = await this.prisma.assignment.findUnique({
+      where: { id },
+      select: {
+        operation: {
+          select: {
+            _count: { select: { photos: true } },
+            maintenanceExecution: {
+              select: { plan: { select: { pmocPlan: { select: { id: true } } } } },
+            },
+          },
+        },
+      },
+    });
+    if (
+      assignment?.operation.maintenanceExecution?.plan.pmocPlan &&
+      assignment.operation._count.photos < PMOC_MIN_PROCEDURE_IMAGES
+    ) {
+      throw new ApplicationException(
+        ERROR_CODES.PMOC_EVIDENCE_REQUIRED,
+        `Registre pelo menos ${PMOC_MIN_PROCEDURE_IMAGES} imagens do procedimento antes de concluir`,
+        HttpStatus.CONFLICT,
+        {
+          required: PMOC_MIN_PROCEDURE_IMAGES,
+          current: assignment.operation._count.photos,
+        },
+      );
+    }
     return this.transition(id, actor, context, {
       event: AssignmentEventType.COMPLETED,
       action: ASSIGNMENT_AUDIT_ACTIONS.ASSIGNMENT_COMPLETED,

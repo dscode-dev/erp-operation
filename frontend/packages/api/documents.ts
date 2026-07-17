@@ -57,7 +57,7 @@ export function renderDocument(documentId: string): Promise<DocumentRenderResult
 }
 
 export function downloadDocument(documentId: string, opts?: { signal?: AbortSignal }): Promise<DocumentDownloadResult> {
-  return api.get<DocumentDownloadResult>(`/documents/${documentId}/download`, opts);
+  return api.blob(`/documents/${documentId}/download`, opts);
 }
 
 export function exportDocumentsPdf(params?: {

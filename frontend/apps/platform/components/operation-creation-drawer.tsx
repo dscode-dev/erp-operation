@@ -3,9 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Check, ChevronLeft, ChevronRight } from "lucide-react";
 import { Drawer } from "@erp/ui/drawer";
+import { MultiSelect } from "@erp/ui/multi-select";
 import {
   ApiClientError,
+  equipmentsApi,
   operationApi,
+  useQuery,
   type CreateOperationPayload,
   type OperationDetail,
   type OperationType,
@@ -14,7 +17,6 @@ import {
   CustomerAddressSelect,
   CustomerSelect,
   DateTimePicker,
-  EquipmentSelect,
   Field,
   ServiceTypeSelect,
   UserSelect,
@@ -85,6 +87,7 @@ export function OperationCreationDrawer({
   const [customerId, setCustomerId] = useState("");
   const [addressId, setAddressId] = useState("");
   const [equipmentId, setEquipmentId] = useState("");
+  const [equipmentIds, setEquipmentIds] = useState<string[]>([]);
   const [operatorId, setOperatorId] = useState("");
   const [type, setType] = useState<OperationType>("PREVENTIVA");
   const [date, setDate] = useState("");
@@ -97,13 +100,23 @@ export function OperationCreationDrawer({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<OperationDetail | null>(null);
+  const equipments = useQuery(
+    (signal) => customerId
+      ? equipmentsApi.listEquipments({ customerId, limit: 100, signal })
+      : Promise.resolve(null),
+    [customerId],
+  );
 
   useEffect(() => {
     if (!open) return;
     setStep(0);
     setCustomerId(initialValues?.customerId ?? "");
     setAddressId(initialValues?.addressId ?? "");
-    setEquipmentId(initialValues?.equipmentId ?? "");
+    setEquipmentId(initialValues?.equipmentId ?? initialValues?.inspectedEquipments?.[0]?.equipmentId ?? "");
+    setEquipmentIds(
+      initialValues?.inspectedEquipments?.map((item) => item.equipmentId) ??
+        (initialValues?.equipmentId ? [initialValues.equipmentId] : []),
+    );
     setOperatorId(initialValues?.operatorId ?? "");
     setType(initialValues?.type ?? "PREVENTIVA");
     const schedule = initialValues?.scheduledFor ? localDateTime(initialValues.scheduledFor) : null;
@@ -147,6 +160,16 @@ export function OperationCreationDrawer({
         customerId,
         addressId: addressId || null,
         equipmentId: equipmentId || null,
+        inspectedEquipments: equipmentIds.map((id) => {
+          const existing = initialValues?.inspectedEquipments?.find((item) => item.equipmentId === id);
+          const equipment = equipments.data?.items.find((item) => item.id === id);
+          return {
+            equipmentId: id,
+            sector: existing?.sector ?? equipment?.name ?? "Equipamento selecionado",
+            systemType: existing?.systemType ?? null,
+            currentSituation: existing?.currentSituation ?? null,
+          };
+        }),
         type,
         status: initialValues?.status ?? (mode === "schedule" ? "DRAFT" : "IN_PROGRESS"),
         scheduledFor,
@@ -219,14 +242,25 @@ export function OperationCreationDrawer({
             <Stepper step={step} />
             {step === 0 && (
               <div className="space-y-3">
-                <CustomerSelect value={customerId} onChange={(id) => { setCustomerId(id); setAddressId(""); setEquipmentId(""); }} />
+                <CustomerSelect value={customerId} onChange={(id) => { setCustomerId(id); setAddressId(""); setEquipmentId(""); setEquipmentIds([]); }} />
                 <CustomerAddressSelect customerId={customerId} value={addressId} onChange={setAddressId} />
               </div>
             )}
             {step === 1 && (
               <div className="space-y-3">
-                <EquipmentSelect customerId={customerId} value={equipmentId} onChange={setEquipmentId} />
-                <p className="text-caption">Vincular o equipamento mantém o histórico técnico e os documentos do atendimento organizados.</p>
+                <MultiSelect
+                  label="Equipamentos da Ordem de Serviço"
+                  value={equipmentIds}
+                  onChange={(ids) => { setEquipmentIds(ids); setEquipmentId(ids[0] ?? ""); }}
+                  options={(equipments.data?.items ?? []).map((equipment) => ({
+                    value: equipment.id,
+                    label: equipment.name,
+                    description: equipment.tag ?? equipment.type,
+                  }))}
+                  placeholder={customerId ? "Selecione um ou mais equipamentos" : "Selecione primeiro o cliente"}
+                  emptyMessage="Nenhum equipamento ativo disponível para este cliente."
+                />
+                <p className="text-caption">Todos os equipamentos selecionados serão preservados na OS, no Operator e no documento. O primeiro permanece como equipamento principal para compatibilidade.</p>
               </div>
             )}
             {step === 2 && (
@@ -262,6 +296,7 @@ export function OperationCreationDrawer({
                   <div><strong>Tipo:</strong> {type}</div>
                   <div><strong>Agenda:</strong> {scheduledFor ? new Date(scheduledFor).toLocaleString("pt-BR") : "não definida"}</div>
                   <div><strong>Checklist:</strong> {checklist.length} item(ns)</div>
+                  <div><strong>Equipamentos:</strong> {equipmentIds.length}</div>
                 </div>
               </div>
             )}

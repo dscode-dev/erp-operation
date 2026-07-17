@@ -8,6 +8,7 @@ const env = Object.fromEntries(rootEnv.split(/\r?\n/).filter((line) => /^[A-Z0-9
 process.env.DATABASE_URL = `postgresql://${encodeURIComponent(env.POSTGRES_USER)}:${encodeURIComponent(env.POSTGRES_PASSWORD)}@127.0.0.1:5432/${env.POSTGRES_DB}?schema=public`;
 const prisma = new PrismaClient();
 const apiBase = 'http://127.0.0.1:4000/api/v1';
+const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=';
 
 async function api(path, init = {}) {
   const response = await fetch(`${apiBase}${path}`, { ...init, headers: { 'content-type': 'application/json', ...(init.headers ?? {}) } });
@@ -80,12 +81,14 @@ try {
   const assignment = assignments.items[0];
   await api(`/assignments/${assignment.id}/accept`, { method: 'PATCH', headers, body: '{}' });
   await api(`/assignments/${assignment.id}/start`, { method: 'PATCH', headers, body: '{}' });
+  await api(`/operations/${operationId}`, { method: 'PATCH', headers, body: JSON.stringify({ photos: Array.from({ length: 4 }, (_, index) => ({ dataUrl: `data:image/png;base64,${png}`, caption: `Evidência PMOC UX-02 ${index + 1}` })) }) });
   await api(`/assignments/${assignment.id}/complete`, { method: 'PATCH', headers, body: JSON.stringify({ notes: 'Execução PMOC UX-02 concluída.' }) });
   const preview = await api(`/documents/operations/${operationId}/PMOC/preview`, { headers });
   if (!preview.sections?.length) throw new Error('PMOC preview is empty.');
   const rendered = await api(`/documents/operations/${operationId}/PMOC/render`, { method: 'POST', headers, body: '{}' });
-  const download = await api(`/documents/${rendered.id}/download`, { headers });
-  const pdf = Buffer.from(download.contentBase64, 'base64');
+  const download = await fetch(`${apiBase}/documents/${rendered.id}/download`, { headers });
+  if (!download.ok) throw new Error(`Document download failed with ${download.status}.`);
+  const pdf = Buffer.from(await download.arrayBuffer());
   if (pdf.subarray(0, 5).toString('ascii') !== '%PDF-') throw new Error('PMOC PDF is invalid.');
   const repository = await api(`/documents?page=1&limit=100&type=PMOC&search=${encodeURIComponent(rendered.number)}`, { headers });
   if (!repository.items.some((item) => item.id === rendered.id)) throw new Error('PMOC document is missing from repository.');

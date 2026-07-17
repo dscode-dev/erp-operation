@@ -6,6 +6,7 @@ import {
   type StorageProviderContract,
 } from '../../infra/storage/storage-provider.type';
 import { ERROR_CODES } from '../../shared/constants/error-codes.constants';
+import { PMOC_MIN_PROCEDURE_IMAGES } from '../../shared/constants/pmoc.constants';
 import {
   MAX_OPERATION_PHOTOS,
   MAX_OPERATION_PHOTO_SIZE_BYTES,
@@ -352,6 +353,8 @@ export class OperationsService {
         serviceTypes: true,
         referenceMonth: true,
         referenceYear: true,
+        maintenanceExecution: { select: { plan: { select: { pmocPlan: { select: { id: true } } } } } },
+        _count: { select: { photos: true } },
       },
     });
     if (!existing)
@@ -381,6 +384,21 @@ export class OperationsService {
       );
     }
     const signatureData = this.normalizeSignatureData(dto.signatureData);
+    if (
+      dto.status === 'COMPLETED' &&
+      existing.maintenanceExecution?.plan.pmocPlan &&
+      existing._count.photos + photos.length < PMOC_MIN_PROCEDURE_IMAGES
+    ) {
+      throw new ApplicationException(
+        ERROR_CODES.PMOC_EVIDENCE_REQUIRED,
+        `A execução PMOC precisa de pelo menos ${PMOC_MIN_PROCEDURE_IMAGES} imagens antes da conclusão`,
+        HttpStatus.CONFLICT,
+        {
+          required: PMOC_MIN_PROCEDURE_IMAGES,
+          current: existing._count.photos + photos.length,
+        },
+      );
+    }
     await this.prisma.$transaction(async (tx) => {
       await tx.operation.update({
         where: { id },
@@ -638,12 +656,33 @@ export class OperationsService {
         'Photo is empty or exceeds the 5 MiB limit',
         HttpStatus.BAD_REQUEST,
       );
+    if (!this.isValidImageBinary(buffer, mimeType))
+      throw new ApplicationException(
+        ERROR_CODES.OPERATION_PHOTO_INVALID,
+        'Photo binary does not match its declared MIME type',
+        HttpStatus.BAD_REQUEST,
+      );
     return {
       buffer,
       mimeType,
       ext: mimeType === 'image/png' ? 'png' : 'jpg',
       caption: input.caption ?? null,
     };
+  }
+
+  private isValidImageBinary(buffer: Buffer, mimeType: string): boolean {
+    if (mimeType === 'image/png') {
+      return buffer.length >= 8 && buffer
+        .subarray(0, 8)
+        .equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    }
+    return (
+      buffer.length >= 4 &&
+      buffer[0] === 0xff &&
+      buffer[1] === 0xd8 &&
+      buffer[buffer.length - 2] === 0xff &&
+      buffer[buffer.length - 1] === 0xd9
+    );
   }
 
   private normalizeSignatureData(value?: string): string | null {

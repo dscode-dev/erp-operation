@@ -1,5 +1,20 @@
 # Security
 
+## PMOC UX-02.1 — upload, documento e RBAC
+
+- Evidências usam allowlist PNG/JPEG, limite de 5 MiB, validação da assinatura binária e chave UUID
+  gerada pelo Storage oficial. Nome original e path nunca controlam a chave persistida.
+- Quatro fotos são uma precondição server-side para concluir Assignment/Operation e renderizar PMOC;
+  o frontend não é fronteira de segurança. O preenchimento parcial não é bloqueado.
+- A política documental pública remove `imageStorageKey`, MIME/tamanho internos e qualquer binário.
+  OPERATOR lê somente o tipo PMOC necessário à execução; listagem e demais tipos permanecem negados.
+- Download de PDF é streaming binário autenticado pelo controller e resolvido por
+  `DocumentAssetResolver`; Base64 deixou de fazer parte do contrato de download.
+- Stale detection compara fingerprints antes de ler o PDF. Assinatura posterior invalida o render
+  anterior e exige novo render, evitando entrega silenciosa de documento desatualizado.
+- Imagens em Preview são assets resolvidos e autorizados do Blueprint efêmero; chaves de Storage não
+  são serializadas. Logs e respostas de configuração também não expõem paths ou tokens.
+
 ## PMOC UX-02 — controles de integridade
 
 - `scopeCatalogIds` valida UUID, unicidade e limite de 50; só aceita `PLAN_SCOPE` ativo, não

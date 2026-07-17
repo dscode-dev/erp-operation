@@ -108,6 +108,20 @@ export class DocumentConfigurationService {
     return Promise.all(types.map((type) => this.getConfigurationForType(type)));
   }
 
+  async listPublicConfigurations(): Promise<unknown[]> {
+    return (await this.listConfigurations()).map((configuration) =>
+      this.publicConfiguration(configuration),
+    );
+  }
+
+  async getPublicConfigurationForType(type: DocumentTemplateType): Promise<unknown> {
+    return this.publicConfiguration(await this.getConfigurationForType(type));
+  }
+
+  async getPublicConfigurationByTemplate(templateId: string): Promise<unknown> {
+    return this.publicConfiguration(await this.getConfigurationByTemplate(templateId));
+  }
+
   async getConfigurationForType(type: DocumentTemplateType): Promise<DocumentConfiguration> {
     const [organization, settings, templates] = await Promise.all([
       this.prisma.organization.findFirst({
@@ -155,5 +169,46 @@ export class DocumentConfigurationService {
       );
     }
     return this.getConfigurationForType(template.type);
+  }
+
+  private publicConfiguration(configuration: DocumentConfiguration): Record<string, unknown> {
+    const sanitizeTemplate = (template: DocumentConfigurationTemplate): Record<string, unknown> => ({
+      ...template,
+      signature: template.signature ? this.publicSignature(template.signature) : null,
+      institutionalSignatures: template.institutionalSignatures.map((link) => ({
+        position: link.position,
+        signature: this.publicSignature(link.signature),
+      })),
+    });
+    return {
+      ...configuration,
+      defaultTemplate: configuration.defaultTemplate
+        ? sanitizeTemplate(configuration.defaultTemplate)
+        : null,
+      templates: configuration.templates.map(sanitizeTemplate),
+    };
+  }
+
+  private publicSignature(signature: {
+    id: string;
+    name: string;
+    title: string;
+    professionalCouncil: string | null;
+    department: string | null;
+    mimeType: string | null;
+    fileSize: number | null;
+    active: boolean;
+    deletedAt?: Date | null;
+  }): Record<string, unknown> {
+    return {
+      id: signature.id,
+      name: signature.name,
+      title: signature.title,
+      professionalCouncil: signature.professionalCouncil,
+      department: signature.department,
+      active: signature.active,
+      hasImage: Boolean(signature.mimeType && signature.fileSize),
+      ...(signature.deletedAt !== undefined ? { deletedAt: signature.deletedAt } : {}),
+    };
   }
 }

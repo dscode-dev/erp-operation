@@ -1,10 +1,11 @@
-import { Controller, Get, Param, ParseEnumPipe, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Get, HttpStatus, Param, ParseEnumPipe, ParseUUIDPipe } from '@nestjs/common';
 import { DocumentTemplateType, Role } from '@prisma/client';
+import { ERROR_CODES } from '../../../shared/constants/error-codes.constants';
+import { CurrentUser } from '../../../shared/decorators/current-user.decorator';
 import { Roles } from '../../../shared/decorators/roles.decorator';
-import {
-  DocumentConfigurationService,
-  type DocumentConfiguration,
-} from './document-configuration.service';
+import { ApplicationException } from '../../../shared/exceptions/application.exception';
+import type { AuthenticatedUser } from '../../../shared/types/authenticated-user.type';
+import { DocumentConfigurationService } from './document-configuration.service';
 
 @Controller('documents/configuration')
 export class DocumentConfigurationController {
@@ -12,23 +13,31 @@ export class DocumentConfigurationController {
 
   @Roles(Role.OWNER, Role.MANAGER, Role.VIEWER)
   @Get()
-  list(): Promise<DocumentConfiguration[]> {
-    return this.configuration.listConfigurations();
+  list(): Promise<unknown[]> {
+    return this.configuration.listPublicConfigurations();
   }
 
-  @Roles(Role.OWNER, Role.MANAGER, Role.VIEWER)
+  @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR, Role.VIEWER)
   @Get('types/:type')
   getByType(
     @Param('type', new ParseEnumPipe(DocumentTemplateType)) type: DocumentTemplateType,
-  ): Promise<DocumentConfiguration> {
-    return this.configuration.getConfigurationForType(type);
+    @CurrentUser() actor: AuthenticatedUser,
+  ): Promise<unknown> {
+    if (actor.role === Role.OPERATOR && type !== DocumentTemplateType.PMOC) {
+      throw new ApplicationException(
+        ERROR_CODES.FORBIDDEN,
+        'Operators can only read the PMOC execution signature policy',
+        HttpStatus.FORBIDDEN,
+      );
+    }
+    return this.configuration.getPublicConfigurationForType(type);
   }
 
   @Roles(Role.OWNER, Role.MANAGER, Role.VIEWER)
   @Get('templates/:templateId')
   getByTemplate(
     @Param('templateId', new ParseUUIDPipe({ version: '4' })) templateId: string,
-  ): Promise<DocumentConfiguration> {
-    return this.configuration.getConfigurationByTemplate(templateId);
+  ): Promise<unknown> {
+    return this.configuration.getPublicConfigurationByTemplate(templateId);
   }
 }

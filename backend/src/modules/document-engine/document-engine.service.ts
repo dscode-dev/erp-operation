@@ -9,6 +9,7 @@ import {
   FINANCIAL_DOCUMENT_TYPES,
 } from '../../shared/constants/document-engine.constants';
 import { ERROR_CODES } from '../../shared/constants/error-codes.constants';
+import { PMOC_MIN_PROCEDURE_IMAGES } from '../../shared/constants/pmoc.constants';
 import {
   formatDocumentNumber,
   OPERATION_DOCUMENT_PREFIX,
@@ -31,6 +32,12 @@ export interface DocumentAuditContext {
   requestId: string;
   ip: string | null;
   userAgent: string | null;
+}
+
+export interface DocumentDownload {
+  content: Buffer;
+  filename: string;
+  mimeType: string;
 }
 
 type DocumentRequest =
@@ -273,6 +280,7 @@ export class DocumentEngineService {
   ): Promise<unknown> {
     const document = await this.documentOrThrow(documentId);
     this.assertTypeAccess(document.type, actor);
+    await this.assertPmocEmissionReady(document.operationId, document.type);
     try {
       if (!document.budgetId && !document.operationId) {
         throw new ApplicationException(
@@ -378,7 +386,7 @@ export class DocumentEngineService {
     documentId: string,
     actor: AuthenticatedUser,
     context: DocumentAuditContext,
-  ): Promise<unknown> {
+  ): Promise<DocumentDownload> {
     const document = await this.documentOrThrow(documentId);
     this.assertTypeAccess(document.type, actor);
     if (!document.storageKey || !document.mimeType || !document.fileSize) {
@@ -426,8 +434,9 @@ export class DocumentEngineService {
       },
     );
     return {
-      ...this.documentPayload(document),
-      contentBase64: stored.content.toString('base64'),
+      content: stored.content,
+      filename: `${document.number.replace(/[^A-Za-z0-9._-]+/g, '-')}.pdf`,
+      mimeType: document.mimeType,
     };
   }
 
@@ -435,7 +444,7 @@ export class DocumentEngineService {
     budgetId: string,
     actor: AuthenticatedUser,
     context: DocumentAuditContext,
-  ): Promise<unknown> {
+  ): Promise<DocumentDownload> {
     this.assertTypeAccess(DocumentTemplateType.BUDGET, actor);
     const budget = await this.budgetOrThrow(budgetId);
     this.assertBudgetRenderable(budget.status);
@@ -458,6 +467,37 @@ export class DocumentEngineService {
         ERROR_CODES.DOCUMENT_FORBIDDEN_TYPE,
         'Only OWNER can access financial document types',
         HttpStatus.FORBIDDEN,
+      );
+    }
+  }
+
+  private async assertPmocEmissionReady(
+    operationId: string | null,
+    type: DocumentTemplateType,
+  ): Promise<void> {
+    if (type !== DocumentTemplateType.PMOC || !operationId) return;
+    const source = await this.prisma.operation.findUnique({
+      where: { id: operationId },
+      select: {
+        _count: { select: { photos: true } },
+        maintenanceExecution: {
+          select: { plan: { select: { pmocPlan: { select: { id: true } } } } },
+        },
+      },
+    });
+    if (!source?.maintenanceExecution?.plan.pmocPlan) {
+      throw new ApplicationException(
+        ERROR_CODES.DOCUMENT_RENDER_FAILED,
+        'O documento PMOC exige uma execução vinculada a um plano PMOC',
+        HttpStatus.CONFLICT,
+      );
+    }
+    if (source._count.photos < PMOC_MIN_PROCEDURE_IMAGES) {
+      throw new ApplicationException(
+        ERROR_CODES.PMOC_EVIDENCE_REQUIRED,
+        `Registre pelo menos ${PMOC_MIN_PROCEDURE_IMAGES} imagens do procedimento antes de gerar o PDF final`,
+        HttpStatus.CONFLICT,
+        { required: PMOC_MIN_PROCEDURE_IMAGES, current: source._count.photos },
       );
     }
   }

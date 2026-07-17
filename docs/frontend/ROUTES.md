@@ -1,5 +1,14 @@
 # ROUTES — Frontend
 
+## PMOC UX-02.1
+
+- `/pmoc/:id`: aba Execuções exibe assinatura/evidências e abre o drawer oficial de documento PMOC.
+- `/pmoc`: Wizard consulta a política real e mantém override restrito ao plano.
+- `/operacoes`: drawer oficial permite registrar evidências e assinatura da execução PMOC.
+- `/operator/services/:assignmentId`: exibe todos os equipamentos, progresso mínimo de fotos e
+  coleta conforme Template; conclusão permanece autorizada pelo backend.
+- `/documentos`: recebe automaticamente o PMOC renderizado pelo Document Engine.
+
 ## PMOC UX-02
 
 - `/pmoc`: abre o Wizard profissional de criação.

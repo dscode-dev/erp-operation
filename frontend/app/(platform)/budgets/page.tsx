@@ -718,13 +718,10 @@ function money(value: string | number): string {
 }
 
 function downloadDocumentFile(file: DocumentDownloadResult) {
-  const binary = atob(file.contentBase64);
-  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
-  const blob = new Blob([bytes], { type: file.mimeType ?? "application/pdf" });
-  const url = URL.createObjectURL(blob);
+  const url = URL.createObjectURL(file.blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = `${file.number}.pdf`;
+  anchor.download = file.filename ?? "orcamento.pdf";
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();

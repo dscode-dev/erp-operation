@@ -25,8 +25,9 @@ const results = [];
 for (const type of types) {
   const preview = await request(`/documents/operations/${operation.id}/${type}/preview`, { headers });
   const rendered = await request(`/documents/operations/${operation.id}/${type}/render`, { method: 'POST', headers, body: '{}' });
-  const download = await request(`/documents/${rendered.id}/download`, { headers });
-  const pdf = Buffer.from(download.contentBase64, 'base64');
+  const download = await fetch(`${apiBase}/documents/${rendered.id}/download`, { headers });
+  if (!download.ok) throw new Error(`Document download failed with ${download.status}.`);
+  const pdf = Buffer.from(await download.arrayBuffer());
   results.push({ type, documentId: rendered.id, sectionIds: preview.sections.map((section) => section.id), pdfHeader: pdf.subarray(0, 5).toString('ascii'), pdfBytes: pdf.length });
 }
 

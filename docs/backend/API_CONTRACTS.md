@@ -1,5 +1,54 @@
 # API Contracts
 
+## PMOC UX-02.1 — evidências, política e PDF binário
+
+### `GET /api/v1/documents/configuration/types/PMOC`
+
+Roles: `OWNER`, `MANAGER`, `VIEWER` e `OPERATOR`. Para OPERATOR, somente `PMOC` é permitido;
+qualquer outro tipo retorna `403 FORBIDDEN`. A resposta mantém o envelope padrão e expõe somente
+metadados públicos (`id`, `name`, `title`, `professionalCouncil`, `department`, `active`,
+`hasImage`). `imageStorageKey`, caminhos e binários não fazem parte dessa projeção.
+
+### Evidências da execução PMOC
+
+`PATCH /api/v1/operations/:id` continua aceitando `photos[]` com `dataUrl` PNG/JPEG e `caption`
+opcional. Cada arquivo deve ter no máximo 5 MiB e possuir assinatura binária compatível. O endpoint
+pode salvar menos de quatro fotos durante o preenchimento parcial.
+
+As seguintes ações exigem pelo menos quatro fotos persistidas quando a Operation pertence a PMOC:
+
+- `PATCH /api/v1/assignments/:id/complete`;
+- `PATCH /api/v1/operations/:id` com `status: "COMPLETED"`;
+- `POST /api/v1/documents/operations/:operationId/PMOC/render`;
+- `POST /api/v1/documents/:documentId/render` para documento PMOC.
+
+Falha:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "PMOC_EVIDENCE_REQUIRED",
+    "message": "Registre pelo menos 4 imagens do procedimento antes de concluir",
+    "details": { "required": 4, "current": 0 }
+  }
+}
+```
+
+### `GET /api/v1/documents/:documentId/download`
+
+### `GET /api/v1/budgets/:id/download`
+
+Resposta de sucesso é binária, sem envelope JSON:
+
+- `Content-Type: application/pdf`;
+- `Content-Disposition: attachment; filename="<numero>.pdf"`;
+- `Content-Length` definido;
+- corpo: bytes do PDF.
+
+Erros continuam no envelope oficial (`404 DOCUMENT_NOT_FOUND`, `409 DOCUMENT_DOWNLOAD_NOT_READY`,
+`409 DOCUMENT_STALE`, `401/403`). O download passa pelo Document Engine e nunca expõe Storage.
+
 ## PMOC UX-02 — nome e escopo estruturado
 
 ### `GET /api/v1/pmoc/name-suggestion?customerId=:uuid`

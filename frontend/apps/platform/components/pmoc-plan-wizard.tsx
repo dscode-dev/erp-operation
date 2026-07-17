@@ -167,7 +167,7 @@ export function PmocPlanWizard({ open, onClose, onCreated }: {
 
   const projection = useMemo(() => project(form), [form]);
   const template = documentConfig.data?.defaultTemplate;
-  const signatureMode = template?.signatureMode ?? "NONE";
+  const signatureMode = template?.signatureMode ?? null;
   const configuredSignature = template?.institutionalSignatures?.[0]?.signature ?? template?.signature ?? null;
   const configurationReady = Boolean(documentConfig.data) && !documentConfig.error;
 
@@ -281,7 +281,7 @@ export function PmocPlanWizard({ open, onClose, onCreated }: {
         />}
         {step === 2 && <PlanningStep form={form} set={set} projection={projection} />}
         {step === 3 && <ExecutionStep form={form} set={set} users={users.data?.items ?? []} />}
-        {step === 4 && <DocumentStep mode={signatureMode} configured={configuredSignature} signatures={signatures.data?.items ?? []} form={form} set={set} />}
+        {step === 4 && <DocumentStep mode={signatureMode} configured={configuredSignature} signatures={signatures.data?.items ?? []} form={form} set={set} loading={documentConfig.loading} error={documentConfig.error} />}
         {step === 5 && <SummaryStep
           form={form}
           customerName={selectedCustomer?.tradeName ?? selectedCustomer?.name ?? "—"}
@@ -289,7 +289,7 @@ export function PmocPlanWizard({ open, onClose, onCreated }: {
           scopes={selectedScopes}
           users={activeUsers}
           projection={projection}
-          signatureMode={signatureMode}
+          signatureMode={signatureMode ?? "NONE"}
           signature={form.overrideSignature ? signatures.data?.items.find((item) => item.id === form.signatureOverrideId) ?? null : configuredSignature}
           onEdit={setStep}
         />}
@@ -367,9 +367,12 @@ function ExecutionStep({ form, set, users }: { form: Form; set: FormSetter; user
   </Section>;
 }
 
-function DocumentStep({ mode, configured, signatures, form, set }: { mode: string; configured: Signature | null; signatures: Signature[]; form: Form; set: FormSetter }) {
+function DocumentStep({ mode, configured, signatures, form, set, loading, error }: { mode: string | null; configured: Signature | null; signatures: Signature[]; form: Form; set: FormSetter; loading: boolean; error: Error | null }) {
   const selected = form.overrideSignature ? signatures.find((item) => item.id === form.signatureOverrideId) ?? null : configured;
   return <Section icon={FileSignature} title="Documento" text="A política do modelo oficial determina como o documento PMOC será assinado.">
+    {loading && <Notice tone="neutral"><strong>Consultando a política do modelo PMOC…</strong></Notice>}
+    {error && <Notice tone="danger"><strong>Não foi possível consultar a política do documento.</strong><br />Tente novamente antes de concluir o cadastro.</Notice>}
+    {!loading && !error && !mode && <Notice tone="danger"><strong>Nenhum modelo PMOC ativo foi encontrado.</strong></Notice>}
     {mode === "NONE" && <Notice tone="neutral"><strong>Sem assinatura configurada.</strong><br />O documento será emitido sem bloco de assinatura.</Notice>}
     {mode === "COLLECTED" && <Notice tone="info"><strong>Coleta obrigatória da assinatura do cliente.</strong><br />A assinatura será coletada durante o atendimento em campo.</Notice>}
     {(mode === "FIXED" || mode === "HYBRID") && <div className="space-y-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4"><div><p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-muted-foreground)]">Assinatura institucional</p>{selected ? <SignatureCard signature={selected} /> : <Notice tone="danger">O modelo exige assinatura institucional, mas nenhuma assinatura ativa está configurada.</Notice>}</div><label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={form.overrideSignature} onChange={(event) => { set("overrideSignature", event.target.checked); if (!event.target.checked) set("signatureOverrideId", ""); }} /> Alterar assinatura somente deste PMOC</label>{form.overrideSignature && <Field label="Assinatura alternativa" required><select value={form.signatureOverrideId} onChange={(event) => set("signatureOverrideId", event.target.value)}><option value="">Selecione uma assinatura ativa…</option>{signatures.map((signature) => <option key={signature.id} value={signature.id}>{signature.name} · {signature.title}</option>)}</select></Field>}</div>}

@@ -746,6 +746,49 @@ describe('DocumentEngine foundation', () => {
     expect(pdf.buffer.subarray(0, 5).toString('latin1')).toBe('%PDF-');
   });
 
+  it('marks an unsigned HYBRID PMOC explicitly and keeps four-column image parity', () => {
+    const context = operationContext(DocumentTemplateType.PMOC);
+    const operation = context.operation as Record<string, unknown>;
+    operation.photos = [1, 2, 3, 4].map((index) => ({
+      id: `pmoc-photo-${index}`,
+      storageKey: `operations/pmoc/photo-${index}.png`,
+      caption: `Evidência ${index}`,
+      mimeType: 'image/png',
+      fileSize: 68,
+      createdAt: new Date(),
+    }));
+    (context.assets as { images: Array<{ storageKey: string; mimeType: string; fileSize: number; contentBase64: string }> }).images = [1, 2, 3, 4].map((index) => ({
+      storageKey: `operations/pmoc/photo-${index}.png`,
+      mimeType: 'image/png',
+      fileSize: 68,
+      contentBase64: ONE_PIXEL_PNG,
+    }));
+    context.signature = {
+      requiresSignature: true,
+      signatureMode: 'HYBRID',
+      signatureId: 'institutional',
+      fixedSignature: null,
+      institutionalSignatures: [{ id: 'institutional', name: 'Marina', title: 'Engenheira', professionalCouncil: 'CREA-123', department: 'Técnico', image: { storageKey: 'private', mimeType: 'image/png', fileSize: 68, contentBase64: ONE_PIXEL_PNG } }],
+      collectedSignature: { label: 'Cliente', name: null, title: null, signedAt: null, caption: 'Pendente', image: null },
+      executionSignatures: [{ role: 'client', label: 'Assinatura do cliente/responsável', name: null, title: null, signedAt: null, caption: 'Pendente', image: null }],
+    };
+
+    const builder = new DocumentBuilderService({} as never) as unknown as { buildFromContext: (ctx: unknown) => DocumentBlueprint };
+    const unsigned = builder.buildFromContext(context);
+    const identification = unsigned.sections.find((section) => section.id === 'pmoc-identification')?.components[0];
+    const gallery = unsigned.sections.find((section) => section.id === 'photos-evidencias-fotograficas')?.components[0];
+    expect(identification?.kind === 'metadata' ? identification.items.find((item) => item.label === 'Situação')?.value : null).toContain('NÃO ASSINADO');
+    expect(unsigned.sections.map((section) => section.id)).toContain('pmoc-signature-pending');
+    expect(gallery?.kind === 'imageGallery' ? gallery.columns : null).toBe(4);
+    expect(gallery?.kind === 'imageGallery' ? gallery.images : []).toHaveLength(4);
+
+    operation.signatureData = `data:image/png;base64,${ONE_PIXEL_PNG}`;
+    const signed = builder.buildFromContext(context);
+    expect(signed.sections.map((section) => section.id)).not.toContain('pmoc-signature-pending');
+    const signedIdentification = signed.sections.find((section) => section.id === 'pmoc-identification')?.components[0];
+    expect(signedIdentification?.kind === 'metadata' ? signedIdentification.items.find((item) => item.label === 'Situação')?.value : null).toBe('ASSINADO');
+  });
+
   it('certifies the Technical Visit Report structure and Preview/PDF blueprint parity', async () => {
     const context = operationContext(DocumentTemplateType.TECHNICAL_REPORT);
     const operation = context.operation as Record<string, unknown>;

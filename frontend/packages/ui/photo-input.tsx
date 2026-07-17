@@ -7,7 +7,7 @@
  * the surrounding flow can later upload to the backend (offline-ready). Sprint 3
  * does not upload — generation/storage stays with the backend.
  */
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { Camera, X, ArrowLeft, ArrowRight, ImagePlus } from "lucide-react";
 
@@ -16,27 +16,50 @@ export type CapturedPhoto = {
   name: string;
   url: string; // object URL for preview
   file: File;
+  caption?: string;
+  status?: "pending" | "saving" | "error";
+  error?: string;
 };
 
 export function PhotoInput({
   photos,
   onChange,
   max = 12,
+  existingCount = 0,
+  requiredMinimum,
+  disabled = false,
 }: {
   photos: CapturedPhoto[];
   onChange: (photos: CapturedPhoto[]) => void;
   max?: number;
+  existingCount?: number;
+  requiredMinimum?: number;
+  disabled?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const photosRef = useRef(photos);
+  const [validationError, setValidationError] = useState<string | null>(null);
+  photosRef.current = photos;
+
+  useEffect(() => () => {
+    photosRef.current.forEach((photo) => URL.revokeObjectURL(photo.url));
+  }, []);
 
   function add(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
-    const room = max - photos.length;
-    const next = files.slice(0, room).map((file) => ({
+    const room = max - existingCount - photos.length;
+    const accepted = files.filter((file) => {
+      const valid = (file.type === "image/png" || file.type === "image/jpeg") && file.size > 0 && file.size <= 5 * 1024 * 1024;
+      if (!valid) setValidationError("Use imagens PNG ou JPEG de até 5 MiB.");
+      return valid;
+    });
+    const next = accepted.slice(0, Math.max(0, room)).map((file) => ({
       id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
       name: file.name,
       url: URL.createObjectURL(file),
       file,
+      caption: "",
+      status: "pending" as const,
     }));
     onChange([...photos, ...next]);
     e.target.value = "";
@@ -56,15 +79,22 @@ export function PhotoInput({
     onChange(next);
   }
 
+  function caption(id: string, value: string) {
+    onChange(photos.map((photo) => photo.id === id ? { ...photo, caption: value } : photo));
+  }
+
+  const total = existingCount + photos.length;
+
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {photos.map((p, i) => (
-          <div key={p.id} className="relative group aspect-square rounded-[var(--radius-md)] overflow-hidden border border-[var(--color-border)] bg-[var(--color-muted)]">
-            <Image src={p.url} alt={p.name} fill sizes="120px" unoptimized className="object-cover" />
+          <div key={p.id} className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)]">
+            <div className="relative group aspect-square bg-[var(--color-muted)]">
+              <Image src={p.url} alt={p.name} fill sizes="160px" unoptimized className="object-contain" />
             <button
               type="button"
-              onClick={() => remove(p.id)}
+              onClick={() => remove(p.id)} disabled={disabled}
               aria-label="Remover foto"
               className="absolute top-1 right-1 h-7 w-7 grid place-items-center rounded-full bg-black/60 text-white active:scale-90"
             >
@@ -79,13 +109,18 @@ export function PhotoInput({
                 <ArrowRight className="h-3.5 w-3.5" />
               </button>
             </div>
+            </div>
+            <div className="space-y-1.5 p-2">
+              <input value={p.caption ?? ""} onChange={(event) => caption(p.id, event.target.value)} disabled={disabled} maxLength={255} placeholder="Legenda opcional" className="h-8 w-full rounded border border-[var(--color-border)] bg-transparent px-2 text-xs" />
+              <span className={`text-[10px] font-medium ${p.status === "error" ? "text-[var(--color-danger)]" : "text-[var(--color-muted-foreground)]"}`}>{p.status === "saving" ? "Salvando…" : p.status === "error" ? p.error ?? "Falha no envio" : "Pendente"}</span>
+            </div>
           </div>
         ))}
 
-        {photos.length < max && (
+        {total < max && (
           <button
             type="button"
-            onClick={() => inputRef.current?.click()}
+            onClick={() => inputRef.current?.click()} disabled={disabled}
             className="aspect-square rounded-[var(--radius-md)] border border-dashed border-[var(--color-border)] grid place-items-center text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)] active:scale-[0.98]"
           >
             <span className="flex flex-col items-center gap-1">
@@ -96,8 +131,9 @@ export function PhotoInput({
         )}
       </div>
 
-      <input ref={inputRef} type="file" accept="image/*" capture="environment" multiple onChange={add} className="hidden" aria-label="Adicionar fotos" />
-      <p className="text-[11px] text-[var(--color-muted-foreground)]">{photos.length}/{max} fotos · toque para capturar ou enviar</p>
+      <input ref={inputRef} type="file" accept="image/png,image/jpeg" capture="environment" multiple onChange={add} className="hidden" aria-label="Adicionar fotos" />
+      {validationError && <p className="text-xs text-[var(--color-danger)]">{validationError}</p>}
+      <p className="text-[11px] text-[var(--color-muted-foreground)]">{total}/{max} imagens · PNG ou JPEG · até 5 MiB cada{requiredMinimum ? ` · mínimo ${requiredMinimum} para concluir e emitir` : ""}</p>
     </div>
   );
 }

@@ -190,8 +190,9 @@ const rendered = await request(`/documents/operations/${operation.id}/TECHNICAL_
   headers,
   body: '{}',
 });
-const download = await request(`/documents/${rendered.id}/download`, { headers });
-const pdf = Buffer.from(download.contentBase64, 'base64');
+const download = await fetch(`${apiBase}/documents/${rendered.id}/download`, { headers });
+if (!download.ok) throw new Error(`Document download failed with ${download.status}.`);
+const pdf = Buffer.from(await download.arrayBuffer());
 if (pdf.subarray(0, 5).toString('ascii') !== '%PDF-')
   throw new Error('Downloaded document is not a PDF.');
 const repository = await request(

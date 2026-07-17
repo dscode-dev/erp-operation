@@ -2,6 +2,9 @@ export const PMOC_RESOURCE = 'PMOC';
 export const PMOC_ENVIRONMENT_RESOURCE = 'PMOC_ENVIRONMENT';
 export const PMOC_EXECUTION_REQUEST_RESOURCE = 'PMOC_EXECUTION_REQUEST';
 
+/** Minimum field evidence required before a PMOC execution can be completed or emitted. */
+export const PMOC_MIN_PROCEDURE_IMAGES = 4;
+
 export const PMOC_AUDIT_ACTIONS = {
   CREATED: 'PMOC_CREATED',
   UPDATED: 'PMOC_UPDATED',

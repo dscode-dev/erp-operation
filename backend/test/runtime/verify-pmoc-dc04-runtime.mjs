@@ -64,8 +64,9 @@ try {
   if (!JSON.stringify(preview).includes('ASSINADO')) throw new Error('Signed PMOC status is missing.');
   for (const id of ['pmoc-identification', 'pmoc-operational-data', 'pmoc-inspected-equipments', 'pmoc-legal-reference', 'pmoc-checklist-0', 'signature']) if (!preview.sections.some((section) => section.id === id)) throw new Error(`Missing ${id}`);
   const rendered = await api(`/documents/operations/${operation.id}/PMOC/render`, { method: 'POST', headers, body: '{}' });
-  const download = await api(`/documents/${rendered.id}/download`, { headers });
-  const pdf = Buffer.from(download.contentBase64, 'base64');
+  const download = await fetch(`${apiBase}/documents/${rendered.id}/download`, { headers });
+  if (!download.ok) throw new Error(`Document download failed with ${download.status}.`);
+  const pdf = Buffer.from(await download.arrayBuffer());
   if (pdf.subarray(0, 5).toString('ascii') !== '%PDF-') throw new Error('Invalid PDF');
   const repository = await api(`/documents?page=1&limit=100&type=PMOC&search=${encodeURIComponent(rendered.number)}`, { headers });
   if (!repository.items.some((item) => item.id === rendered.id)) throw new Error('Document not found in repository');

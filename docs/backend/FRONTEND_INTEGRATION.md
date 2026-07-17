@@ -1,5 +1,21 @@
 # Frontend Integration
 
+## PMOC UX-02.1
+
+- Antes de exibir assinatura, consultar `GET /documents/configuration/types/PMOC`. Tratar loading e
+  erro separadamente; nunca assumir `NONE` enquanto a consulta estiver pendente ou falhar.
+- FIXED/HYBRID exibem a assinatura institucional readonly e o override usa o `signatureOverrideId`
+  do PMOC, sem alterar o Template. COLLECTED/HYBRID informam a coleta durante a execução.
+- O detalhe PMOC abre o `DocumentViewer` com `{ operationId, type: "PMOC", documentId? }`. Preview,
+  render, rerender stale e download usam somente o Document Engine.
+- Execution Requests retornam `operation.signedAt`, `operation._count.photos`, documentos e todos os
+  equipamentos. O drawer de OS deve enviar `inspectedEquipments[]`; `equipmentId` permanece apenas
+  como equipamento principal compatível.
+- Platform e Operator salvam fotos pela atualização oficial da Operation. Exibir progresso `x/4`,
+  permitir salvamento parcial e bloquear somente concluir/renderizar enquanto `x < 4`.
+- Downloads usam `api.blob()`. Criar object URL temporária, acionar o download e revogá-la; não
+  decodificar Base64.
+
 ## PMOC UX-02
 
 - Consultar `GET /pmoc/name-suggestion` ao selecionar cliente. Atualizar o campo apenas enquanto

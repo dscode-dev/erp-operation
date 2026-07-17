@@ -128,7 +128,7 @@ function AssignmentWorkflow({
     : "Endereço não informado";
   const pmoc = op.maintenanceExecution?.plan.pmocPlan;
   const pmocExecution = op.maintenanceExecution?.pmocExecutionRequest;
-  const pmocSignatureMode = pmocConfiguration.data?.defaultTemplate?.signatureMode ?? "NONE";
+  const pmocSignatureMode = pmocConfiguration.data?.defaultTemplate?.signatureMode ?? null;
   const visibleWorkflow = isPmoc && (pmocSignatureMode === "NONE" || pmocSignatureMode === "FIXED")
     ? workflow.filter((item) => item.label !== "Assinatura")
     : workflow;
@@ -181,7 +181,7 @@ function AssignmentWorkflow({
           </>
         )}
         {assignment.status === "ACCEPTED" && <BigButton icon={Play} label="Iniciar execução" busy={busy === "start"} onClick={() => onAction("start")} />}
-        {assignment.status === "STARTED" && <BigButton icon={CheckCircle2} label="Concluir atendimento" busy={busy === "complete"} onClick={() => onAction("complete")} />}
+        {assignment.status === "STARTED" && <><BigButton icon={CheckCircle2} label="Concluir atendimento" busy={busy === "complete"} disabled={isPmoc && (operation.data?.photos.length ?? 0) < 4} onClick={() => onAction("complete")} />{isPmoc && (operation.data?.photos.length ?? 0) < 4 && <p className="text-center text-xs text-[var(--color-warning)]">Registre ao menos quatro imagens do procedimento antes de concluir.</p>}</>}
       </section>
 
       <section className="space-y-2">
@@ -321,7 +321,7 @@ function AssignmentWorkflow({
   );
 }
 
-function PmocFieldExecution({ operation, signatureMode, configurationLoading, onSaved }: { operation: OperationDetail; signatureMode: SignatureMode; configurationLoading: boolean; onSaved: () => void }) {
+function PmocFieldExecution({ operation, signatureMode, configurationLoading, onSaved }: { operation: OperationDetail; signatureMode: SignatureMode | null; configurationLoading: boolean; onSaved: () => void }) {
   const [items, setItems] = useState(operation.maintenanceChecklistItems);
   const [photos, setPhotos] = useState<CapturedPhoto[]>([]);
   const [signature, setSignature] = useState<string | null>(null);
@@ -334,8 +334,9 @@ function PmocFieldExecution({ operation, signatureMode, configurationLoading, on
   async function save() {
     setBusy(true);
     setFeedback(null);
+    setPhotos((current) => current.map((photo) => ({ ...photo, status: "saving" })));
     try {
-      const encodedPhotos = await Promise.all(photos.map(async (photo) => ({ dataUrl: await fileDataUrl(photo.file), caption: photo.name })));
+      const encodedPhotos = await Promise.all(photos.map(async (photo) => ({ dataUrl: await fileDataUrl(photo.file), caption: photo.caption?.trim() || photo.name })));
       await operationApi.updateOperation(operation.id, {
         maintenanceChecklist: items.map((item) => ({
           equipmentId: item.equipmentId,
@@ -353,11 +354,14 @@ function PmocFieldExecution({ operation, signatureMode, configurationLoading, on
           signedAt: signature ? new Date().toISOString() : undefined,
         } : {}),
       });
+      photos.forEach((photo) => URL.revokeObjectURL(photo.url));
       setPhotos([]);
       setFeedback("Execução PMOC salva. O Preview foi invalidado e refletirá os novos dados.");
       onSaved();
     } catch (cause) {
-      setFeedback(cause instanceof Error ? cause.message : "Não foi possível salvar o PMOC.");
+      const message = cause instanceof Error ? cause.message : "Não foi possível salvar o PMOC.";
+      setPhotos((current) => current.map((photo) => ({ ...photo, status: "error", error: message })));
+      setFeedback(message);
     } finally {
       setBusy(false);
     }
@@ -378,8 +382,8 @@ function PmocFieldExecution({ operation, signatureMode, configurationLoading, on
           </div>
         ))}
       </div>
-      <PhotoInput photos={photos} onChange={setPhotos} />
-      {configurationLoading ? <SkeletonCard /> : collectsClientSignature ? <div className="space-y-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] p-3"><p className="text-sm font-medium">Assinatura do cliente</p><div className="grid gap-2"><input value={signerName} onChange={(event) => setSignerName(event.target.value)} placeholder="Nome do cliente/responsável" className="h-11 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-3 text-sm" /><input value={signerRole} onChange={(event) => setSignerRole(event.target.value)} placeholder="Função ou vínculo" className="h-11 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-3 text-sm" /></div><SignaturePad onChange={setSignature} onConfirm={setSignature} /></div> : signatureMode === "FIXED" ? <p className="rounded-[var(--radius-md)] bg-[var(--color-muted)] px-3 py-2 text-sm text-[var(--color-muted-foreground)]">A assinatura institucional definida no modelo será aplicada automaticamente ao documento.</p> : null}
+      <PhotoInput photos={photos} onChange={setPhotos} max={16} existingCount={operation.photos.length} requiredMinimum={4} disabled={busy} />
+      {configurationLoading ? <SkeletonCard /> : collectsClientSignature ? <div className="space-y-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] p-3"><p className="text-sm font-medium">Assinatura do cliente</p><div className="grid gap-2"><input value={signerName} onChange={(event) => setSignerName(event.target.value)} placeholder="Nome do cliente/responsável" className="h-11 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-3 text-sm" /><input value={signerRole} onChange={(event) => setSignerRole(event.target.value)} placeholder="Função ou vínculo" className="h-11 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-3 text-sm" /></div><SignaturePad onChange={setSignature} onConfirm={setSignature} /></div> : signatureMode === "FIXED" ? <p className="rounded-[var(--radius-md)] bg-[var(--color-muted)] px-3 py-2 text-sm text-[var(--color-muted-foreground)]">A assinatura institucional definida no modelo será aplicada automaticamente ao documento.</p> : !signatureMode ? <p className="text-sm text-[var(--color-danger)]">Não foi possível consultar a política de assinatura do modelo PMOC.</p> : null}
       {feedback && <p className="text-sm text-[var(--color-muted-foreground)]">{feedback}</p>}
       <button type="button" disabled={busy || configurationLoading || (collectsClientSignature && Boolean(signature) && !signerName.trim())} onClick={() => void save()} className="h-12 w-full rounded-[var(--radius-lg)] bg-[var(--color-primary)] text-sm font-semibold text-white disabled:opacity-50">{busy ? "Salvando…" : "Salvar atendimento PMOC"}</button>
     </section>
@@ -507,9 +511,9 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   return <label className="block space-y-1.5"><span className="text-sm font-medium">{label}</span>{children}</label>;
 }
 
-function BigButton({ icon: Icon, label, busy, onClick }: { icon: typeof CheckCircle2; label: string; busy: boolean; onClick: () => void }) {
+function BigButton({ icon: Icon, label, busy, disabled = false, onClick }: { icon: typeof CheckCircle2; label: string; busy: boolean; disabled?: boolean; onClick: () => void }) {
   return (
-    <button onClick={onClick} disabled={busy} className="inline-flex h-14 items-center justify-center gap-2 rounded-[var(--radius-xl)] bg-[var(--color-primary)] px-4 text-base font-semibold text-white shadow-[var(--shadow-hover)] disabled:opacity-50">
+    <button onClick={onClick} disabled={busy || disabled} className="inline-flex h-14 items-center justify-center gap-2 rounded-[var(--radius-xl)] bg-[var(--color-primary)] px-4 text-base font-semibold text-white shadow-[var(--shadow-hover)] disabled:opacity-50">
       <Icon className="h-5 w-5" /> {busy ? "Atualizando…" : label}
     </button>
   );

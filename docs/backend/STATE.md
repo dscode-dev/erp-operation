@@ -1,5 +1,24 @@
 # Backend State
 
+## PMOC UX-02.1 — fechamento do fluxo crítico (2026-07-17)
+
+- A política de assinatura PMOC continua governada pelo `DocumentTemplate`: o Wizard e o Operator
+  consomem a projeção pública sanitizada de `DocumentConfiguration`; OPERATOR pode consultar apenas
+  o tipo `PMOC`, sem acesso à listagem geral ou aos demais tipos.
+- A emissão final PMOC exige quatro fotos oficiais da `Operation`. `Assignment.complete`, conclusão
+  direta da Operation e `DocumentEngine.renderDocument` retornam `409 PMOC_EVIDENCE_REQUIRED`
+  enquanto a quantidade mínima não for atingida; salvamento parcial permanece permitido.
+- Uploads PMOC aceitam somente PNG/JPEG até 5 MiB, validam MIME e assinatura binária e continuam
+  persistidos por `OperationPhoto` + `StorageProvider`.
+- `DocumentBuilder` diferencia `NÃO ASSINADO`, `ASSINADO INSTITUCIONALMENTE`, `ASSINADO` e
+  `SEM ASSINATURA EXIGIDA`; COLLECTED/HYBRID sem coleta recebem aviso explícito no Blueprint.
+- Downloads de documentos e orçamentos agora são binários `application/pdf`, sem Base64 no payload.
+  Stale detection, RBAC, auditoria e resolução via `DocumentAssetResolver` foram preservados.
+- A projeção das Execution Requests inclui `signedAt` e contagem de fotos. O prefill oficial e a
+  relação `OperationInspectedEquipment` preservam todos os equipamentos do PMOC.
+- Nenhuma migration foi criada; o schema existente já representava fotos, múltiplos equipamentos,
+  assinatura/override e documentos.
+
 ## PMOC UX-02 — refinamento profissional (2026-07-16)
 
 - `TechnicalCatalogType.PLAN_SCOPE` estrutura o escopo usando o Catálogo Técnico oficial;

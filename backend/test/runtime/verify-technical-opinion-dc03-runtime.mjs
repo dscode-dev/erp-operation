@@ -206,8 +206,9 @@ const rendered = await request(`/documents/operations/${created.id}/TECHNICAL_OP
   headers,
   body: '{}',
 });
-const download = await request(`/documents/${rendered.id}/download`, { headers });
-const pdf = Buffer.from(download.contentBase64, 'base64');
+const download = await fetch(`${apiBase}/documents/${rendered.id}/download`, { headers });
+if (!download.ok) throw new Error(`Document download failed with ${download.status}.`);
+const pdf = Buffer.from(await download.arrayBuffer());
 if (pdf.subarray(0, 5).toString('ascii') !== '%PDF-') {
   throw new Error('Downloaded TECHNICAL_OPINION is not a PDF.');
 }

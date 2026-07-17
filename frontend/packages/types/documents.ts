@@ -191,10 +191,4 @@ export type DocumentRenderResult = {
   downloadReady: boolean;
 };
 
-export type DocumentDownloadResult = DocumentRenderResult & {
-  contentBase64: string;
-};
-
-export function documentDataUrl(download: DocumentDownloadResult): string {
-  return `data:${download.mimeType ?? 'application/pdf'};base64,${download.contentBase64}`;
-}
+export type DocumentDownloadResult = { blob: Blob; filename: string | null };

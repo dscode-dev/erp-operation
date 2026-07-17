@@ -231,7 +231,8 @@ try {
     headers: authorization,
     body: '{}',
   });
-  let download = await api(`/documents/${rendered.id}/download`, { headers: authorization });
+  let download = await fetch(`${apiBase}/documents/${rendered.id}/download`, { headers: authorization });
+  if (!download.ok) throw new Error(`Document download failed with ${download.status}.`);
   await api(`/operations/${operation.id}`, {
     method: 'PATCH', headers: authorization,
     body: JSON.stringify({ observations: 'Revisão técnica concluída — pressão, vazão e condição do equipamento estão estáveis. Atualização confirmada.' }),
@@ -245,9 +246,10 @@ try {
   rendered = await api(`/documents/operations/${operation.id}/WORK_ORDER/render`, {
     method: 'POST', headers: authorization, body: '{}',
   });
-  download = await api(`/documents/${rendered.id}/download`, { headers: authorization });
+  download = await fetch(`${apiBase}/documents/${rendered.id}/download`, { headers: authorization });
+  if (!download.ok) throw new Error(`Document download failed with ${download.status}.`);
   reloaded = await api(`/operations/${operation.id}`, { headers: authorization });
-  const pdf = Buffer.from(download.contentBase64, 'base64');
+  const pdf = Buffer.from(await download.arrayBuffer());
   const components = preview.sections.flatMap((section) => section.components.map((component) => component.kind));
   const signature = preview.sections.flatMap((section) => section.components).find((component) => component.kind === 'signature');
   const equipmentMetadata = preview.sections.find((section) => section.id === 'equipment')?.components.find((component) => component.kind === 'metadata');

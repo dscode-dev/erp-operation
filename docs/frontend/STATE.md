@@ -1,5 +1,17 @@
 # STATE — Frontend
 
+## PMOC UX-02.1 — fechamento dos quatro fluxos críticos
+
+- Wizard não usa mais `NONE` como fallback: loading/erro da configuração são explícitos e a política
+  FIXED/COLLECTED/HYBRID real permanece visível.
+- Detalhe PMOC oferece drawer documental oficial com status de assinatura, progresso das quatro
+  evidências e `DocumentViewer` para Preview, Render, Rerender stale e Download.
+- `OperationCreationDrawer` usa MultiSelect e persiste todos os equipamentos em
+  `inspectedEquipments`, preservando o principal para retrocompatibilidade.
+- Platform e Operator usam o mesmo `PhotoInput` com múltiplas imagens, legenda, estados de upload,
+  remoção/reordenação e revogação de object URLs. PMOC bloqueia conclusão abaixo de quatro fotos.
+- Downloads de Documento e Orçamento consomem bytes via `api.blob()`; não há conversão Base64.
+
 ## PMOC UX-02 — Wizard profissional
 
 - Wizard reorganizado em Identificação, Cobertura, Planejamento, Execução, Documento e Confirmação.

@@ -1,5 +1,15 @@
 # ARCHITECTURE — Frontend
 
+## PMOC UX-02.1
+
+- A cadeia permanece `PmocPlan → ExecutionRequest → Operation → Assignment → MaintenanceExecution →
+  DocumentContext → Builder → Blueprint → Renderer → PdfEngine → Storage → /documentos`.
+- Fotos e assinaturas são gravadas somente na Operation; Platform e Operator compartilham os mesmos
+  contratos e componentes, sem estado persistente paralelo.
+- O frontend apenas representa `signatureMode`, `signedAt` e contagem retornados. Template e backend
+  são autoridades de política, mínimo de evidências, transições e stale detection.
+- PDF é transportado como Blob autenticado; object URL é temporária e revogada após uso.
+
 ## PMOC UX-02
 
 - O browser não persiste agenda nem títulos de escopo: envia IDs de catálogo e solicita

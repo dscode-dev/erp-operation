@@ -74,6 +74,7 @@ try {
   if (policyResults.NONE !== 0 || policyResults.FIXED !== 1 || policyResults.COLLECTED !== 1 || policyResults.HYBRID !== 2) throw new Error(`Signature policy mismatch: ${JSON.stringify(policyResults)}`);
   if (!fixedSignatures.some((item) => item.name === institutional.name)) throw new Error('PMOC institutional override was not resolved.');
 
+  await api(`/operations/${operationId}`, { method: 'PATCH', headers: operatorHeaders, body: JSON.stringify({ photos: Array.from({ length: 4 }, (_, index) => ({ dataUrl: `data:image/png;base64,${png}`, caption: `Evidência PMOC UX-01 ${index + 1}` })) }) });
   await api(`/assignments/${assignment.id}/complete`, { method: 'PATCH', headers: operatorHeaders, body: JSON.stringify({ notes: 'Atendimento PMOC UX-01 concluído.' }) });
   await api(`/pmoc/${plan.id}`, { method: 'PATCH', headers: ownerHeaders, body: JSON.stringify({ generationMode: 'AUTO' }) });
   const laterRequests = await api(`/pmoc/${plan.id}/execution-requests?page=1&limit=20`, { headers: ownerHeaders });
@@ -84,8 +85,9 @@ try {
   const automaticallyGenerated = await api(`/pmoc/execution-requests/${nextRequest.id}`, { headers: ownerHeaders });
   if (automaticallyGenerated.status !== 'GENERATED' || !automaticallyGenerated.generatedOperationId) throw new Error('The subsequent automatic Work Order was not generated.');
   const rendered = await api(`/documents/operations/${operationId}/PMOC/render`, { method: 'POST', headers: ownerHeaders, body: '{}' });
-  const download = await api(`/documents/${rendered.id}/download`, { headers: ownerHeaders });
-  const pdf = Buffer.from(download.contentBase64, 'base64');
+  const download = await fetch(`${apiBase}/documents/${rendered.id}/download`, { headers: ownerHeaders });
+  if (!download.ok) throw new Error(`Document download failed with ${download.status}.`);
+  const pdf = Buffer.from(await download.arrayBuffer());
   if (pdf.subarray(0, 5).toString('ascii') !== '%PDF-') throw new Error('Rendered PMOC PDF is invalid.');
   const repository = await api(`/documents?page=1&limit=100&type=PMOC&search=${encodeURIComponent(rendered.number)}`, { headers: ownerHeaders });
   if (!repository.items.some((item) => item.id === rendered.id)) throw new Error('PMOC document is missing from repository.');

@@ -1,5 +1,15 @@
 # COMPONENTS — Frontend
 
+## PMOC UX-02.1
+
+- `PhotoInput`: galeria responsiva 2/4 colunas, PNG/JPEG até 5 MiB, legenda, progresso, erro,
+  reordenação, remoção e limpeza de object URLs; aceita mínimo/limite e fotos já persistidas.
+- `OperationCreationDrawer`: MultiSelect oficial de equipamentos, inclusive prefill integral do PMOC.
+- `OperationDetailDrawer`: seção `PmocExecutionEvidenceSection` para evidências e assinatura conforme
+  Template, sem criar fluxo ou storage paralelo.
+- `DocumentViewer`: download binário via Blob e ações oficiais reutilizadas no detalhe PMOC.
+- `PmocPlanWizard`: estados loading/error da política e cards readonly para assinatura institucional.
+
 ## PMOC UX-02
 
 - `PmocPlanWizard`: seis etapas contextuais, sugestão de nome protegida contra overwrite, escopo

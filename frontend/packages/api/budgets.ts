@@ -89,5 +89,5 @@ export function renderBudget(id: string): Promise<BudgetRenderResult> {
 }
 
 export function downloadBudget(id: string, opts?: { signal?: AbortSignal }): Promise<DocumentDownloadResult> {
-  return api.get<DocumentDownloadResult>(`/budgets/${id}/download`, opts);
+  return api.blob(`/budgets/${id}/download`, opts);
 }

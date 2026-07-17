@@ -100,8 +100,9 @@ const rendered = await request(`/documents/operations/${operation.id}/WORK_ORDER
   headers,
   body: '{}',
 });
-const download = await request(`/documents/${rendered.id}/download`, { headers });
-const pdf = Buffer.from(download.contentBase64, 'base64');
+const download = await fetch(`${apiBase}/documents/${rendered.id}/download`, { headers });
+if (!download.ok) throw new Error(`Document download failed with ${download.status}.`);
+const pdf = Buffer.from(await download.arrayBuffer());
 if (pdf.subarray(0, 5).toString('ascii') !== '%PDF-') throw new Error('Invalid Work Order PDF.');
 
 const evidence = {

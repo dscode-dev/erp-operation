@@ -1157,6 +1157,8 @@ export type PmocExecutionRequest = {
   updatedAt: string;
   operation?: (Pick<OperationSummary, 'id' | 'number' | 'type' | 'status'> & {
     scheduledFor?: string | null;
+    signedAt?: string | null;
+    _count?: { photos: number };
     operator?: Pick<TeamUser, 'id' | 'name' | 'username' | 'role'>;
     documents?: Array<{
       id: string;

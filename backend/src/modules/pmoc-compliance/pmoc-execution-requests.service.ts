@@ -47,6 +47,8 @@ const REQUEST_INCLUDE = {
       status: true,
       scheduledFor: true,
       completedAt: true,
+      signedAt: true,
+      _count: { select: { photos: true } },
       operator: { select: { id: true, name: true, username: true, role: true, jobTitle: true } },
       documents: {
         where: { type: DocumentTemplateType.PMOC },

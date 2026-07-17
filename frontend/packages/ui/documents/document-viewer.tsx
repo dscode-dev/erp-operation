@@ -163,7 +163,7 @@ export function DocumentViewer({
       }
       if (!id) throw new Error('Renderize o documento antes do download.');
       const file = await documentsApi.downloadDocument(id);
-      downloadBase64(file);
+      downloadBlob(file);
     } catch (err) {
       if (err instanceof ApiClientError && err.code === 'DOCUMENT_STALE') {
         setStale(true);
@@ -774,14 +774,11 @@ function metadataValue(blueprint: DocumentBlueprint | null, label: string): stri
   return '—';
 }
 
-function downloadBase64(file: DocumentDownloadResult) {
-  const binary = atob(file.contentBase64);
-  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
-  const blob = new Blob([bytes], { type: file.mimeType ?? 'application/pdf' });
-  const url = URL.createObjectURL(blob);
+function downloadBlob(file: DocumentDownloadResult) {
+  const url = URL.createObjectURL(file.blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `${file.number}.pdf`;
+  a.download = file.filename ?? 'documento.pdf';
   document.body.appendChild(a);
   a.click();
   a.remove();

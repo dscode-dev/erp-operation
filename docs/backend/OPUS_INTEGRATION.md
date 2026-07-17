@@ -1,5 +1,15 @@
 # OPUS Frontend Integration
 
+## PMOC UX-02.1 — contrato pronto para UI
+
+- Política: `GET /documents/configuration/types/PMOC`; não usar fallback `NONE` durante loading/erro.
+- Documento: `DocumentViewer` oficial recebe a Operation PMOC e oferece Preview → Render → Download.
+- Download: resposta `application/pdf` binária; consumir com `api.blob()` e filename do header.
+- Evidências: fotos oficiais vivem na Operation; mínimo 4 somente para concluir ou emitir PDF.
+- Execution Request: `operation.signedAt`, `_count.photos`, `documents` e equipamentos inspecionados
+  sustentam os badges sem regra documental local.
+- Operator pode ler exclusivamente a configuração PMOC sanitizada. Nenhum `storageKey` é público.
+
 ## PMOC UX-02
 
 - Nome: `GET /pmoc/name-suggestion?customerId=<uuid>`; omita `name` na criação se não personalizado.

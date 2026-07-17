@@ -348,9 +348,8 @@ describe('AppSec Maintenance Planning and PMOC closure', () => {
       expect.arrayContaining([graph.equipmentId, secondEquipment.id]),
     );
     expect(generatedRequest.data.generatedOperationId).toBe(operationId);
-    await expect(prisma.assignment.findUnique({ where: { operationId } })).resolves.toMatchObject({
-      assignedTo: operator.user.id,
-    });
+    const assignment = await prisma.assignment.findUniqueOrThrow({ where: { operationId } });
+    expect(assignment.assignedTo).toBe(operator.user.id);
     await expect(
       prisma.operationDocument.findUnique({ where: { operationId_type: { operationId, type: 'WORK_ORDER' } } }),
     ).resolves.toBeTruthy();
@@ -358,17 +357,32 @@ describe('AppSec Maintenance Planning and PMOC closure', () => {
       where: { operationId },
     });
     expect(maintenanceExecution.status).toBe(MaintenanceExecutionStatus.LINKED);
-    const executedAt = '2026-07-16T14:00:00.000Z';
-    const completed = await authPatch(
-      owner,
-      `/api/v1/maintenance-executions/${maintenanceExecution.id}`,
-    ).send({ status: MaintenanceExecutionStatus.COMPLETED, executedAt });
+    expect((await authPatch(operator, `/api/v1/assignments/${assignment.id}/accept`).send({})).status).toBe(200);
+    expect((await authPatch(operator, `/api/v1/assignments/${assignment.id}/start`).send({})).status).toBe(200);
+    const blockedWithoutEvidence = await authPatch(
+      operator,
+      `/api/v1/assignments/${assignment.id}/complete`,
+    ).send({ notes: 'Tentativa sem evidências' });
+    expect(blockedWithoutEvidence.status).toBe(409);
+    expect(errorCode(blockedWithoutEvidence)).toBe(ERROR_CODES.PMOC_EVIDENCE_REQUIRED);
+    const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=';
+    const evidenceSaved = await authPatch(operator, `/api/v1/operations/${operationId}`).send({
+      photos: Array.from({ length: 4 }, (_, index) => ({
+        dataUrl: `data:image/png;base64,${png}`,
+        caption: `Evidência obrigatória ${index + 1}`,
+      })),
+    });
+    expect(evidenceSaved.status).toBe(200);
+    const completed = await authPatch(operator, `/api/v1/assignments/${assignment.id}/complete`).send({
+      notes: 'Execução concluída com quatro evidências',
+    });
     expect(completed.status).toBe(200);
-    await expect(prisma.pmocPlan.findUniqueOrThrow({ where: { id: pmoc.data.id } })).resolves.toMatchObject({
+    const completedPlan = await prisma.pmocPlan.findUniqueOrThrow({ where: { id: pmoc.data.id } });
+    expect(completedPlan).toMatchObject({
       lastReservedExecutionNumber: 2,
       lastGeneratedExecutionNumber: 1,
-      lastExecutionDate: new Date(executedAt),
     });
+    expect(completedPlan.lastExecutionDate).toBeInstanceOf(Date);
     await expect(
       prisma.pmocExecutionRequest.findMany({
         where: { pmocPlanId: pmoc.data.id },
@@ -386,7 +400,9 @@ describe('AppSec Maintenance Planning and PMOC closure', () => {
     };
     const completionHistory = history.data.find((item) => item.action === 'EXECUTION_COMPLETED');
     expect(completionHistory?.execution?.executionNumber).toBe(1);
-    expect(completionHistory?.execution?.executedAt).toBe(executedAt);
+    expect(completionHistory?.execution?.executedAt).toBe(
+      completedPlan.lastExecutionDate?.toISOString(),
+    );
     expect(history.data.some((item) => item.action === 'ASSIGNMENT_ASSIGNED')).toBe(true);
     await expect(
       prisma.pmocHistory.count({ where: { pmocPlanId: pmoc.data.id, operationId } }),

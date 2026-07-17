@@ -1,6 +1,8 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query, Req } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query, Req, Res } from '@nestjs/common';
 import { Role } from '@prisma/client';
+import type { Response } from 'express';
 import { CurrentUser } from '../../shared/decorators/current-user.decorator';
+import { RawResponse } from '../../shared/decorators/raw-response.decorator';
 import { Roles } from '../../shared/decorators/roles.decorator';
 import type { AuthenticatedUser } from '../../shared/types/authenticated-user.type';
 import type { RequestWithId } from '../../shared/types/request-with-id.type';
@@ -56,13 +58,19 @@ export class BudgetsController {
   }
 
   @Roles(Role.OWNER, Role.MANAGER)
+  @RawResponse()
   @Get('budgets/:id/download')
-  downloadDocument(
+  async downloadDocument(
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
     @CurrentUser() actor: AuthenticatedUser,
     @Req() request: RequestWithId,
-  ): Promise<unknown> {
-    return this.documents.downloadBudget(id, actor, contextFromRequest(request));
+    @Res() response: Response,
+  ): Promise<void> {
+    const file = await this.documents.downloadBudget(id, actor, contextFromRequest(request));
+    response.setHeader('Content-Type', file.mimeType);
+    response.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
+    response.setHeader('Content-Length', String(file.content.length));
+    response.end(file.content);
   }
 
   @Roles(Role.OWNER, Role.MANAGER)

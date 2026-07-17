@@ -16,8 +16,10 @@ import { OperationView } from "@erp/ui/operations/operation-view";
 import { OPERATION_STATUS, OPERATION_TYPE_LABEL, operationCode } from "@erp/ui/operations/operation-shared";
 import { DocumentViewer } from "@erp/ui/documents/document-viewer";
 import { SignaturePad } from "@erp/ui/documents/signature-pad";
+import { PhotoInput, type CapturedPhoto } from "@erp/ui/photo-input";
 import { Gate } from "@erp/ui/auth/gate";
-import { assignmentsApi, budgetsApi, inventoryApi, operationApi, pricingApi, useQuery, type Assignment, type Budget, type BudgetItemPayload, type BudgetPayload, type InventoryItem, type OperationDetail, type OperationDocument, type OperationPart, type Product, type ProductPricing } from "@erp/api";
+import { assignmentsApi, budgetsApi, documentsApi, inventoryApi, operationApi, pricingApi, useQuery, type Assignment, type Budget, type BudgetItemPayload, type BudgetPayload, type InventoryItem, type OperationDetail, type OperationDocument, type OperationPart, type Product, type ProductPricing } from "@erp/api";
+import type { DocumentConfiguration, SignatureMode } from "@erp/types";
 import { formatCurrencyBRL, formatDateTime, formatNumber } from "@erp/utils";
 import { ASSIGNMENT_STATUS_LABEL, assignmentTime } from "@erp/ui/assignments/assignment-shared";
 import { UserSelect } from "./entity-select";
@@ -43,6 +45,11 @@ export function OperationDetailDrawer({
   const [previewDoc, setPreviewDoc] = useState<OperationDocument | null>(null);
 
   const op = detail.data;
+  const isPmoc = Boolean(op?.maintenanceExecution?.plan.pmocPlan);
+  const pmocConfiguration = useQuery<DocumentConfiguration | null>(
+    (signal) => isPmoc ? documentsApi.getConfigurationByType("PMOC", { signal }) : Promise.resolve(null),
+    [isPmoc],
+  );
 
   // Load photo content (base64) once an operation is loaded.
   useEffect(() => {
@@ -81,7 +88,11 @@ export function OperationDetailDrawer({
 
           <OperationDates operation={op} assignment={assignmentQuery.data?.items[0] ?? null} />
 
-          <WorkOrderSignatureSection operation={op} onSaved={detail.refetch} />
+          {isPmoc ? (
+            <PmocExecutionEvidenceSection operation={op} configuration={pmocConfiguration.data} configurationLoading={pmocConfiguration.loading} onSaved={detail.refetch} />
+          ) : (
+            <WorkOrderSignatureSection operation={op} onSaved={detail.refetch} />
+          )}
 
           <OperationBudgetsSection operation={op} />
 
@@ -132,6 +143,67 @@ function OperationDates({ operation, assignment }: { operation: OperationDetail;
       </div>
     </section>
   );
+}
+
+function PmocExecutionEvidenceSection({ operation, configuration, configurationLoading, onSaved }: { operation: OperationDetail; configuration: DocumentConfiguration | null | undefined; configurationLoading: boolean; onSaved: () => void }) {
+  const [photos, setPhotos] = useState<CapturedPhoto[]>([]);
+  const [signature, setSignature] = useState<string | null>(null);
+  const [signerName, setSignerName] = useState(operation.customerSignerName ?? "");
+  const [signerRole, setSignerRole] = useState(operation.customerSignerRole ?? "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<string | null>(null);
+  const mode: SignatureMode | null = configuration?.defaultTemplate?.signatureMode ?? null;
+  const collects = mode === "COLLECTED" || mode === "HYBRID";
+
+  async function save() {
+    setSaving(true);
+    setError(null);
+    setFeedback(null);
+    setPhotos((current) => current.map((photo) => ({ ...photo, status: "saving" })));
+    try {
+      const encoded = await Promise.all(photos.map(async (photo) => ({
+        dataUrl: await fileDataUrl(photo.file),
+        caption: photo.caption?.trim() || null,
+      })));
+      await operationApi.updateOperation(operation.id, {
+        photos: encoded,
+        ...(collects && signature ? {
+          signatureData: signature,
+          customerSignerName: signerName.trim(),
+          customerSignerRole: signerRole.trim() || null,
+          signedAt: new Date().toISOString(),
+        } : {}),
+      });
+      photos.forEach((photo) => URL.revokeObjectURL(photo.url));
+      setPhotos([]);
+      setSignature(null);
+      setFeedback("Evidências salvas. O preview foi atualizado e qualquer PDF anterior ficou desatualizado.");
+      onSaved();
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : "Não foi possível salvar as evidências.";
+      setPhotos((current) => current.map((photo) => ({ ...photo, status: "error", error: message })));
+      setError(message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return <Gate roles={["OWNER", "MANAGER", "OPERATOR"]}>
+    <section className="space-y-3">
+      <div><h3 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)]">Evidências e assinatura do PMOC</h3><p className="mt-1 text-xs text-[var(--color-muted-foreground)]">O preenchimento pode ser salvo parcialmente. Quatro imagens são obrigatórias apenas para concluir e emitir o documento final.</p></div>
+      <div className="space-y-4 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
+        <PhotoInput photos={photos} onChange={setPhotos} max={16} existingCount={operation.photos.length} requiredMinimum={4} disabled={saving} />
+        {configurationLoading && <SkeletonList rows={2} />}
+        {!configurationLoading && mode === "FIXED" && <p className="rounded-[var(--radius-md)] bg-[var(--color-muted)] px-3 py-2 text-sm">A assinatura institucional configurada no modelo será aplicada automaticamente.</p>}
+        {!configurationLoading && collects && <div className="space-y-3 rounded-[var(--radius-md)] border border-[var(--color-border)] p-3"><p className="text-sm font-medium">Assinatura do cliente</p><div className="grid gap-2 sm:grid-cols-2"><input value={signerName} onChange={(event) => setSignerName(event.target.value)} placeholder="Nome do cliente/responsável" className={inputCls} /><input value={signerRole} onChange={(event) => setSignerRole(event.target.value)} placeholder="Função ou vínculo" className={inputCls} /></div><SignaturePad onChange={setSignature} onConfirm={setSignature} /></div>}
+        {!configurationLoading && !mode && <p className="text-sm text-[var(--color-danger)]">Não foi possível resolver a política do modelo PMOC.</p>}
+        {error && <p className="text-sm text-[var(--color-danger)]">{error}</p>}
+        {feedback && <p className="text-sm text-[var(--color-success)]">{feedback}</p>}
+        <button type="button" onClick={() => void save()} disabled={saving || configurationLoading || (photos.length === 0 && !signature) || (Boolean(signature) && !signerName.trim())} className="h-10 rounded-[var(--radius-md)] bg-[var(--color-primary)] px-4 text-sm font-medium text-[var(--color-primary-foreground)] disabled:opacity-50">{saving ? "Salvando…" : "Salvar evidências do PMOC"}</button>
+      </div>
+    </section>
+  </Gate>;
 }
 
 function WorkOrderSignatureSection({ operation, onSaved }: { operation: OperationDetail; onSaved: () => void }) {
@@ -439,6 +511,15 @@ function BudgetMiniStatus({ status }: { status: Budget["status"] }) {
 
 function operationNextDate(days: number): string {
   return new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
+}
+
+function fileDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error ?? new Error("Falha ao ler a imagem"));
+    reader.readAsDataURL(file);
+  });
 }
 
 function OperationMaterialsSection({ operationId }: { operationId: string }) {

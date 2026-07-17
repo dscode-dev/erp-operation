@@ -850,6 +850,16 @@ export class DocumentBuilderService {
     }
     const address = operation.address ?? operation.customer.addresses[0] ?? null;
     const contact = operation.customer.contacts[0] ?? null;
+    const collectsClientSignature =
+      context.signature.signatureMode === SignatureMode.COLLECTED ||
+      context.signature.signatureMode === SignatureMode.HYBRID;
+    const signatureStatus = collectsClientSignature
+      ? operation.signatureData
+        ? 'ASSINADO'
+        : 'NÃO ASSINADO — AGUARDANDO ASSINATURA DO CLIENTE'
+      : context.signature.signatureMode === SignatureMode.FIXED
+        ? 'ASSINADO INSTITUCIONALMENTE'
+        : 'SEM ASSINATURA EXIGIDA';
     const sections: DocumentSection[] = [
       {
         id: 'pmoc-identification',
@@ -860,7 +870,7 @@ export class DocumentBuilderService {
             ['Título', `PMOC — ${operation.customer.tradeName ?? operation.customer.name}`],
             ['Número', documentNumber],
             ['Emissão', this.date(generatedAt)],
-            ['Situação', operation.signatureData ? 'ASSINADO' : operation.status === 'COMPLETED' ? 'NÃO ASSINADO' : 'EM PREENCHIMENTO'],
+            ['Situação', signatureStatus],
             ['Responsável técnico', pmoc.responsibleTechnician],
             ['ART/registro', pmoc.artNumber ?? '—'],
             ['Contrato', pmoc.contractNumber ?? '—'],
@@ -869,6 +879,19 @@ export class DocumentBuilderService {
           ]),
         ],
       },
+      ...(collectsClientSignature && !operation.signatureData
+        ? [{
+            id: 'pmoc-signature-pending',
+            title: 'Situação da assinatura',
+            critical: true,
+            components: [{
+              id: 'pmoc-signature-pending-warning',
+              kind: 'paragraph' as const,
+              text: 'DOCUMENTO NÃO ASSINADO. A assinatura do cliente/responsável ainda precisa ser coletada para concluir a política definida no modelo.',
+              keepTogether: true,
+            }],
+          }]
+        : []),
       {
         id: 'pmoc-operational-data',
         title: 'Dados operacionais',
