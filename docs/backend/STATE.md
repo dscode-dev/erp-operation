@@ -2888,3 +2888,29 @@ Status: implementado e validado em PostgreSQL/Docker.
   renderizados como READY e associa assinaturas existentes à organização única da instalação.
 - Runtime certificado para OS, Visita, Laudo, Orçamento, PMOC e compatibilidade de Recibo. PMOC
   preservou 2 equipamentos, 4 evidências, duas assinaturas e a cadeia oficial.
+
+## PMOC FIX-01 — emissão oficial do PDF (2026-07-17)
+
+- A emissão continua exclusivamente em `DocumentEngineService`; nenhum endpoint, renderer, engine,
+  storage, entidade ou migration foi criado.
+- As consultas de execução PMOC identificam explicitamente o documento `PMOC` mais recente e
+  retornam metadados seguros de artefato (`renderedAt`, `fileSize`, `revision`, `renderMetadata`).
+- O fingerprint passou a neutralizar a data/hora de emissão gerada pelo próprio Builder, inclusive
+  quando impressa em seções/rodapé. O tempo não causa falso STALE; alterações documentais reais
+  continuam exigindo nova renderização.
+- Runtime real aprovado: PMOC-000048, documento `739340b6-7ee2-4fbf-8a9a-1b2ed3c4e6f3`, versão 4,
+  PDF de 23.925 bytes, Preview/PDF com o mesmo fingerprint, catálogo confirmado e STALE após troca
+  do responsável técnico.
+# PMOC FIX-02A — revisão de assinaturas no Wizard (2026-07-17)
+
+- O handoff documental passou a devolver, dentro de `customerSignature`, o usuário que realizou a coleta (`collectedBy`: id, nome e role).
+- A substituição de assinatura atualiza `collectedById`, preserva revisões append-only e mantém auditoria `DOCUMENT_REVIEW_UPDATED`.
+- Reabrir/salvar o rascunho não substitui mais silenciosamente o coletor de uma assinatura já existente.
+- Nenhuma entidade ou migration foi criada; o fluxo reutiliza `OperationDocument`, `DocumentRevision`, `AuditLog` e o Document Engine oficial.
+
+## PMOC FIX-02B — evidências fotográficas no Wizard (2026-07-17)
+
+- O Wizard PMOC oficial ganhou a etapa **Evidências**, compartilhada pelos fluxos vindos do Operator e criados na Platform.
+- `OperationPhoto` continua sendo a única entidade. A migration aditiva `20260717210000_pmoc_fix02b_photo_author` acrescenta autoria opcional, com backfill pelo operador e preservação por `SET NULL`.
+- Upload múltiplo reutiliza `PATCH /operations/:id`; legenda e remoção atuam sobre a mesma foto, com auditoria e invalidação PENDING/STALE.
+- `DocumentContext` continua sendo a única fonte da galeria; ordem e legendas foram certificadas no Wizard, Preview, render e PDF.

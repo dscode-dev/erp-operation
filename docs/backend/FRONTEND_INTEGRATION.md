@@ -2430,3 +2430,29 @@ significa que já existe PDF. STALE exige nova revisão/finalização/render e p
 Não persista Base64 recebido em estado global, não monte URL de Storage e não renderize metadata
 como HTML. Use exclusivamente os clients oficiais, cancelamento por `AbortSignal`, retry explícito e
 tratamento dos códigos de pendência retornados em `details.issues`.
+
+## PMOC FIX-01 — Preview, geração e download
+
+Na tela do plano, selecione a execução com `operation` e o primeiro documento do array já filtrado
+como `PMOC`. Passe `documentId`, `operationId`, tipo `PMOC` e os metadados do artefato ao
+`DocumentViewer`. Estados: sem `renderedAt` = **Sem PDF**; fingerprint atual diferente do
+`renderMetadata.sourceFingerprint` = **PDF desatualizado**; caso contrário = **PDF disponível**.
+
+Nunca mantenha uma cópia isolada da execução aberta: após renderizar, resolva-a novamente pela ID na
+lista atualizada. Isso preserva o `documentId` recém-criado e libera o download oficial no mesmo
+Drawer. OWNER/MANAGER podem renderizar; o backend permanece a autoridade.
+# PMOC FIX-02A — integração de revisão de assinaturas
+
+- A revisão usa exclusivamente o handoff oficial do documento PMOC.
+- `customerSignature.collectedBy` é a fonte para “Coletada por”; `collectedAt` fornece data e hora.
+- Coleta/substituição: `PATCH /documents/:documentId/handoff/customer-signature`.
+- Seleção técnica da execução corrente: `PATCH /documents/:documentId/handoff/technical-signature`.
+- Override das futuras emissões daquele PMOC: `PATCH /pmoc/:id` com `signatureOverrideId`.
+- Alterar o override não modifica a assinatura global nem documentos já emitidos; o preview oficial deve ser recarregado após a resposta.
+
+## PMOC FIX-02B — integração de evidências
+
+- Use `operation.photos[].createdBy/createdAt` para autor/data; esses metadados são somente leitura.
+- Miniaturas vêm exclusivamente de `GET /operations/photos/:photoId`; não persista Base64.
+- Adição múltipla reutiliza PATCH da Operation; legenda usa PATCH e remoção usa DELETE da foto.
+- Após qualquer mutação, recarregue Operation e `DocumentViewer`. A ordem do array é a ordem documental.

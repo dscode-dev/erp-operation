@@ -706,6 +706,7 @@ export type DocumentHandoff = {
     timezone: string;
     origin: DocumentHandoffOrigin;
     available: true;
+    collectedBy: { id: string; name: string; role: Role } | null;
   };
   technicalSignature: null | Pick<Signature, 'id' | 'name' | 'title' | 'profession' | 'professionalCouncil' | 'registrationNumber' | 'department' | 'active' | 'hasImage'>;
   collectedBy: { id: string; name: string; role: Role } | null;
@@ -846,6 +847,7 @@ export type OperationPhoto = {
   mimeType: string;
   fileSize: number;
   createdAt: string;
+  createdBy: { id: string; name: string; role: Role } | null;
 };
 
 export type OperationSummary = {
@@ -1224,6 +1226,9 @@ export type PmocExecutionRequest = {
       number: string;
       status: OperationDocumentStatus;
       renderedAt: string | null;
+      fileSize: number | null;
+      revision: number;
+      renderMetadata: Record<string, unknown> | null;
     }>;
   }) | null;
   maintenanceExecution?: Pick<MaintenanceExecution, 'id' | 'scheduledAt' | 'status' | 'executedAt' | 'operationId'> | null;

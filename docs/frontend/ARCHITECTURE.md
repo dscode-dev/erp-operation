@@ -1024,3 +1024,30 @@ Operator / Operation atribuída
 O estado editorial é independente do artefato. Edições posteriores produzem STALE e nova revisão,
 sem apagar PDF nem histórico. Componentes de UI não consultam Storage, não calculam políticas de
 assinatura e não geram documentos localmente.
+
+## PMOC FIX-01
+
+```text
+PmocExecutionRequest (ID estável)
+  → Operation + documento PMOC atual
+  → DocumentViewer
+  → Preview / Render / Download oficiais
+  → refetch da execução por ID
+  → /documentos
+```
+
+O estado STALE é determinado pelos fingerprints produzidos pelo backend. O frontend não acessa
+Storage, não gera PDF e não reconstrói o Blueprint.
+# PMOC FIX-02A — decisão arquitetural
+
+O estado técnico do plano (`signatureOverrideId`) e o snapshot documental (`OperationDocument` handoff) são atualizados pelas APIs oficiais. O primeiro orienta futuras emissões do PMOC; o segundo atualiza o documento corrente. O preview é sempre solicitado ao Document Engine, evitando regra de assinatura ou renderização no frontend.
+
+## PMOC FIX-02B — decisão arquitetural
+
+```text
+PmocPlan → ExecutionRequest → OperationPhoto/StorageProvider
+  → DocumentContext → imageGallery no Blueprint
+  → mesmo Preview → Renderer/PDF
+```
+
+O Wizard edita a coleção oficial da Operation e invalida o Preview após cada resposta. Autoria e datas vêm do backend; conteúdo passa por endpoint autenticado. O frontend não replica fotos em estrutura PMOC, não lê Storage e não monta galeria documental local.

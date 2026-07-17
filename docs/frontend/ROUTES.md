@@ -543,3 +543,16 @@ modo novo cria uma Operation DRAFT oficial e segue Preview → Render → Downlo
 - `/reports`: caixa de entrada, filtros, revisão e emissão por OWNER/MANAGER.
 - `/documentos`: repositório oficial com estado editorial, versão/revisão e Viewer oficial.
 - Nenhuma rota nova de PDF, preview, PMOC, OS ou assinatura foi criada.
+
+## PMOC FIX-01
+
+- `/pmoc/:id`: ações e estado do PDF oficial da execução mais recente; execuções anteriores mantêm
+  a mesma ação individual na aba Execuções.
+- `/documentos`: recebe o PMOC automaticamente após renderização. Nenhuma rota frontend nova.
+# PMOC FIX-02A
+
+- `/pmoc/:id`: OWNER/MANAGER visualizam a ação “Revisar assinaturas”, que abre o Wizard oficial em modo de revisão sem criar rota adicional.
+
+## PMOC FIX-02B
+
+- `/pmoc/:id`: OWNER/MANAGER visualizam **Revisar evidências**, que abre o Wizard oficial na etapa Evidências. Nenhuma rota frontend foi adicionada.

@@ -51,6 +51,13 @@ export class OperationPhotoInputDto {
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(255) caption?: string;
 }
 
+export class UpdateOperationPhotoDto {
+  @Transform(({ value }) => trim(value))
+  @IsString()
+  @MaxLength(255)
+  caption!: string;
+}
+
 export class OperationMaintenanceChecklistItemDto {
   @IsOptional() @IsUUID('4') equipmentId?: string;
   @IsEnum(OperationMaintenanceType) maintenanceType!: OperationMaintenanceType;

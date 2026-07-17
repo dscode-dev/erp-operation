@@ -91,6 +91,21 @@ describe('Field Report Handoff', () => {
     expect(submitted.editorialStatus).toBe('DRAFT');
     expect(submitted.customerSignature).toMatchObject({ name: 'Responsável local', origin: 'OPERATOR' });
 
+    const replaced = await service.collectCustomerSignature(
+      draft.id,
+      {
+        signerName: 'Responsável substituto',
+        signerRole: 'Cliente',
+        signatureData: `data:image/png;base64,${PNG.toString('base64')}`,
+        collectedAt: '2026-07-17T15:42:00.000Z',
+        timezone: 'America/Recife',
+      },
+      owner,
+      audit,
+    ) as { customerSignature: { name: string; collectedBy: { id: string } }; collectedBy: { id: string } };
+    expect(replaced.customerSignature).toMatchObject({ name: 'Responsável substituto', collectedBy: { id: owner.id } });
+    expect(replaced.collectedBy.id).toBe(owner.id);
+
     await service.startReview(draft.id, owner, audit);
     const finalized = await service.finalize(draft.id, owner, audit) as {
       editorialStatus: string;
@@ -101,9 +116,10 @@ describe('Field Report Handoff', () => {
 
     const persisted = await prisma.operationDocument.findUniqueOrThrow({ where: { id: draft.id } });
     expect(persisted.technicalSignatureSnapshot).toMatchObject({ name: 'Engenheira Responsável', registrationNumber: '123456' });
-    expect(persisted.customerSignatureSnapshot).toMatchObject({ name: 'Responsável local', origin: 'OPERATOR' });
-    expect(await prisma.documentRevision.count({ where: { documentId: draft.id } })).toBeGreaterThanOrEqual(4);
-    expect(storage.saves).toHaveLength(2);
+    expect(persisted.customerSignatureSnapshot).toMatchObject({ name: 'Responsável substituto', origin: 'PLATFORM' });
+    expect(persisted.collectedById).toBe(owner.id);
+    expect(await prisma.documentRevision.count({ where: { documentId: draft.id } })).toBeGreaterThanOrEqual(5);
+    expect(storage.saves).toHaveLength(3);
   });
 
   it('enforces Assignment authorization, document matrix and management-only finalization', async () => {

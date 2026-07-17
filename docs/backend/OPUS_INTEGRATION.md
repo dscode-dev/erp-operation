@@ -1974,4 +1974,18 @@ edição e remoção lógica pelos endpoints já oficiais.
   Operator recebem 403 mesmo com chamadas diretas.
 - Não reutilize `signatureMode` para novos handoffs. Os campos legados permanecem apenas para
   compatibilidade histórica e layout do template.
+
+## PMOC FIX-01
+
+`/pmoc/:id` apresenta as ações **Pré-visualizar**, **Gerar PDF**, **Baixar PDF** e, quando o
+fingerprint oficial divergir, **Gerar novamente**. Todas reutilizam `DocumentViewer` e os endpoints
+de `/documents`; não implemente download por Storage nem geração no cliente. O documento renderizado
+é listado automaticamente em `/documentos?type=PMOC`.
 - Clientes devem remover qualquer emissão PDF mobile/local; o único caminho é o Document Engine.
+# PMOC FIX-02A
+
+O Wizard oficial da Platform agora revisa assinaturas de PMOC. Consumir `customerSignature.collectedBy`, nunca inferir o coletor pelo operador atual. A política `NONE/FIXED/COLLECTED/HYBRID` continua vindo da configuração do template; o frontend não decide quais blocos serão renderizados.
+
+## PMOC FIX-02B
+
+Na etapa Evidências do `PmocPlanWizard`, consuma somente `operationApi`: detalhe, conteúdo autenticado, upload em lote, atualização de legenda e remoção. Cada mutação invalida o artefato no backend; refaça o Preview. A grade oficial é 1/2/4 colunas e o uploader aceita seleção múltipla/drag-and-drop. Não há API ou storage específico de PMOC.

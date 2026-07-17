@@ -623,22 +623,49 @@ export class DocumentEngineService {
 
   private withSourceFingerprint(blueprint: DocumentBlueprint): DocumentBlueprint {
     const sourceFingerprint = createHash('sha256')
-      .update(
-        JSON.stringify({
-          ...blueprint,
-          metadata: {
-            ...blueprint.metadata,
-            generatedAt: null,
-            sourceFingerprint: undefined,
-          },
-          footer: { ...blueprint.footer, generatedAt: null },
-        }),
-      )
+      .update(JSON.stringify(this.fingerprintPayload(blueprint)))
       .digest('hex');
     return {
       ...blueprint,
       metadata: { ...blueprint.metadata, sourceFingerprint },
     };
+  }
+
+  private fingerprintPayload(blueprint: DocumentBlueprint): unknown {
+    const generatedAt = blueprint.metadata.generatedAt;
+    const generatedDate = new Date(generatedAt);
+    const timezone = blueprint.metadata.timezone || 'America/Recife';
+    const generatedValues = [
+      generatedAt,
+      new Intl.DateTimeFormat('pt-BR', {
+        dateStyle: 'short',
+        timeStyle: 'short',
+        timeZone: timezone,
+      }).format(generatedDate),
+      new Intl.DateTimeFormat('pt-BR', {
+        dateStyle: 'short',
+        timeZone: timezone,
+      }).format(generatedDate),
+    ].filter(Boolean);
+    const normalize = (value: unknown): unknown => {
+      if (typeof value === 'string') {
+        return generatedValues.reduce(
+          (result, generatedValue) => result.split(generatedValue).join('[GENERATED_AT]'),
+          value,
+        );
+      }
+      if (Array.isArray(value)) return value.map(normalize);
+      if (value && typeof value === 'object') {
+        return Object.fromEntries(
+          Object.entries(value).map(([key, item]) => [
+            key,
+            key === 'sourceFingerprint' ? undefined : normalize(item),
+          ]),
+        );
+      }
+      return value;
+    };
+    return normalize(blueprint);
   }
 
   private renderedSourceFingerprint(metadata: Prisma.JsonValue | null): string | null {

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query, Req } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query, Req } from '@nestjs/common';
 import { Role } from '@prisma/client';
 import { CurrentUser } from '../../shared/decorators/current-user.decorator';
 import { Roles } from '../../shared/decorators/roles.decorator';
@@ -8,6 +8,7 @@ import {
   CreateOperationDto,
   ListOperationsQueryDto,
   UpdateOperationDto,
+  UpdateOperationPhotoDto,
 } from './dto/operation.dto';
 import { OperationsService, type OperationAuditContext } from './operations.service';
 
@@ -41,6 +42,27 @@ export class OperationsController {
   @Get('photos/:photoId')
   getPhoto(@Param('photoId', new ParseUUIDPipe({ version: '4' })) id: string): Promise<unknown> {
     return this.operations.getPhoto(id);
+  }
+
+  @Roles(Role.OWNER, Role.MANAGER)
+  @Patch('photos/:photoId')
+  updatePhoto(
+    @Param('photoId', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body() body: UpdateOperationPhotoDto,
+    @CurrentUser() actor: AuthenticatedUser,
+    @Req() request: RequestWithId,
+  ): Promise<unknown> {
+    return this.operations.updatePhoto(id, body.caption, actor, this.context(request));
+  }
+
+  @Roles(Role.OWNER, Role.MANAGER)
+  @Delete('photos/:photoId')
+  deletePhoto(
+    @Param('photoId', new ParseUUIDPipe({ version: '4' })) id: string,
+    @CurrentUser() actor: AuthenticatedUser,
+    @Req() request: RequestWithId,
+  ): Promise<unknown> {
+    return this.operations.deletePhoto(id, actor, this.context(request));
   }
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR, Role.VIEWER)

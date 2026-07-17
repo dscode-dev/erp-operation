@@ -14,6 +14,7 @@ import {
   OPERATION_AUDIT_ACTIONS,
   OPERATION_DOCUMENT_PREFIX,
   OPERATION_PHOTO_MIME_TYPES,
+  OPERATION_PHOTO_RESOURCE,
   OPERATION_RESOURCE,
   OPERATION_SIGNATURE_MIME_TYPES,
   formatDocumentNumber,
@@ -51,7 +52,14 @@ const OPERATION_INCLUDE = {
   operator: { select: { id: true, name: true } },
   photos: {
     orderBy: { createdAt: 'asc' as const },
-    select: { id: true, caption: true, mimeType: true, fileSize: true, createdAt: true },
+    select: {
+      id: true,
+      caption: true,
+      mimeType: true,
+      fileSize: true,
+      createdAt: true,
+      createdBy: { select: { id: true, name: true, role: true } },
+    },
   },
   maintenanceChecklistItems: {
     orderBy: [{ maintenanceType: 'asc' as const }, { position: 'asc' as const }],
@@ -323,6 +331,7 @@ export class OperationsService {
         await this.prisma.operationPhoto.create({
           data: {
             operationId,
+            createdById: actor.id,
             storageKey,
             caption: photo.caption,
             mimeType: photo.mimeType,
@@ -376,10 +385,10 @@ export class OperationsService {
         : await this.resolveInspectedEquipments(existing.customerId, dto.inspectedEquipments);
     await this.validateChecklistEquipments(existing.customerId, dto.maintenanceChecklist);
     const photos = (dto.photos ?? []).map((p) => this.decodePhoto(p));
-    if (photos.length > MAX_OPERATION_PHOTOS) {
+    if (existing._count.photos + photos.length > MAX_OPERATION_PHOTOS) {
       throw new ApplicationException(
         ERROR_CODES.OPERATION_PHOTO_INVALID,
-        `A maximum of ${MAX_OPERATION_PHOTOS} photos is allowed per update`,
+        `A maximum of ${MAX_OPERATION_PHOTOS} photos is allowed per Operation`,
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -461,46 +470,7 @@ export class OperationsService {
             : {}),
         },
       });
-      if (Object.keys(dto).some((field) => field !== 'status' || dto.status !== undefined)) {
-        await tx.operationDocument.updateMany({
-          where: { operationId: id, submittedAt: { not: null }, renderedAt: null },
-          data: { editorialStatus: 'PENDING' },
-        });
-        await tx.operationDocument.updateMany({
-          where: { operationId: id, submittedAt: { not: null }, renderedAt: { not: null } },
-          data: { editorialStatus: 'STALE' },
-        });
-        const affectedDocuments = await tx.operationDocument.findMany({
-          where: { operationId: id, submittedAt: { not: null } },
-          select: { id: true, renderedAt: true },
-        });
-        for (const document of affectedDocuments) {
-          const revisioned = await tx.operationDocument.update({
-            where: { id: document.id },
-            data: { revision: { increment: 1 } },
-            select: { revision: true, editorialStatus: true },
-          });
-          await tx.documentRevision.create({
-            data: {
-              documentId: document.id,
-              revision: revisioned.revision,
-              action: document.renderedAt
-                ? DocumentRevisionAction.MARKED_STALE
-                : DocumentRevisionAction.REVIEW_UPDATED,
-              origin:
-                actor.role === Role.OPERATOR
-                  ? DocumentHandoffOrigin.OPERATOR
-                  : DocumentHandoffOrigin.PLATFORM,
-              actorId: actor.id,
-              changedFields: Object.keys(dto),
-              snapshot: {
-                editorialStatus: revisioned.editorialStatus,
-                operationId: id,
-              },
-            },
-          });
-        }
-      }
+      if (Object.keys(dto).length > 0) await this.markDocumentsChangedTx(tx, id, actor, Object.keys(dto));
       if (dto.maintenanceChecklist !== undefined) {
         await tx.operationMaintenanceChecklistItem.deleteMany({ where: { operationId: id } });
         if (dto.maintenanceChecklist.length > 0) {
@@ -548,21 +518,29 @@ export class OperationsService {
         await this.prisma.operationPhoto.create({
           data: {
             operationId: id,
+            createdById: actor.id,
             storageKey,
             caption: photo.caption,
             mimeType: photo.mimeType,
             fileSize: photo.buffer.length,
           },
         });
-      } catch {
+        await this.prisma.auditLog.create({
+          data: this.audit(OPERATION_AUDIT_ACTIONS.OPERATION_PHOTO_UPLOADED, OPERATION_PHOTO_RESOURCE, actor, context, { operationId: id, caption: photo.caption }),
+        });
+      } catch (error) {
         await this.storage.delete(storageKey).catch(() => undefined);
+        throw error;
       }
     }
     return this.operationOrThrow(id);
   }
 
   async getPhoto(photoId: string): Promise<unknown> {
-    const photo = await this.prisma.operationPhoto.findUnique({ where: { id: photoId } });
+    const photo = await this.prisma.operationPhoto.findUnique({
+      where: { id: photoId },
+      include: { createdBy: { select: { id: true, name: true, role: true } } },
+    });
     if (!photo)
       throw new ApplicationException(
         ERROR_CODES.OPERATION_PHOTO_NOT_FOUND,
@@ -576,8 +554,32 @@ export class OperationsService {
       mimeType: photo.mimeType,
       fileSize: photo.fileSize,
       createdAt: photo.createdAt,
+      createdBy: photo.createdBy,
       contentBase64: stored.content.toString('base64'),
     };
+  }
+
+  async updatePhoto(photoId: string, caption: string, actor: AuthenticatedUser, context: OperationAuditContext): Promise<unknown> {
+    this.assertPhotoManagement(actor);
+    const photo = await this.photoOrThrow(photoId);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.operationPhoto.update({ where: { id: photoId }, data: { caption: caption || null } });
+      await this.markDocumentsChangedTx(tx, photo.operationId, actor, ['photos.caption']);
+      await tx.auditLog.create({ data: this.audit(OPERATION_AUDIT_ACTIONS.OPERATION_PHOTO_CAPTION_UPDATED, OPERATION_PHOTO_RESOURCE, actor, context, { operationId: photo.operationId, photoId, previousCaption: photo.caption, caption: caption || null }) });
+    });
+    return this.operationOrThrow(photo.operationId);
+  }
+
+  async deletePhoto(photoId: string, actor: AuthenticatedUser, context: OperationAuditContext): Promise<unknown> {
+    this.assertPhotoManagement(actor);
+    const photo = await this.photoOrThrow(photoId);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.operationPhoto.delete({ where: { id: photoId } });
+      await this.markDocumentsChangedTx(tx, photo.operationId, actor, ['photos']);
+      await tx.auditLog.create({ data: this.audit(OPERATION_AUDIT_ACTIONS.OPERATION_PHOTO_DELETED, OPERATION_PHOTO_RESOURCE, actor, context, { operationId: photo.operationId, photoId, caption: photo.caption }) });
+    });
+    await this.storage.delete(photo.storageKey).catch(() => undefined);
+    return this.operationOrThrow(photo.operationId);
   }
 
   private normalizeChecklist(items?: OperationChecklistItemDto[]): Prisma.InputJsonValue {
@@ -879,6 +881,51 @@ export class OperationsService {
       );
     const { signatureData: _privateSignature, ...safeOperation } = operation;
     return { ...safeOperation, signatureCaptured: Boolean(_privateSignature) };
+  }
+
+  private async photoOrThrow(photoId: string): Promise<{ id: string; operationId: string; storageKey: string; caption: string | null }> {
+    const photo = await this.prisma.operationPhoto.findUnique({ where: { id: photoId } });
+    if (!photo) {
+      throw new ApplicationException(ERROR_CODES.OPERATION_PHOTO_NOT_FOUND, 'Operation photo was not found', HttpStatus.NOT_FOUND);
+    }
+    return photo;
+  }
+
+  private assertPhotoManagement(actor: AuthenticatedUser): void {
+    if (actor.role !== Role.OWNER && actor.role !== Role.MANAGER) {
+      throw new ApplicationException(ERROR_CODES.FORBIDDEN, 'Only OWNER and MANAGER can manage historical evidence', HttpStatus.FORBIDDEN);
+    }
+  }
+
+  private async markDocumentsChangedTx(
+    tx: Prisma.TransactionClient,
+    operationId: string,
+    actor: AuthenticatedUser,
+    changedFields: string[],
+  ): Promise<void> {
+    const affectedDocuments = await tx.operationDocument.findMany({
+      where: { operationId, submittedAt: { not: null } },
+      select: { id: true, renderedAt: true },
+    });
+    for (const document of affectedDocuments) {
+      const editorialStatus = document.renderedAt ? 'STALE' : 'PENDING';
+      const revisioned = await tx.operationDocument.update({
+        where: { id: document.id },
+        data: { editorialStatus, revision: { increment: 1 } },
+        select: { revision: true },
+      });
+      await tx.documentRevision.create({
+        data: {
+          documentId: document.id,
+          revision: revisioned.revision,
+          action: document.renderedAt ? DocumentRevisionAction.MARKED_STALE : DocumentRevisionAction.REVIEW_UPDATED,
+          origin: actor.role === Role.OPERATOR ? DocumentHandoffOrigin.OPERATOR : DocumentHandoffOrigin.PLATFORM,
+          actorId: actor.id,
+          changedFields,
+          snapshot: { editorialStatus, operationId },
+        },
+      });
+    }
   }
 
   private audit(

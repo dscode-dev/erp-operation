@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import {
   CalendarClock,
   Check,
@@ -8,6 +9,7 @@ import {
   ChevronRight,
   ClipboardCheck,
   FileSignature,
+  Images,
   MapPinned,
   RefreshCw,
   Settings2,
@@ -19,6 +21,7 @@ import {
   documentsApi,
   equipmentsApi,
   pmocApi,
+  operationApi,
   signaturesApi,
   technicalCatalogsApi,
   usersApi,
@@ -27,7 +30,10 @@ import {
   type Customer,
   type CustomerAddress,
   type DocumentConfiguration,
+  type DocumentHandoff,
   type EquipmentSummary,
+  type OperationDetail,
+  type OperationPhoto,
   type OperationType,
   type PmocGenerationMode,
   type PmocPeriodicity,
@@ -36,7 +42,12 @@ import {
   type TeamUser,
 } from "@erp/api";
 import { Drawer } from "@erp/ui/drawer";
+import { ConfirmDialog } from "@erp/ui/confirm-dialog";
+import { DocumentViewer } from "@erp/ui/documents/document-viewer";
+import { SignaturePad } from "@erp/ui/documents/signature-pad";
 import { MultiSelect } from "@erp/ui/multi-select";
+import { PhotoInput, type CapturedPhoto } from "@erp/ui/photo-input";
+import { CustomerSignaturePreview } from "./document-handoff-inbox";
 import { OperationCreationDrawer } from "./operation-creation-drawer";
 
 const PERIODICITIES: Array<{ value: PmocPeriodicity; label: string; months: number }> = [
@@ -98,13 +109,17 @@ const initialForm: Form = {
   signatureOverrideId: "",
 };
 
-const STEPS = ["Identificação", "Cobertura", "Planejamento", "Execução", "Documento", "Confirmação"];
+const STEPS = ["Identificação", "Cobertura", "Planejamento", "Execução", "Evidências", "Documento", "Confirmação"];
 
-export function PmocPlanWizard({ open, onClose, onCreated }: {
+export function PmocPlanWizard({ open, onClose, onCreated, pmoc = null, onUpdated, initialReviewSection = "signatures" }: {
   open: boolean;
   onClose: () => void;
   onCreated: (pmoc: PmocPlan) => void;
+  pmoc?: PmocPlan | null;
+  onUpdated?: (pmoc: PmocPlan) => void;
+  initialReviewSection?: "signatures" | "evidence";
 }) {
+  const reviewing = Boolean(pmoc);
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<Form>(initialForm);
   const [nameEdited, setNameEdited] = useState(false);
@@ -114,6 +129,19 @@ export function PmocPlanWizard({ open, onClose, onCreated }: {
   const [operationOpen, setOperationOpen] = useState(false);
   const [executionRequestId, setExecutionRequestId] = useState<string | null>(null);
   const [prefill, setPrefill] = useState<CreateOperationPayload | null>(null);
+  const [handoff, setHandoff] = useState<DocumentHandoff | null>(null);
+  const [signatureData, setSignatureData] = useState<string | null>(null);
+  const [signerName, setSignerName] = useState("");
+  const [signerRole, setSignerRole] = useState("");
+  const [captureOpen, setCaptureOpen] = useState(false);
+  const [selectorOpen, setSelectorOpen] = useState(false);
+  const [signatureBusy, setSignatureBusy] = useState(false);
+  const [signatureFeedback, setSignatureFeedback] = useState<string | null>(null);
+  const [previewRevision, setPreviewRevision] = useState(0);
+
+  const reviewRequest = pmoc?.executionRequests?.find((item) => item.operation) ?? null;
+  const reviewOperationId = reviewRequest?.operation?.id ?? null;
+  const reviewDocumentId = reviewRequest?.operation?.documents?.[0]?.id ?? null;
 
   const customers = useQuery((signal) => customersApi.listCustomers({ limit: 100, signal }), []);
   const customer = useQuery(
@@ -149,15 +177,54 @@ export function PmocPlanWizard({ open, onClose, onCreated }: {
     (signal) => documentsApi.getConfigurationByType("PMOC", { signal }),
     [],
   );
+  const reviewOperation = useQuery<OperationDetail | null>(
+    (signal) => reviewOperationId
+      ? operationApi.getOperation(reviewOperationId, { signal })
+      : Promise.resolve(null),
+    [reviewOperationId],
+  );
+  const reviewHandoff = useQuery<DocumentHandoff | null>(
+    (signal) => reviewDocumentId ? documentsApi.getHandoff(reviewDocumentId, { signal }) : Promise.resolve(null),
+    [reviewDocumentId],
+  );
 
   useEffect(() => {
     if (!open) return;
-    setStep(0);
-    setForm(initialForm);
+    setStep(reviewing ? (initialReviewSection === "evidence" ? 4 : 5) : 0);
+    setForm(pmoc ? {
+      ...initialForm,
+      customerId: pmoc.customerId,
+      addressId: pmoc.defaultAddressId ?? "",
+      equipmentIds: pmoc.equipments?.map((item) => item.equipmentId) ?? [pmoc.equipmentId],
+      scopeCatalogIds: pmoc.scopes?.map((item) => item.technicalCatalogId) ?? [],
+      name: pmoc.maintenancePlan?.name ?? "",
+      periodicity: pmoc.periodicity,
+      startDate: pmoc.startDate.slice(0, 10),
+      endDate: pmoc.endDate.slice(0, 10),
+      defaultTechnicianId: pmoc.defaultTechnicianId ?? "",
+      defaultOperatorId: pmoc.defaultOperatorId ?? "",
+      serviceTypes: pmoc.serviceTypes,
+      duration: String(pmoc.defaultEstimatedDurationMinutes ?? 120),
+      operationObservations: pmoc.defaultOperationObservations ?? "",
+      generationMode: pmoc.generationMode,
+      overrideSignature: Boolean(pmoc.signatureOverrideId),
+      signatureOverrideId: pmoc.signatureOverrideId ?? "",
+    } : initialForm);
     setNameEdited(false);
     setError(null);
     setSaving(false);
-  }, [open]);
+    setHandoff(reviewHandoff.data ?? null);
+    setSignatureData(null);
+    setSignerName("");
+    setSignerRole("");
+    setCaptureOpen(false);
+    setSelectorOpen(false);
+    setSignatureFeedback(null);
+  }, [initialReviewSection, open, pmoc, reviewHandoff.data, reviewing]);
+
+  useEffect(() => {
+    if (reviewHandoff.data) setHandoff(reviewHandoff.data);
+  }, [reviewHandoff.data]);
 
   useEffect(() => {
     if (!nameEdited && nameSuggestion.data?.name) {
@@ -171,8 +238,75 @@ export function PmocPlanWizard({ open, onClose, onCreated }: {
   const configuredSignature = template?.institutionalSignatures?.[0]?.signature ?? template?.signature ?? null;
   const configurationReady = Boolean(documentConfig.data) && !documentConfig.error;
 
+  useEffect(() => {
+    if (!open || reviewing || !signatures.data?.items.length || form.signatureOverrideId) return;
+    if (signatureMode !== "FIXED" && signatureMode !== "HYBRID") return;
+    const preferred = signatures.data.items.find((item) => item.isDefault) ?? configuredSignature;
+    if (preferred) {
+      setForm((current) => ({ ...current, overrideSignature: true, signatureOverrideId: preferred.id }));
+    }
+  }, [configuredSignature, form.signatureOverrideId, open, reviewing, signatureMode, signatures.data?.items]);
+
   function set<K extends keyof Form>(key: K, value: Form[K]) {
     setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  async function ensureHandoff() {
+    if (handoff) return handoff;
+    if (reviewHandoff.data) return reviewHandoff.data;
+    if (!reviewOperationId) throw new Error("A primeira Ordem de Serviço precisa ser criada antes da coleta de assinatura.");
+    const created = await documentsApi.saveHandoffDraft(reviewOperationId, "PMOC");
+    setHandoff(created);
+    return created;
+  }
+
+  async function collectSignature() {
+    if (!signatureData || !signerName.trim()) return;
+    setSignatureBusy(true);
+    setSignatureFeedback(null);
+    try {
+      const current = await ensureHandoff();
+      const updated = await documentsApi.collectCustomerSignature(current.id, {
+        signerName: signerName.trim(),
+        signerRole: signerRole.trim() || undefined,
+        signatureData,
+        collectedAt: new Date().toISOString(),
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      });
+      setHandoff(updated);
+      setSignatureData(null);
+      setCaptureOpen(false);
+      setPreviewRevision((value) => value + 1);
+      setSignatureFeedback(current.customerSignature ? "Assinatura do cliente substituída e registrada." : "Assinatura do cliente coletada e registrada.");
+    } catch (cause) {
+      setSignatureFeedback(cause instanceof ApiClientError ? cause.message : cause instanceof Error ? cause.message : "Não foi possível registrar a assinatura.");
+    } finally {
+      setSignatureBusy(false);
+    }
+  }
+
+  async function changeTechnicalSignature(signatureId: string) {
+    set("overrideSignature", true);
+    set("signatureOverrideId", signatureId);
+    setSignatureBusy(true);
+    setSignatureFeedback(null);
+    try {
+      if (pmoc) {
+        const updatedPlan = await pmocApi.updatePmoc(pmoc.id, { signatureOverrideId: signatureId });
+        onUpdated?.(updatedPlan);
+        if (reviewOperationId) {
+          const current = await ensureHandoff();
+          setHandoff(await documentsApi.selectHandoffTechnicalSignature(current.id, signatureId));
+        }
+      }
+      setSelectorOpen(false);
+      setPreviewRevision((value) => value + 1);
+      setSignatureFeedback("Assinatura técnica atualizada somente para este PMOC.");
+    } catch (cause) {
+      setSignatureFeedback(cause instanceof ApiClientError ? cause.message : "Não foi possível alterar a assinatura técnica.");
+    } finally {
+      setSignatureBusy(false);
+    }
   }
 
   const validByStep = [
@@ -180,6 +314,7 @@ export function PmocPlanWizard({ open, onClose, onCreated }: {
     Boolean(form.equipmentIds.length && form.scopeCatalogIds.length && form.serviceTypes.length),
     Boolean(form.startDate && form.endDate && new Date(form.startDate) <= new Date(form.endDate)),
     Boolean(form.defaultTechnicianId && Number(form.duration) >= 15),
+    true,
     configurationReady && (!(signatureMode === "FIXED" || signatureMode === "HYBRID") || Boolean(form.overrideSignature ? form.signatureOverrideId : configuredSignature)),
     true,
   ];
@@ -243,9 +378,9 @@ export function PmocPlanWizard({ open, onClose, onCreated }: {
       open={open && !operationOpen}
       onClose={onClose}
       eyebrow="PMOC operacional"
-      title="Novo plano PMOC"
+      title={reviewing ? (initialReviewSection === "evidence" ? "Revisar evidências do PMOC" : "Revisar assinaturas do PMOC") : "Novo plano PMOC"}
       width="max-w-5xl"
-      footer={<>
+      footer={reviewing ? <button className={secondary} onClick={onClose}>Fechar</button> : <>
         <button className={secondary} onClick={step === 0 ? onClose : () => setStep((value) => value - 1)}>
           {step === 0 ? "Cancelar" : <><ChevronLeft className="h-4 w-4" /> Voltar</>}
         </button>
@@ -255,7 +390,7 @@ export function PmocPlanWizard({ open, onClose, onCreated }: {
       </>}
     >
       <div className="space-y-6">
-        <Stepper step={step} onStep={setStep} />
+        {!reviewing && <Stepper step={step} onStep={setStep} />}
         {error && <Notice tone="danger">{error}</Notice>}
         {documentConfig.error && <Notice tone="danger">Não foi possível consultar a configuração documental. Tente novamente antes de concluir.</Notice>}
 
@@ -281,8 +416,44 @@ export function PmocPlanWizard({ open, onClose, onCreated }: {
         />}
         {step === 2 && <PlanningStep form={form} set={set} projection={projection} />}
         {step === 3 && <ExecutionStep form={form} set={set} users={users.data?.items ?? []} />}
-        {step === 4 && <DocumentStep mode={signatureMode} configured={configuredSignature} signatures={signatures.data?.items ?? []} form={form} set={set} loading={documentConfig.loading} error={documentConfig.error} />}
-        {step === 5 && <SummaryStep
+        {step === 4 && <EvidenceStep
+          operation={reviewOperation.data}
+          operationId={reviewOperationId}
+          documentId={reviewDocumentId}
+          reviewing={reviewing}
+          previewRevision={previewRevision}
+          onChanged={() => { reviewOperation.refetch(); setPreviewRevision((value) => value + 1); }}
+        />}
+        {step === 5 && <DocumentStep
+          mode={signatureMode}
+          configured={configuredSignature}
+          signatures={signatures.data?.items ?? []}
+          form={form}
+          set={set}
+          loading={documentConfig.loading || reviewHandoff.loading || reviewOperation.loading}
+          error={documentConfig.error ?? reviewHandoff.error ?? reviewOperation.error}
+          reviewing={reviewing}
+          handoff={handoff}
+          operation={reviewOperation.data}
+          documentId={handoff?.id ?? reviewDocumentId}
+          operationId={reviewOperationId}
+          captureOpen={captureOpen}
+          selectorOpen={selectorOpen}
+          signatureData={signatureData}
+          signerName={signerName}
+          signerRole={signerRole}
+          busy={signatureBusy}
+          feedback={signatureFeedback}
+          previewRevision={previewRevision}
+          onCaptureOpen={setCaptureOpen}
+          onSelectorOpen={setSelectorOpen}
+          onSignatureData={setSignatureData}
+          onSignerName={setSignerName}
+          onSignerRole={setSignerRole}
+          onCollect={() => void collectSignature()}
+          onTechnicalSignature={(id) => void changeTechnicalSignature(id)}
+        />}
+        {step === 6 && <SummaryStep
           form={form}
           customerName={selectedCustomer?.tradeName ?? selectedCustomer?.name ?? "—"}
           equipments={equipments.data?.items ?? []}
@@ -367,16 +538,151 @@ function ExecutionStep({ form, set, users }: { form: Form; set: FormSetter; user
   </Section>;
 }
 
-function DocumentStep({ mode, configured, signatures, form, set, loading, error }: { mode: string | null; configured: Signature | null; signatures: Signature[]; form: Form; set: FormSetter; loading: boolean; error: Error | null }) {
+function EvidenceStep({ operation, operationId, documentId, reviewing, previewRevision, onChanged }: {
+  operation: OperationDetail | null;
+  operationId: string | null;
+  documentId: string | null;
+  reviewing: boolean;
+  previewRevision: number;
+  onChanged: () => void;
+}) {
+  const [pending, setPending] = useState<CapturedPhoto[]>([]);
+  const [sources, setSources] = useState<Record<string, string>>({});
+  const [captions, setCaptions] = useState<Record<string, string>>({});
+  const [editing, setEditing] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<OperationPhoto | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [feedback, setFeedback] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!operation?.photos.length) { setSources({}); setCaptions({}); return; }
+    let active = true;
+    setCaptions(Object.fromEntries(operation.photos.map((photo) => [photo.id, photo.caption ?? ""])));
+    operation.photos.forEach((photo) => {
+      operationApi.getOperationPhoto(photo.id).then((content) => {
+        if (active) setSources((current) => ({ ...current, [photo.id]: `data:${content.mimeType};base64,${content.contentBase64}` }));
+      }).catch(() => undefined);
+    });
+    return () => { active = false; };
+  }, [operation]);
+
+  async function upload() {
+    if (!operationId || pending.length === 0) return;
+    setBusy(true); setError(null); setFeedback(null); setProgress(10);
+    setPending((current) => current.map((photo) => ({ ...photo, status: "saving" })));
+    try {
+      const photos = await Promise.all(pending.map(async (photo) => ({ dataUrl: await evidenceFileDataUrl(photo.file), caption: photo.caption?.trim() || null })));
+      setProgress(45);
+      await operationApi.updateOperation(operationId, { photos });
+      setProgress(100);
+      pending.forEach((photo) => URL.revokeObjectURL(photo.url));
+      setPending([]);
+      setFeedback(`${photos.length} evidência(s) adicionada(s). O preview oficial foi atualizado.`);
+      onChanged();
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : "Não foi possível adicionar as evidências.";
+      setPending((current) => current.map((photo) => ({ ...photo, status: "error", error: message })));
+      setError(message);
+    } finally { setBusy(false); setTimeout(() => setProgress(0), 800); }
+  }
+
+  async function saveCaption(photo: OperationPhoto) {
+    setBusy(true); setError(null); setFeedback(null);
+    try {
+      await operationApi.updateOperationPhoto(photo.id, captions[photo.id] ?? "");
+      setEditing(null);
+      setFeedback("Legenda atualizada. O preview oficial já utiliza o novo texto.");
+      onChanged();
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Não foi possível atualizar a legenda."); }
+    finally { setBusy(false); }
+  }
+
+  async function removePhoto() {
+    if (!removing) return;
+    setBusy(true); setError(null); setFeedback(null);
+    try {
+      await operationApi.deleteOperationPhoto(removing.id);
+      setSources((current) => { const next = { ...current }; delete next[removing.id]; return next; });
+      setFeedback("Evidência removida com auditoria. O preview oficial foi atualizado.");
+      setRemoving(null);
+      onChanged();
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Não foi possível remover a evidência."); }
+    finally { setBusy(false); }
+  }
+
+  return <Section icon={Images} title="Evidências fotográficas" text="Revise as imagens da execução e complemente o documento quando necessário.">
+    {!operationId && <Notice tone="neutral"><strong>Nenhuma evidência cadastrada.</strong><br />As fotos poderão ser adicionadas após a criação da primeira Ordem de Serviço deste PMOC.</Notice>}
+    {operationId && <div className="space-y-5">
+      {!operation?.photos.length && <Notice tone="neutral"><strong>Nenhuma evidência cadastrada.</strong><br />Adicione imagens PNG ou JPEG utilizando o uploader oficial.</Notice>}
+      {Boolean(operation?.photos.length) && <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">{operation?.photos.map((photo, index) => <article key={photo.id} className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card)]">
+        <div className="relative aspect-square bg-white">{sources[photo.id] ? <Image src={sources[photo.id]} alt={photo.caption || `Evidência ${index + 1}`} fill unoptimized sizes="240px" className="object-contain" /> : <div className="grid h-full place-items-center text-xs text-[var(--color-muted-foreground)]">Carregando miniatura…</div>}<span className="absolute left-2 top-2 rounded-full bg-black/65 px-2 py-1 text-xs text-white">{index + 1}</span></div>
+        <div className="space-y-3 p-3">
+          {editing === photo.id ? <div className="space-y-2"><input value={captions[photo.id] ?? ""} maxLength={255} onChange={(event) => setCaptions((current) => ({ ...current, [photo.id]: event.target.value }))} className="h-9 w-full rounded-md border border-[var(--color-border)] bg-transparent px-2 text-sm" placeholder="Legenda da evidência" autoFocus /><div className="flex gap-2"><button type="button" className={smallButton} disabled={busy} onClick={() => void saveCaption(photo)}>Salvar</button><button type="button" className={smallButton} onClick={() => { setEditing(null); setCaptions((current) => ({ ...current, [photo.id]: photo.caption ?? "" })); }}>Cancelar</button></div></div> : <><p className="min-h-10 text-sm font-medium">{photo.caption || "Sem legenda"}</p><div className="space-y-1 text-xs text-[var(--color-muted-foreground)]"><p>{photo.createdBy?.name ?? operation.operator?.name ?? "Responsável não identificado"}</p><p>{new Date(photo.createdAt).toLocaleDateString("pt-BR")} · {new Date(photo.createdAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</p></div><div className="flex gap-2"><button type="button" className={smallButton} onClick={() => setEditing(photo.id)}>Editar legenda</button><button type="button" className={`${smallButton} text-red-600`} onClick={() => setRemoving(photo)}>Remover</button></div></>}
+        </div>
+      </article>)}</div>}
+      {reviewing && <section className="space-y-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4"><div><h4 className="font-semibold">Adicionar fotos</h4><p className="text-sm text-[var(--color-muted-foreground)]">Arraste imagens ou selecione vários arquivos. Revise as miniaturas e legendas antes do envio.</p></div><PhotoInput photos={pending} onChange={setPending} max={16} existingCount={operation?.photos.length ?? 0} requiredMinimum={4} disabled={busy} />{progress > 0 && <div className="space-y-1"><div className="h-2 overflow-hidden rounded-full bg-[var(--color-muted)]"><div className="h-full bg-[var(--color-primary)] transition-all" style={{ width: `${progress}%` }} /></div><p className="text-xs text-[var(--color-muted-foreground)]">Enviando evidências · {progress}%</p></div>}<button type="button" className={primary} disabled={!pending.length || busy} onClick={() => void upload()}>{busy ? "Enviando…" : `Enviar ${pending.length || ""} foto(s)`}</button></section>}
+      {error && <Notice tone="danger">{error}</Notice>}{feedback && <Notice tone="info">{feedback}</Notice>}
+      {reviewing && <section className="space-y-3"><div><h4 className="font-semibold">Preview do documento</h4><p className="text-sm text-[var(--color-muted-foreground)]">Esta é a mesma coleção, ordem e legenda resolvida pelo DocumentContext para Preview e PDF.</p></div><DocumentViewer key={`evidence-${documentId ?? operationId}-${previewRevision}`} source={{ operationId, type: "PMOC", documentId }} canRender={false} canDownload={false} title="Preview das evidências do PMOC" /></section>}
+    </div>}
+    <ConfirmDialog open={Boolean(removing)} title="Remover esta evidência?" danger confirmLabel="Remover evidência" description="A imagem deixará o documento atual. A ação será registrada em auditoria e PDFs emitidos ficarão desatualizados." onClose={() => setRemoving(null)} onConfirm={() => void removePhoto()} />
+  </Section>;
+}
+
+function DocumentStep({
+  mode, configured, signatures, form, set, loading, error, reviewing, handoff, operation,
+  documentId, operationId, captureOpen, selectorOpen, signatureData, signerName, signerRole,
+  busy, feedback, previewRevision, onCaptureOpen, onSelectorOpen, onSignatureData,
+  onSignerName, onSignerRole, onCollect, onTechnicalSignature,
+}: {
+  mode: string | null; configured: Signature | null; signatures: Signature[]; form: Form; set: FormSetter;
+  loading: boolean; error: Error | null; reviewing: boolean; handoff: DocumentHandoff | null;
+  operation: OperationDetail | null; documentId: string | null; operationId: string | null;
+  captureOpen: boolean; selectorOpen: boolean; signatureData: string | null; signerName: string;
+  signerRole: string; busy: boolean; feedback: string | null; previewRevision: number;
+  onCaptureOpen: (value: boolean) => void; onSelectorOpen: (value: boolean) => void;
+  onSignatureData: (value: string | null) => void; onSignerName: (value: string) => void;
+  onSignerRole: (value: string) => void; onCollect: () => void; onTechnicalSignature: (id: string) => void;
+}) {
   const selected = form.overrideSignature ? signatures.find((item) => item.id === form.signatureOverrideId) ?? null : configured;
-  return <Section icon={FileSignature} title="Documento" text="A política do modelo oficial determina como o documento PMOC será assinado.">
+  const customerRequired = mode === "COLLECTED" || mode === "HYBRID";
+  const technicalRequired = mode === "FIXED" || mode === "HYBRID";
+  const collectedAt = handoff?.customerSignature?.collectedAt ? new Date(handoff.customerSignature.collectedAt) : null;
+  const collectedBy = handoff?.customerSignature?.collectedBy ?? handoff?.collectedBy ?? null;
+  const operator = operation?.operator ?? handoff?.operation?.operator ?? null;
+  return <Section icon={FileSignature} title="Assinaturas" text="Revise exatamente as assinaturas que farão parte do documento final.">
     {loading && <Notice tone="neutral"><strong>Consultando a política do modelo PMOC…</strong></Notice>}
     {error && <Notice tone="danger"><strong>Não foi possível consultar a política do documento.</strong><br />Tente novamente antes de concluir o cadastro.</Notice>}
     {!loading && !error && !mode && <Notice tone="danger"><strong>Nenhum modelo PMOC ativo foi encontrado.</strong></Notice>}
     {mode === "NONE" && <Notice tone="neutral"><strong>Sem assinatura configurada.</strong><br />O documento será emitido sem bloco de assinatura.</Notice>}
-    {mode === "COLLECTED" && <Notice tone="info"><strong>Coleta obrigatória da assinatura do cliente.</strong><br />A assinatura será coletada durante o atendimento em campo.</Notice>}
-    {(mode === "FIXED" || mode === "HYBRID") && <div className="space-y-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4"><div><p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-muted-foreground)]">Assinatura institucional</p>{selected ? <SignatureCard signature={selected} /> : <Notice tone="danger">O modelo exige assinatura institucional, mas nenhuma assinatura ativa está configurada.</Notice>}</div><label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={form.overrideSignature} onChange={(event) => { set("overrideSignature", event.target.checked); if (!event.target.checked) set("signatureOverrideId", ""); }} /> Alterar assinatura somente deste PMOC</label>{form.overrideSignature && <Field label="Assinatura alternativa" required><select value={form.signatureOverrideId} onChange={(event) => set("signatureOverrideId", event.target.value)}><option value="">Selecione uma assinatura ativa…</option>{signatures.map((signature) => <option key={signature.id} value={signature.id}>{signature.name} · {signature.title}</option>)}</select></Field>}</div>}
-    {mode === "HYBRID" && <Notice tone="info"><strong>Assinatura híbrida.</strong><br />O documento utilizará a assinatura institucional exibida e também coletará a assinatura do cliente.</Notice>}
+    {customerRequired && <section className="space-y-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-muted-foreground)]">Assinatura do cliente</p><h4 className="mt-1 font-semibold">{handoff?.customerSignature ? "✓ Assinatura coletada" : "Nenhuma assinatura coletada."}</h4></div>{reviewing && <button type="button" className={secondary} onClick={() => onCaptureOpen(!captureOpen)}>{handoff?.customerSignature ? "Substituir assinatura" : "Coletar assinatura"}</button>}</div>
+      {handoff?.customerSignature && documentId && <>
+        <CustomerSignaturePreview documentId={documentId} name={handoff.customerSignature.name} />
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Readonly label="Nome do cliente" value={handoff.customerSignature.name} />
+          <Readonly label="Data da coleta" value={collectedAt?.toLocaleDateString("pt-BR") ?? "—"} />
+          <Readonly label="Hora" value={collectedAt?.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) ?? "—"} />
+          <Readonly label="Coletada por" value={collectedBy ? `${collectedBy.name} (${roleLabel(collectedBy.role)})` : "—"} />
+        </div>
+      </>}
+      {!handoff?.customerSignature && !reviewing && <Notice tone="info">A coleta ficará disponível após a criação da primeira Ordem de Serviço.</Notice>}
+      {reviewing && captureOpen && <div className="space-y-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-muted)]/40 p-4">
+        <div className="grid gap-3 sm:grid-cols-2"><Field label="Nome do cliente" required><input value={signerName} maxLength={120} onChange={(event) => onSignerName(event.target.value)} /></Field><Field label="Função" optional><input value={signerRole} maxLength={80} onChange={(event) => onSignerRole(event.target.value)} placeholder="Ex.: responsável pela unidade" /></Field></div>
+        <SignaturePad onChange={onSignatureData} />
+        <div className="flex justify-end"><button type="button" className={primary} disabled={!signatureData || !signerName.trim() || busy} onClick={onCollect}>{busy ? "Salvando…" : handoff?.customerSignature ? "Confirmar substituição" : "Confirmar assinatura"}</button></div>
+      </div>}
+      <Readonly label="Operador responsável" value={operator?.name ?? "Ainda não definido"} />
+    </section>}
+    {technicalRequired && <section className="space-y-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-muted-foreground)]">Responsável técnico</p><h4 className="mt-1 font-semibold">Assinatura atualmente selecionada</h4></div><button type="button" className={secondary} onClick={() => onSelectorOpen(!selectorOpen)}>Alterar assinatura técnica</button></div>
+      {selected ? <SignatureCard signature={selected} /> : <Notice tone="danger">O modelo exige assinatura institucional, mas nenhuma assinatura ativa está configurada.</Notice>}
+      {selectorOpen && <div className="space-y-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-muted)]/30 p-3"><p className="text-sm font-medium">Assinaturas ativas da organização</p>{signatures.length ? <div className="grid gap-3 md:grid-cols-2">{signatures.map((signature) => <button type="button" key={signature.id} disabled={busy} onClick={() => onTechnicalSignature(signature.id)} className={`rounded-lg border p-1 text-left transition hover:border-[var(--color-primary)] ${selected?.id === signature.id ? "border-[var(--color-primary)] ring-1 ring-[var(--color-primary)]/20" : "border-transparent"}`}><SignatureCard signature={signature} />{signature.isDefault && <span className="mb-2 ml-3 inline-flex rounded-full bg-emerald-500/10 px-2 py-1 text-xs font-medium text-emerald-700">Assinatura padrão</span>}</button>)}</div> : <Notice tone="danger">Nenhuma assinatura ativa está disponível.</Notice>}</div>}
+      {!reviewing && <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={form.overrideSignature} onChange={(event) => { set("overrideSignature", event.target.checked); if (!event.target.checked) set("signatureOverrideId", ""); }} /> Utilizar esta assinatura somente neste PMOC</label>}
+    </section>}
+    {feedback && <Notice tone={feedback.startsWith("Não") ? "danger" : "info"}>{feedback}</Notice>}
+    {reviewing && operationId && <section className="space-y-3"><div><h4 className="font-semibold">Preview do documento</h4><p className="text-sm text-[var(--color-muted-foreground)]">O preview oficial é atualizado após cada alteração, sem modificar documentos históricos já emitidos.</p></div><DocumentViewer key={`${documentId ?? operationId}-${previewRevision}`} source={{ operationId, type: "PMOC", documentId }} canRender={false} canDownload={false} title="Preview das assinaturas do PMOC" /></section>}
   </Section>;
 }
 
@@ -393,13 +699,14 @@ function SummaryStep({ form, customerName, equipments, scopes, users, projection
       <SummaryCard title="Cobertura" onEdit={() => onEdit(1)} rows={[['Equipamentos', `${equipmentNames.length} selecionado(s)`], ['Escopo', scopes.map((item) => item.title).join(', ') || '—'], ['Serviços', form.serviceTypes.map(operationTypeLabel).join(', ')]]} />
       <SummaryCard title="Planejamento" onEdit={() => onEdit(2)} rows={[['Periodicidade', periodicityLabel(form.periodicity)], ['Próxima execução', formatDate(projection.next)], ['Execuções previstas', String(projection.count)], ['Programação', generationModeLabel(form.generationMode)]]} />
       <SummaryCard title="Execução" onEdit={() => onEdit(3)} rows={[['Operador padrão', userName(users, form.defaultOperatorId, 'Definido ao gerar')], ['Técnico', userName(users, form.defaultTechnicianId)], ['Duração prevista', `${form.duration} minutos`], ['Prioridade', priorityLabel(form.priority)]]} />
-      <div className="md:col-span-2"><SummaryCard title="Política documental" onEdit={() => onEdit(4)} rows={[['Modo', signatureModeLabel(signatureMode)], ['Assinatura institucional', signature?.name ?? (signatureMode === 'NONE' || signatureMode === 'COLLECTED' ? 'Não aplicável' : 'Não configurada')], ['Origem', form.overrideSignature ? 'Definida somente para este PMOC' : 'Modelo oficial do documento']]} /></div>
+      <div className="md:col-span-2"><SummaryCard title="Política documental" onEdit={() => onEdit(5)} rows={[['Modo', signatureModeLabel(signatureMode)], ['Assinatura institucional', signature?.name ?? (signatureMode === 'NONE' || signatureMode === 'COLLECTED' ? 'Não aplicável' : 'Não configurada')], ['Origem', form.overrideSignature ? 'Definida somente para este PMOC' : 'Modelo oficial do documento']]} /></div>
     </div>
   </Section>;
 }
 
 function Section({ icon: Icon, title, text, children }: { icon: LucideIcon; title: string; text: string; children: React.ReactNode }) { return <section className="space-y-5"><div className="flex gap-3 border-b border-[var(--color-border)] pb-4"><span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[var(--color-primary)]/10 text-[var(--color-primary)]"><Icon className="h-5 w-5" /></span><div><h3 className="text-base font-semibold">{title}</h3><p className="text-sm text-[var(--color-muted-foreground)]">{text}</p></div></div>{children}</section>; }
 function Field({ label, children, required = false, optional = false, hint }: { label: string; children: React.ReactNode; required?: boolean; optional?: boolean; hint?: string }) { return <label className="grid gap-1.5 text-sm font-medium"><span>{label}{required && <span className="ml-1 text-[var(--color-danger)]">*</span>}{optional && <span className="ml-1 font-normal text-[var(--color-muted-foreground)]">(opcional)</span>}</span>{children}{hint && <span className="text-xs font-normal text-[var(--color-muted-foreground)]">{hint}</span>}</label>; }
+function Readonly({ label, value }: { label: string; value: string }) { return <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-muted)]/30 p-3"><span className="block text-xs text-[var(--color-muted-foreground)]">{label}</span><strong className="mt-1 block text-sm">{value}</strong></div>; }
 function Choice({ checked, onChange, title, text }: { checked: boolean; onChange: () => void; title: string; text: string }) { return <label className={`flex gap-3 rounded-lg border p-3 ${checked ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5' : 'border-[var(--color-border)]'}`}><input type="radio" checked={checked} onChange={onChange} /><span><strong className="text-sm">{title}</strong><span className="block text-xs text-[var(--color-muted-foreground)]">{text}</span></span></label>; }
 function Notice({ tone, children }: { tone: "danger" | "info" | "neutral"; children: React.ReactNode }) { const color = tone === "danger" ? "border-red-500/30 bg-red-500/10 text-red-700" : tone === "info" ? "border-blue-500/30 bg-blue-500/10 text-blue-700" : "border-[var(--color-border)] bg-[var(--color-muted)]"; return <div className={`rounded-lg border p-3 text-sm ${color}`}>{children}</div>; }
 function Projection({ projection, detailed = false }: { projection: ReturnType<typeof project>; detailed?: boolean }) { return <div className="space-y-3 rounded-xl bg-[var(--color-muted)] p-4"><div className="grid gap-3 sm:grid-cols-3"><Metric label="Execuções previstas" value={String(projection.count)} /><Metric label="Período" value={`${projection.months} meses`} /><Metric label="Próxima execução" value={formatDate(projection.next)} /></div>{detailed && <div className="grid gap-2 border-t border-[var(--color-border)] pt-3 sm:grid-cols-2 lg:grid-cols-3">{projection.dates.slice(0, 6).map((date, index) => <div key={`${date}-${index}`} className="rounded-lg bg-[var(--color-card)] p-2 text-sm"><span className="text-xs text-[var(--color-muted-foreground)]">Execução {String(index + 1).padStart(3, '0')}</span><strong className="block">{formatDate(date)}</strong></div>)}{projection.dates.length > 6 && <div className="grid place-items-center rounded-lg border border-dashed border-[var(--color-border)] p-2 text-xs text-[var(--color-muted-foreground)]">+ {projection.dates.length - 6} execuções</div>}</div>}</div>; }
@@ -418,5 +725,8 @@ function generationModeLabel(value: PmocGenerationMode) { return ({ AUTO: 'Gera�
 function operationTypeLabel(value: OperationType) { return SERVICE_TYPES.find((item) => item.value === value)?.label ?? value; }
 function signatureModeLabel(value: string) { return ({ NONE: 'Sem assinatura', FIXED: 'Assinatura institucional', COLLECTED: 'Coleta em campo', HYBRID: 'Assinatura híbrida' } as Record<string, string>)[value] ?? value; }
 function priorityLabel(value: Form['priority']) { return ({ LOW: 'Baixa', MEDIUM: 'Média', HIGH: 'Alta', CRITICAL: 'Crítica' } as const)[value]; }
+function roleLabel(value: string) { return ({ OWNER: "Owner", MANAGER: "Manager", OPERATOR: "Operator", VIEWER: "Viewer" } as Record<string, string>)[value] ?? value; }
+function evidenceFileDataUrl(file: File): Promise<string> { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = () => reject(new Error("Não foi possível ler a imagem.")); reader.readAsDataURL(file); }); }
 const primary = "inline-flex h-10 items-center gap-2 rounded-[var(--radius-md)] bg-[var(--color-primary)] px-4 text-sm font-medium text-[var(--color-primary-foreground)] disabled:opacity-50";
 const secondary = "inline-flex h-10 items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] px-4 text-sm font-medium";
+const smallButton = "inline-flex h-8 items-center rounded-md border border-[var(--color-border)] px-2 text-xs font-medium hover:bg-[var(--color-muted)] disabled:opacity-50";

@@ -176,7 +176,7 @@ export class DocumentHandoffService {
         },
         update: {
           handoffOrigin: origin,
-          collectedById: actor.id,
+          ...(operation.documents[0]?.id ? {} : { collectedById: actor.id }),
           ...(operation.documents[0]?.id ? {} : { technicalSignatureId: defaultTechnicalSignatureId }),
           collectionSnapshot: this.operationSnapshot(operation),
           ...(operation.documents[0]?.renderedAt
@@ -220,6 +220,7 @@ export class DocumentHandoffService {
           where: { id: documentId },
           data: {
             customerSignatureSnapshot: snapshot as unknown as Prisma.InputJsonObject,
+            collectedById: actor.id,
             ...(document.renderedAt
               ? { editorialStatus: DocumentEditorialStatus.STALE }
               : document.submittedAt
@@ -489,7 +490,7 @@ export class DocumentHandoffService {
       renderedAt: document.renderedAt,
       revision: document.revision,
       validationIssues: document.validationIssues,
-      customerSignature: customerSnapshot ? { name: customerSnapshot.name, role: customerSnapshot.title ?? null, collectedAt: customerSnapshot.collectedAt, timezone: customerSnapshot.timezone, origin: customerSnapshot.origin, available: true } : null,
+      customerSignature: customerSnapshot ? { name: customerSnapshot.name, role: customerSnapshot.title ?? null, collectedAt: customerSnapshot.collectedAt, timezone: customerSnapshot.timezone, origin: customerSnapshot.origin, available: true, collectedBy: document.collectedBy } : null,
       technicalSignature: document.technicalSignature ? { id: document.technicalSignature.id, name: document.technicalSignature.name, title: document.technicalSignature.title, profession: document.technicalSignature.profession, professionalCouncil: document.technicalSignature.professionalCouncil, registrationNumber: document.technicalSignature.registrationNumber, department: document.technicalSignature.department, active: document.technicalSignature.active, hasImage: Boolean(document.technicalSignature.imageStorageKey) } : null,
       collectedBy: document.collectedBy,
       reviewedBy: document.reviewedBy,

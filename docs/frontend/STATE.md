@@ -1051,3 +1051,27 @@ Status: concluído.
 - `/documentos` usa estado editorial e exibe revisão junto da versão.
 - Runtime visual aprovado em Platform, Operator e repositório; screenshots registrados no relatório
   de release.
+
+## PMOC FIX-01 — 2026-07-17
+
+- `/pmoc/:id` exibe o documento da última execução com **Sem PDF**, **PDF disponível** ou **PDF
+  desatualizado**, além de Pré-visualizar, Gerar/Gerar novamente e Baixar.
+- O Drawer mantém apenas a ID da execução aberta e a resolve novamente após refetch, evitando perder
+  o `documentId` criado durante o render.
+- `DocumentViewer` compara fingerprints oficiais, usa metadados persistidos para tamanho/data e
+  continua sendo o único fluxo de Preview/Render/Download.
+- Runtime visual autenticado aprovado em build de produção.
+# PMOC FIX-02A — Wizard de assinaturas (2026-07-17)
+
+- O Wizard oficial ganhou modo de revisão para PMOCs existentes, aberto pela ação “Revisar assinaturas” no detalhe.
+- A etapa exibe assinatura do cliente, coletor, data/hora, operador responsável e assinatura técnica.
+- Coleta e substituição reutilizam `SignaturePad`; a escolha técnica reutiliza assinaturas ativas e aplica override somente ao PMOC.
+- O `DocumentViewer` oficial é incorporado à etapa e recarregado após alterações.
+- Política do template preservada: `NONE`, `FIXED`, `COLLECTED` e `HYBRID` controlam os blocos visíveis.
+
+## PMOC FIX-02B — evidências fotográficas (2026-07-17)
+
+- `/pmoc/:id` ganhou **Revisar evidências**, abrindo o mesmo `PmocPlanWizard` na etapa Evidências.
+- Fotos existentes mostram miniatura protegida, legenda, autor, data/hora e ações de gestão.
+- `PhotoInput` oficial suporta drag-and-drop, seleção múltipla, preview, legenda, progresso e grade 1/2/4 colunas.
+- Adicionar, editar e remover recarregam Operation e `DocumentViewer`; nenhum preview ou uploader paralelo foi criado.

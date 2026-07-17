@@ -83,16 +83,28 @@ try {
   const signaturesInDocument = signatureComponents(signedPreview);
   if (signaturesInDocument.length !== 2 || !signaturesInDocument.some((item) => item.name === institutional.name) || !signaturesInDocument.some((item) => item.name === 'Cliente Runtime UX-02.1')) throw new Error('HYBRID signatures are incomplete.');
   const rendered = await api(`/documents/operations/${operationId}/PMOC/render`, { method: 'POST', headers: ownerHeaders, body: '{}' });
+  await api(`/assignments/${assignment.id}/complete`, { method: 'PATCH', headers: operatorHeaders, body: JSON.stringify({ notes: 'PMOC UX-02.1 complete' }) });
+  const completedRender = await api(`/documents/${rendered.id}/render`, { method: 'POST', headers: ownerHeaders, body: '{}' });
+  const completedPreview = await api(`/documents/${rendered.id}/preview`, { headers: ownerHeaders });
+  if (completedRender.renderMetadata?.sourceFingerprint !== completedPreview.metadata?.sourceFingerprint) throw new Error('Preview/PDF source parity is invalid.');
   const pdf = await downloadPdf(`/documents/${rendered.id}/download`, ownerHeaders);
   if (pdf.subarray(0, 5).toString('ascii') !== '%PDF-') throw new Error('PMOC PDF is invalid.');
-  await api(`/assignments/${assignment.id}/complete`, { method: 'PATCH', headers: operatorHeaders, body: JSON.stringify({ notes: 'PMOC UX-02.1 complete' }) });
-  const repository = await api(`/documents?page=1&limit=100&type=PMOC&search=${encodeURIComponent(rendered.number)}`, { headers: ownerHeaders });
-  if (!repository.items.some((item) => item.id === rendered.id)) throw new Error('PMOC is missing from /documentos.');
 
-  const evidence = { pmocPlanId: plan.id, executionRequestId: executionRequest.id, operationId, assignmentId: assignment.id, documentId: rendered.id, templateId: template.id, institutionalSignatureId: institutional.id, equipmentCount: operation.inspectedEquipments.length, blockedWithoutImages: true, photoCount: gallery.images.length, previewImageColumns: gallery.columns, unsignedStatusConfirmed: true, staleAfterSignature: true, signatureCount: signaturesInDocument.length, pdfBytes: pdf.length, repositoryConfirmed: true };
+  await api(`/pmoc/${plan.id}`, { method: 'PATCH', headers: ownerHeaders, body: JSON.stringify({ responsibleTechnician: `Responsável técnico atualizado ${Date.now()}` }) });
+  const staleAfterPmocChange = await request(`/documents/${rendered.id}/download`, { headers: ownerHeaders });
+  if (staleAfterPmocChange.response.status !== 409 || staleAfterPmocChange.body.error?.code !== 'DOCUMENT_STALE') throw new Error('PMOC change did not mark the official PDF as stale.');
+  const rerendered = await api(`/documents/${rendered.id}/render`, { method: 'POST', headers: ownerHeaders, body: '{}' });
+  const rerenderedPdf = await downloadPdf(`/documents/${rerendered.id}/download`, ownerHeaders);
+  if (rerenderedPdf.subarray(0, 5).toString('ascii') !== '%PDF-') throw new Error('Re-rendered PMOC PDF is invalid.');
+
+  const repository = await api(`/documents?page=1&limit=100&type=PMOC&search=${encodeURIComponent(rendered.number)}`, { headers: ownerHeaders });
+  const repositoryDocument = repository.items.find((item) => item.id === rendered.id);
+  if (!repositoryDocument || repositoryDocument.type !== 'PMOC' || !repositoryDocument.renderedAt || repositoryDocument.revision < 2) throw new Error('PMOC is incomplete in /documentos.');
+
+  const evidence = { pmocPlanId: plan.id, executionRequestId: executionRequest.id, operationId, assignmentId: assignment.id, documentId: rerendered.id, documentNumber: rerendered.number, documentRevision: repositoryDocument.revision, documentStatus: repositoryDocument.status, templateId: template.id, institutionalSignatureId: institutional.id, equipmentCount: operation.inspectedEquipments.length, operationCompleted: true, blockedWithoutImages: true, photoCount: gallery.images.length, previewImageColumns: gallery.columns, unsignedStatusConfirmed: true, staleAfterSignature: true, staleAfterPmocChange: true, rerenderedAfterStale: true, previewPdfSourceParity: true, signatureCount: signaturesInDocument.length, pdfBytes: rerenderedPdf.length, repositoryConfirmed: true };
   await writeFile('/private/tmp/orbit-pmoc-ux02-1-credentials.json', JSON.stringify({ owner: ownerCredentials, operator: operatorCredentials }));
   await writeFile('/private/tmp/orbit-pmoc-ux02-1-evidence.json', JSON.stringify(evidence, null, 2));
-  await writeFile('/private/tmp/orbit-pmoc-ux02-1.pdf', pdf);
+  await writeFile('/private/tmp/orbit-pmoc-ux02-1.pdf', rerenderedPdf);
   console.log(JSON.stringify(evidence, null, 2));
 } finally {
   await prisma.$disconnect();

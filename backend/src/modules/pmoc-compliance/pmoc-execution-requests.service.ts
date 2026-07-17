@@ -52,7 +52,15 @@ const REQUEST_INCLUDE = {
       operator: { select: { id: true, name: true, username: true, role: true, jobTitle: true } },
       documents: {
         where: { type: DocumentTemplateType.PMOC },
-        select: { id: true, number: true, status: true, renderedAt: true },
+        select: {
+          id: true,
+          number: true,
+          status: true,
+          renderedAt: true,
+          fileSize: true,
+          revision: true,
+          renderMetadata: true,
+        },
         orderBy: [{ renderedAt: 'desc' as const }, { createdAt: 'desc' as const }],
         take: 1,
       },

@@ -39,14 +39,14 @@ export function PhotoInput({
   const inputRef = useRef<HTMLInputElement>(null);
   const photosRef = useRef(photos);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
   photosRef.current = photos;
 
   useEffect(() => () => {
     photosRef.current.forEach((photo) => URL.revokeObjectURL(photo.url));
   }, []);
 
-  function add(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files ?? []);
+  function addFiles(files: File[]) {
     const room = max - existingCount - photos.length;
     const accepted = files.filter((file) => {
       const valid = (file.type === "image/png" || file.type === "image/jpeg") && file.size > 0 && file.size <= 5 * 1024 * 1024;
@@ -62,6 +62,10 @@ export function PhotoInput({
       status: "pending" as const,
     }));
     onChange([...photos, ...next]);
+  }
+
+  function add(e: React.ChangeEvent<HTMLInputElement>) {
+    addFiles(Array.from(e.target.files ?? []));
     e.target.value = "";
   }
 
@@ -87,7 +91,7 @@ export function PhotoInput({
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {photos.map((p, i) => (
           <div key={p.id} className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)]">
             <div className="relative group aspect-square bg-[var(--color-muted)]">
@@ -121,11 +125,15 @@ export function PhotoInput({
           <button
             type="button"
             onClick={() => inputRef.current?.click()} disabled={disabled}
-            className="aspect-square rounded-[var(--radius-md)] border border-dashed border-[var(--color-border)] grid place-items-center text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)] active:scale-[0.98]"
+            onDragEnter={(event) => { event.preventDefault(); if (!disabled) setDragging(true); }}
+            onDragOver={(event) => { event.preventDefault(); if (!disabled) setDragging(true); }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(event) => { event.preventDefault(); setDragging(false); if (!disabled) addFiles(Array.from(event.dataTransfer.files)); }}
+            className={`aspect-square rounded-[var(--radius-md)] border border-dashed grid place-items-center text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)] active:scale-[0.98] ${dragging ? "border-[var(--color-primary)] bg-[var(--color-primary)]/5" : "border-[var(--color-border)]"}`}
           >
             <span className="flex flex-col items-center gap-1">
               {photos.length === 0 ? <Camera className="h-6 w-6" /> : <ImagePlus className="h-6 w-6" />}
-              <span className="text-[11px] font-medium">{photos.length === 0 ? "Câmera" : "Adicionar"}</span>
+              <span className="text-[11px] font-medium">{dragging ? "Solte aqui" : photos.length === 0 ? "Adicionar fotos" : "Adicionar"}</span>
             </span>
           </button>
         )}

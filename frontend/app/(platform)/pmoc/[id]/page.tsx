@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ArrowLeft, CalendarClock, FileText, History, PauseCircle, Play, RefreshCw, RotateCcw, Settings2, XCircle } from "lucide-react";
+import { ArrowLeft, CalendarClock, Download, Eye, FileSignature, FileText, History, Images, PauseCircle, Play, RefreshCw, RotateCcw, Settings2, XCircle } from "lucide-react";
 import { OperationCreationDrawer } from "@platform/components/operation-creation-drawer";
 import { Pagination } from "@platform/components/pagination";
+import { PmocPlanWizard } from "@platform/components/pmoc-plan-wizard";
 import {
   ApiClientError, operationApi, pmocApi, usersApi, useQuery,
   type CreateOperationPayload, type PmocExecutionRequest, type PmocHistoryItem, type PmocPlan,
@@ -37,7 +38,8 @@ export default function PmocDetailPage() {
   const [rescheduling, setRescheduling] = useState<PmocExecutionRequest | null>(null);
   const [canceling, setCanceling] = useState<PmocExecutionRequest | null>(null);
   const [settings, setSettings] = useState(false);
-  const [documentRequest, setDocumentRequest] = useState<PmocExecutionRequest | null>(null);
+  const [reviewSection, setReviewSection] = useState<"signatures" | "evidence" | null>(null);
+  const [documentRequestId, setDocumentRequestId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function openGeneration(request: PmocExecutionRequest) {
@@ -58,34 +60,66 @@ export default function PmocDetailPage() {
   if (!pmoc.data) return <EmptyState icon={CalendarClock} title="PMOC não encontrado" description="O plano não está disponível." />;
   const plan = pmoc.data;
   const items = requests.data?.items ?? [];
+  const documentRequest = documentRequestId
+    ? items.find((item) => item.id === documentRequestId)
+      ?? plan.executionRequests?.find((item) => item.id === documentRequestId)
+      ?? null
+    : null;
+  const latestDocumentRequest = plan.executionRequests?.find((item) => item.operation)
+    ?? items.find((item) => item.operation)
+    ?? null;
   const overview = plan.overview;
 
   return <div className="space-y-6">
     <Link href="/pmoc" className="inline-flex items-center gap-2 text-sm text-[var(--color-muted-foreground)]"><ArrowLeft className="h-4 w-4" /> Voltar para PMOC</Link>
-    <header className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between"><div><div className="flex items-center gap-2"><span className="text-xs font-semibold uppercase tracking-wide text-[var(--color-primary)]">PMOC-{String(plan.number).padStart(6, "0")}</span><StatusChip tone={overview?.health.tone ?? (plan.operationalStatus === "PAUSED" ? "warning" : "success")}>{overview?.health.label ?? operationalStatusLabel(plan.operationalStatus)}</StatusChip></div><h1 className="mt-2 text-2xl font-semibold">{plan.maintenancePlan?.name}</h1><p className="mt-1 text-sm text-[var(--color-muted-foreground)]">{plan.customer?.tradeName ?? plan.customer?.name} · {periodicityLabel(plan.periodicity)} · {generationModeLabel(plan.generationMode)}</p></div>{canEdit && <div className="flex flex-wrap gap-2"><button className={secondary} onClick={async () => { await pmocApi.updatePmoc(plan.id, { generationMode: plan.generationMode === "PAUSED" ? "MANUAL" : "PAUSED" }); setTick((value) => value + 1); }}>{plan.generationMode === "PAUSED" ? <><RotateCcw className="h-4 w-4" /> Retomar plano</> : <><PauseCircle className="h-4 w-4" /> Pausar plano</>}</button><button className={secondary} onClick={() => setSettings(true)}><Settings2 className="h-4 w-4" /> Configurar responsáveis</button></div>}</header>
+    <header className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between"><div><div className="flex items-center gap-2"><span className="text-xs font-semibold uppercase tracking-wide text-[var(--color-primary)]">PMOC-{String(plan.number).padStart(6, "0")}</span><StatusChip tone={overview?.health.tone ?? (plan.operationalStatus === "PAUSED" ? "warning" : "success")}>{overview?.health.label ?? operationalStatusLabel(plan.operationalStatus)}</StatusChip></div><h1 className="mt-2 text-2xl font-semibold">{plan.maintenancePlan?.name}</h1><p className="mt-1 text-sm text-[var(--color-muted-foreground)]">{plan.customer?.tradeName ?? plan.customer?.name} · {periodicityLabel(plan.periodicity)} · {generationModeLabel(plan.generationMode)}</p></div>{canEdit && <div className="flex flex-wrap gap-2"><button className={secondary} onClick={() => setReviewSection("evidence")}><Images className="h-4 w-4" /> Revisar evidências</button><button className={secondary} onClick={() => setReviewSection("signatures")}><FileSignature className="h-4 w-4" /> Revisar assinaturas</button><button className={secondary} onClick={async () => { await pmocApi.updatePmoc(plan.id, { generationMode: plan.generationMode === "PAUSED" ? "MANUAL" : "PAUSED" }); setTick((value) => value + 1); }}>{plan.generationMode === "PAUSED" ? <><RotateCcw className="h-4 w-4" /> Retomar plano</> : <><PauseCircle className="h-4 w-4" /> Pausar plano</>}</button><button className={secondary} onClick={() => setSettings(true)}><Settings2 className="h-4 w-4" /> Configurar responsáveis</button></div>}</header>
     {error && <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-700">{error}</div>}
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6"><Metric label="Previstas" value={overview?.expectedExecutions ?? "—"} /><Metric label="Concluídas" value={overview?.completedExecutions ?? "—"} /><Metric label="Pendentes" value={overview?.pendingExecutions ?? "—"} /><Metric label="Falhas" value={overview?.failedExecutions ?? "—"} tone="danger" /><Metric label="Canceladas" value={overview?.cancelledExecutions ?? "—"} /><Metric label="Próxima" value={date(plan.nextExecutionDate)} /></div>
     {overview && <section className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4"><div className="flex items-center justify-between text-sm"><strong>Progresso das execuções</strong><span>{overview.completedExecutions} / {overview.expectedExecutions} · {overview.remainingExecutions} restantes</span></div><div className="mt-2 h-3 overflow-hidden rounded-full bg-[var(--color-muted)]"><div className="h-full rounded-full bg-[var(--color-primary)]" style={{ width: `${overview.completionPercentage}%` }} /></div><p className="mt-2 text-xs text-[var(--color-muted-foreground)]">Saúde {overview.health.label} ({overview.health.score}/100) · atraso médio {overview.averageDelayDays} dia(s)</p></section>}
+    {latestDocumentRequest?.operation && <PmocDocumentActions request={latestDocumentRequest} canRender={canEdit} onOpen={() => setDocumentRequestId(latestDocumentRequest.id)} />}
     <nav className="flex gap-1 border-b border-[var(--color-border)]">{(["summary", "requests", "timeline"] as Tab[]).map((value) => <button key={value} className={`px-4 py-3 text-sm font-medium ${tab === value ? "border-b-2 border-[var(--color-primary)] text-[var(--color-primary)]" : "text-[var(--color-muted-foreground)]"}`} onClick={() => setTab(value)}>{value === "summary" ? "Resumo" : value === "requests" ? "Execuções" : "Timeline"}</button>)}</nav>
     {tab === "summary" && <Summary plan={plan} />}
-    {tab === "requests" && (requests.loading && !requests.data ? <SkeletonList rows={6} /> : <div className="space-y-3"><Requests items={items} canEdit={canEdit} onGenerate={(item) => void openGeneration(item)} onDocument={setDocumentRequest} onReschedule={setRescheduling} onCancel={setCanceling} />{requests.data && <Pagination pagination={requests.data.pagination} onPageChange={setRequestPage} onPageSizeChange={(value) => { setRequestLimit(value); setRequestPage(1); }} />}</div>)}
+    {tab === "requests" && (requests.loading && !requests.data ? <SkeletonList rows={6} /> : <div className="space-y-3"><Requests items={items} canEdit={canEdit} onGenerate={(item) => void openGeneration(item)} onDocument={(item) => setDocumentRequestId(item.id)} onReschedule={setRescheduling} onCancel={setCanceling} />{requests.data && <Pagination pagination={requests.data.pagination} onPageChange={setRequestPage} onPageSizeChange={(value) => { setRequestLimit(value); setRequestPage(1); }} />}</div>)}
     {tab === "timeline" && (history.loading && !history.data ? <SkeletonList rows={6} /> : <Timeline items={history.data ?? []} />)}
 
     <OperationCreationDrawer open={Boolean(generating)} mode="work-order" initialValues={prefill ?? undefined} submitOperation={submitOperation} submitLabel={`Criar OS da execução ${String(generating?.executionNumber ?? 0).padStart(3, "0")}`} contextNotice="Revise os dados desta execução programada. A Ordem de Serviço ficará disponível para gerenciamento normalmente." onClose={() => { setGenerating(null); setPrefill(null); }} />
     <RescheduleDrawer request={rescheduling} onClose={() => setRescheduling(null)} onSaved={() => { setRescheduling(null); setTick((value) => value + 1); }} />
     <DefaultsDrawer open={settings} plan={plan} onClose={() => setSettings(false)} onSaved={() => { setSettings(false); setTick((value) => value + 1); }} />
-    <Drawer open={Boolean(documentRequest)} onClose={() => setDocumentRequest(null)} eyebrow="Documento PMOC" title={documentRequest ? `Execução ${String(documentRequest.executionNumber).padStart(3, "0")}` : "Documento"} width="max-w-[1280px]">
+    <PmocPlanWizard open={reviewSection !== null} pmoc={plan} initialReviewSection={reviewSection ?? "signatures"} onClose={() => setReviewSection(null)} onCreated={() => undefined} onUpdated={() => setTick((value) => value + 1)} />
+    <Drawer open={Boolean(documentRequest)} onClose={() => setDocumentRequestId(null)} eyebrow="Documento PMOC" title={documentRequest ? `Execução ${String(documentRequest.executionNumber).padStart(3, "0")}` : "Documento"} width="max-w-[1280px]">
       {documentRequest?.operation && <div className="space-y-4">
         <div className="flex flex-wrap gap-2">
           <StatusChip tone={documentRequest.operation.signedAt ? "success" : "warning"}>{documentRequest.operation.signedAt ? "ASSINADO" : "NÃO ASSINADO"}</StatusChip>
           <StatusChip tone={(documentRequest.operation._count?.photos ?? 0) >= 4 ? "success" : "warning"}>{documentRequest.operation._count?.photos ?? 0}/4 imagens obrigatórias</StatusChip>
         </div>
         <p className="text-sm text-[var(--color-muted-foreground)]">O Preview pode ser consultado a qualquer momento. A geração do PDF final exige quatro imagens; quando o modelo solicitar coleta, o status permanecerá não assinado até a assinatura do cliente. Alterações posteriores tornam o PDF anterior desatualizado.</p>
-        <DocumentViewer source={{ operationId: documentRequest.operation.id, type: "PMOC", documentId: documentRequest.operation.documents?.[0]?.id ?? null }} title={`PMOC · Execução ${String(documentRequest.executionNumber).padStart(3, "0")}`} onRendered={() => setTick((value) => value + 1)} />
+        <DocumentViewer
+          source={{ operationId: documentRequest.operation.id, type: "PMOC", documentId: documentRequest.operation.documents?.[0]?.id ?? null }}
+          artifact={documentRequest.operation.documents?.[0] ?? null}
+          title={`PMOC · Execução ${String(documentRequest.executionNumber).padStart(3, "0")}`}
+          canRender={canEdit}
+          onRendered={() => setTick((value) => value + 1)}
+        />
       </div>}
     </Drawer>
     <ConfirmDialog open={Boolean(canceling)} title="Cancelar execução prevista?" danger confirmLabel="Cancelar execução" description="O número e todo o histórico serão preservados. A execução continuará disponível para consulta." onClose={() => setCanceling(null)} onConfirm={async () => { if (canceling) { await pmocApi.cancelExecutionRequest(canceling.id); setTick((value) => value + 1); } }} />
   </div>;
+}
+
+function PmocDocumentActions({ request, canRender, onOpen }: { request: PmocExecutionRequest; canRender: boolean; onOpen: () => void }) {
+  const document = request.operation?.documents?.[0];
+  const available = Boolean(document?.renderedAt);
+  return <section className="flex flex-col gap-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4 lg:flex-row lg:items-center lg:justify-between">
+    <div>
+      <div className="flex flex-wrap items-center gap-2"><h2 className="font-semibold">Documento PMOC</h2><StatusChip tone={available ? "success" : "warning"}>{available ? "PDF disponível" : "Sem PDF"}</StatusChip></div>
+      <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">Execução {String(request.executionNumber).padStart(3, "0")}{document ? ` · ${document.number} · versão ${document.revision}` : " · o PDF oficial ainda não foi gerado"}</p>
+    </div>
+    <div className="flex flex-wrap gap-2">
+      <button className={secondary} onClick={onOpen}><Eye className="h-4 w-4" /> Pré-visualizar</button>
+      {canRender && <button className={primary} onClick={onOpen}><FileText className="h-4 w-4" /> {available ? "Gerar novamente" : "Gerar PDF"}</button>}
+      {available && <button className={secondary} onClick={onOpen}><Download className="h-4 w-4" /> Baixar PDF</button>}
+    </div>
+  </section>;
 }
 
 function Summary({ plan }: { plan: PmocPlan }) { const overview = plan.overview; const equipments = plan.equipments?.map((item) => item.equipment) ?? (plan.equipment ? [plan.equipment] : []); const scope = plan.scopes?.map((item) => item.technicalCatalog.title).join(" · ") || plan.coverage || "Não informado"; return <div className="grid gap-4 lg:grid-cols-2"><Card title="Plano e cliente"><Rows rows={[["Cliente", plan.customer?.tradeName ?? plan.customer?.name ?? "—"], ["Endereço", plan.defaultAddress ? [plan.defaultAddress.street, plan.defaultAddress.number, plan.defaultAddress.city].filter(Boolean).join(", ") : "Endereço padrão do cliente"], ["Escopo", scope], ["Periodicidade", periodicityLabel(plan.periodicity)], ["Período", `${date(plan.startDate)} até ${date(plan.endDate)}`], ["Programação", generationModeLabel(plan.generationMode)]]} /><div className="mt-4 flex flex-wrap gap-2">{plan.customer && <Link className={smallLink} href={`/clientes/${plan.customer.id}`}>Abrir cliente</Link>}{equipments.map((equipment) => <Link key={equipment.id} className={smallLink} href={`/equipamentos/${equipment.id}`}>{equipment.name}</Link>)}</div></Card><Card title="Operação"><Rows rows={[["Tipos de serviço", (plan.serviceTypes.length ? plan.serviceTypes : [plan.defaultOperationType]).map(operationTypeLabel).join(" · ")], ["Próxima execução", date(plan.nextExecutionDate)], ["Última execução", date(overview?.lastExecutionDate ?? plan.lastExecutionDate)], ["Operador padrão", plan.defaultOperator?.name ?? "Definido ao gerar"], ["Técnico padrão", plan.defaultTechnician?.name ?? plan.responsibleTechnician], ["Última OS", overview?.lastOperation ? `OS-${String(overview.lastOperation.number).padStart(6, "0")}` : "—"], ["Último documento", overview?.lastDocument?.number ?? "—"]]} /><div className="mt-4 flex gap-2">{overview?.lastOperation && <Link className={smallLink} href={`/operacoes?operationId=${overview.lastOperation.id}`}>Abrir última OS</Link>}{overview?.lastDocument && <Link className={smallLink} href={`/documentos?documentId=${overview.lastDocument.id}`}>Abrir documento</Link>}</div></Card><Card title="Assinatura"><Rows rows={[["Assinatura utilizada", plan.signatureOverride?.name ?? "Definida pelo modelo do documento"], ["Cargo", plan.signatureOverride?.title ?? "—"], ["Conselho", plan.signatureOverride?.professionalCouncil ?? "—"]]} /></Card><Card title="Saúde e automação"><Rows rows={[["Saúde", overview ? `${overview.health.label} · ${overview.health.score}/100` : "—"], ["Atrasadas", String(overview?.overdueExecutions ?? 0)], ["Atraso médio", `${overview?.averageDelayDays ?? 0} dia(s)`], ["Última verificação automática", dateTime(plan.lastSchedulerRun)], ["Situação da geração automática", schedulerStatusLabel(plan.lastSchedulerStatus)]]} /></Card></div>; }

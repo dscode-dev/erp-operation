@@ -1417,6 +1417,7 @@ describe('DocumentEngine foundation', () => {
       signatureData: null,
       signedAt: null,
       photos: [],
+      _count: { photos: 0 },
     };
     const transactionOperationUpdate = jest.fn().mockResolvedValue(operation);
     const operationFindUnique = jest.fn().mockResolvedValue(operation);
@@ -1424,6 +1425,7 @@ describe('DocumentEngine foundation', () => {
     const prisma = {
       operation: { findUnique: operationFindUnique },
       operationPhoto: { create: photoCreate },
+      auditLog: { create: jest.fn() },
       $transaction: jest.fn(async (callback: (tx: unknown) => Promise<void>) =>
         callback({
           operation: { update: transactionOperationUpdate },
@@ -1459,6 +1461,7 @@ describe('DocumentEngine foundation', () => {
     expect(operationFindUnique).toHaveBeenCalledTimes(2);
     expect(result).toEqual({
       id: operation.id,
+      _count: operation._count,
       photos: operation.photos,
       signedAt: operation.signedAt,
       signatureCaptured: false,
@@ -1545,11 +1548,17 @@ describe('DocumentEngine foundation', () => {
         }
       ).withSourceFingerprint(value).metadata.sourceFingerprint;
     const first = blueprint(1);
-    const regenerated = {
-      ...first,
-      metadata: { ...first.metadata, generatedAt: '2026-07-11T12:00:00.000Z' },
-      footer: { ...first.footer, generatedAt: '2026-07-11T12:00:00.000Z' },
-    };
+    first.footer.content = 'Emissão 29/06/2026, 07:00';
+    const firstMetadata = first.sections[0]?.components[0];
+    if (firstMetadata?.kind === 'metadata')
+      firstMetadata.items.push({ label: 'Emissão', value: '29/06/2026, 07:00' });
+    const regenerated = structuredClone(first);
+    regenerated.metadata.generatedAt = '2026-07-11T12:00:00.000Z';
+    regenerated.footer.generatedAt = '2026-07-11T12:00:00.000Z';
+    regenerated.footer.content = 'Emissão 11/07/2026, 09:00';
+    const regeneratedMetadata = regenerated.sections[0]?.components[0];
+    if (regeneratedMetadata?.kind === 'metadata' && regeneratedMetadata.items.at(-1))
+      regeneratedMetadata.items.at(-1)!.value = '11/07/2026, 09:00';
     const changed = structuredClone(first);
     const metadata = changed.sections[0]?.components[0];
     if (metadata?.kind === 'metadata' && metadata.items[0])

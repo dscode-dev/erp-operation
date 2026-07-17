@@ -97,7 +97,7 @@ function DocumentReviewDrawer({ handoff, onClose, onChanged }: { handoff: Docume
 function Info({ label, value }: { label: string; value?: string | null }) { return <div className="rounded-[var(--radius-md)] border border-[var(--color-border)] p-3"><div className="text-caption">{label}</div><div className="text-sm font-medium">{value || '—'}</div></div>; }
 function Area({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) { return <label className="space-y-1 text-sm"><span className="font-medium">{label}</span><textarea className={`${input} min-h-28 resize-y`} value={value} onChange={(event) => onChange(event.target.value)} maxLength={30000} /></label>; }
 
-function CustomerSignaturePreview({ documentId, name }: { documentId: string; name: string }) {
+export function CustomerSignaturePreview({ documentId, name }: { documentId: string; name: string }) {
   const image = useQuery((signal) => documentsApi.getCustomerSignatureImage(documentId, { signal }), [documentId]);
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {
@@ -109,7 +109,7 @@ function CustomerSignaturePreview({ documentId, name }: { documentId: string; na
   return <section className="space-y-2"><h3 className="font-semibold">Assinatura do cliente coletada</h3><div className="grid min-h-28 place-items-center rounded-[var(--radius-md)] border border-[var(--color-border)] bg-white p-3">{url ? <Image unoptimized src={url} width={320} height={96} alt={`Assinatura de ${name}`} className="max-h-24 max-w-full object-contain" /> : image.error ? <ErrorState error={image.error} onRetry={image.refetch} /> : <span className="text-caption">Carregando assinatura…</span>}</div></section>;
 }
 
-function TechnicalSignaturePreview({ signature }: { signature: Signature }) {
+export function TechnicalSignaturePreview({ signature }: { signature: Signature }) {
   const image = useQuery((signal) => signaturesApi.downloadSignatureImage(signature.id, { signal }), [signature.id]);
   const source = image.data ? `data:${image.data.mimeType};base64,${image.data.contentBase64}` : null;
   return <div className="grid gap-3 rounded-[var(--radius-md)] border border-[var(--color-border)] p-3 text-sm sm:grid-cols-[180px_1fr] sm:items-center"><div className="grid min-h-24 place-items-center rounded bg-white p-2">{source ? <Image unoptimized src={source} width={180} height={80} alt={`Assinatura de ${signature.name}`} className="max-h-20 max-w-full object-contain" /> : image.error ? <span className="text-xs text-[var(--color-danger)]">Imagem indisponível</span> : <span className="text-caption">Carregando imagem…</span>}</div><div><strong>{signature.name}</strong><span className="block text-caption">{[signature.profession, signature.title, signature.professionalCouncil, signature.registrationNumber, signature.department].filter(Boolean).join(' · ')}</span></div></div>;

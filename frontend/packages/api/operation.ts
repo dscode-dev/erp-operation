@@ -25,6 +25,7 @@ export type OperationPhotoContent = {
   mimeType: string;
   fileSize: number;
   createdAt: string;
+  createdBy: { id: string; name: string; role: string } | null;
   contentBase64: string;
 };
 
@@ -115,4 +116,12 @@ export function getOperationPhoto(
   opts?: { signal?: AbortSignal },
 ): Promise<OperationPhotoContent> {
   return api.get<OperationPhotoContent>(`/operations/photos/${photoId}`, opts);
+}
+
+export function updateOperationPhoto(photoId: string, caption: string): Promise<OperationDetail> {
+  return api.patch<OperationDetail>(`/operations/photos/${photoId}`, { caption });
+}
+
+export function deleteOperationPhoto(photoId: string): Promise<OperationDetail> {
+  return api.delete<OperationDetail>(`/operations/photos/${photoId}`);
 }

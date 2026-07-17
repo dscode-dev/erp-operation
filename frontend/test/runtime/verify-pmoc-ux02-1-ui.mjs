@@ -36,7 +36,8 @@ try {
   await command('Page.enable'); await command('Runtime.enable');
   await activateSession(owner, 'platform', '/login');
 
-  await navigate(`/pmoc/${evidence.pmocPlanId}`);
+  const pmocDetailText = await navigate(`/pmoc/${evidence.pmocPlanId}`);
+  if (!['Documento PMOC', 'PDF disponível', 'Pré-visualizar', 'Gerar novamente', 'Baixar PDF'].every((label) => pmocDetailText.includes(label))) throw new Error(`PMOC detail official PDF actions are incomplete: ${pmocDetailText.slice(0, 1800)}`);
   await evaluate(`([...document.querySelectorAll('button')].find((button) => button.innerText.trim() === 'Execuções'))?.click()`);
   await sleep(1800);
   const detailText = await evaluate('document.body.innerText');
@@ -44,9 +45,21 @@ try {
   await evaluate(`document.querySelector('button[title="Preview, gerar e baixar PMOC"]')?.click()`);
   await sleep(4500);
   const documentText = await evaluate(`document.querySelector('[role="dialog"]')?.innerText ?? ''`);
-  if (!['Atualizar preview', 'Renderizar documento atual', 'Download PDF'].every((label) => documentText.includes(label))) throw new Error('Official PMOC document actions are not visible.');
+  if (!['Pré-visualizar', 'Download PDF'].every((label) => documentText.includes(label)) || !documentText.includes('PDF disponível') || (!documentText.includes('Gerar PDF') && !documentText.includes('Gerar novamente'))) throw new Error(`Official PMOC document actions are not visible: ${documentText.slice(0, 1800)}`);
   if (!documentText.includes('ASSINADO') || !documentText.includes('4/4 imagens obrigatórias')) throw new Error('Document drawer status is incomplete.');
   await screenshot('/private/tmp/orbit-pmoc-ux02-1-document-drawer.png');
+
+  const staleMutation = await fetch(`http://127.0.0.1:4000/api/v1/pmoc/${evidence.pmocPlanId}`, { method: 'PATCH', headers: { authorization: `Bearer ${owner.accessToken}`, 'content-type': 'application/json' }, body: JSON.stringify({ responsibleTechnician: `Responsável visual atualizado ${Date.now()}` }) });
+  if (!staleMutation.ok) throw new Error(`Could not mutate PMOC source for STALE UI proof: ${staleMutation.status}`);
+  await navigate(`/pmoc/${evidence.pmocPlanId}`);
+  await evaluate(`([...document.querySelectorAll('button')].find((button) => button.innerText.trim() === 'Execuções'))?.click()`); await sleep(1000);
+  await evaluate(`document.querySelector('button[title="Preview, gerar e baixar PMOC"]')?.click()`); await sleep(3500);
+  const staleDocumentText = await evaluate(`document.querySelector('[role="dialog"]')?.innerText ?? ''`);
+  if (!staleDocumentText.includes('PDF desatualizado') || !staleDocumentText.includes('Gerar novamente')) throw new Error(`STALE PMOC UI state is missing: ${staleDocumentText.slice(-900)}`);
+  await evaluate(`([...document.querySelectorAll('[role="dialog"] button')].find((button) => button.innerText.includes('Gerar novamente')))?.click()`); await sleep(5000);
+  const rerenderedDocumentText = await evaluate(`document.querySelector('[role="dialog"]')?.innerText ?? ''`);
+  if (!rerenderedDocumentText.includes('PDF disponível') || !rerenderedDocumentText.includes('Download PDF')) throw new Error('PMOC did not return to the available state after re-render.');
+  await screenshot('/private/tmp/orbit-pmoc-fix01-stale-rerender.png');
 
   await activateSession(operator, 'operator', '/operator/login');
   const operatorText = await navigate(`/operator/services/${evidence.assignmentId}`);
@@ -73,7 +86,7 @@ try {
   if (normalizedWizardText.includes('assinatura desativada') || normalizedWizardText.includes('não é possível adicionar assinatura')) throw new Error('False disabled signature message remains visible.');
   await screenshot('/private/tmp/orbit-pmoc-ux02-1-wizard-signature.png');
 
-  const result = { wizardHybridReadonlyVisible: true, falseDisabledMessageAbsent: true, multipleEquipmentOperationVisible: true, documentActionsVisible: true, signedStatusVisible: true, mandatoryImageStatusVisible: true, operatorFlowVisible: true, screenshots: ['/private/tmp/orbit-pmoc-ux02-1-wizard-signature.png', '/private/tmp/orbit-pmoc-ux02-1-document-drawer.png', '/private/tmp/orbit-pmoc-ux02-1-operator.png'] };
+  const result = { wizardHybridReadonlyVisible: true, falseDisabledMessageAbsent: true, multipleEquipmentOperationVisible: true, pmocDetailPdfStateVisible: true, documentActionsVisible: true, staleUiVisible: true, rerenderedFromUi: true, signedStatusVisible: true, mandatoryImageStatusVisible: true, operatorFlowVisible: true, screenshots: ['/private/tmp/orbit-pmoc-ux02-1-wizard-signature.png', '/private/tmp/orbit-pmoc-ux02-1-document-drawer.png', '/private/tmp/orbit-pmoc-fix01-stale-rerender.png', '/private/tmp/orbit-pmoc-ux02-1-operator.png'] };
   await writeFile('/private/tmp/orbit-pmoc-ux02-1-ui-evidence.json', JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result, null, 2));
 } finally { socket?.close(); browser.kill('SIGTERM'); }

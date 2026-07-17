@@ -734,3 +734,21 @@ Tipos:
 - `TechnicalSignaturePreview`: mostra a assinatura institucional selecionada e metadados técnicos.
 - `OperationEvidence`: resolve cada evidência pelo endpoint autorizado e apresenta legenda.
 - `DocumentViewer`: permanece o único componente de Preview/Render/Download.
+
+### PMOC FIX-01
+
+- `DocumentViewer.artifact`: recebe somente `renderedAt`, `fileSize`, `revision` e
+  `renderMetadata`; apresenta disponibilidade/STALE e ações oficiais.
+- `PmocDocumentActions`: resumo da última execução na tela do plano; abre o mesmo
+  `DocumentViewer`, sem downloader ou preview paralelo.
+# PMOC FIX-02A
+
+- `PmocPlanWizard`: além da criação, aceita um `PmocPlan` para abrir exclusivamente a revisão de assinaturas do plano existente.
+- Reutilizados: `SignaturePad`, `CustomerSignaturePreview`, `SignatureCard` e `DocumentViewer`.
+- Nenhum novo Wizard, capturador, seletor global ou visualizador foi criado.
+
+## PMOC FIX-02B
+
+- `PmocPlanWizard.EvidenceStep`: etapa interna do Wizard oficial; lista, autoria, legenda, remoção e atualização do Viewer.
+- `PhotoInput`: uploader oficial evoluído com dropzone, múltiplos arquivos e grade responsiva.
+- Reutilizados `ConfirmDialog` e `DocumentViewer`; não há novo componente documental ou uploader PMOC.

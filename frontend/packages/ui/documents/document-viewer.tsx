@@ -33,12 +33,19 @@ export function DocumentViewer({
   title,
   canRender = true,
   canDownload = true,
+  artifact,
   onRendered,
 }: {
   source: Source;
   title?: string;
   canRender?: boolean;
   canDownload?: boolean;
+  artifact?: {
+    renderedAt: string | null;
+    fileSize: number | null;
+    revision?: number;
+    renderMetadata?: Record<string, unknown> | null;
+  } | null;
   onRendered?: (document: DocumentRenderResult) => void;
 }) {
   const [documentId, setDocumentId] = useState(
@@ -88,6 +95,14 @@ export function DocumentViewer({
       .then((data) => {
         if (!active) return;
         setBlueprint(data);
+        const currentFingerprint = data.metadata.sourceFingerprint;
+        const renderedFingerprint = artifact?.renderMetadata?.sourceFingerprint;
+        setStale(Boolean(
+          documentId &&
+          artifact?.renderedAt &&
+          typeof currentFingerprint === 'string' &&
+          currentFingerprint !== renderedFingerprint
+        ));
         setLoading(false);
       })
       .catch((err: unknown) => {
@@ -104,7 +119,7 @@ export function DocumentViewer({
       active = false;
       controller.abort();
     };
-  }, [documentId, source, tick]);
+  }, [artifact, documentId, source, tick]);
 
   const pages = useMemo(() => paginate(blueprint), [blueprint]);
   const currentPage = pages[Math.min(page, Math.max(0, pages.length - 1))] ?? [];
@@ -113,6 +128,13 @@ export function DocumentViewer({
     blueprint?.header.title ??
     (source.type ? DOCUMENT_KIND_LABEL[source.type] : 'Documento');
   const isModelPreview = 'templateId' in source;
+  const effectiveRenderedAt = rendered?.renderedAt ?? artifact?.renderedAt ?? null;
+  const effectiveFileSize = rendered?.fileSize ?? artifact?.fileSize ?? 0;
+  const pdfState = stale
+    ? { label: 'PDF desatualizado', className: 'border-amber-500/30 bg-amber-500/10 text-amber-700' }
+    : effectiveRenderedAt
+      ? { label: 'PDF disponível', className: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700' }
+      : { label: 'Sem PDF', className: 'border-[var(--color-border)] bg-[var(--color-muted)] text-[var(--color-muted-foreground)]' };
 
   const render = useCallback(async () => {
     setRendering(true);
@@ -266,15 +288,18 @@ export function DocumentViewer({
             </div>
           </div>
           <dl className="mt-4 space-y-2 text-sm">
+            <div className={`mb-3 rounded-[var(--radius-md)] border px-3 py-2 text-center text-xs font-semibold ${pdfState.className}`}>
+              {pdfState.label}
+            </div>
             <Meta label="Cliente" value={metadataValue(blueprint, 'Cliente')} />
             <Meta label="Equipamento" value={metadataValue(blueprint, 'Nome')} />
             <Meta label="Operador" value={metadataValue(blueprint, 'Operador')} />
             <Meta label="Páginas" value={pages.length ? String(pages.length) : '—'} />
-            <Meta label="Tamanho" value={formatBytes(rendered?.fileSize ?? 0)} />
+            <Meta label="Tamanho" value={formatBytes(effectiveFileSize)} />
             <Meta
               label="Renderizado em"
               value={
-                rendered?.renderedAt ? new Date(rendered.renderedAt).toLocaleString('pt-BR') : '—'
+                effectiveRenderedAt ? new Date(effectiveRenderedAt).toLocaleString('pt-BR') : '—'
               }
             />
             <Meta label="Versão" value={blueprint?.version ? `v${blueprint.version}` : 'v1'} />
@@ -298,7 +323,7 @@ export function DocumentViewer({
             onClick={() => setTick((value) => value + 1)}
             className={secondaryButtonCls}
           >
-            <RefreshCw className="h-4 w-4" /> Atualizar preview
+            <RefreshCw className="h-4 w-4" /> Pré-visualizar
           </button>
           {canRender && (
             <button
@@ -312,7 +337,7 @@ export function DocumentViewer({
               ) : (
                 <FileText className="h-4 w-4" />
               )}
-              {stale ? 'Gerar novamente' : 'Renderizar documento atual'}
+              {stale ? 'Gerar novamente' : 'Gerar PDF'}
             </button>
           )}
           {canDownload && (

@@ -1993,3 +1993,28 @@ The catalog is scoped to the installation Organization in every query. Reads req
   anterior não é promovido como atual.
 - Testes PostgreSQL confirmam RBAC/IDOR, matriz documental, validação binária, rollback e
   concorrência. Rate limiting global continua cobrindo uploads e ações sensíveis.
+
+## PMOC FIX-01 — segurança documental
+
+- Render permanece restrito a OWNER/MANAGER pelos guards existentes; o frontend apenas oculta a
+  ação para outros perfis.
+- Download continua autenticado e servido pelo backend com validação de fingerprint; nenhum
+  `storageKey`, path, Base64, token ou URL permanente foi adicionado ao contrato.
+- `renderMetadata` exposto no contexto PMOC contém somente metadados do motor/fingerprint e não
+  identifica a localização física do arquivo.
+- O fingerprint ignora exclusivamente timestamps gerados pelo render. Cliente, equipamentos,
+  técnico, assinaturas, evidências, conteúdo e configuração continuam participando da invalidação.
+# PMOC FIX-02A — segurança e rastreabilidade
+
+- Somente OWNER/MANAGER acessam a revisão na Platform; o backend permanece autoridade do RBAC.
+- Assinaturas institucionais selecionáveis são filtradas por organização e estado ativo.
+- Imagens continuam protegidas por endpoints autenticados; `storageKey`, paths e binários não são expostos no handoff.
+- Substituições geram nova revisão e auditoria; não alteram documentos históricos nem o cadastro institucional global.
+- O coletor persistido só muda em uma coleta/substituição explícita, não ao reabrir o rascunho.
+
+## PMOC FIX-02B — segurança das evidências
+
+- Upload mantém allowlist PNG/JPEG, assinatura binária, 5 MiB, UUID físico e teto de 16 imagens.
+- OWNER/MANAGER editam/removem; OPERATOR/VIEWER recebem 403 nessas mutações.
+- Conteúdo exige endpoint autenticado; listagens/auditoria não expõem Base64, `storageKey` ou paths.
+- Eventos `OPERATION_PHOTO_*` são append-only; documentos submetidos recebem revisão PENDING/STALE na mesma transação de metadados.
