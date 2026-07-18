@@ -65,7 +65,7 @@ const DOCUMENT_HANDOFF_INCLUDE = {
       equipment: { select: { id: true, name: true, tag: true } },
       inspectedEquipments: { select: { id: true, equipmentId: true } },
       photos: { select: { id: true } },
-      assignment: { select: { id: true, assignedTo: true } },
+      assignment: { select: { id: true, assignedBy: true, assignedTo: true } },
       maintenanceExecution: { select: { id: true, plan: { select: { pmocPlan: { select: { id: true } } } } } },
     },
   },
@@ -88,7 +88,16 @@ const COLLECTION_OPERATION_INCLUDE = {
   inspectedEquipments: { select: { equipmentId: true } },
   photos: { select: { id: true } },
   documents: { select: { id: true, renderedAt: true } },
-  assignment: { select: { assignedTo: true } },
+  assignment: { select: { assignedBy: true, assignedTo: true } },
+  maintenanceExecution: {
+    select: {
+      plan: {
+        select: {
+          pmocPlan: { select: { signatureOverrideId: true } },
+        },
+      },
+    },
+  },
 } satisfies Prisma.OperationInclude;
 
 type HandoffDocument = Prisma.OperationDocumentGetPayload<{ include: typeof DOCUMENT_HANDOFF_INCLUDE }>;
@@ -159,7 +168,9 @@ export class DocumentHandoffService {
     this.assertTypeAllowed(dto.type, actor);
     const operation = await this.operationForActor(dto.operationId, actor);
     const origin = actor.role === Role.OPERATOR ? DocumentHandoffOrigin.OPERATOR : DocumentHandoffOrigin.PLATFORM;
-    const defaultTechnicalSignatureId = await this.defaultTechnicalSignatureId();
+    const defaultTechnicalSignatureId = await this.defaultTechnicalSignatureId(
+      operation.maintenanceExecution?.plan.pmocPlan?.signatureOverrideId ?? null,
+    );
     const document = await this.prisma.$transaction(async (tx) => {
       const saved = await tx.operationDocument.upsert({
         where: { operationId_type: { operationId: dto.operationId, type: dto.type } },
@@ -219,12 +230,12 @@ export class DocumentHandoffService {
         const saved = await tx.operationDocument.update({
           where: { id: documentId },
           data: {
-            customerSignatureSnapshot: snapshot as unknown as Prisma.InputJsonObject,
+            customerSignatureSnapshot: snapshot,
             collectedById: actor.id,
             ...(document.renderedAt
               ? { editorialStatus: DocumentEditorialStatus.STALE }
               : document.submittedAt
-                ? { editorialStatus: DocumentEditorialStatus.PENDING }
+                ? { editorialStatus: this.submittedEditorialStatus(document) }
                 : {}),
           },
         });
@@ -273,6 +284,11 @@ export class DocumentHandoffService {
       throw new ApplicationException(ERROR_CODES.PMOC_EVIDENCE_REQUIRED, `Registre pelo menos ${PMOC_MIN_PROCEDURE_IMAGES} imagens antes de enviar o PMOC`, HttpStatus.CONFLICT, { issues });
     }
     const origin = actor.role === Role.OPERATOR ? DocumentHandoffOrigin.OPERATOR : DocumentHandoffOrigin.PLATFORM;
+    const managementAssigned = this.isManagementAssigned(document);
+    const editorialStatus =
+      actor.role === Role.OPERATOR && !managementAssigned
+        ? DocumentEditorialStatus.DRAFT
+        : DocumentEditorialStatus.PENDING;
     const updated = await this.prisma.$transaction(async (tx) => {
       const saved = await tx.operationDocument.update({
         where: { id: documentId },
@@ -280,14 +296,14 @@ export class DocumentHandoffService {
           handoffOrigin: origin,
           collectedById: actor.id,
           submittedAt: new Date(),
-          editorialStatus: DocumentEditorialStatus.DRAFT,
+          editorialStatus,
           collectionSnapshot: this.operationSnapshot(operation),
           validationIssues: issues,
         },
       });
       await this.appendRevisionTx(tx, saved.id, DocumentRevisionAction.SUBMITTED, origin, actor.id, ['submittedAt', 'collectionSnapshot']);
-      await this.notifyManagementTx(tx, saved.id, operation.number, document.type, actor.id);
-      await tx.auditLog.create({ data: this.audit(DOCUMENT_ENGINE_AUDIT_ACTIONS.DOCUMENT_SUBMITTED, actor, context, saved.id, document.operationId, { origin, issues }) });
+      await this.notifyManagementTx(tx, saved.id, operation.number, document.type, actor.id, managementAssigned);
+      await tx.auditLog.create({ data: this.audit(DOCUMENT_ENGINE_AUDIT_ACTIONS.DOCUMENT_SUBMITTED, actor, context, saved.id, document.operationId, { origin, issues, managementAssigned, workflowStatus: this.workflowStatus(editorialStatus) }) });
       return tx.operationDocument.findUniqueOrThrow({ where: { id: saved.id }, include: DOCUMENT_HANDOFF_INCLUDE });
     });
     return this.response(updated, true);
@@ -426,7 +442,8 @@ export class DocumentHandoffService {
     return operation;
   }
 
-  private async defaultTechnicalSignatureId(): Promise<string | null> {
+  private async defaultTechnicalSignatureId(pmocOverrideId: string | null): Promise<string | null> {
+    if (pmocOverrideId) return pmocOverrideId;
     const signatures = await this.prisma.signature.findMany({
       where: { active: true, deletedAt: null, imageStorageKey: { not: null } },
       orderBy: [{ isDefault: 'desc' }, { position: 'asc' }, { name: 'asc' }],
@@ -483,6 +500,8 @@ export class DocumentHandoffService {
       type: document.type,
       artifactStatus: document.status,
       editorialStatus: document.editorialStatus,
+      workflowStatus: this.workflowStatus(document.editorialStatus),
+      assignmentOrigin: this.isManagementAssigned(document) ? 'MANAGEMENT' : 'OPERATOR',
       origin: document.handoffOrigin,
       submittedAt: document.submittedAt,
       reviewStartedAt: document.reviewStartedAt,
@@ -508,6 +527,23 @@ export class DocumentHandoffService {
     await tx.documentRevision.create({ data: { documentId, revision: document.revision, action, origin, actorId, changedFields, snapshot: document } });
   }
 
+  private isManagementAssigned(document: HandoffDocument): boolean {
+    const assignment = document.operation?.assignment;
+    return Boolean(assignment && assignment.assignedBy !== assignment.assignedTo);
+  }
+
+  private submittedEditorialStatus(document: HandoffDocument): DocumentEditorialStatus {
+    return document.reviewStartedAt || this.isManagementAssigned(document)
+      ? DocumentEditorialStatus.PENDING
+      : DocumentEditorialStatus.DRAFT;
+  }
+
+  private workflowStatus(status: DocumentEditorialStatus): 'DRAFT' | 'REVIEW' | 'APPROVED' | 'STALE' {
+    if (status === DocumentEditorialStatus.PENDING) return 'REVIEW';
+    if (status === DocumentEditorialStatus.READY) return 'APPROVED';
+    return status;
+  }
+
   private decodeSignature(dataUrl: string): { buffer: Buffer; mimeType: string; extension: 'png' | 'jpg' } {
     const match = /^data:(image\/png|image\/jpeg);base64,([A-Za-z0-9+/=\s]+)$/i.exec(dataUrl.trim());
     if (!match) throw this.invalid('A assinatura deve ser uma imagem PNG ou JPEG válida');
@@ -526,11 +562,11 @@ export class DocumentHandoffService {
     return { action, resource: DOCUMENT_ENGINE_RESOURCE, actor: actor.id, metadata: { documentId, operationId, requestId: context.requestId, ip: context.ip, userAgent: context.userAgent, ...extra } };
   }
 
-  private async notifyManagementTx(tx: Prisma.TransactionClient, documentId: string, operationNumber: number, type: DocumentTemplateType, actorId: string): Promise<void> {
+  private async notifyManagementTx(tx: Prisma.TransactionClient, documentId: string, operationNumber: number, type: DocumentTemplateType, actorId: string, managementAssigned: boolean): Promise<void> {
     const organization = await tx.organization.findFirst({ select: { id: true } });
     if (!organization) return;
     const recipients = await tx.user.findMany({ where: { role: { in: MANAGEMENT_ROLES }, isActive: true, disabledAt: null, id: { not: actorId } }, select: { id: true } });
-    await tx.notification.createMany({ data: recipients.map(({ id }) => ({ organizationId: organization.id, recipientUserId: id, type: NotificationType.DOCUMENT_SUBMITTED, severity: NotificationSeverity.INFO, title: 'Relatório recebido para revisão', message: `${type} da operação #${operationNumber} foi enviado para revisão.`, entityType: NotificationEntityType.DOCUMENT, entityId: documentId, actionUrl: '/reports', eventKey: `document:${documentId}:submitted` })), skipDuplicates: true });
+    await tx.notification.createMany({ data: recipients.map(({ id }) => ({ organizationId: organization.id, recipientUserId: id, type: NotificationType.DOCUMENT_SUBMITTED, severity: NotificationSeverity.INFO, title: managementAssigned ? 'Atendimento devolvido para revisão' : 'Novo atendimento aguardando aprovação', message: managementAssigned ? `${type} da operação #${operationNumber} foi executado e devolvido para revisão.` : `${type} da operação #${operationNumber} foi iniciado pelo operador e aguarda aprovação.`, entityType: NotificationEntityType.DOCUMENT, entityId: documentId, actionUrl: '/reports', eventKey: `document:${documentId}:submitted` })), skipDuplicates: true });
   }
 
   private async notifyOperatorReadyTx(tx: Prisma.TransactionClient, documentId: string, operatorId: string | null): Promise<void> {

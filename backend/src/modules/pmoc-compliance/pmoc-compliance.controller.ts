@@ -81,7 +81,7 @@ export class PmocComplianceController {
     return this.executionRequests.get(id);
   }
 
-  @Roles(Role.OWNER, Role.MANAGER)
+  @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR)
   @Get('pmoc/execution-requests/:id/prefill')
   executionRequestPrefill(
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
@@ -90,7 +90,7 @@ export class PmocComplianceController {
     return this.executionRequests.prefill(id, actor);
   }
 
-  @Roles(Role.OWNER, Role.MANAGER)
+  @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR)
   @Post('pmoc/execution-requests/:id/generate-work-order')
   generateWorkOrder(
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,

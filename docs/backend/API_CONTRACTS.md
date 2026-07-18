@@ -1,5 +1,18 @@
 # API Contracts
 
+## PMOC — evidências e assinaturas no wizard
+
+Nenhum endpoint novo. Os fluxos Platform e Operator reutilizam:
+
+- `PATCH /api/v1/operations/:id` para adicionar fotos oficiais à execução;
+- `GET /api/v1/operations/photos/:photoId` para miniaturas autenticadas;
+- `POST /api/v1/documents/handoffs` para obter/criar idempotentemente o Handoff PMOC;
+- `PATCH /api/v1/documents/:documentId/handoff/customer-signature` para coletar ou substituir;
+- `GET /api/v1/documents/:documentId/handoff/customer-signature` para a imagem autenticada.
+
+O Handoff retorna `customerSignature.collectedBy`, `collectedAt`, `technicalSignature` e
+`operation.operator`. Nenhuma resposta expõe `storageKey`, path ou Base64 de assinatura.
+
 ## PMOC UX-02.1 — evidências, política e PDF binário
 
 ### `GET /api/v1/documents/configuration/types/PMOC`
@@ -5422,3 +5435,36 @@ Uma nova chamada de coleta substitui o snapshot corrente, incrementa a revisão 
 - Upload continua em `PATCH /api/v1/operations/:id`, `photos[]`, PNG/JPEG, 5 MiB por arquivo e máximo acumulado 16.
 
 Erros: `400 OPERATION_PHOTO_INVALID`, `403 FORBIDDEN`, `404 OPERATION_PHOTO_NOT_FOUND`.
+
+## Workflow de atendimento iniciado no Operator
+
+### `POST /api/v1/operations`
+
+Campo aditivo:
+
+```json
+{
+  "documentType": "WORK_ORDER | TECHNICAL_REPORT | TECHNICAL_OPINION | BUDGET | PMOC"
+}
+```
+
+`documentType` é opcional e assume `WORK_ORDER`. A resposta inclui `requestedDocumentType` e `assignment { id, assignedBy, assignedTo, status }`. Quando diferente de `WORK_ORDER`, o backend cria também o `OperationDocument` solicitado; a OS automática é preservada por compatibilidade.
+
+### `POST /api/v1/documents/:documentId/handoff/submit`
+
+A resposta mantém `editorialStatus` e adiciona:
+
+```json
+{
+  "workflowStatus": "DRAFT | REVIEW | APPROVED | STALE",
+  "assignmentOrigin": "OPERATOR | MANAGEMENT"
+}
+```
+
+- Assignment próprio (`assignedBy == assignedTo`): submissão fica `editorialStatus: DRAFT`, `workflowStatus: DRAFT`.
+- Assignment delegado (`assignedBy != assignedTo`): submissão fica `editorialStatus: PENDING`, `workflowStatus: REVIEW`.
+- Finalização por OWNER/MANAGER: `READY` / `APPROVED`.
+
+### PMOC assumido pelo Operator
+
+`GET /api/v1/pmoc/execution-requests/:id/prefill` e `POST /api/v1/pmoc/execution-requests/:id/generate-work-order` aceitam OPERATOR somente quando a solicitação não possui operador planejado ou está planejada para o próprio ator. Solicitação reservada a terceiro retorna `403 FORBIDDEN`.

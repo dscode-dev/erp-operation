@@ -1,5 +1,14 @@
 # Backend State
 
+## PMOC — evidências e identidade da coleta consolidadas (2026-07-18)
+
+- O Handoff oficial agora prioriza `PmocPlan.signatureOverrideId` ao preparar o documento da
+  execução; sem override, permanece o resolvedor institucional existente.
+- Fotos continuam pertencendo exclusivamente à `Operation` e assinatura do cliente ao snapshot do
+  `OperationDocument`; nenhuma entidade, migration ou storage paralelo foi criado.
+- `collectedBy` permanece a fonte autoritativa do usuário que coletou/substituiu a assinatura.
+- Teste PostgreSQL cobre a prioridade do override PMOC no Handoff oficial.
+
 ## PMOC UX-02.1 — fechamento do fluxo crítico (2026-07-17)
 
 - A política de assinatura PMOC continua governada pelo `DocumentTemplate`: o Wizard e o Operator
@@ -2914,3 +2923,12 @@ Status: implementado e validado em PostgreSQL/Docker.
 - `OperationPhoto` continua sendo a única entidade. A migration aditiva `20260717210000_pmoc_fix02b_photo_author` acrescenta autoria opcional, com backfill pelo operador e preservação por `SET NULL`.
 - Upload múltiplo reutiliza `PATCH /operations/:id`; legenda e remoção atuam sobre a mesma foto, com auditoria e invalidação PENDING/STALE.
 - `DocumentContext` continua sendo a única fonte da galeria; ordem e legendas foram certificadas no Wizard, Preview, render e PDF.
+
+## Operator — início autônomo e retorno para revisão (2026-07-18)
+
+- `Operation.requestedDocumentType` identifica o documento solicitado sem substituir `Operation`, `Assignment` ou `OperationDocument`.
+- Migration aditiva `20260718110000_operator_attendance_workflow`; PMOCs existentes são retropreenchidos como `PMOC`, demais registros preservam `WORK_ORDER`.
+- Atendimento iniciado pelo próprio OPERATOR cria Assignment próprio, percorre aceitar/iniciar/concluir e envia o handoff como `DRAFT` para aprovação.
+- Atendimento delegado por OWNER/MANAGER retorna do campo como `PENDING`, projetado no contrato como `workflowStatus: REVIEW`, até finalização da gestão.
+- Geração PMOC pelo Operator reutiliza uma `PmocExecutionRequest` pendente; solicitações reservadas a outro operador são rejeitadas.
+- A publicação de conclusão de Operation deixou de ocorrer em criações/edições não concluídas; Lifecycle e Maintenance só sincronizam na transição real para `COMPLETED`.

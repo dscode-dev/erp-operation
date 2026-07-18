@@ -908,6 +908,7 @@ model Operation {
   equipmentId                     String?                             @map("equipment_id") @db.Uuid
   operatorId                      String                              @map("operator_id") @db.Uuid
   type                            OperationType
+  requestedDocumentType           DocumentTemplateType                @default(WORK_ORDER) @map("requested_document_type")
   serviceTypes                    OperationType[]                     @default([]) @map("service_types")
   status                          OperationStatus                     @default(DRAFT)
   scheduledFor                    DateTime?                           @map("scheduled_for") @db.Timestamptz(3)
@@ -959,6 +960,7 @@ model Operation {
   @@index([customerId, createdAt])
   @@index([equipmentId, createdAt])
   @@index([operatorId, createdAt])
+  @@index([requestedDocumentType, status, createdAt], map: "operations_requested_document_status_idx")
   @@index([status, createdAt])
   @@map("operations")
 }

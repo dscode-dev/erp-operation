@@ -45,7 +45,7 @@ export type CreatePmocPayload = {
 };
 
 export type UpdatePmocPayload = Partial<
-  Pick<
+  Omit<Pick<
     CreatePmocPayload,
     | "equipmentIds"
     | "scopeCatalogIds"
@@ -63,7 +63,7 @@ export type UpdatePmocPayload = Partial<
     | "serviceTypes"
     | "defaultEstimatedDurationMinutes"
     | "defaultOperationObservations"
-  >
+  >, "defaultAddressId" | "defaultOperationObservations">
 > & {
   artNumber?: string | null;
   contractNumber?: string | null;
@@ -71,6 +71,8 @@ export type UpdatePmocPayload = Partial<
   coverage?: string | null;
   defaultOperatorId?: string | null;
   defaultTechnicianId?: string | null;
+  defaultAddressId?: string | null;
+  defaultOperationObservations?: string | null;
   signatureOverrideId?: string | null;
   applyDefaultsToPendingExecutions?: boolean;
 };

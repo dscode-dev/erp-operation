@@ -1,6 +1,7 @@
 "use client";
 
-import { Briefcase } from "lucide-react";
+import Link from "next/link";
+import { Briefcase, Plus } from "lucide-react";
 import { AssignmentCard } from "@operator/components/assignment-card";
 import { SkeletonList } from "@erp/ui/skeletons";
 import { EmptyState } from "@erp/ui/empty-state";
@@ -16,9 +17,10 @@ export default function OperatorServices() {
 
   return (
     <div className="px-4 pt-4 pb-24 space-y-6">
-      <header>
-        <h1 className="text-[22px] font-semibold tracking-tight">Minhas ordens</h1>
-        <p className="text-[var(--color-muted-foreground)] text-sm">Ordens de Serviço atribuídas a você.</p>
+      <header className="flex items-start justify-between gap-3">
+        <div><h1 className="text-[22px] font-semibold tracking-tight">Meus atendimentos</h1>
+        <p className="text-[var(--color-muted-foreground)] text-sm">Atividades atribuídas e iniciadas por você.</p></div>
+        <Link href="/operator/atendimento" className="inline-flex h-10 items-center gap-1.5 rounded-[var(--radius-md)] bg-[var(--color-primary)] px-3 text-sm font-semibold text-[var(--color-primary-foreground)]"><Plus className="h-4 w-4" /> Novo</Link>
       </header>
 
       {assignments.loading && !assignments.data ? (
@@ -26,7 +28,7 @@ export default function OperatorServices() {
       ) : assignments.error && !assignments.data ? (
         <ErrorState error={assignments.error} onRetry={assignments.refetch} />
       ) : items.length === 0 ? (
-        <EmptyState icon={Briefcase} title="Fila vazia" description="Nenhuma ordem atribuída no momento." />
+        <EmptyState icon={Briefcase} title="Fila vazia" description="Inicie um atendimento ou aguarde uma atividade da gestão." />
       ) : (
         <div className="space-y-6">
           {ongoing.length > 0 && <Group title="Em andamento" items={ongoing} />}

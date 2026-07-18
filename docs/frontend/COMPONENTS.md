@@ -1,5 +1,15 @@
 # COMPONENTS — Frontend
 
+## PMOC — componentes consolidados de coleta
+
+- `PmocPlanWizard`: compartilha evidências e assinaturas entre criação, edição e revisão; dados de
+  novo cadastro são transitórios até existir a primeira Operation.
+- `PmocFieldExecution`: lista fotos existentes, adiciona novas, apresenta técnico/assinatura
+  institucional e gerencia assinatura do cliente com metadados do coletor.
+- `CustomerSignaturePreview`: visualizador autenticado reutilizável por Platform e Operator; cria
+  object URL temporária e a revoga no cleanup.
+- `OperatorEvidence`: miniatura autenticada com legenda, autor e data da coleta.
+
 ## PMOC UX-02.1
 
 - `PhotoInput`: galeria responsiva 2/4 colunas, PNG/JPEG até 5 MiB, legenda, progresso, erro,
@@ -752,3 +762,17 @@ Tipos:
 - `PmocPlanWizard.EvidenceStep`: etapa interna do Wizard oficial; lista, autoria, legenda, remoção e atualização do Viewer.
 - `PhotoInput`: uploader oficial evoluído com dropzone, múltiplos arquivos e grade responsiva.
 - Reutilizados `ConfirmDialog` e `DocumentViewer`; não há novo componente documental ou uploader PMOC.
+
+## Operator attendance workflow
+
+- `AtendimentoWizard`: ganhou seletor inicial de documento e submissão por Operation → Assignment → Handoff.
+- `PmocStartStep`: etapa interna do mesmo Wizard; seleciona plano/execução elegível e redireciona para o `AssignmentWorkflow` existente.
+- `FieldReportHandoff`: fixa `requestedDocumentType` quando o Assignment veio da gestão e apresenta `DRAFT/REVIEW` do backend.
+- `OperationCreationDrawer`: OWNER/MANAGER escolhem o documento solicitado; PMOC permanece no fluxo oficial do plano.
+
+## PMOC management UX
+
+- `PmocPage`: tabs Visão geral/Agenda, dashboard contextual, catálogo de planos e filtros de execução.
+- `ExecutionList`: agora apresenta o status de negócio enviado pelo backend, além de cliente, equipamentos e data.
+- `PmocPlanWizard(editMode)`: modo adicional do Wizard oficial para atualizar um plano existente; cliente permanece readonly para preservar relacionamentos.
+- `PmocDetailPage`: reúne editar, evidências, assinaturas, pausa/retomada, responsáveis e finalização confirmada.

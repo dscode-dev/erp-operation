@@ -96,6 +96,7 @@ const OPERATION_INCLUDE = {
       },
     },
   },
+  assignment: { select: { id: true, assignedBy: true, assignedTo: true, status: true } },
 } satisfies Prisma.OperationInclude;
 
 const OPERATION_LIST_INCLUDE = {
@@ -221,6 +222,7 @@ export class OperationsService {
           equipmentId: dto.equipmentId ?? null,
           operatorId: assignment.operatorId,
           type: dto.type,
+          requestedDocumentType: dto.documentType ?? DocumentTemplateType.WORK_ORDER,
           serviceTypes: this.operationTypes(dto.type, dto.serviceTypes),
           status: dto.status ?? 'DRAFT',
           scheduledFor: dto.scheduledFor ? new Date(dto.scheduledFor) : null,
@@ -270,6 +272,16 @@ export class OperationsService {
           status: 'DRAFT',
         },
       });
+      if (dto.documentType && dto.documentType !== DocumentTemplateType.WORK_ORDER) {
+        await tx.operationDocument.create({
+          data: {
+            operationId: operation.id,
+            type: dto.documentType,
+            number: formatDocumentNumber(OPERATION_DOCUMENT_PREFIX[dto.documentType], operation.number),
+            status: 'DRAFT',
+          },
+        });
+      }
       await tx.auditLog.create({
         data: this.audit(
           OPERATION_AUDIT_ACTIONS.OPERATION_CREATED,
@@ -282,6 +294,7 @@ export class OperationsService {
             customerId: operation.customerId,
             createdBy: actor.id,
             operatorId: operation.operatorId,
+            requestedDocumentType: operation.requestedDocumentType,
             delegated: assignment.delegated,
             ignoredOperatorId: assignment.ignoredOperatorId ?? null,
           },
@@ -316,8 +329,10 @@ export class OperationsService {
         actor.id,
         context,
       );
-      await this.lifecycle.publishOperationCompletedTx(tx, operation.id, actor.id, context);
-      await this.maintenance.syncOperationCompletedTx(tx, operation.id, actor.id, context);
+      if (operation.status === 'COMPLETED') {
+        await this.lifecycle.publishOperationCompletedTx(tx, operation.id, actor.id, context);
+        await this.maintenance.syncOperationCompletedTx(tx, operation.id, actor.id, context);
+      }
       await transactionHook?.(tx, operation.id);
       return operation.id;
     });
@@ -358,6 +373,7 @@ export class OperationsService {
         id: true,
         customerId: true,
         operatorId: true,
+        status: true,
         type: true,
         serviceTypes: true,
         referenceMonth: true,
@@ -508,8 +524,10 @@ export class OperationsService {
           },
         ),
       });
-      await this.lifecycle.publishOperationCompletedTx(tx, id, actor.id, context);
-      await this.maintenance.syncOperationCompletedTx(tx, id, actor.id, context);
+      if (dto.status === 'COMPLETED' && existing.status !== 'COMPLETED') {
+        await this.lifecycle.publishOperationCompletedTx(tx, id, actor.id, context);
+        await this.maintenance.syncOperationCompletedTx(tx, id, actor.id, context);
+      }
     });
     for (const photo of photos) {
       const storageKey = `operations/${id}/photos/${randomUUID()}.${photo.ext}`;

@@ -681,6 +681,7 @@ export type OperationMaintenanceType =
   | 'CORRECTIVE';
 export type OperationDocumentStatus = 'DRAFT' | 'READY' | 'VALIDATED' | 'SENT';
 export type DocumentEditorialStatus = 'DRAFT' | 'PENDING' | 'READY' | 'STALE';
+export type DocumentWorkflowStatus = 'DRAFT' | 'REVIEW' | 'APPROVED' | 'STALE';
 export type DocumentHandoffOrigin = 'OPERATOR' | 'PLATFORM' | 'SYSTEM';
 
 export type DocumentHandoff = {
@@ -690,6 +691,8 @@ export type DocumentHandoff = {
   type: DocumentTemplateType;
   artifactStatus: OperationDocumentStatus;
   editorialStatus: DocumentEditorialStatus;
+  workflowStatus: DocumentWorkflowStatus;
+  assignmentOrigin: 'MANAGEMENT' | 'OPERATOR';
   origin: DocumentHandoffOrigin;
   submittedAt: string | null;
   reviewStartedAt: string | null;
@@ -854,6 +857,7 @@ export type OperationSummary = {
   id: string;
   number: number;
   type: OperationType;
+  requestedDocumentType: DocumentTemplateType;
   serviceTypes: OperationType[];
   status: OperationStatus;
   customer: { id: string; name: string } | null;
@@ -869,6 +873,12 @@ export type OperationSummary = {
 };
 
 export type OperationDetail = Omit<OperationSummary, 'equipment'> & {
+  assignment?: {
+    id: string;
+    assignedBy: string;
+    assignedTo: string;
+    status: AssignmentStatus;
+  } | null;
   address: CustomerAddress | null;
   equipment: { id: string; name: string; tag: string | null; type: EquipmentType } | null;
   checklist: OperationChecklistItem[];
@@ -931,6 +941,8 @@ export type CreateOperationPayload = {
   equipmentId?: string | null;
   /** Delegates the resulting Operation/Assignment when allowed by backend RBAC. */
   operatorId?: string | null;
+  /** Documento operacional solicitado para este atendimento. */
+  documentType?: DocumentTemplateType;
   type: OperationType;
   serviceTypes?: OperationType[];
   status?: OperationStatus;

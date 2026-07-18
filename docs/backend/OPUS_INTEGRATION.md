@@ -1,5 +1,13 @@
 # OPUS Frontend Integration
 
+## PMOC — coleta consolidada
+
+- Wizard e Operator exibem fotos persistidas da `Operation` e adicionam novas pelo contrato atual.
+- Assinatura do cliente é lida/escrita pelo Handoff; `collectedBy` identifica o coletor real.
+- Responsável técnico (`PmocPlan`) e assinatura institucional (`technicalSignature`) são conceitos
+  distintos e devem aparecer em blocos separados.
+- O override do PMOC tem precedência ao criar o Handoff. Não escolher assinatura localmente.
+
 ## PMOC UX-02.1 — contrato pronto para UI
 
 - Política: `GET /documents/configuration/types/PMOC`; não usar fallback `NONE` durante loading/erro.
@@ -1989,3 +1997,10 @@ O Wizard oficial da Platform agora revisa assinaturas de PMOC. Consumir `custome
 ## PMOC FIX-02B
 
 Na etapa Evidências do `PmocPlanWizard`, consuma somente `operationApi`: detalhe, conteúdo autenticado, upload em lote, atualização de legenda e remoção. Cada mutação invalida o artefato no backend; refaça o Preview. A grade oficial é 1/2/4 colunas e o uploader aceita seleção múltipla/drag-and-drop. Não há API ou storage específico de PMOC.
+
+## Operator self-service / management review
+
+- Use `requestedDocumentType` como tipo oficial do atendimento atribuído.
+- `assignmentOrigin: OPERATOR` + `workflowStatus: DRAFT`: criado no campo e aguardando aprovação.
+- `assignmentOrigin: MANAGEMENT` + `workflowStatus: REVIEW`: delegado pela gestão, executado e devolvido.
+- PMOC iniciado no PWA significa assumir uma Execution Request elegível; não criar plano nem Operation paralela.

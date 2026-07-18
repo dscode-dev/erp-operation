@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { ArrowLeft, CalendarClock, Camera, CheckCircle2, ClipboardCheck, Clock, FileText, MapPin, Package, PenLine, Play, XCircle } from "lucide-react";
@@ -11,8 +12,9 @@ import { StatusPill } from "@erp/ui/status-pill";
 import { DocumentViewer } from "@erp/ui/documents/document-viewer";
 import { SignaturePad } from "@erp/ui/documents/signature-pad";
 import { PhotoInput, type CapturedPhoto } from "@erp/ui/photo-input";
+import { CustomerSignaturePreview } from "@erp/ui/documents/customer-signature-preview";
 import { assignmentsApi, documentsApi, inventoryApi, operationApi, useQuery, type Assignment, type InventoryItem, type OperationDetail, type OperationDocument, type OperationPart, type Product } from "@erp/api";
-import type { DocumentConfiguration, SignatureMode } from "@erp/types";
+import type { DocumentConfiguration, Signature, SignatureMode } from "@erp/types";
 import {
   ASSIGNMENT_STATUS_LABEL,
   ASSIGNMENT_STATUS_PILL,
@@ -130,6 +132,9 @@ function AssignmentWorkflow({
   const pmoc = op.maintenanceExecution?.plan.pmocPlan;
   const pmocExecution = op.maintenanceExecution?.pmocExecutionRequest;
   const pmocSignatureMode = pmocConfiguration.data?.defaultTemplate?.signatureMode ?? null;
+  const pmocTechnicalSignature = pmocConfiguration.data?.defaultTemplate?.institutionalSignatures?.[0]?.signature
+    ?? pmocConfiguration.data?.defaultTemplate?.signature
+    ?? null;
   const visibleWorkflow = isPmoc && (pmocSignatureMode === "NONE" || pmocSignatureMode === "FIXED")
     ? workflow.filter((item) => item.label !== "Assinatura")
     : workflow;
@@ -209,7 +214,7 @@ function AssignmentWorkflow({
       </section>
 
       {operation.data?.maintenanceExecution?.plan.pmocPlan && (
-        <PmocFieldExecution operation={operation.data} signatureMode={pmocSignatureMode} configurationLoading={pmocConfiguration.loading} onSaved={operation.refetch} />
+        <PmocFieldExecution operation={operation.data} signatureMode={pmocSignatureMode} technicalSignature={pmocTechnicalSignature} configurationLoading={pmocConfiguration.loading} onSaved={operation.refetch} />
       )}
 
       {operation.data && (assignment.status === "ACCEPTED" || assignment.status === "STARTED" || assignment.status === "COMPLETED") && (
@@ -326,7 +331,7 @@ function AssignmentWorkflow({
   );
 }
 
-function PmocFieldExecution({ operation, signatureMode, configurationLoading, onSaved }: { operation: OperationDetail; signatureMode: SignatureMode | null; configurationLoading: boolean; onSaved: () => void }) {
+function PmocFieldExecution({ operation, signatureMode, technicalSignature, configurationLoading, onSaved }: { operation: OperationDetail; signatureMode: SignatureMode | null; technicalSignature: Signature | null; configurationLoading: boolean; onSaved: () => void }) {
   const [items, setItems] = useState(operation.maintenanceChecklistItems);
   const [photos, setPhotos] = useState<CapturedPhoto[]>([]);
   const [signature, setSignature] = useState<string | null>(null);
@@ -334,7 +339,25 @@ function PmocFieldExecution({ operation, signatureMode, configurationLoading, on
   const [signerRole, setSignerRole] = useState(operation.customerSignerRole ?? "");
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [handoff, setHandoff] = useState<Awaited<ReturnType<typeof documentsApi.saveHandoffDraft>> | null>(null);
+  const [captureOpen, setCaptureOpen] = useState(!operation.signatureCaptured);
   const collectsClientSignature = signatureMode === "COLLECTED" || signatureMode === "HYBRID";
+  const pmoc = operation.maintenanceExecution?.plan.pmocPlan;
+  const pmocDocument = operation.documents.find((item) => item.type === "PMOC") ?? null;
+
+  const existingHandoff = useQuery(
+    (signal) => pmocDocument ? documentsApi.getHandoff(pmocDocument.id, { signal }) : Promise.resolve(null),
+    [pmocDocument?.id],
+  );
+
+  useEffect(() => {
+    if (existingHandoff.data) {
+      setHandoff(existingHandoff.data);
+      setSignerName(existingHandoff.data.customerSignature?.name ?? operation.customerSignerName ?? "");
+      setSignerRole(existingHandoff.data.customerSignature?.role ?? operation.customerSignerRole ?? "");
+      setCaptureOpen(!existingHandoff.data.customerSignature);
+    }
+  }, [existingHandoff.data, operation.customerSignerName, operation.customerSignerRole]);
 
   async function save() {
     setBusy(true);
@@ -352,13 +375,22 @@ function PmocFieldExecution({ operation, signatureMode, configurationLoading, on
           observations: item.observations,
         })),
         photos: encodedPhotos,
-        ...(collectsClientSignature ? {
-          signatureData: signature,
-          customerSignerName: signature ? signerName : undefined,
-          customerSignerRole: signature ? signerRole : undefined,
-          signedAt: signature ? new Date().toISOString() : undefined,
-        } : {}),
       });
+      let currentHandoff = handoff;
+      if (collectsClientSignature && signature) {
+        if (!signerName.trim()) throw new Error("Informe o nome de quem assinou.");
+        currentHandoff = currentHandoff ?? await documentsApi.saveHandoffDraft(operation.id, "PMOC");
+        currentHandoff = await documentsApi.collectCustomerSignature(currentHandoff.id, {
+          signerName: signerName.trim(),
+          signerRole: signerRole.trim() || undefined,
+          signatureData: signature,
+          collectedAt: new Date().toISOString(),
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Recife",
+        });
+        setHandoff(currentHandoff);
+        setSignature(null);
+        setCaptureOpen(false);
+      }
       photos.forEach((photo) => URL.revokeObjectURL(photo.url));
       setPhotos([]);
       setFeedback("Execução PMOC salva. O Preview foi invalidado e refletirá os novos dados.");
@@ -387,8 +419,23 @@ function PmocFieldExecution({ operation, signatureMode, configurationLoading, on
           </div>
         ))}
       </div>
-      <PhotoInput photos={photos} onChange={setPhotos} max={16} existingCount={operation.photos.length} requiredMinimum={4} disabled={busy} />
-      {configurationLoading ? <SkeletonCard /> : collectsClientSignature ? <div className="space-y-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] p-3"><p className="text-sm font-medium">Assinatura do cliente</p><div className="grid gap-2"><input value={signerName} onChange={(event) => setSignerName(event.target.value)} placeholder="Nome do cliente/responsável" className="h-11 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-3 text-sm" /><input value={signerRole} onChange={(event) => setSignerRole(event.target.value)} placeholder="Função ou vínculo" className="h-11 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-3 text-sm" /></div><SignaturePad onChange={setSignature} onConfirm={setSignature} /></div> : signatureMode === "FIXED" ? <p className="rounded-[var(--radius-md)] bg-[var(--color-muted)] px-3 py-2 text-sm text-[var(--color-muted-foreground)]">A assinatura institucional definida no modelo será aplicada automaticamente ao documento.</p> : !signatureMode ? <p className="text-sm text-[var(--color-danger)]">Não foi possível consultar a política de assinatura do modelo PMOC.</p> : null}
+      <section className="space-y-3">
+        <div><p className="text-sm font-medium">Evidências fotográficas</p><p className="text-xs text-[var(--color-muted-foreground)]">As imagens existentes e as novas fotos pertencem a esta execução do PMOC.</p></div>
+        {operation.photos.length > 0 ? <div className="grid grid-cols-2 gap-2">{operation.photos.map((photo) => <OperatorEvidence key={photo.id} photo={photo} />)}</div> : <p className="rounded-[var(--radius-md)] border border-dashed border-[var(--color-border)] p-3 text-center text-xs text-[var(--color-muted-foreground)]">Nenhuma foto registrada ainda.</p>}
+        <PhotoInput photos={photos} onChange={setPhotos} max={16} existingCount={operation.photos.length} requiredMinimum={4} disabled={busy} />
+      </section>
+      {configurationLoading ? <SkeletonCard /> : <section className="space-y-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] p-3">
+        <div><p className="text-sm font-semibold">Responsável técnico pelo PMOC</p><p className="text-xs text-[var(--color-muted-foreground)]">Não confundir com o operador que realiza a coleta em campo.</p></div>
+        <InfoRow icon={ClipboardCheck} label="Técnico responsável" value={pmoc?.responsibleTechnician ?? "Não informado"} />
+        {handoff?.technicalSignature || technicalSignature ? <div className="rounded-[var(--radius-md)] bg-[var(--color-muted)] p-3 text-sm"><strong>{(handoff?.technicalSignature ?? technicalSignature)?.name}</strong><span className="block text-xs text-[var(--color-muted-foreground)]">{[(handoff?.technicalSignature ?? technicalSignature)?.title, (handoff?.technicalSignature ?? technicalSignature)?.professionalCouncil, (handoff?.technicalSignature ?? technicalSignature)?.registrationNumber, (handoff?.technicalSignature ?? technicalSignature)?.department].filter(Boolean).join(" · ")}</span></div> : signatureMode === "FIXED" || signatureMode === "HYBRID" ? <p className="text-xs text-[var(--color-warning)]">A assinatura técnica será resolvida pela configuração oficial do documento.</p> : <p className="text-xs text-[var(--color-muted-foreground)]">O modelo atual identifica o técnico, mas não insere assinatura institucional.</p>}
+      </section>}
+      {collectsClientSignature && <section className="space-y-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] p-3">
+        <div className="flex items-start justify-between gap-2"><div><p className="text-sm font-semibold">Assinatura do cliente</p><p className="text-xs text-[var(--color-muted-foreground)]">{handoff?.customerSignature ? "Assinatura já coletada." : "Aguardando coleta."}</p></div><button type="button" className="rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 py-2 text-xs font-medium" onClick={() => setCaptureOpen((value) => !value)}>{handoff?.customerSignature ? "Substituir" : captureOpen ? "Fechar" : "Assinar"}</button></div>
+        {handoff?.customerSignature && <><CustomerSignaturePreview documentId={handoff.id} name={handoff.customerSignature.name} /><div className="grid gap-2"><InfoRow icon={PenLine} label="Cliente" value={handoff.customerSignature.name} /><InfoRow icon={Clock} label="Coletada em" value={new Date(handoff.customerSignature.collectedAt).toLocaleString("pt-BR")} /><InfoRow icon={ClipboardCheck} label="Coletada por" value={handoff.customerSignature.collectedBy?.name ?? handoff.collectedBy?.name ?? operation.operator?.name ?? "Não identificado"} /></div></>}
+        {captureOpen && <div className="space-y-3"><div className="grid gap-2"><input value={signerName} onChange={(event) => setSignerName(event.target.value)} placeholder="Nome do cliente/responsável" className="h-11 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-3 text-sm" /><input value={signerRole} onChange={(event) => setSignerRole(event.target.value)} placeholder="Função ou vínculo" className="h-11 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-3 text-sm" /></div><SignaturePad onChange={setSignature} onConfirm={setSignature} /></div>}
+        <InfoRow icon={ClipboardCheck} label="Operador da coleta" value={handoff?.collectedBy?.name ?? operation.operator?.name ?? "Operador atual"} />
+      </section>}
+      {!configurationLoading && !collectsClientSignature && signatureMode === "FIXED" ? <p className="rounded-[var(--radius-md)] bg-[var(--color-muted)] px-3 py-2 text-sm text-[var(--color-muted-foreground)]">A assinatura institucional definida no modelo será aplicada automaticamente. Não há coleta de assinatura do cliente nesta política.</p> : !configurationLoading && !signatureMode ? <p className="text-sm text-[var(--color-danger)]">Não foi possível consultar a política de assinatura do modelo PMOC.</p> : null}
       {feedback && <p className="text-sm text-[var(--color-muted-foreground)]">{feedback}</p>}
       <button type="button" disabled={busy || configurationLoading || (collectsClientSignature && Boolean(signature) && !signerName.trim())} onClick={() => void save()} className="h-12 w-full rounded-[var(--radius-lg)] bg-[var(--color-primary)] text-sm font-semibold text-white disabled:opacity-50">{busy ? "Salvando…" : "Salvar atendimento PMOC"}</button>
     </section>
@@ -402,6 +449,23 @@ function fileDataUrl(file: File): Promise<string> {
     reader.onerror = () => reject(reader.error ?? new Error("Falha ao ler a foto"));
     reader.readAsDataURL(file);
   });
+}
+
+function OperatorEvidence({ photo }: { photo: OperationDetail["photos"][number] }) {
+  const image = useQuery((signal) => operationApi.getOperationPhoto(photo.id, { signal }), [photo.id]);
+  const source = image.data ? `data:${image.data.mimeType};base64,${image.data.contentBase64}` : null;
+  return (
+    <figure className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)]">
+      <div className="grid aspect-square place-items-center bg-white">
+        {source ? <Image unoptimized src={source} width={320} height={320} alt={photo.caption || "Evidência do PMOC"} className="h-full w-full object-contain" /> : <span className="p-2 text-center text-[11px] text-[var(--color-muted-foreground)]">Carregando foto…</span>}
+      </div>
+      <figcaption className="space-y-1 p-2 text-[11px]">
+        <strong className="block text-xs">{photo.caption || "Sem legenda"}</strong>
+        <span className="block text-[var(--color-muted-foreground)]">{photo.createdBy?.name ?? "Responsável não identificado"}</span>
+        <span className="block text-[var(--color-muted-foreground)]">{new Date(photo.createdAt).toLocaleString("pt-BR")}</span>
+      </figcaption>
+    </figure>
+  );
 }
 
 function periodicityLabel(value: string): string {

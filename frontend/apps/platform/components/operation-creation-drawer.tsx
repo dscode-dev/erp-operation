@@ -10,9 +10,11 @@ import {
   operationApi,
   useQuery,
   type CreateOperationPayload,
+  type DocumentKind,
   type OperationDetail,
   type OperationType,
 } from "@erp/api";
+import { DOCUMENT_KIND_LABEL } from "@erp/types";
 import {
   CustomerAddressSelect,
   CustomerSelect,
@@ -34,6 +36,13 @@ const DEFAULT_CHECKLIST = [
   "Executar serviço planejado",
   "Testar funcionamento",
   "Registrar evidências",
+];
+
+const ATTENDANCE_DOCUMENT_TYPES: DocumentKind[] = [
+  "WORK_ORDER",
+  "TECHNICAL_REPORT",
+  "TECHNICAL_OPINION",
+  "BUDGET",
 ];
 
 const MODE_COPY: Record<Mode, { eyebrow: string; title: string; description: string; success: string }> = {
@@ -90,6 +99,7 @@ export function OperationCreationDrawer({
   const [equipmentIds, setEquipmentIds] = useState<string[]>([]);
   const [operatorId, setOperatorId] = useState("");
   const [type, setType] = useState<OperationType>("PREVENTIVA");
+  const [documentType, setDocumentType] = useState<DocumentKind>("WORK_ORDER");
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [checklist, setChecklist] = useState(DEFAULT_CHECKLIST);
@@ -119,6 +129,7 @@ export function OperationCreationDrawer({
     );
     setOperatorId(initialValues?.operatorId ?? "");
     setType(initialValues?.type ?? "PREVENTIVA");
+    setDocumentType(initialValues?.documentType ?? "WORK_ORDER");
     const schedule = initialValues?.scheduledFor ? localDateTime(initialValues.scheduledFor) : null;
     setDate(schedule?.date ?? "");
     setTime(schedule?.time ?? "");
@@ -136,6 +147,7 @@ export function OperationCreationDrawer({
     if (!date || !time) return null;
     return new Date(`${date}T${time}:00`).toISOString();
   }, [date, time]);
+  const documentTypeLocked = initialValues?.documentType === "PMOC";
 
   const canNext =
     step === 0 ? Boolean(customerId)
@@ -171,6 +183,7 @@ export function OperationCreationDrawer({
           };
         }),
         type,
+        documentType,
         status: initialValues?.status ?? (mode === "schedule" ? "DRAFT" : "IN_PROGRESS"),
         scheduledFor,
         operatorId: operatorId || null,
@@ -266,6 +279,14 @@ export function OperationCreationDrawer({
             {step === 2 && (
               <div className="space-y-3">
                 <ServiceTypeSelect value={type} onChange={setType} />
+                <Field label="Documento solicitado">
+                  <select value={documentType} onChange={(event) => setDocumentType(event.target.value as DocumentKind)} className={inputCls} disabled={documentTypeLocked}>
+                    {(documentTypeLocked ? (["PMOC"] as DocumentKind[]) : ATTENDANCE_DOCUMENT_TYPES).map((item) => (
+                      <option key={item} value={item}>{DOCUMENT_KIND_LABEL[item]}</option>
+                    ))}
+                  </select>
+                </Field>
+                <p className="text-caption">PMOC continua sendo atribuído pelo plano oficial. Os demais atendimentos usarão o documento selecionado.</p>
                 <UserSelect value={operatorId} onChange={setOperatorId} />
                 <DateTimePicker date={date} time={time} onDate={setDate} onTime={setTime} />
               </div>
@@ -294,6 +315,7 @@ export function OperationCreationDrawer({
                 <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 text-sm">
                   <div><strong>Cliente:</strong> {customerId ? "selecionado" : "—"}</div>
                   <div><strong>Tipo:</strong> {type}</div>
+                  <div><strong>Documento:</strong> {DOCUMENT_KIND_LABEL[documentType]}</div>
                   <div><strong>Agenda:</strong> {scheduledFor ? new Date(scheduledFor).toLocaleString("pt-BR") : "não definida"}</div>
                   <div><strong>Checklist:</strong> {checklist.length} item(ns)</div>
                   <div><strong>Equipamentos:</strong> {equipmentIds.length}</div>

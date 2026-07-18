@@ -1,5 +1,16 @@
 # Security
 
+## PMOC — segurança da coleta consolidada (2026-07-18)
+
+- Evidências continuam sob validação binária/MIME/tamanho e autorização da Operation; o plano PMOC
+  não recebe binários.
+- Assinatura do cliente continua em storage privado, acessada apenas pelo endpoint autenticado; a
+  resposta JSON contém metadados sanitizados e identidade do coletor.
+- O override técnico vem do PMOC relacionado pela cadeia MaintenanceExecution e não de parâmetro
+  enviado pelo Operator, prevenindo troca indevida de assinatura em campo.
+- OWNER/MANAGER podem revisar/substituir; OPERATOR somente atua na Operation atribuída, conforme o
+  `assertAccess` existente. Toda substituição preserva revisão e auditoria.
+
 ## PMOC UX-02.1 — upload, documento e RBAC
 
 - Evidências usam allowlist PNG/JPEG, limite de 5 MiB, validação da assinatura binária e chave UUID
@@ -2018,3 +2029,11 @@ The catalog is scoped to the installation Organization in every query. Reads req
 - OWNER/MANAGER editam/removem; OPERATOR/VIEWER recebem 403 nessas mutações.
 - Conteúdo exige endpoint autenticado; listagens/auditoria não expõem Base64, `storageKey` ou paths.
 - Eventos `OPERATION_PHOTO_*` são append-only; documentos submetidos recebem revisão PENDING/STALE na mesma transação de metadados.
+
+## Início autônomo e revisão de atendimentos
+
+- A origem do workflow é calculada exclusivamente pelo backend a partir de `Assignment.assignedBy/assignedTo`; o cliente não envia `DRAFT` ou `REVIEW` como decisão de autorização.
+- OPERATOR continua limitado ao próprio Assignment. OWNER/MANAGER continuam sendo os únicos revisores/finalizadores.
+- A tomada de execução PMOC valida status, plano ativo, UUID e operador planejado, impedindo apropriação de atividade reservada a terceiro.
+- `requestedDocumentType` é validado pelo enum oficial; a matriz de tipos permitidos no handoff permanece aplicada.
+- Lifecycle de conclusão só é publicado na primeira transição efetiva para `COMPLETED`, evitando histórico falso ou duplicado.

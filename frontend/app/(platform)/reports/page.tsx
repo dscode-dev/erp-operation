@@ -905,6 +905,7 @@ function ReportWorkflowDrawer({
               null,
             operatorId: form.operatorId,
             type: operationTypeFor(type),
+            documentType: type,
             status: 'DRAFT',
             ...content,
           });

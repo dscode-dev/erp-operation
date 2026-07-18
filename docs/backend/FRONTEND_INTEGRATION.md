@@ -1,5 +1,17 @@
 # Frontend Integration
 
+## PMOC — fotos, assinatura técnica e assinatura do cliente
+
+- Em cadastro sem OS, fotos e assinatura ficam somente em memória. Ao concluir, a primeira OS é
+  criada pelo fluxo oficial e os dados são persistidos em `Operation`/Handoff.
+- Em edição, usar a execução PMOC mais recente que possua Operation; listar as fotos autenticadas e
+  permitir novas imagens sem criar galeria do plano.
+- Exibir separadamente `responsibleTechnician` e `technicalSignature`: operador de campo não é o
+  responsável técnico por inferência.
+- Mostrar o coletor por `customerSignature.collectedBy`, com fallback visual para `collectedBy` e
+  `operation.operator`; nunca inferir pelo usuário atualmente autenticado.
+- Substituição da assinatura usa o mesmo PATCH oficial e mantém revisão/auditoria append-only.
+
 ## PMOC UX-02.1
 
 - Antes de exibir assinatura, consultar `GET /documents/configuration/types/PMOC`. Tratar loading e
@@ -2456,3 +2468,11 @@ Drawer. OWNER/MANAGER podem renderizar; o backend permanece a autoridade.
 - Miniaturas vêm exclusivamente de `GET /operations/photos/:photoId`; não persista Base64.
 - Adição múltipla reutiliza PATCH da Operation; legenda usa PATCH e remoção usa DELETE da foto.
 - Após qualquer mutação, recarregue Operation e `DocumentViewer`. A ordem do array é a ordem documental.
+
+## Operator — atendimento autônomo e delegado
+
+1. O seletor inicial define o `documentType`; envie-o ao criar a Operation.
+2. Para atividade autônoma, percorra as APIs oficiais de Assignment (`accept`, `start`, `complete`), salve o handoff e submeta.
+3. Exiba `workflowStatus`, não derive o estado comparando roles: `DRAFT` significa aguardando aprovação e `REVIEW` significa atividade delegada devolvida à gestão.
+4. Para PMOC, liste planos/execuções existentes e use `prefill → generate-work-order`; nunca crie uma Operation PMOC avulsa.
+5. Em atividade delegada, bloqueie a troca do tipo documental no campo e use `operation.requestedDocumentType`.

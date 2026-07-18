@@ -4,6 +4,7 @@ import { DocumentHandoffService } from '../../src/modules/document-engine/docume
 import {
   ControlledStorage,
   createActor,
+  createMaintenanceFixture,
   createOperation,
   createOrganization,
   disconnectDatabase,
@@ -88,7 +89,7 @@ describe('Field Report Handoff', () => {
       editorialStatus: string;
       customerSignature: { name: string; origin: string };
     };
-    expect(submitted.editorialStatus).toBe('DRAFT');
+    expect(submitted.editorialStatus).toBe('PENDING');
     expect(submitted.customerSignature).toMatchObject({ name: 'Responsável local', origin: 'OPERATOR' });
 
     const replaced = await service.collectCustomerSignature(
@@ -134,9 +135,75 @@ describe('Field Report Handoff', () => {
     await expect(service.saveDraft({ operationId: operation.id, type: DocumentTemplateType.RECEIPT }, operator, audit)).rejects.toMatchObject({ status: 403 });
 
     const opinion = await service.saveDraft({ operationId: operation.id, type: DocumentTemplateType.TECHNICAL_OPINION }, operator, audit) as { id: string };
-    await expect(service.submit(opinion.id, operator, audit)).resolves.toMatchObject({ editorialStatus: 'DRAFT', customerSignature: null });
+    await expect(service.submit(opinion.id, operator, audit)).resolves.toMatchObject({ editorialStatus: 'PENDING', workflowStatus: 'REVIEW', assignmentOrigin: 'MANAGEMENT', customerSignature: null });
     await expect(service.finalize(opinion.id, operator, audit)).rejects.toMatchObject({ status: 403 });
     await service.startReview(opinion.id, owner, audit);
     await expect(service.finalize(opinion.id, owner, audit)).rejects.toMatchObject({ status: 409 });
+  });
+
+  it('prioritizes the PMOC technical signature override when preparing the official handoff', async () => {
+    const organization = await createOrganization();
+    const owner = await createActor(Role.OWNER, 'pmoc-signature-owner');
+    const fixture = await createMaintenanceFixture(owner);
+    const operation = await prisma.operation.findUniqueOrThrow({ where: { id: fixture.operationId } });
+    const overrideKey = 'documents/signatures/pmoc-override.png';
+    storage.files.set(overrideKey, PNG);
+    const override = await prisma.signature.create({
+      data: {
+        organizationId: organization.id,
+        name: 'Responsável Técnica do PMOC',
+        title: 'Engenheira responsável',
+        imageStorageKey: overrideKey,
+        mimeType: 'image/png',
+        originalFileName: 'pmoc-override.png',
+        fileSize: PNG.length,
+        active: true,
+      },
+    });
+    await prisma.pmocPlan.create({
+      data: {
+        organizationId: organization.id,
+        customerId: operation.customerId,
+        equipmentId: operation.equipmentId!,
+        maintenancePlanId: fixture.planId,
+        signatureOverrideId: override.id,
+        responsibleTechnician: 'Responsável Técnica do PMOC',
+        startDate: new Date('2026-01-01T00:00:00.000Z'),
+        endDate: new Date('2026-12-31T00:00:00.000Z'),
+      },
+    });
+
+    await expect(
+      service.saveDraft(
+        { operationId: fixture.operationId, type: DocumentTemplateType.PMOC },
+        owner,
+        audit,
+      ),
+    ).resolves.toMatchObject({ technicalSignature: { id: override.id, name: override.name } });
+  });
+
+  it('keeps operator-initiated work in DRAFT until management starts approval', async () => {
+    await createOrganization();
+    const owner = await createActor(Role.OWNER, 'self-review-owner');
+    const operator = await createActor(Role.OPERATOR, 'self-review-operator');
+    const operation = await createOperation(operator);
+    await prisma.assignment.create({
+      data: { operationId: operation.id, assignedBy: operator.id, assignedTo: operator.id },
+    });
+
+    const draft = await service.saveDraft(
+      { operationId: operation.id, type: DocumentTemplateType.TECHNICAL_OPINION },
+      operator,
+      audit,
+    ) as { id: string };
+    await expect(service.submit(draft.id, operator, audit)).resolves.toMatchObject({
+      editorialStatus: 'DRAFT',
+      workflowStatus: 'DRAFT',
+      assignmentOrigin: 'OPERATOR',
+    });
+    await expect(service.startReview(draft.id, owner, audit)).resolves.toMatchObject({
+      editorialStatus: 'PENDING',
+      workflowStatus: 'REVIEW',
+    });
   });
 });

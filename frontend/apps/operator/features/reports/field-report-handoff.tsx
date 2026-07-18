@@ -23,7 +23,9 @@ const input = 'w-full rounded-[var(--radius-md)] border border-[var(--color-bord
 
 export function FieldReportHandoff({ operation, onSaved }: { operation: OperationDetail; onSaved: () => void }) {
   const isPmoc = Boolean(operation.maintenanceExecution?.plan.pmocPlan);
-  const [type, setType] = useState<DocumentKind>(isPmoc ? 'PMOC' : 'WORK_ORDER');
+  const managementAssigned = Boolean(operation.assignment && operation.assignment.assignedBy !== operation.assignment.assignedTo);
+  const requestedType = isPmoc ? 'PMOC' : operation.requestedDocumentType ?? 'WORK_ORDER';
+  const [type, setType] = useState<DocumentKind>(requestedType);
   const [issue, setIssue] = useState(operation.reportedIssue ?? '');
   const [diagnosis, setDiagnosis] = useState(operation.technicalDiagnosis ?? '');
   const [service, setService] = useState(operation.serviceDescription ?? '');
@@ -78,7 +80,7 @@ export function FieldReportHandoff({ operation, onSaved }: { operation: Operatio
       setHandoff(current);
       setPhotos([]);
       setSignature(null);
-      setFeedback(submit ? 'Relatório enviado para revisão da equipe responsável.' : 'Rascunho salvo. Você pode continuar depois.');
+      setFeedback(submit ? (current.workflowStatus === 'REVIEW' ? 'Atendimento devolvido para revisão da equipe responsável.' : 'Atendimento enviado como rascunho para aprovação da equipe responsável.') : 'Rascunho salvo. Você pode continuar depois.');
       onSaved();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Não foi possível salvar o relatório.');
@@ -88,7 +90,7 @@ export function FieldReportHandoff({ operation, onSaved }: { operation: Operatio
   }
 
   const customerSignatureRequired = CUSTOMER_SIGNATURE.has(type);
-  const canSubmit = equipmentIds.length > 0 && (!customerSignatureRequired || signature || operation.signatureCaptured || handoff?.customerSignature);
+  const canSubmit = equipmentIds.length > 0 && (isPmoc || !customerSignatureRequired || signature || operation.signatureCaptured || handoff?.customerSignature);
 
   return <section className="space-y-3">
     <div>
@@ -96,7 +98,7 @@ export function FieldReportHandoff({ operation, onSaved }: { operation: Operatio
       <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">Colete os dados em campo. A emissão final será realizada pela Platform.</p>
     </div>
     <div className="space-y-4 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
-      <label className="space-y-1 text-sm"><span className="font-medium">Tipo do relatório</span><select className={input} value={type} onChange={(event) => { setType(event.target.value as DocumentKind); setHandoff(null); }} disabled={isPmoc}>{FIELD_TYPES.filter((item) => !isPmoc || item === 'PMOC').map((item) => <option key={item} value={item}>{DOCUMENT_KIND_LABEL[item]}</option>)}</select></label>
+      <label className="space-y-1 text-sm"><span className="font-medium">Tipo do relatório</span><select className={input} value={type} onChange={(event) => { setType(event.target.value as DocumentKind); setHandoff(null); }} disabled={isPmoc || managementAssigned}>{FIELD_TYPES.filter((item) => !isPmoc || item === 'PMOC').map((item) => <option key={item} value={item}>{DOCUMENT_KIND_LABEL[item]}</option>)}</select>{managementAssigned && <span className="block text-xs text-[var(--color-muted-foreground)]">Definido pela gestão para este atendimento.</span>}</label>
       <div className="space-y-1 text-sm"><MultiSelect label="Equipamentos envolvidos" value={equipmentIds} onChange={setEquipmentIds} options={options} placeholder="Selecionar equipamentos" /></div>
       <TextArea label={type === 'TECHNICAL_REPORT' ? 'Motivo da visita' : type === 'TECHNICAL_OPINION' ? 'Contexto da inspeção' : type === 'BUDGET' ? 'Necessidade identificada' : 'Problema relatado'} value={issue} onChange={setIssue} />
       <TextArea label="Condições encontradas / diagnóstico" value={diagnosis} onChange={setDiagnosis} />

@@ -1,4 +1,5 @@
 import {
+  DocumentTemplateType,
   MaintenanceChecklistResult,
   OperationMaintenanceType,
   OperationStatus,
@@ -91,6 +92,7 @@ export class CreateOperationDto {
   @IsOptional() @IsUUID('4') addressId?: string;
   @IsOptional() @IsUUID('4') equipmentId?: string;
   @IsOptional() @IsUUID('4') operatorId?: string;
+  @IsOptional() @IsEnum(DocumentTemplateType) documentType?: DocumentTemplateType;
   @IsEnum(OperationType) type!: OperationType;
   @IsOptional()
   @IsArray()

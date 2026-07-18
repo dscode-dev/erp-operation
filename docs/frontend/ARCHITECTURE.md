@@ -1,5 +1,14 @@
 # ARCHITECTURE — Frontend
 
+## PMOC — ownership dos artefatos de campo
+
+- `PmocPlan` mantém configuração e responsável técnico; `Operation` mantém fotos; o Handoff do
+  `OperationDocument` mantém a assinatura do cliente e o coletor. Não existe estado persistente
+  concorrente no wizard.
+- Em criação, artefatos ficam apenas em memória e forçam a criação da primeira execução/OS antes de
+  persistir. Em edição, a execução mais recente é a fonte autoritativa.
+- Platform e Operator usam os mesmos endpoints e o mesmo preview autenticado de assinatura.
+
 ## PMOC UX-02.1
 
 - A cadeia permanece `PmocPlan → ExecutionRequest → Operation → Assignment → MaintenanceExecution →
@@ -1051,3 +1060,37 @@ PmocPlan → ExecutionRequest → OperationPhoto/StorageProvider
 ```
 
 O Wizard edita a coleção oficial da Operation e invalida o Preview após cada resposta. Autoria e datas vêm do backend; conteúdo passa por endpoint autenticado. O frontend não replica fotos em estrutura PMOC, não lê Storage e não monta galeria documental local.
+
+## Workflow de origem do atendimento
+
+```text
+Operator inicia
+  → Operation(requestedDocumentType) → Assignment próprio
+  → accept → start → complete → handoff submit
+  → DRAFT → aprovação da gestão
+
+Gestão delega
+  → Operation(requestedDocumentType) → Assignment delegado
+  → Operator executa → handoff submit
+  → REVIEW → aprovação/finalização da gestão
+
+Operator inicia PMOC
+  → PmocPlan → ExecutionRequest elegível → Operation → Assignment
+```
+
+O frontend apenas apresenta `workflowStatus`; a origem e a transição são decididas pelo backend.
+
+## PMOC — composição da experiência de gestão
+
+```text
+/pmoc
+  ├─ Visão geral → PmocStats + PmocPlan list + PmocPlanWizard(create)
+  └─ Agenda → PmocStats.calendar/upcoming/recent + filtros de apresentação
+
+/pmoc/:id
+  → PmocPlan + ExecutionRequests + History
+  → PmocPlanWizard(edit/review)
+  → update/delete oficiais
+```
+
+O calendário e as listas usam as mesmas Execution Requests retornadas pelo backend. Os filtros não recalculam recorrência nem status. Finalização chama a desativação oficial e não remove histórico.

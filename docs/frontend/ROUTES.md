@@ -1,5 +1,14 @@
 # ROUTES — Frontend
 
+## PMOC — coleta e revisão
+
+- `/pmoc`: novo PMOC pode preparar fotos e assinatura; havendo coleta, a primeira OS é criada pelo
+  fluxo oficial para receber os artefatos.
+- `/pmoc/:id`: resumo mostra identidade da coleta; editar/revisar abre o wizard com fotos e
+  assinaturas da execução mais recente.
+- `/operator/services/:assignmentId`: execução PMOC lista evidências, permite novas fotos, mostra o
+  responsável técnico e permite coletar/substituir a assinatura do cliente conforme o Template.
+
 ## PMOC UX-02.1
 
 - `/pmoc/:id`: aba Execuções exibe assinatura/evidências e abre o drawer oficial de documento PMOC.
@@ -556,3 +565,16 @@ modo novo cria uma Operation DRAFT oficial e segue Preview → Render → Downlo
 ## PMOC FIX-02B
 
 - `/pmoc/:id`: OWNER/MANAGER visualizam **Revisar evidências**, que abre o Wizard oficial na etapa Evidências. Nenhuma rota frontend foi adicionada.
+
+## Operator — início autônomo
+
+- `/operator`: CTA **Iniciar atendimento ou relatório**.
+- `/operator/atendimento`: seletor de OS, Relatório de Visita, Laudo, Orçamento ou execução PMOC elegível.
+- `/operator/services`: lista unificada de atividades atribuídas e iniciadas pelo operador.
+- `/operator/services/:id`: continua sendo o único fluxo de execução, coleta e devolução para revisão.
+
+## PMOC — navegação consolidada
+
+- `/pmoc?tab` não cria rotas adicionais: as tabs locais **Visão geral** e **Agenda dos PMOCs** compartilham o mesmo estado oficial.
+- `/pmoc`: Visão geral mostra indicadores, status dos planos e criação; Agenda mostra calendário, busca, filtros e listas temporais.
+- `/pmoc/:id`: informações, edição, ajustes operacionais, documentos, execuções, timeline e finalização por OWNER.

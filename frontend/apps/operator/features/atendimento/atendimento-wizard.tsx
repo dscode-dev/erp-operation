@@ -26,6 +26,8 @@ import {
   Circle,
   QrCode,
   X,
+  FileCheck2,
+  FileSearch,
 } from 'lucide-react';
 import { WizardProgressHeader } from '@erp/ui/wizard/progress-header';
 import { WizardFooter } from '@erp/ui/wizard/step-footer';
@@ -41,7 +43,9 @@ import { TechnicalCatalogSelector } from '@erp/ui/technical-catalog/technical-ca
 import { QrScanner } from '@erp/ui/qr-scanner';
 import {
   customersApi,
+  assignmentsApi,
   equipmentsApi,
+  pmocApi,
   useQuery,
   ApiClientError,
   type Customer,
@@ -49,7 +53,12 @@ import {
   type EquipmentSummary,
   type EquipmentDetail,
   type TechnicalCatalogArea,
+  type DocumentKind,
+  type PmocPlan,
+  type PmocExecutionRequest,
 } from '@erp/api';
+import { DOCUMENT_KIND_LABEL } from '@erp/types';
+import { useAuth } from '@erp/ui/auth/auth-provider';
 import { EQUIPMENT_STATUS_LABEL, EQUIPMENT_STATUS_PILL } from '@platform/equipment-display';
 import { useDebounce } from '@erp/utils';
 import { SERVICE_TYPES, serviceTypeLabel, type ServiceTypeKey } from '../../lib/service-types';
@@ -67,6 +76,18 @@ const STEPS = [
   'Resumo',
 ] as const;
 
+const FIELD_DOCUMENT_TYPES: DocumentKind[] = [
+  'WORK_ORDER',
+  'TECHNICAL_REPORT',
+  'TECHNICAL_OPINION',
+  'BUDGET',
+];
+const CUSTOMER_SIGNATURE_TYPES = new Set<DocumentKind>([
+  'WORK_ORDER',
+  'TECHNICAL_REPORT',
+  'BUDGET',
+]);
+
 type ChecklistItem = { label: string; done: boolean };
 
 export function AtendimentoWizard({
@@ -77,6 +98,7 @@ export function AtendimentoWizard({
   initialEquipmentId?: string;
 } = {}) {
   const router = useRouter();
+  const [documentType, setDocumentType] = useState<DocumentKind | null>(null);
   const [step, setStep] = useState(0);
 
   const [customer, setCustomer] = useState<Customer | null>(null);
@@ -94,7 +116,7 @@ export function AtendimentoWizard({
 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [result, setResult] = useState<{ operationId: string; osNumber: string | null } | null>(
+  const [result, setResult] = useState<{ operationId: string; documentNumber: string; documentType: DocumentKind; workflowStatus: string } | null>(
     null,
   );
   const [startedAt] = useState(() => new Date().toISOString());
@@ -155,13 +177,13 @@ export function AtendimentoWizard({
       case 6:
         return true;
       case 7:
-        return !!signature;
+        return documentType ? !CUSTOMER_SIGNATURE_TYPES.has(documentType) || !!signature : false;
       case 8:
         return true;
       default:
         return false;
     }
-  }, [step, customer, address, serviceType, signature]);
+  }, [step, customer, address, serviceType, signature, documentType]);
 
   function back() {
     if (step === 0) router.push('/operator');
@@ -177,7 +199,9 @@ export function AtendimentoWizard({
     setSubmitting(true);
     setSubmitError(null);
     try {
-      const operation = await createOperationFromDraft({
+      if (!documentType) return;
+      const submission = await createOperationFromDraft({
+        documentType,
         customerId: customer?.id ?? null,
         addressId: address?.id ?? null,
         equipmentId: equipments[0]?.id ?? null,
@@ -196,7 +220,12 @@ export function AtendimentoWizard({
         signature,
         startedAt,
       });
-      setResult({ operationId: operation.id, osNumber: workOrderNumber(operation) });
+      setResult({
+        operationId: submission.operation.id,
+        documentNumber: submission.handoff.number ?? workOrderNumber(submission.operation) ?? `OP-${submission.operation.number}`,
+        documentType,
+        workflowStatus: submission.handoff.workflowStatus,
+      });
     } catch (err) {
       setSubmitError(
         err instanceof ApiClientError
@@ -211,11 +240,21 @@ export function AtendimentoWizard({
   if (result) {
     return (
       <SuccessView
-        osNumber={result.osNumber}
+        documentNumber={result.documentNumber}
+        documentType={result.documentType}
+        workflowStatus={result.workflowStatus}
         onDone={() => router.push('/operator')}
         onNew={() => window.location.reload()}
       />
     );
+  }
+
+  if (!documentType) {
+    return <AttendanceTypeStep onSelect={setDocumentType} onClose={() => router.push('/operator')} />;
+  }
+
+  if (documentType === 'PMOC') {
+    return <PmocStartStep onBack={() => setDocumentType(null)} />;
   }
 
   const isLast = step === STEPS.length - 1;
@@ -223,7 +262,7 @@ export function AtendimentoWizard({
   return (
     <div className="flex flex-col min-h-dvh">
       <WizardProgressHeader
-        title={STEPS[step]}
+        title={`${DOCUMENT_KIND_LABEL[documentType]} · ${STEPS[step]}`}
         current={step}
         total={STEPS.length}
         onBack={back}
@@ -284,7 +323,7 @@ export function AtendimentoWizard({
           />
         )}
         {step === 6 && <FotosStep photos={photos} onChange={setPhotos} />}
-        {step === 7 && <AssinaturaStep onChange={setSignature} />}
+        {step === 7 && (CUSTOMER_SIGNATURE_TYPES.has(documentType) ? <AssinaturaStep onChange={setSignature} /> : <EmptyState icon={PenLine} title="Assinatura não exigida" description="Este tipo de documento não exige assinatura do cliente nesta coleta." />)}
         {step === 8 && (
           <ResumoStep
             customer={customer}
@@ -295,6 +334,7 @@ export function AtendimentoWizard({
             notes={notes}
             photoCount={photos.length}
             signed={!!signature}
+            documentType={documentType}
           />
         )}
         {submitError && (
@@ -307,7 +347,7 @@ export function AtendimentoWizard({
       <WizardFooter
         onBack={back}
         onNext={next}
-        nextLabel={isLast ? 'Enviar atendimento' : 'Continuar'}
+        nextLabel={isLast ? 'Enviar para aprovação' : 'Continuar'}
         nextDisabled={!canNext}
         loading={submitting}
         isLast={isLast}
@@ -318,6 +358,90 @@ export function AtendimentoWizard({
 }
 
 /* ---------- Steps ---------- */
+
+function AttendanceTypeStep({ onSelect, onClose }: { onSelect: (type: DocumentKind) => void; onClose: () => void }) {
+  return (
+    <div className="min-h-dvh px-4 py-5">
+      <div className="mx-auto max-w-lg space-y-5">
+        <header className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-caption uppercase tracking-wider">Nova atividade</p>
+            <h1 className="text-[22px] font-semibold tracking-tight">O que você vai realizar?</h1>
+            <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">Você pode iniciar uma coleta mesmo sem uma atribuição. Ela ficará aguardando aprovação da gestão.</p>
+          </div>
+          <button type="button" onClick={onClose} className="grid h-10 w-10 place-items-center rounded-full border border-[var(--color-border)]"><X className="h-4 w-4" /></button>
+        </header>
+
+        <div className="space-y-2">
+          {FIELD_DOCUMENT_TYPES.map((type) => (
+            <button key={type} type="button" onClick={() => onSelect(type)} className="flex w-full items-center gap-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 text-left active:scale-[0.99]">
+              <span className="grid h-11 w-11 place-items-center rounded-[var(--radius-md)] bg-[var(--color-primary)]/10 text-[var(--color-primary)]"><FileText className="h-5 w-5" /></span>
+              <span className="min-w-0 flex-1"><span className="block font-semibold">{DOCUMENT_KIND_LABEL[type]}</span><span className="block text-xs text-[var(--color-muted-foreground)]">Registrar uma nova atividade de campo</span></span>
+              <ChevronRight className="h-5 w-5 text-[var(--color-muted-foreground)]" />
+            </button>
+          ))}
+          <button type="button" onClick={() => onSelect('PMOC')} className="flex w-full items-center gap-3 rounded-[var(--radius-lg)] border border-[var(--color-primary)]/25 bg-[var(--color-primary)]/5 p-4 text-left active:scale-[0.99]">
+            <span className="grid h-11 w-11 place-items-center rounded-[var(--radius-md)] bg-[var(--color-primary)]/10 text-[var(--color-primary)]"><FileCheck2 className="h-5 w-5" /></span>
+            <span className="min-w-0 flex-1"><span className="block font-semibold">PMOC</span><span className="block text-xs text-[var(--color-muted-foreground)]">Assumir uma execução disponível de um plano ativo</span></span>
+            <ChevronRight className="h-5 w-5 text-[var(--color-muted-foreground)]" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PmocStartStep({ onBack }: { onBack: () => void }) {
+  const router = useRouter();
+  const { session } = useAuth();
+  const [planId, setPlanId] = useState('');
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const plans = useQuery((signal) => pmocApi.listPmoc({ active: true, limit: 100, signal }), []);
+  const requests = useQuery(
+    (signal) => planId
+      ? pmocApi.listExecutionRequests(planId, { status: 'PENDING', limit: 100, signal })
+      : Promise.resolve({ items: [], pagination: { page: 1, limit: 100, total: 0, totalPages: 0 } }),
+    [planId],
+  );
+  const eligible = (requests.data?.items ?? []).filter((request) => !request.plannedOperatorId || request.plannedOperatorId === session?.user.id);
+
+  async function claim(request: PmocExecutionRequest) {
+    setBusy(request.id);
+    setError(null);
+    try {
+      const prefill = await pmocApi.getExecutionRequestPrefill(request.id);
+      const generated = await pmocApi.generateWorkOrder(request.id, {
+        ...prefill,
+        documentType: 'PMOC',
+        operatorId: undefined,
+      });
+      const operationId = generated.operationId ?? generated.generatedOperationId;
+      if (!operationId) throw new Error('A execução foi reservada, mas o atendimento não foi localizado.');
+      const assignments = await assignmentsApi.listMyAssignments({ operationId, limit: 1 });
+      const assignment = assignments.items[0];
+      if (!assignment) throw new Error('O atendimento PMOC foi criado, mas ainda não está disponível na sua fila.');
+      router.push(`/operator/services/${assignment.id}`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível iniciar esta execução PMOC.');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div className="min-h-dvh px-4 py-5">
+      <div className="mx-auto max-w-lg space-y-5">
+        <header className="flex items-start gap-3"><button type="button" onClick={onBack} className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-[var(--color-border)]"><ChevronRight className="h-4 w-4 rotate-180" /></button><div><p className="text-caption uppercase tracking-wider">Nova atividade</p><h1 className="text-[22px] font-semibold">Iniciar execução PMOC</h1><p className="mt-1 text-sm text-[var(--color-muted-foreground)]">Selecione um plano e assuma uma execução disponível. O atendimento seguirá a cadeia oficial do PMOC.</p></div></header>
+        {plans.loading && !plans.data ? <SkeletonList rows={4} /> : plans.error && !plans.data ? <ErrorState error={plans.error} onRetry={plans.refetch} /> : (
+          <label className="block space-y-1 text-sm"><span className="font-medium">Plano PMOC</span><select className="w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-3 py-3" value={planId} onChange={(event) => setPlanId(event.target.value)}><option value="">Selecione um plano ativo</option>{(plans.data?.items ?? []).map((plan: PmocPlan) => <option key={plan.id} value={plan.id}>PMOC-{String(plan.number).padStart(6, '0')} · {plan.customer?.name ?? plan.maintenancePlan?.name ?? 'Plano PMOC'}</option>)}</select></label>
+        )}
+        {error && <p className="rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 p-3 text-sm text-[var(--color-danger)]">{error}</p>}
+        {planId && (requests.loading && !requests.data ? <SkeletonList rows={3} /> : eligible.length === 0 ? <EmptyState icon={FileSearch} title="Nenhuma execução disponível" description="As próximas atividades aparecerão aqui conforme a programação do PMOC." /> : <div className="space-y-2">{eligible.map((request) => <button key={request.id} type="button" disabled={Boolean(busy)} onClick={() => void claim(request)} className="flex w-full items-center justify-between gap-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 text-left disabled:opacity-60"><span><span className="block font-semibold">Execução {String(request.executionNumber).padStart(3, '0')}</span><span className="block text-xs text-[var(--color-muted-foreground)]">Prevista para {new Date(request.scheduledFor).toLocaleDateString('pt-BR')}</span></span>{busy === request.id ? <Loader2 className="h-5 w-5 animate-spin" /> : <ChevronRight className="h-5 w-5" />}</button>)}</div>)}
+      </div>
+    </div>
+  );
+}
 
 function ClienteStep({
   selected,
@@ -844,6 +968,7 @@ function ResumoStep({
   notes,
   photoCount,
   signed,
+  documentType,
 }: {
   customer: Customer | null;
   address: { id: string; label: string } | null;
@@ -853,6 +978,7 @@ function ResumoStep({
   notes: string;
   photoCount: number;
   signed: boolean;
+  documentType: DocumentKind;
 }) {
   const done = checklist.filter((c) => c.done).length;
   return (
@@ -862,6 +988,7 @@ function ResumoStep({
         Revise os dados antes de enviar. O documento é gerado pelo backend após o envio.
       </div>
       <SummaryRow icon={<Building2 className="h-4 w-4" />} label="Cliente" value={customer?.name} />
+      <SummaryRow icon={<FileText className="h-4 w-4" />} label="Documento" value={DOCUMENT_KIND_LABEL[documentType]} />
       <SummaryRow icon={<MapPin className="h-4 w-4" />} label="Endereço" value={address?.label} />
       <SummaryRow
         icon={<Wrench className="h-4 w-4" />}
@@ -898,11 +1025,15 @@ function ResumoStep({
 }
 
 function SuccessView({
-  osNumber,
+  documentNumber,
+  documentType,
+  workflowStatus,
   onDone,
   onNew,
 }: {
-  osNumber: string | null;
+  documentNumber: string;
+  documentType: DocumentKind;
+  workflowStatus: string;
   onDone: () => void;
   onNew: () => void;
 }) {
@@ -912,14 +1043,12 @@ function SuccessView({
         <div className="mx-auto h-16 w-16 rounded-full bg-[var(--color-success)]/12 grid place-items-center text-[var(--color-success)]">
           <CheckCircle2 className="h-9 w-9" />
         </div>
-        <h1 className="text-section-title mt-4">Atendimento registrado com sucesso</h1>
-        {osNumber && (
-          <p className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-[var(--color-primary)]/30 bg-[var(--color-primary)]/10 px-3 py-1 text-sm font-medium text-[var(--color-primary)]">
-            <FileText className="h-4 w-4" /> OS #{osNumber.replace(/^OS-/, '')} criada
-          </p>
-        )}
+        <h1 className="text-section-title mt-4">Atendimento enviado para aprovação</h1>
+        <p className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-[var(--color-primary)]/30 bg-[var(--color-primary)]/10 px-3 py-1 text-sm font-medium text-[var(--color-primary)]">
+          <FileText className="h-4 w-4" /> {documentNumber}
+        </p>
         <p className="text-sm text-[var(--color-muted-foreground)] mt-2">
-          A operação foi registrada e a Ordem de Serviço foi gerada em rascunho.
+          {DOCUMENT_KIND_LABEL[documentType]} registrado como {workflowStatus === 'DRAFT' ? 'rascunho aguardando aprovação' : 'em revisão'} pela equipe responsável.
         </p>
         <div className="mt-6 space-y-2">
           <button

@@ -13,6 +13,7 @@ import {
   PmocPeriodicity,
   PmocSchedulerStatus,
   Prisma,
+  Role,
   TechnicalCatalogType,
   TechnicalCatalogWorkflow,
 } from '@prisma/client';
@@ -392,6 +393,7 @@ export class PmocExecutionRequestsService {
   async prefill(id: string, actor: AuthenticatedUser): Promise<CreateOperationDto> {
     const request = await this.requestWithPlanOrThrow(id);
     this.assertRequestCanGenerate(request.status);
+    this.assertOperatorCanClaim(request, actor);
     return this.buildOperationPayload(request.pmocPlan, request.scheduledFor, actor, undefined, request);
   }
 
@@ -404,6 +406,7 @@ export class PmocExecutionRequestsService {
   ): Promise<unknown> {
     const request = await this.requestWithPlanOrThrow(id);
     this.assertRequestCanGenerate(request.status);
+    this.assertOperatorCanClaim(request, actor);
     this.assertPlanCanSchedule(request.pmocPlan);
     const claimed = await this.prisma.$transaction(async (tx) => {
       const result = await tx.pmocExecutionRequest.updateMany({
@@ -1043,6 +1046,7 @@ export class PmocExecutionRequestsService {
       addressId,
       equipmentId: plan.equipmentId,
       operatorId,
+      documentType: DocumentTemplateType.PMOC,
       type: plan.defaultOperationType,
       serviceTypes: plan.serviceTypes.length ? plan.serviceTypes : [plan.defaultOperationType],
       status: reviewed?.status ?? OperationStatus.DRAFT,
@@ -1234,6 +1238,17 @@ export class PmocExecutionRequestsService {
       status !== PmocExecutionRequestStatus.FAILED
     ) {
       throw this.invalidState('Execution request cannot generate a Work Order in its current state');
+    }
+  }
+
+  private assertOperatorCanClaim(request: RequestWithPlan, actor: AuthenticatedUser): void {
+    if (actor.role !== Role.OPERATOR) return;
+    if (request.plannedOperatorId && request.plannedOperatorId !== actor.id) {
+      throw new ApplicationException(
+        ERROR_CODES.FORBIDDEN,
+        'Esta execução está reservada para outro operador',
+        HttpStatus.FORBIDDEN,
+      );
     }
   }
 

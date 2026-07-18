@@ -1,5 +1,15 @@
 # STATE — Frontend
 
+## PMOC — evidências e assinaturas em todos os fluxos (2026-07-18)
+
+- Wizard Platform de criação/edição/revisão possui etapas funcionais de evidências e assinaturas.
+- Fotos preparadas durante novo cadastro são vinculadas à primeira OS oficial; edição usa a última
+  execução existente e permite listar, adicionar, legendar e remover pelo fluxo atual.
+- Operator mostra fotos persistidas, permite novas evidências, exibe responsável/assinatura técnica
+  e coleta ou substitui a assinatura do cliente pelo Handoff oficial.
+- Detalhe PMOC mostra responsável técnico, assinatura institucional, cliente signatário, data e
+  operador que realizou a coleta.
+
 ## PMOC UX-02.1 — fechamento dos quatro fluxos críticos
 
 - Wizard não usa mais `NONE` como fallback: loading/erro da configuração são explícitos e a política
@@ -1075,3 +1085,19 @@ Status: concluído.
 - Fotos existentes mostram miniatura protegida, legenda, autor, data/hora e ações de gestão.
 - `PhotoInput` oficial suporta drag-and-drop, seleção múltipla, preview, legenda, progresso e grade 1/2/4 colunas.
 - Adicionar, editar e remover recarregam Operation e `DocumentViewer`; nenhum preview ou uploader paralelo foi criado.
+
+## Operator — atendimentos e relatórios autônomos (2026-07-18)
+
+- Home e Meus Atendimentos possuem CTA para iniciar atividade sem atribuição.
+- O Wizard oficial inicia OS, Relatório de Visita, Laudo ou Orçamento; PMOC assume uma execução pendente do plano oficial.
+- O envio autônomo conclui o Assignment próprio e apresenta “rascunho aguardando aprovação”.
+- Atendimentos delegados mantêm o tipo definido pela gestão e retornam como “Em revisão”.
+- Nenhum dashboard administrativo, PDF local ou workflow paralelo foi introduzido no Operator.
+
+## PMOC — navegação e gestão consolidada (2026-07-18)
+
+- `/pmoc` foi reorganizado em duas tabs: **Visão geral** concentra indicadores e planos; **Agenda dos PMOCs** preserva o calendário e concentra próximas/últimas execuções.
+- A agenda ganhou busca cumulativa por PMOC/cliente/equipamento e filtro de status, com badges explícitos em cada execução.
+- O detalhe reutiliza o `PmocPlanWizard` em modo de edição completa para cobertura, planejamento, responsáveis e política documental.
+- OWNER pode finalizar o PMOC mediante confirmação; o backend desativa o plano e preserva histórico, OS e documentos.
+- Nenhum endpoint, calendário, scheduler ou domínio paralelo foi criado.

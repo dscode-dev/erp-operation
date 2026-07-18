@@ -6,7 +6,7 @@
  * large cards and fast one-handed actions.
  */
 import Link from "next/link";
-import { Calendar, ClipboardList, FileText, QrCode, RefreshCw, Wrench } from "lucide-react";
+import { Calendar, ClipboardList, FileText, Plus, QrCode, RefreshCw, Wrench } from "lucide-react";
 import { AssignmentCard } from "@operator/components/assignment-card";
 import { useAuth } from "@erp/ui/auth/auth-provider";
 import { SkeletonList } from "@erp/ui/skeletons";
@@ -51,6 +51,10 @@ export function OperatorHome() {
         <Metric label="Atrasadas" value={overdue.length} tone={overdue.length ? "danger" : "muted"} />
       </div>
 
+      <Link href="/operator/atendimento" className="flex min-h-14 items-center justify-center gap-2 rounded-[var(--radius-xl)] bg-[var(--color-primary)] px-4 text-sm font-semibold text-[var(--color-primary-foreground)] shadow-[var(--shadow-card)] active:scale-[0.99]">
+        <Plus className="h-5 w-5" /> Iniciar atendimento ou relatório
+      </Link>
+
       <div className="grid grid-cols-4 gap-2.5">
         <Shortcut href="/operator/services" icon={ClipboardList} label="Ordens" />
         <Shortcut href="/operator/qr" icon={QrCode} label="QR" />
@@ -63,7 +67,7 @@ export function OperatorHome() {
       ) : assignments.error && !assignments.data ? (
         <ErrorState error={assignments.error} onRetry={assignments.refetch} />
       ) : items.length === 0 ? (
-        <EmptyState icon={Wrench} title="Sem atividades atribuídas" description="Quando uma Ordem de Serviço for atribuída, ela aparecerá aqui." />
+        <EmptyState icon={Wrench} title="Sem atividades atribuídas" description="Você pode iniciar um atendimento agora ou aguardar uma atividade enviada pela gestão." />
       ) : (
         <>
           {ongoing.length > 0 && (
