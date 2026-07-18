@@ -17,7 +17,7 @@ describe('ListExportController', () => {
     };
     const controller = new ListExportController(service as never);
 
-    const returned = await controller.operations({}, response as never);
+    const returned = await controller.operations({}, { id: 'owner', role: 'OWNER' } as never, response as never);
 
     expect(returned).toBeUndefined();
     expect(response.setHeader).toHaveBeenCalledWith('Content-Type', 'application/pdf');

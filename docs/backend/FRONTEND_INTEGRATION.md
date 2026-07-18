@@ -1,5 +1,18 @@
 # Frontend Integration
 
+## ORBIT_SECURITY_FIX01 — integração de ownership
+
+- O frontend não deve filtrar operações, documentos, fotos, histórico ou execuções por operador.
+  A API já devolve somente o conjunto autorizado pelo `Assignment` vigente.
+- Não use `operation.operatorId` para inferir permissão, nem trate conhecer um ID como autorização.
+- Em resposta `403 FORBIDDEN`, descarte qualquer estado local do recurso, não tente abrir preview,
+  imagem ou download e apresente a mensagem padrão de acesso indisponível.
+- Assignments cancelados/rejeitados revogam imediatamente o acesso; atualize lista/detalhe após uma
+  transição. `COMPLETED` permanece consultável pelo operador originalmente atribuído.
+- URLs de foto e download continuam autenticadas e privadas. Não persistir URL, token, Base64,
+  `storageKey` ou path no cliente.
+- Nenhum componente, rota ou payload frontend mudou nesta correção.
+
 ## DC-05 — fluxo do Recibo / Garantia
 
 Escolha origem manual ou OS concluída; preencha snapshots editáveis; envie garantia nula ou 1–3650

@@ -84,6 +84,13 @@ describe('AppSec Inventory and Procurement deep abuse closure', () => {
     const organization = await createOrganization();
     const opA = await createOperation(owner.user);
     const opB = await createOperation(owner.user);
+    await prisma.assignment.create({
+      data: {
+        operationId: opA.id,
+        assignedBy: owner.user.id,
+        assignedTo: operator.user.id,
+      },
+    });
     const itemA = await createProductWithInventory(organization.id, 2);
     const itemB = await createProductWithInventory(organization.id, 2);
 

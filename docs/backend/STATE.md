@@ -1,5 +1,25 @@
 # Backend State
 
+## ORBIT_SECURITY_FIX01 — ownership do Operator certificado (2026-07-18)
+
+- `Assignment` vigente passou a ser a única autoridade para o acesso operacional do papel
+  `OPERATOR`; `operation.operatorId`, filtros do frontend e identificadores recebidos na requisição
+  não autorizam acesso.
+- O novo `OperationAccessService` centraliza escopos Prisma e assertions para Operation, fotos,
+  documentos, Handoff, MaintenanceExecution, Asset Lifecycle, materiais, movimentações e exports.
+- São válidos para leitura operacional os estados `ASSIGNED`, `ACCEPTED`, `STARTED`, `PAUSED` e
+  `COMPLETED`. `REJECTED` e `CANCELED` revogam acesso e chamadas diretas retornam `403` sem payload
+  parcial.
+- O Repositório Documental e todas as listagens afetadas aplicam o ownership no SQL; não há
+  pós-filtro no frontend. Documentos sem Operation também são negados ao Operator.
+- Toda negação do resolvedor central registra `OPERATOR_ACCESS_DENIED` em `AuditLog`, com instalação,
+  usuário, role, recurso, ID, motivo e request ID, sem paths, chaves de Storage ou binários.
+- Nenhuma entidade ou migration foi criada. A máquina de estados de Assignment/Operation e os
+  contratos funcionais de PMOC, Handoff, Receipt, Budget e Document Engine foram preservados.
+- Certificação: unitários 17 suites/80 testes, segurança 13/55, integração PostgreSQL 3/12 e
+  concorrência 2/24 aprovados. Relatório:
+  `docs/release/ORBIT_SECURITY_FIX01_OPERATOR_OWNERSHIP.md`.
+
 ## DC-05 — Recibo / Garantia certificado (2026-07-18)
 
 - `RECEIPT` reutiliza o Document Engine oficial; não houve domínio, renderer, PDF ou Storage paralelo.
@@ -2970,3 +2990,11 @@ Status: implementado e validado em PostgreSQL/Docker.
 - Cada Budget recebe OperationDocument próprio; Budget.operationId mantém apenas a origem comercial opcional e não disputa a unicidade documental da OS.
 - Preview, render e download usam o mesmo BudgetContext → DocumentBuilder → Blueprint → LayoutEngine → Renderer → PdfEngine.
 - Assinaturas do cliente e técnica reutilizam o handoff oficial; Budget e frontend não acessam Storage nem geram PDF.
+
+## ORBIT_OPERATION_AUDIT_V1 — auditoria operacional (2026-07-18)
+
+- Auditoria sem alteração funcional registrada em `docs/release/ORBIT_OPERATION_AUDIT_V1.md`.
+- Veredito: `ORBIT_OPERATION_AUDIT_V1_NOT_READY`.
+- Bloqueadores confirmados: bypass da máquina Operation/Assignment, escopo insuficiente para OPERATOR, submissão PWA não atômica, caminhos documentais comerciais paralelos, ausência de binário histórico por revisão, política de assinatura divergente no handoff, exposição de assets em JSON, lacunas de integridade relacional e truncamentos em consultas de produção.
+- Validações aprovadas: Prisma, lint/build, 80 testes unitários, 12 testes PostgreSQL de integração, 24 de concorrência e 50 de segurança.
+- Nenhuma migration ou regra de negócio foi criada nesta auditoria.

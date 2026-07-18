@@ -18,14 +18,14 @@ export class OperationsController {
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR, Role.VIEWER)
   @Get()
-  list(@Query() query: ListOperationsQueryDto): Promise<unknown> {
-    return this.operations.list(query);
+  list(@Query() query: ListOperationsQueryDto, @CurrentUser() actor: AuthenticatedUser): Promise<unknown> {
+    return this.operations.list(query, actor);
   }
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR, Role.VIEWER)
   @Get('stats')
-  stats(): Promise<Record<string, unknown>> {
-    return this.operations.stats();
+  stats(@CurrentUser() actor: AuthenticatedUser): Promise<Record<string, unknown>> {
+    return this.operations.stats(actor);
   }
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR)
@@ -40,8 +40,12 @@ export class OperationsController {
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR, Role.VIEWER)
   @Get('photos/:photoId')
-  getPhoto(@Param('photoId', new ParseUUIDPipe({ version: '4' })) id: string): Promise<unknown> {
-    return this.operations.getPhoto(id);
+  getPhoto(
+    @Param('photoId', new ParseUUIDPipe({ version: '4' })) id: string,
+    @CurrentUser() actor: AuthenticatedUser,
+    @Req() request: RequestWithId,
+  ): Promise<unknown> {
+    return this.operations.getPhoto(id, actor, this.context(request));
   }
 
   @Roles(Role.OWNER, Role.MANAGER)
@@ -70,8 +74,9 @@ export class OperationsController {
   get(
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
     @CurrentUser() actor: AuthenticatedUser,
+    @Req() request: RequestWithId,
   ): Promise<unknown> {
-    return this.operations.get(id, actor);
+    return this.operations.get(id, actor, this.context(request));
   }
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR)

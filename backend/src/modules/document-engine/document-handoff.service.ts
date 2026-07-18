@@ -24,6 +24,7 @@ import { ApplicationException } from '../../shared/exceptions/application.except
 import type { AuthenticatedUser } from '../../shared/types/authenticated-user.type';
 import { buildPaginatedResponse } from '../../shared/types/pagination.types';
 import { PrismaService } from '../database/prisma.service';
+import { OperationAccessService } from '../operation-access/operation-access.service';
 import type {
   CollectCustomerSignatureDto,
   ListDocumentHandoffsQueryDto,
@@ -117,6 +118,7 @@ export class DocumentHandoffService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly assets: DocumentAssetResolver,
+    private readonly access: OperationAccessService,
   ) {}
 
   async list(query: ListDocumentHandoffsQueryDto): Promise<unknown> {
@@ -162,9 +164,9 @@ export class DocumentHandoffService {
     return buildPaginatedResponse(items.map((item) => this.response(item)), total, query.page, query.limit);
   }
 
-  async get(documentId: string, actor: AuthenticatedUser): Promise<unknown> {
+  async get(documentId: string, actor: AuthenticatedUser, context: DocumentAuditContext): Promise<unknown> {
     const document = await this.documentOrThrow(documentId);
-    this.assertAccess(document, actor);
+    await this.assertAccess(document, actor, context);
     return this.response(document, true);
   }
 
@@ -174,7 +176,7 @@ export class DocumentHandoffService {
     context: DocumentAuditContext,
   ): Promise<unknown> {
     this.assertTypeAllowed(dto.type, actor);
-    const operation = await this.operationForActor(dto.operationId, actor);
+    const operation = await this.operationForActor(dto.operationId, actor, context);
     const origin = actor.role === Role.OPERATOR ? DocumentHandoffOrigin.OPERATOR : DocumentHandoffOrigin.PLATFORM;
     const defaultTechnicalSignatureId = await this.defaultTechnicalSignatureId(
       operation.maintenanceExecution?.plan.pmocPlan?.signatureOverrideId ?? null,
@@ -222,7 +224,7 @@ export class DocumentHandoffService {
     context: DocumentAuditContext,
   ): Promise<unknown> {
     const document = await this.documentOrThrow(documentId);
-    this.assertAccess(document, actor);
+    await this.assertAccess(document, actor, context);
     if (!document.operationId && !document.budgetId) {
       throw this.invalid('O documento não possui uma origem válida');
     }
@@ -267,7 +269,7 @@ export class DocumentHandoffService {
 
   async submit(documentId: string, actor: AuthenticatedUser, context: DocumentAuditContext): Promise<unknown> {
     let document = await this.documentOrThrow(documentId);
-    this.assertAccess(document, actor);
+    await this.assertAccess(document, actor, context);
     if (!document.operation) throw this.invalid('Document has no Operation');
     if (
       CUSTOMER_SIGNATURE_TYPES.has(document.type) &&
@@ -407,9 +409,9 @@ export class DocumentHandoffService {
     }
   }
 
-  async history(documentId: string, actor: AuthenticatedUser): Promise<unknown> {
+  async history(documentId: string, actor: AuthenticatedUser, context: DocumentAuditContext): Promise<unknown> {
     const document = await this.documentOrThrow(documentId);
-    this.assertAccess(document, actor);
+    await this.assertAccess(document, actor, context);
     return this.prisma.documentRevision.findMany({
       where: { documentId },
       orderBy: { revision: 'asc' },
@@ -420,9 +422,10 @@ export class DocumentHandoffService {
   async customerSignatureImage(
     documentId: string,
     actor: AuthenticatedUser,
+    context: DocumentAuditContext,
   ): Promise<{ content: Buffer; mimeType: string; filename: string }> {
     const document = await this.documentOrThrow(documentId);
-    this.assertAccess(document, actor);
+    await this.assertAccess(document, actor, context);
     const snapshot = document.customerSignatureSnapshot as SignatureSnapshot | null;
     if (!snapshot?.storageKey || !snapshot.mimeType) {
       throw new ApplicationException(
@@ -445,15 +448,21 @@ export class DocumentHandoffService {
     return document;
   }
 
-  private async operationForActor(id: string, actor: AuthenticatedUser): Promise<CollectionOperation> {
+  private async operationForActor(
+    id: string,
+    actor: AuthenticatedUser,
+    context: DocumentAuditContext,
+  ): Promise<CollectionOperation> {
+    await this.access.assertOperationAccess(actor, id, {
+      resource: DOCUMENT_ENGINE_RESOURCE,
+      resourceId: id,
+      context,
+    });
     const operation = await this.prisma.operation.findUnique({
       where: { id },
       include: COLLECTION_OPERATION_INCLUDE,
     });
     if (!operation) throw new ApplicationException(ERROR_CODES.OPERATION_NOT_FOUND, 'Operação não encontrada', HttpStatus.NOT_FOUND);
-    if (actor.role === Role.OPERATOR && operation.assignment?.assignedTo !== actor.id) {
-      throw new ApplicationException(ERROR_CODES.FORBIDDEN, 'O operador só pode preparar relatórios de atividades atribuídas a ele', HttpStatus.FORBIDDEN);
-    }
     return operation;
   }
 
@@ -468,10 +477,16 @@ export class DocumentHandoffService {
     return signatures.find((item) => item.isDefault)?.id ?? (signatures.length === 1 ? signatures[0].id : null);
   }
 
-  private assertAccess(document: HandoffDocument, actor: AuthenticatedUser): void {
-    if (actor.role === Role.OPERATOR && document.operation?.assignment?.assignedTo !== actor.id) {
-      throw new ApplicationException(ERROR_CODES.FORBIDDEN, 'O operador não possui acesso a este relatório', HttpStatus.FORBIDDEN);
-    }
+  private async assertAccess(
+    document: HandoffDocument,
+    actor: AuthenticatedUser,
+    context: DocumentAuditContext,
+  ): Promise<void> {
+    await this.access.assertOperationBackedResourceAccess(actor, document.operationId, {
+      resource: DOCUMENT_ENGINE_RESOURCE,
+      resourceId: document.id,
+      context,
+    });
   }
 
   private assertReviewer(actor: AuthenticatedUser): void {

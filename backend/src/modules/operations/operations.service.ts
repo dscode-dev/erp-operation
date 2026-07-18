@@ -26,6 +26,7 @@ import { LifecyclePublisher } from '../asset-lifecycle/lifecycle-publisher.servi
 import { AssignmentsService } from '../assignments/assignments.service';
 import { PrismaService } from '../database/prisma.service';
 import { MaintenancePlanningService } from '../maintenance-planning/maintenance-planning.service';
+import { OperationAccessService } from '../operation-access/operation-access.service';
 import type {
   CreateOperationDto,
   ListOperationsQueryDto,
@@ -134,10 +135,12 @@ export class OperationsService {
     private readonly lifecycle: LifecyclePublisher,
     private readonly maintenance: MaintenancePlanningService,
     private readonly assignments: AssignmentsService,
+    private readonly access: OperationAccessService,
   ) {}
 
-  async list(query: ListOperationsQueryDto): Promise<unknown> {
+  async list(query: ListOperationsQueryDto, actor: AuthenticatedUser): Promise<unknown> {
     const where: Prisma.OperationWhereInput = {
+      ...this.access.operationScope(actor),
       ...(query.customerId ? { customerId: query.customerId } : {}),
       ...(query.equipmentId ? { equipmentId: query.equipmentId } : {}),
       ...(query.operatorId ? { operatorId: query.operatorId } : {}),
@@ -166,13 +169,14 @@ export class OperationsService {
     return buildPaginatedResponse(items, total, query.page, query.limit);
   }
 
-  async stats(): Promise<Record<string, unknown>> {
+  async stats(actor: AuthenticatedUser): Promise<Record<string, unknown>> {
+    const where = this.access.operationScope(actor);
     const [total, draft, inProgress, completed, canceled] = await this.prisma.$transaction([
-      this.prisma.operation.count(),
-      this.prisma.operation.count({ where: { status: 'DRAFT' } }),
-      this.prisma.operation.count({ where: { status: 'IN_PROGRESS' } }),
-      this.prisma.operation.count({ where: { status: 'COMPLETED' } }),
-      this.prisma.operation.count({ where: { status: 'CANCELED' } }),
+      this.prisma.operation.count({ where }),
+      this.prisma.operation.count({ where: { ...where, status: 'DRAFT' } }),
+      this.prisma.operation.count({ where: { ...where, status: 'IN_PROGRESS' } }),
+      this.prisma.operation.count({ where: { ...where, status: 'COMPLETED' } }),
+      this.prisma.operation.count({ where: { ...where, status: 'CANCELED' } }),
     ]);
     return {
       total,
@@ -180,11 +184,13 @@ export class OperationsService {
     };
   }
 
-  async get(id: string, actor: AuthenticatedUser): Promise<unknown> {
+  async get(id: string, actor: AuthenticatedUser, context: OperationAuditContext): Promise<unknown> {
+    await this.access.assertOperationAccess(actor, id, {
+      resource: OPERATION_RESOURCE,
+      resourceId: id,
+      context,
+    });
     const operation = await this.operationOrThrow(id);
-    if (actor.role === Role.OPERATOR && (operation as { operatorId: string }).operatorId !== actor.id) {
-      throw new ApplicationException(ERROR_CODES.FORBIDDEN, 'Operator can only access assigned Operations', HttpStatus.FORBIDDEN);
-    }
     return operation;
   }
 
@@ -380,6 +386,11 @@ export class OperationsService {
     actor: AuthenticatedUser,
     context: OperationAuditContext,
   ): Promise<unknown> {
+    await this.access.assertOperationAccess(actor, id, {
+      resource: OPERATION_RESOURCE,
+      resourceId: id,
+      context,
+    });
     const existing = await this.prisma.operation.findUnique({
       where: { id },
       select: {
@@ -401,9 +412,6 @@ export class OperationsService {
         'Operation was not found',
         HttpStatus.NOT_FOUND,
       );
-    if (actor.role === Role.OPERATOR && existing.operatorId !== actor.id) {
-      throw new ApplicationException(ERROR_CODES.FORBIDDEN, 'Operator can only update assigned Operations', HttpStatus.FORBIDDEN);
-    }
     this.validateReferencePeriod(
       dto.referenceMonth ?? existing.referenceMonth ?? undefined,
       dto.referenceYear ?? existing.referenceYear ?? undefined,
@@ -585,7 +593,16 @@ export class OperationsService {
     return this.operationOrThrow(id);
   }
 
-  async getPhoto(photoId: string): Promise<unknown> {
+  async getPhoto(
+    photoId: string,
+    actor: AuthenticatedUser,
+    context: OperationAuditContext,
+  ): Promise<unknown> {
+    await this.access.assertPhotoAccess(actor, photoId, {
+      resource: OPERATION_PHOTO_RESOURCE,
+      resourceId: photoId,
+      context,
+    });
     const photo = await this.prisma.operationPhoto.findUnique({
       where: { id: photoId },
       include: { createdBy: { select: { id: true, name: true, role: true } } },

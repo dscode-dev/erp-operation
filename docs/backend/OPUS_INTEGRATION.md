@@ -1,5 +1,15 @@
 # OPUS Frontend Integration
 
+## ORBIT_SECURITY_FIX01 — regra obrigatória para clientes web/PWA
+
+`Assignment` é a única fonte de autorização do Operator. Consuma as listagens normalmente e nunca
+envie ou aplique um filtro local baseado em `operation.operatorId`. A API pagina depois de aplicar o
+ownership. Chamadas diretas a operação, foto, execução, documento, preview, download, Handoff,
+histórico, lifecycle ou material não pertencente retornam `403 FORBIDDEN` sem dados parciais.
+
+Ao receber 403, fechar viewers/drawers que dependam do recurso e recarregar a fila oficial. Não há
+mudança nos tipos públicos nem endpoint novo.
+
 ## DC-05 — Recibo / Garantia
 
 Exponha RECEIPT somente para OWNER/MANAGER. O Wizard possui origem manual ou OS `COMPLETED`, dados

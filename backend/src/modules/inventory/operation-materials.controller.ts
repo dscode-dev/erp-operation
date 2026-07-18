@@ -13,8 +13,12 @@ export class OperationMaterialsController {
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR, Role.VIEWER)
   @Get()
-  list(@Param('operationId', new ParseUUIDPipe({ version: '4' })) operationId: string): Promise<unknown> {
-    return this.inventory.listOperationMaterials(operationId);
+  list(
+    @Param('operationId', new ParseUUIDPipe({ version: '4' })) operationId: string,
+    @CurrentUser() actor: AuthenticatedUser,
+    @Req() request: RequestWithId,
+  ): Promise<unknown> {
+    return this.inventory.listOperationMaterials(operationId, actor, this.context(request));
   }
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR)

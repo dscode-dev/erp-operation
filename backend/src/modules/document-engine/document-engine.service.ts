@@ -19,6 +19,7 @@ import type { AuthenticatedUser } from '../../shared/types/authenticated-user.ty
 import type { RequestWithId } from '../../shared/types/request-with-id.type';
 import { AppLoggerService } from '../../infra/logger/app-logger.service';
 import { LifecyclePublisher } from '../asset-lifecycle/lifecycle-publisher.service';
+import { OperationAccessService } from '../operation-access/operation-access.service';
 import { PrismaService } from '../database/prisma.service';
 import { DocumentAssetResolver } from './assets/document-asset-resolver.service';
 import type { DocumentBlueprint } from './blueprint/document-blueprint.types';
@@ -55,6 +56,7 @@ export class DocumentEngineService {
     private readonly logger: AppLoggerService,
     private readonly assets: DocumentAssetResolver,
     private readonly lifecycle: LifecyclePublisher,
+    private readonly access: OperationAccessService,
   ) {}
 
   async listDocuments(query: ListDocumentsQueryDto, actor: AuthenticatedUser): Promise<unknown> {
@@ -72,8 +74,8 @@ export class DocumentEngineService {
           ? { type: { not: DocumentTemplateType.QUOTE } }
           : { type: { notIn: [...FINANCIAL_DOCUMENT_TYPES] } }),
       ...(query.operatorId ? { operation: { operatorId: query.operatorId } } : {}),
-      ...(actor.role === Role.OPERATOR ? { operation: { operatorId: actor.id } } : {}),
       AND: [
+        this.access.documentScope(actor),
         ...(query.from || query.to ? [{ OR: [{ renderedAt: period }, { renderedAt: null, createdAt: period }] }] : []),
         ...(query.customerId ? [{ OR: [{ operation: { customerId: query.customerId } }, { budget: { customerId: query.customerId } }] }] : []),
         ...(query.equipmentId ? [{ OR: [{ operation: { equipmentId: query.equipmentId } }, { budget: { equipmentId: query.equipmentId } }] }] : []),
@@ -128,7 +130,7 @@ export class DocumentEngineService {
     context: DocumentAuditContext,
   ): Promise<unknown> {
     this.assertTypeAccess(type, actor);
-    await this.assertOperationAccess(operationId, actor);
+    await this.assertOperationAccess(operationId, actor, context);
     const blueprint = this.withSourceFingerprint(await this.builder.buildFromOperation(operationId, type));
     await this.audit(
       DOCUMENT_ENGINE_AUDIT_ACTIONS.DOCUMENT_PREVIEWED,
@@ -151,7 +153,7 @@ export class DocumentEngineService {
   ): Promise<unknown> {
     const document = await this.documentOrThrow(documentId);
     this.assertTypeAccess(document.type, actor);
-    await this.assertDocumentAccess(document, actor);
+    await this.assertDocumentAccess(document, actor, context);
     if (document.budgetId) {
       const blueprint = await this.builder.buildBudget(document.budgetId);
       await this.audit(
@@ -455,7 +457,7 @@ export class DocumentEngineService {
   ): Promise<DocumentDownload> {
     const document = await this.documentOrThrow(documentId);
     this.assertTypeAccess(document.type, actor);
-    await this.assertDocumentAccess(document, actor);
+    await this.assertDocumentAccess(document, actor, context);
     if (!document.storageKey || !document.mimeType || !document.fileSize) {
       throw new ApplicationException(
         ERROR_CODES.DOCUMENT_DOWNLOAD_NOT_READY,
@@ -553,16 +555,28 @@ export class DocumentEngineService {
     }
   }
 
-  private async assertOperationAccess(operationId: string, actor: AuthenticatedUser): Promise<void> {
-    if (actor.role !== Role.OPERATOR) return;
-    const allowed = await this.prisma.assignment.count({ where: { operationId, assignedTo: actor.id } });
-    if (!allowed) throw new ApplicationException(ERROR_CODES.FORBIDDEN, 'Operator can only access assigned Operations', HttpStatus.FORBIDDEN);
+  private async assertOperationAccess(
+    operationId: string,
+    actor: AuthenticatedUser,
+    context: DocumentAuditContext,
+  ): Promise<void> {
+    await this.access.assertOperationAccess(actor, operationId, {
+      resource: DOCUMENT_ENGINE_RESOURCE,
+      resourceId: operationId,
+      context,
+    });
   }
 
-  private async assertDocumentAccess(document: OperationDocument, actor: AuthenticatedUser): Promise<void> {
-    if (actor.role !== Role.OPERATOR) return;
-    if (!document.operationId) throw new ApplicationException(ERROR_CODES.FORBIDDEN, 'Operator cannot access this document', HttpStatus.FORBIDDEN);
-    await this.assertOperationAccess(document.operationId, actor);
+  private async assertDocumentAccess(
+    document: OperationDocument,
+    actor: AuthenticatedUser,
+    context: DocumentAuditContext,
+  ): Promise<void> {
+    await this.access.assertOperationBackedResourceAccess(actor, document.operationId, {
+      resource: DOCUMENT_ENGINE_RESOURCE,
+      resourceId: document.id,
+      context,
+    });
   }
 
   private async assertPmocEmissionReady(

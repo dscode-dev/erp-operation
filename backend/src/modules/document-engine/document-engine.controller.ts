@@ -109,8 +109,8 @@ export class DocumentEngineController {
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR)
   @Get(':documentId/handoff')
-  getHandoff(@Param('documentId', new ParseUUIDPipe({ version: '4' })) documentId: string, @CurrentUser() actor: AuthenticatedUser): Promise<unknown> {
-    return this.handoffs.get(documentId, actor);
+  getHandoff(@Param('documentId', new ParseUUIDPipe({ version: '4' })) documentId: string, @CurrentUser() actor: AuthenticatedUser, @Req() request: RequestWithId): Promise<unknown> {
+    return this.handoffs.get(documentId, actor, contextFromRequest(request));
   }
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR)
@@ -125,9 +125,10 @@ export class DocumentEngineController {
   async customerSignatureImage(
     @Param('documentId', new ParseUUIDPipe({ version: '4' })) documentId: string,
     @CurrentUser() actor: AuthenticatedUser,
+    @Req() request: RequestWithId,
     @Res() response: Response,
   ): Promise<void> {
-    const image = await this.handoffs.customerSignatureImage(documentId, actor);
+    const image = await this.handoffs.customerSignatureImage(documentId, actor, contextFromRequest(request));
     response.setHeader('Content-Type', image.mimeType);
     response.setHeader('Content-Disposition', `inline; filename="${image.filename}"`);
     response.setHeader('Content-Length', String(image.content.length));
@@ -161,8 +162,8 @@ export class DocumentEngineController {
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR)
   @Get(':documentId/handoff/history')
-  handoffHistory(@Param('documentId', new ParseUUIDPipe({ version: '4' })) documentId: string, @CurrentUser() actor: AuthenticatedUser): Promise<unknown> {
-    return this.handoffs.history(documentId, actor);
+  handoffHistory(@Param('documentId', new ParseUUIDPipe({ version: '4' })) documentId: string, @CurrentUser() actor: AuthenticatedUser, @Req() request: RequestWithId): Promise<unknown> {
+    return this.handoffs.history(documentId, actor, contextFromRequest(request));
   }
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR, Role.VIEWER)

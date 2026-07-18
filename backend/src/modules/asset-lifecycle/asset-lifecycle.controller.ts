@@ -36,14 +36,14 @@ export class AssetLifecycleController {
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR, Role.VIEWER)
   @Get('asset-lifecycle')
-  list(@Query() query: ListAssetLifecycleQueryDto): Promise<unknown> {
-    return this.lifecycle.list(query);
+  list(@Query() query: ListAssetLifecycleQueryDto, @CurrentUser() actor: AuthenticatedUser): Promise<unknown> {
+    return this.lifecycle.list(query, actor);
   }
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR, Role.VIEWER)
   @Get('asset-lifecycle/:id')
-  get(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string): Promise<unknown> {
-    return this.lifecycle.get(id);
+  get(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string, @CurrentUser() actor: AuthenticatedUser, @Req() request: RequestWithId): Promise<unknown> {
+    return this.lifecycle.get(id, actor, this.context(request));
   }
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR)
@@ -61,22 +61,25 @@ export class AssetLifecycleController {
   listForEquipment(
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
     @Query() query: ListAssetLifecycleQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
   ): Promise<unknown> {
-    return this.lifecycle.listForEquipment(id, query);
+    return this.lifecycle.listForEquipment(id, query, actor);
   }
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR, Role.VIEWER)
   @Get('equipments/:id/lifecycle/stats')
-  stats(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string): Promise<unknown> {
-    return this.lifecycle.stats(id);
+  stats(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string, @CurrentUser() actor: AuthenticatedUser): Promise<unknown> {
+    return this.lifecycle.stats(id, actor);
   }
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR, Role.VIEWER)
   @Get('asset-lifecycle/:id/attachments')
   listAttachments(
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @CurrentUser() actor: AuthenticatedUser,
+    @Req() request: RequestWithId,
   ): Promise<unknown> {
-    return this.lifecycle.listAttachments(id);
+    return this.lifecycle.listAttachments(id, actor, this.context(request));
   }
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR)

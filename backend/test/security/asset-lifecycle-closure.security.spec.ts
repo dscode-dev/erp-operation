@@ -40,6 +40,13 @@ describe('AppSec Asset Lifecycle closure', () => {
 
   it('does not expose raw metadata, storage keys, user email or financial fields in public timeline responses', async () => {
     const operation = await createOperation(owner.user);
+    await prisma.assignment.create({
+      data: {
+        operationId: operation.id,
+        assignedBy: owner.user.id,
+        assignedTo: operator.user.id,
+      },
+    });
     const event = await prisma.assetLifecycleEvent.create({
       data: {
         equipmentId: operation.equipmentId,

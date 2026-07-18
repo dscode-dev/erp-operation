@@ -11,6 +11,7 @@ import type { AuthenticatedUser } from '../../shared/types/authenticated-user.ty
 import { buildPaginatedResponse, type PaginatedResponse } from '../../shared/types/pagination.types';
 import { LifecyclePublisher } from '../asset-lifecycle/lifecycle-publisher.service';
 import { PrismaService } from '../database/prisma.service';
+import { OperationAccessService } from '../operation-access/operation-access.service';
 import {
   CreateMaintenanceExecutionDto,
   CreateMaintenancePlanDto,
@@ -54,6 +55,7 @@ export class MaintenancePlanningService {
     private readonly prisma: PrismaService,
     private readonly recurrence: RecurringEngine,
     private readonly lifecycle: LifecyclePublisher,
+    private readonly access: OperationAccessService,
   ) {}
 
   async listPlans(query: ListMaintenancePlansQueryDto): Promise<unknown> {
@@ -194,9 +196,16 @@ export class MaintenancePlanningService {
     return { deleted: true };
   }
 
-  async listExecutions(planId: string, query: ListMaintenanceExecutionsQueryDto): Promise<unknown> {
+  async listExecutions(
+    planId: string,
+    query: ListMaintenanceExecutionsQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<unknown> {
     await this.planOrThrow(planId);
-    const where = this.executionWhere({ ...query, planId });
+    const where = {
+      ...this.executionWhere({ ...query, planId }),
+      ...this.access.maintenanceExecutionScope(actor),
+    };
     const [items, total] = await this.prisma.$transaction([
       this.prisma.maintenanceExecution.findMany({
         where,
@@ -258,6 +267,11 @@ export class MaintenancePlanningService {
     actor: AuthenticatedUser,
     context: MaintenanceAuditContext,
   ): Promise<unknown> {
+    await this.access.assertMaintenanceExecutionAccess(actor, id, {
+      resource: MAINTENANCE_EXECUTION_RESOURCE,
+      resourceId: id,
+      context,
+    });
     const existing = await this.executionOrThrow(id);
     return this.prisma.$transaction(async (tx) => {
       const operation = dto.operationId
@@ -350,6 +364,7 @@ export class MaintenancePlanningService {
   async equipmentUpcoming(
     equipmentId: string,
     query: ListMaintenanceExecutionsQueryDto,
+    actor: AuthenticatedUser,
   ): Promise<unknown> {
     await this.equipmentOrThrow(equipmentId);
     const where = this.executionWhere({
@@ -357,6 +372,7 @@ export class MaintenancePlanningService {
       equipmentId,
       status: query.status ?? MaintenanceExecutionStatus.PLANNED,
     });
+    Object.assign(where, this.access.maintenanceExecutionScope(actor));
     const [items, total] = await this.prisma.$transaction([
       this.prisma.maintenanceExecution.findMany({
         where,
@@ -370,8 +386,11 @@ export class MaintenancePlanningService {
     return this.page(items, query.page, query.limit, total);
   }
 
-  async stats(): Promise<unknown> {
+  async stats(actor: AuthenticatedUser): Promise<unknown> {
     const now = new Date();
+    const executionScope = this.access.maintenanceExecutionScope(actor);
+    const planScope: Prisma.MaintenancePlanWhereInput =
+      actor.role === 'OPERATOR' ? { executions: { some: executionScope } } : {};
     const [
       activePlans,
       overduePlans,
@@ -380,21 +399,22 @@ export class MaintenancePlanningService {
       pendingExecutions,
       completed,
     ] = await this.prisma.$transaction([
-      this.prisma.maintenancePlan.count({ where: { active: true } }),
-      this.prisma.maintenancePlan.count({ where: { active: true, nextExecution: { lt: now } } }),
+      this.prisma.maintenancePlan.count({ where: { ...planScope, active: true } }),
+      this.prisma.maintenancePlan.count({ where: { ...planScope, active: true, nextExecution: { lt: now } } }),
       this.prisma.maintenanceExecution.count({
-        where: { status: MaintenanceExecutionStatus.PLANNED, scheduledAt: { gte: now } },
+        where: { ...executionScope, status: MaintenanceExecutionStatus.PLANNED, scheduledAt: { gte: now } },
       }),
       this.prisma.maintenanceExecution.count({
-        where: { status: MaintenanceExecutionStatus.COMPLETED },
+        where: { ...executionScope, status: MaintenanceExecutionStatus.COMPLETED },
       }),
       this.prisma.maintenanceExecution.count({
         where: {
+          ...executionScope,
           status: { in: [MaintenanceExecutionStatus.PLANNED, MaintenanceExecutionStatus.LINKED] },
         },
       }),
       this.prisma.maintenanceExecution.findMany({
-        where: { status: MaintenanceExecutionStatus.COMPLETED, executedAt: { not: null } },
+        where: { ...executionScope, status: MaintenanceExecutionStatus.COMPLETED, executedAt: { not: null } },
         select: { executedAt: true, maintenancePlanId: true },
         orderBy: [{ maintenancePlanId: 'asc' }, { executedAt: 'asc' }],
       }),

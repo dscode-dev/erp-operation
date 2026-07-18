@@ -36,8 +36,8 @@ export class MaintenancePlanningController {
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR, Role.VIEWER)
   @Get('maintenance-plans/stats')
-  stats(): Promise<unknown> {
-    return this.maintenance.stats();
+  stats(@CurrentUser() actor: AuthenticatedUser): Promise<unknown> {
+    return this.maintenance.stats(actor);
   }
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR, Role.VIEWER)
@@ -89,11 +89,12 @@ export class MaintenancePlanningController {
   listExecutions(
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
     @Query() query: ListMaintenanceExecutionsQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
   ): Promise<unknown> {
-    return this.maintenance.listExecutions(id, query);
+    return this.maintenance.listExecutions(id, query, actor);
   }
 
-  @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR)
+  @Roles(Role.OWNER, Role.MANAGER)
   @Post('maintenance-plans/:id/executions')
   createExecution(
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
@@ -129,8 +130,9 @@ export class MaintenancePlanningController {
   equipmentUpcoming(
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
     @Query() query: ListMaintenanceExecutionsQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
   ): Promise<unknown> {
-    return this.maintenance.equipmentUpcoming(id, query);
+    return this.maintenance.equipmentUpcoming(id, query, actor);
   }
 
   private context(request: RequestWithId): MaintenanceAuditContext {

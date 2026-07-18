@@ -19,6 +19,7 @@ import { ApplicationException } from '../../shared/exceptions/application.except
 import type { AuthenticatedUser } from '../../shared/types/authenticated-user.type';
 import { buildPaginationMeta } from '../../shared/types/pagination.types';
 import { PrismaService } from '../database/prisma.service';
+import { OperationAccessService } from '../operation-access/operation-access.service';
 import {
   ASSET_LIFECYCLE_EVENT_INCLUDE,
   type AssetLifecycleAuditContext,
@@ -53,10 +54,11 @@ export class AssetLifecycleService {
     @Inject(STORAGE_PROVIDER_TOKEN) private readonly storage: StorageProviderContract,
     private readonly publisher: LifecyclePublisher,
     private readonly timeline: TimelineAssembler,
+    private readonly access: OperationAccessService,
   ) {}
 
-  async list(query: ListAssetLifecycleQueryDto): Promise<unknown> {
-    const where = this.where(query);
+  async list(query: ListAssetLifecycleQueryDto, actor: AuthenticatedUser): Promise<unknown> {
+    const where = { ...this.where(query), ...this.access.lifecycleScope(actor) };
     const [items, total] = await this.prisma.$transaction([
       this.prisma.assetLifecycleEvent.findMany({
         where,
@@ -74,13 +76,18 @@ export class AssetLifecycleService {
     };
   }
 
-  async get(id: string): Promise<unknown> {
+  async get(id: string, actor: AuthenticatedUser, context: AssetLifecycleAuditContext): Promise<unknown> {
+    await this.access.assertLifecycleEventAccess(actor, id, {
+      resource: 'asset_lifecycle_event',
+      resourceId: id,
+      context,
+    });
     const event = await this.eventOrThrow(id);
     return this.withTimeline(event);
   }
 
-  listForEquipment(equipmentId: string, query: ListAssetLifecycleQueryDto): Promise<unknown> {
-    return this.list({ ...query, equipmentId });
+  listForEquipment(equipmentId: string, query: ListAssetLifecycleQueryDto, actor: AuthenticatedUser): Promise<unknown> {
+    return this.list({ ...query, equipmentId }, actor);
   }
 
   async create(
@@ -88,11 +95,23 @@ export class AssetLifecycleService {
     actor: AuthenticatedUser,
     context: AssetLifecycleAuditContext,
   ): Promise<unknown> {
+    if (dto.operationId) {
+      await this.access.assertOperationAccess(actor, dto.operationId, {
+        resource: 'asset_lifecycle_event',
+        resourceId: dto.operationId,
+        context,
+      });
+    }
     const event = await this.publisher.publishManual(dto, actor.id, context);
     return this.withTimeline(event);
   }
 
-  async listAttachments(eventId: string): Promise<unknown> {
+  async listAttachments(eventId: string, actor: AuthenticatedUser, context: AssetLifecycleAuditContext): Promise<unknown> {
+    await this.access.assertLifecycleEventAccess(actor, eventId, {
+      resource: ASSET_LIFECYCLE_ATTACHMENT_RESOURCE,
+      resourceId: eventId,
+      context,
+    });
     await this.eventOrThrow(eventId);
     const attachments = await this.prisma.assetLifecycleAttachment.findMany({
       where: { eventId, deletedAt: null },
@@ -108,6 +127,11 @@ export class AssetLifecycleService {
     actor: AuthenticatedUser,
     context: AssetLifecycleAuditContext,
   ): Promise<unknown> {
+    await this.access.assertLifecycleEventAccess(actor, eventId, {
+      resource: ASSET_LIFECYCLE_ATTACHMENT_RESOURCE,
+      resourceId: eventId,
+      context,
+    });
     await this.eventOrThrow(eventId);
     this.validateAttachment(file);
     const validFile = file as UploadedAssetLifecycleFile;
@@ -184,9 +208,9 @@ export class AssetLifecycleService {
     return { deleted: true };
   }
 
-  async stats(equipmentId: string): Promise<unknown> {
+  async stats(equipmentId: string, actor: AuthenticatedUser): Promise<unknown> {
     const events = await this.prisma.assetLifecycleEvent.findMany({
-      where: { equipmentId },
+      where: { equipmentId, ...this.access.lifecycleScope(actor) },
       select: { type: true, occurredAt: true },
       orderBy: { occurredAt: 'asc' },
     });

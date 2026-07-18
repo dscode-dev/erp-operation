@@ -1,6 +1,7 @@
 import { DocumentTemplateType, Role } from '@prisma/client';
 import { DocumentAssetResolver } from '../../src/modules/document-engine/assets/document-asset-resolver.service';
 import { DocumentHandoffService } from '../../src/modules/document-engine/document-handoff.service';
+import { OperationAccessService } from '../../src/modules/operation-access/operation-access.service';
 import {
   ControlledStorage,
   createActor,
@@ -23,6 +24,7 @@ describe('Field Report Handoff', () => {
   const service = new DocumentHandoffService(
     prisma as never,
     new DocumentAssetResolver(storage),
+    new OperationAccessService(prisma as never),
   );
 
   beforeEach(async () => {

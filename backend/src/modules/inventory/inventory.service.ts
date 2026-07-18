@@ -14,6 +14,7 @@ import type { AuthenticatedUser } from '../../shared/types/authenticated-user.ty
 import { buildPaginatedResponse, type PaginatedResponse } from '../../shared/types/pagination.types';
 import { LifecyclePublisher } from '../asset-lifecycle/lifecycle-publisher.service';
 import { PrismaService } from '../database/prisma.service';
+import { OperationAccessService } from '../operation-access/operation-access.service';
 import type {
   CreateOperationMaterialDto,
   CreateProductDto,
@@ -82,6 +83,7 @@ export class InventoryService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly lifecycle: LifecyclePublisher,
+    private readonly access: OperationAccessService,
   ) {}
 
   async listProducts(query: ListProductsQueryDto): Promise<unknown> {
@@ -259,8 +261,10 @@ export class InventoryService {
     });
   }
 
-  async inventoryStats(): Promise<unknown> {
+  async inventoryStats(actor: AuthenticatedUser): Promise<unknown> {
     const from = new Date(Date.now() - 30 * 86_400_000);
+    const movementScope = this.access.stockMovementScope(actor);
+    const operationPartScope = this.access.operationPartScope(actor);
     const [totalItems, critical, empty, products, movements, mostUsed, byEquipment, byCustomer] = await this.prisma.$transaction([
       this.prisma.inventoryItem.count({ where: { isActive: true } }),
       this.prisma.inventoryItem.count({
@@ -269,11 +273,11 @@ export class InventoryService {
       this.prisma.inventoryItem.count({ where: { isActive: true, currentQuantity: { lte: 0 } } }),
       this.prisma.product.count({ where: { isActive: true } }),
       this.prisma.stockMovement.count({
-        where: { type: StockMovementType.CONSUMPTION, occurredAt: { gte: from } },
+        where: { ...movementScope, type: StockMovementType.CONSUMPTION, occurredAt: { gte: from } },
       }),
       this.prisma.operationPart.groupBy({
         by: ['productId'],
-        where: { deletedAt: null, createdAt: { gte: from } },
+        where: { ...operationPartScope, deletedAt: null, createdAt: { gte: from } },
         _sum: { quantity: true },
         _count: true,
         orderBy: { _sum: { quantity: 'desc' } },
@@ -281,13 +285,13 @@ export class InventoryService {
       }),
       this.prisma.operationPart.groupBy({
         by: ['operationId'],
-        where: { deletedAt: null, operation: { equipmentId: { not: null } }, createdAt: { gte: from } },
+        where: { ...operationPartScope, deletedAt: null, operation: { equipmentId: { not: null } }, createdAt: { gte: from } },
         _sum: { quantity: true },
         orderBy: { operationId: 'asc' },
       }),
       this.prisma.operationPart.groupBy({
         by: ['operationId'],
-        where: { deletedAt: null, createdAt: { gte: from } },
+        where: { ...operationPartScope, deletedAt: null, createdAt: { gte: from } },
         _sum: { quantity: true },
         orderBy: { operationId: 'asc' },
       }),
@@ -338,6 +342,13 @@ export class InventoryService {
     actor: AuthenticatedUser,
     context: InventoryAuditContext,
   ): Promise<unknown> {
+    if (dto.operationId) {
+      await this.access.assertOperationAccess(actor, dto.operationId, {
+        resource: STOCK_MOVEMENT_RESOURCE,
+        resourceId: dto.operationId,
+        context,
+      });
+    }
     return this.runSerializable(() =>
       this.prisma.$transaction(async (tx) => {
         const movement = await this.createMovementTx(
@@ -401,8 +412,9 @@ export class InventoryService {
     });
   }
 
-  async listMovements(query: ListStockMovementsQueryDto): Promise<unknown> {
+  async listMovements(query: ListStockMovementsQueryDto, actor: AuthenticatedUser): Promise<unknown> {
     const where: Prisma.StockMovementWhereInput = {
+      ...this.access.stockMovementScope(actor),
       ...(query.inventoryItemId ? { inventoryItemId: query.inventoryItemId } : {}),
       ...(query.operationId ? { operationId: query.operationId } : {}),
       ...(query.productId ? { inventoryItem: { productId: query.productId } } : {}),
@@ -508,7 +520,16 @@ export class InventoryService {
     return { deleted: true };
   }
 
-  async listOperationMaterials(operationId: string): Promise<unknown> {
+  async listOperationMaterials(
+    operationId: string,
+    actor: AuthenticatedUser,
+    context: InventoryAuditContext,
+  ): Promise<unknown> {
+    await this.access.assertOperationAccess(actor, operationId, {
+      resource: OPERATION_PART_RESOURCE,
+      resourceId: operationId,
+      context,
+    });
     await this.operationOrThrow(operationId);
     return this.prisma.operationPart.findMany({
       where: { operationId, deletedAt: null },
@@ -523,6 +544,11 @@ export class InventoryService {
     actor: AuthenticatedUser,
     context: InventoryAuditContext,
   ): Promise<unknown> {
+    await this.access.assertOperationAccess(actor, operationId, {
+      resource: OPERATION_PART_RESOURCE,
+      resourceId: operationId,
+      context,
+    });
     return this.runSerializable(() =>
       this.prisma.$transaction(async (tx) => {
         const operation = await this.operationOrThrowTx(tx, operationId);

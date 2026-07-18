@@ -1440,6 +1440,7 @@ describe('DocumentEngine foundation', () => {
       {} as never,
       {} as never,
       {} as never,
+      {} as never,
     );
     const normalize = (
       service as unknown as { normalizeSignatureData: (value?: string) => string | null }
@@ -1481,6 +1482,10 @@ describe('DocumentEngine foundation', () => {
       { publishOperationCompletedTx: jest.fn() } as never,
       { syncOperationCompletedTx: jest.fn() } as never,
       {} as never,
+      {
+        assertOperationAccess: jest.fn(),
+        assertOperationBackedResourceAccess: jest.fn(),
+      } as never,
     );
 
     const result = await service.update(
@@ -1558,6 +1563,10 @@ describe('DocumentEngine foundation', () => {
       {} as never,
       { getDocumentPdf } as never,
       {} as never,
+      {
+        assertOperationAccess: jest.fn(),
+        assertOperationBackedResourceAccess: jest.fn(),
+      } as never,
     );
 
     await expect(
@@ -1572,6 +1581,7 @@ describe('DocumentEngine foundation', () => {
 
   it('keeps source fingerprints stable across preview timestamps and changes them for semantic content', () => {
     const service = new DocumentEngineService(
+      {} as never,
       {} as never,
       {} as never,
       {} as never,
@@ -1648,6 +1658,7 @@ describe('DocumentEngine foundation', () => {
       {} as never,
       {} as never,
       {} as never,
+      { documentScope: jest.fn().mockReturnValue({}) } as never,
     );
     const result = (await service.listDocuments(
       { page: 1, limit: 20, search: 'OS', customerId: '00000000-0000-4000-8000-000000000001' },

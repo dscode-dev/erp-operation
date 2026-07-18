@@ -24,14 +24,14 @@ export class InventoryController {
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR, Role.VIEWER)
   @Get('stats')
-  stats(): Promise<unknown> {
-    return this.inventory.inventoryStats();
+  stats(@CurrentUser() actor: AuthenticatedUser): Promise<unknown> {
+    return this.inventory.inventoryStats(actor);
   }
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR, Role.VIEWER)
   @Get('movements')
-  movements(@Query() query: ListStockMovementsQueryDto): Promise<unknown> {
-    return this.inventory.listMovements(query);
+  movements(@Query() query: ListStockMovementsQueryDto, @CurrentUser() actor: AuthenticatedUser): Promise<unknown> {
+    return this.inventory.listMovements(query, actor);
   }
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR)

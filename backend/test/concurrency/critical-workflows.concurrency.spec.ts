@@ -15,6 +15,7 @@ import { BudgetsService } from '../../src/modules/budgets/budgets.service';
 import { FinancialService } from '../../src/modules/financial/financial.service';
 import { InventoryService } from '../../src/modules/inventory/inventory.service';
 import { MaintenancePlanningService } from '../../src/modules/maintenance-planning/maintenance-planning.service';
+import { OperationAccessService } from '../../src/modules/operation-access/operation-access.service';
 import { RecurrenceFrequency } from '../../src/modules/maintenance-planning/dto/maintenance-planning.dto';
 import { RecurringEngine } from '../../src/modules/maintenance-planning/recurring-engine.service';
 import { PricingService } from '../../src/modules/pricing/pricing.service';
@@ -52,8 +53,9 @@ function services(): {
 } {
   const lifecycle = new LifecyclePublisher(prisma as never);
   const recurrence = new RecurringEngine();
-  const maintenance = new MaintenancePlanningService(prisma as never, recurrence, lifecycle);
-  const inventory = new InventoryService(prisma as never, lifecycle);
+  const access = new OperationAccessService(prisma as never);
+  const maintenance = new MaintenancePlanningService(prisma as never, recurrence, lifecycle, access);
+  const inventory = new InventoryService(prisma as never, lifecycle, access);
   return {
     lifecycle,
     recurrence,

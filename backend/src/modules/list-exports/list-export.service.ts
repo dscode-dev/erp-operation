@@ -11,8 +11,10 @@ import {
 import { DOCUMENT_PAGE } from '../../shared/constants/document-engine.constants';
 import { ERROR_CODES } from '../../shared/constants/error-codes.constants';
 import { ApplicationException } from '../../shared/exceptions/application.exception';
+import type { AuthenticatedUser } from '../../shared/types/authenticated-user.type';
 import { PrismaService } from '../database/prisma.service';
 import { PdfEngineService } from '../document-engine/pdf/pdf-engine.service';
+import { OperationAccessService } from '../operation-access/operation-access.service';
 import type { RenderedDocument, RenderedElement, RenderedPage } from '../document-engine/renderer/document-renderer.types';
 import type {
   DocumentsPdfExportQueryDto,
@@ -39,10 +41,11 @@ export class ListExportService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly pdf: PdfEngineService,
+    private readonly access: OperationAccessService,
   ) {}
 
-  async operations(query: OperationsPdfExportQueryDto): Promise<PdfExportResult> {
-    const where = this.operationWhere(query);
+  async operations(query: OperationsPdfExportQueryDto, actor: AuthenticatedUser): Promise<PdfExportResult> {
+    const where = { AND: [this.operationWhere(query), this.access.operationScope(actor)] };
     const total = await this.prisma.operation.count({ where });
     this.assertLimit(total);
     const rows = await this.prisma.operation.findMany({
@@ -121,8 +124,8 @@ export class ListExportService {
     });
   }
 
-  async documents(query: DocumentsPdfExportQueryDto): Promise<PdfExportResult> {
-    const where = this.documentWhere(query);
+  async documents(query: DocumentsPdfExportQueryDto, actor: AuthenticatedUser): Promise<PdfExportResult> {
+    const where = { AND: [this.documentWhere(query), this.access.documentScope(actor)] };
     const total = await this.prisma.operationDocument.count({ where });
     this.assertLimit(total);
     const rows = await this.prisma.operationDocument.findMany({

@@ -31,6 +31,7 @@ import { DocumentRendererService } from '../../src/modules/document-engine/rende
 import { AppLoggerService } from '../../src/infra/logger/app-logger.service';
 import type { StorageProviderContract, StorageSaveInput, StoredFile } from '../../src/infra/storage/storage-provider.type';
 import { LifecyclePublisher } from '../../src/modules/asset-lifecycle/lifecycle-publisher.service';
+import { OperationAccessService } from '../../src/modules/operation-access/operation-access.service';
 import type { AuthenticatedUser } from '../../src/shared/types/authenticated-user.type';
 import type { FinancialAuditContext } from '../../src/modules/financial/financial.service';
 
@@ -463,7 +464,16 @@ export function createDocumentEngine(storage = new ControlledStorage()): {
   const logger = new AppLoggerService({ appName: 'test', logLevel: 'error' } as never);
   const lifecycle = new LifecyclePublisher(prisma as never);
   return {
-    documents: new DocumentEngineService(prisma as never, builder, renderer, pdf, logger, assets, lifecycle),
+    documents: new DocumentEngineService(
+      prisma as never,
+      builder,
+      renderer,
+      pdf,
+      logger,
+      assets,
+      lifecycle,
+      new OperationAccessService(prisma as never),
+    ),
     builder,
     storage,
   };

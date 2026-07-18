@@ -2,6 +2,7 @@ import { BudgetStatus, StockMovementType } from '@prisma/client';
 import { LifecyclePublisher } from '../../src/modules/asset-lifecycle/lifecycle-publisher.service';
 import { BudgetsService } from '../../src/modules/budgets/budgets.service';
 import { InventoryService } from '../../src/modules/inventory/inventory.service';
+import { OperationAccessService } from '../../src/modules/operation-access/operation-access.service';
 import { ProcurementService } from '../../src/modules/procurement/procurement.service';
 import {
   context,
@@ -47,7 +48,11 @@ describe('cross-domain transaction rollback with real PostgreSQL', () => {
     const lifecycle = new LifecyclePublisher(prisma as never);
     const procurement = new ProcurementService(
       prisma as never,
-      new ThrowingInventoryService(prisma as never, lifecycle),
+      new ThrowingInventoryService(
+        prisma as never,
+        lifecycle,
+        new OperationAccessService(prisma as never),
+      ),
       lifecycle,
     );
     const purchase = await createSupplierProductPurchase(actor, org.id, 10);
@@ -75,7 +80,11 @@ describe('cross-domain transaction rollback with real PostgreSQL', () => {
     const org = await createOrganization();
     const operation = await createOperation(actor);
     const item = await createProductWithInventory(org.id, 10);
-    const inventory = new InventoryService(prisma as never, new ThrowingLifecyclePublisher(prisma as never));
+    const inventory = new InventoryService(
+      prisma as never,
+      new ThrowingLifecyclePublisher(prisma as never),
+      new OperationAccessService(prisma as never),
+    );
 
     await expect(inventory.consumeMaterial(operation.id, { productId: item.productId, inventoryItemId: item.inventoryItemId, quantity: 3 }, actor, context)).rejects.toThrow('forced lifecycle rollback');
 

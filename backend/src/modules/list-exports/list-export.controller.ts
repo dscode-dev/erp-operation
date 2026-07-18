@@ -3,6 +3,8 @@ import { Role } from '@prisma/client';
 import type { Response } from 'express';
 import { RawResponse } from '../../shared/decorators/raw-response.decorator';
 import { Roles } from '../../shared/decorators/roles.decorator';
+import { CurrentUser } from '../../shared/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../../shared/types/authenticated-user.type';
 import {
   DocumentsPdfExportQueryDto,
   EquipmentsPdfExportQueryDto,
@@ -19,9 +21,10 @@ export class ListExportController {
   @Get('operations/export')
   async operations(
     @Query() query: OperationsPdfExportQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
     @Res() response: Response,
   ): Promise<void> {
-    this.send(response, await this.exports.operations(query));
+    this.send(response, await this.exports.operations(query, actor));
   }
 
   @RawResponse()
@@ -39,9 +42,10 @@ export class ListExportController {
   @Get('documents/export')
   async documents(
     @Query() query: DocumentsPdfExportQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
     @Res() response: Response,
   ): Promise<void> {
-    this.send(response, await this.exports.documents(query));
+    this.send(response, await this.exports.documents(query, actor));
   }
 
   private send(response: Response, result: PdfExportResult): void {

@@ -1,5 +1,43 @@
 # Security
 
+## ORBIT_SECURITY_FIX01 — ownership autoritativo do Operator
+
+### Autoridade e estados
+
+`OperationAccessService` é a única implementação da política transversal. Para `OPERATOR`, ele exige
+um `Assignment` cujo `assignedTo` seja o usuário autenticado e cujo status esteja em `ASSIGNED`,
+`ACCEPTED`, `STARTED`, `PAUSED` ou `COMPLETED`. Nenhuma decisão utiliza `operation.operatorId`,
+parâmetro do frontend ou filtro posterior à consulta. `CANCELED` e `REJECTED` revogam acesso.
+
+### Defesa contra IDOR
+
+- listagens usam escopos Prisma no próprio `WHERE`, inclusive contagem/paginação;
+- detalhes validam ownership antes de carregar ou mutar o agregado;
+- fotos são resolvidas pela relação foto → Operation → Assignment antes de acessar Storage;
+- MaintenanceExecution exige relação execution → Operation → Assignment;
+- documentos, preview, download, Handoff, assinatura coletada e histórico exigem Operation atribuída;
+- documento sem Operation nunca é acessível ao Operator;
+- timelines, anexos, materiais, movimentações e exports aplicam o mesmo resolvedor;
+- não existem URLs públicas/assinadas para contornar o controller autenticado.
+
+Uma negação retorna `403 FORBIDDEN` sem payload parcial e sem revelar se o recurso pertence a outro
+usuário. O RBAC continua sendo aplicado antes da autorização de ownership quando a rota não pertence
+ao papel.
+
+### Auditoria de negações
+
+Cada negação central gera evento append-only `OPERATOR_ACCESS_DENIED` no recurso
+`operation_access`. Metadata: `tenant`, `userId`, `role`, `requestedResource`, `resourceId`,
+`operationId` quando conhecido, `reason` e `requestId`; o timestamp é `AuditLog.createdAt`. Não são
+registrados token, conteúdo, Base64, path, `storageKey`, segredo ou binário. A negação permanece
+fail-closed mesmo se a escrita auxiliar de auditoria falhar.
+
+### Cobertura certificada
+
+Testes PostgreSQL validam acesso permitido, isolamento de listas, tentativas IDOR por UUID conhecido,
+foto estrangeira, preview/download/handoff/histórico estrangeiros, documento sem Operation,
+MaintenanceExecution estrangeira e revogação por Assignment cancelado/rejeitado.
+
 ## DC-05 — controles do Recibo / Garantia
 
 - RECEIPT permite OWNER/MANAGER; QUOTE permanece OWNER-only e demais papéis não recebem o tipo.

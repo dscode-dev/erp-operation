@@ -1127,3 +1127,10 @@ Status: concluído.
 - Wizard inclui valor por extenso editável, validade, formas de pagamento e assinaturas oficiais.
 - A etapa de assinaturas mostra a imagem autenticada do responsável técnico e, ao editar, a assinatura do cliente já coletada com nome, data/hora e coletor; uma nova captura substitui somente o snapshot desse orçamento.
 - Detalhe oferece Preview, emissão/reemissão, download e estado Sem PDF/PDF disponível/STALE pelo DocumentViewer.
+
+## ORBIT_OPERATION_AUDIT_V1 — auditoria operacional (2026-07-18)
+
+- A Platform e o Operator foram auditados sem alteração funcional; relatório completo em `docs/release/ORBIT_OPERATION_AUDIT_V1.md`.
+- Veredito global: `ORBIT_OPERATION_AUDIT_V1_NOT_READY`.
+- Gaps frontend prioritários: submissão Operator composta por chamadas não atômicas, caminho BUDGET baseado em Operation, filtros de Documentos derivados apenas da página atual, selects limitados a 100 registros e tela de sincronização legada sem flush real.
+- Lint e build passaram; a certificação fica bloqueada pelos desvios de domínio, autorização, histórico e produção descritos no relatório.

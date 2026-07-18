@@ -1,5 +1,38 @@
 # API Contracts
 
+## ORBIT_SECURITY_FIX01 — política transversal de ownership
+
+Não houve mudança de URL, request ou shape de sucesso. Para usuário `OPERATOR`, todos os contratos
+operacionais abaixo são condicionados ao `Assignment` vigente do próprio usuário:
+
+- `/operations`, `/operations/stats`, `/operations/:id` e `/operations/photos/:photoId`;
+- `/maintenance-plans/:id/executions`, `/maintenance-executions/:id` e consultas upcoming/stats;
+- `/documents`, preview por Operation/documento, download, Handoff, assinatura e histórico;
+- `/asset-lifecycle`, detalhe, timeline/métricas por equipamento e anexos;
+- `/operations/:id/materials`, movimentações de estoque relacionadas e exports de operações/documentos.
+
+Listagens retornam somente registros autorizados e mantêm paginação sobre o conjunto filtrado no
+banco. Acesso direto a recurso existente sem Assignment válido retorna:
+
+```http
+HTTP/1.1 403 Forbidden
+```
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "FORBIDDEN",
+    "message": "Operator does not have an active Assignment for this resource",
+    "details": {}
+  }
+}
+```
+
+Estados aceitos: `ASSIGNED`, `ACCEPTED`, `STARTED`, `PAUSED`, `COMPLETED`. Assignments
+`REJECTED`/`CANCELED`, documentos sem vínculo com Operation e IDs pertencentes a outro operador são
+negados com `403`. OWNER/MANAGER/VIEWER mantêm o RBAC previamente documentado.
+
 ## DC-05 — Recibo / Garantia
 
 `POST /api/v1/operations` e `PATCH /api/v1/operations/:id` aceitam os campos aditivos:

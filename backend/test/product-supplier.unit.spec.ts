@@ -20,7 +20,7 @@ function serviceWithTx(tx: Record<string, unknown>): InventoryService {
   const prisma = {
     $transaction: jest.fn((callback: (client: typeof tx) => unknown) => callback(tx)),
   };
-  return new InventoryService(prisma as never, {} as never);
+  return new InventoryService(prisma as never, {} as never, {} as never);
 }
 
 function createTx(supplier: { id: string; isActive: boolean } | null = { id: supplierId, isActive: true }): {

@@ -212,15 +212,21 @@ export class NotificationsService {
         id: true,
         status: true,
         failureReason: true,
-        operation: { select: { id: true, number: true, operatorId: true } },
+        operation: {
+          select: {
+            id: true,
+            number: true,
+            assignment: { select: { assignedTo: true } },
+          },
+        },
         pmocPlan: { select: { id: true, number: true, organizationId: true } },
       },
     });
     if (!request) return;
     const managers = await this.managementRecipientsTx(tx);
     const recipients = new Set(managers);
-    if (type === NotificationType.PMOC_OS_GENERATED && request.operation?.operatorId) {
-      recipients.add(request.operation.operatorId);
+    if (type === NotificationType.PMOC_OS_GENERATED && request.operation?.assignment?.assignedTo) {
+      recipients.add(request.operation.assignment.assignedTo);
     }
     const pmocNumber = `PMOC-${String(request.pmocPlan.number).padStart(6, '0')}`;
     const generated = type === NotificationType.PMOC_OS_GENERATED;
@@ -259,9 +265,9 @@ export class NotificationsService {
     const assignments = await this.prisma.assignment.findMany({
       where: {
         status: { in: [AssignmentStatus.ASSIGNED, AssignmentStatus.ACCEPTED, AssignmentStatus.STARTED] },
+        ...(actor.role === Role.OPERATOR ? { assignedTo: actor.id } : {}),
         operation: {
           scheduledFor: { lt: now },
-          ...(actor.role === Role.OPERATOR ? { operatorId: actor.id } : {}),
         },
       },
       select: {
