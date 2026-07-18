@@ -1,5 +1,11 @@
 # ROUTES — Frontend
 
+## `/reports` — Recibo / Garantia
+
+OWNER/MANAGER iniciam o Recibo manualmente ou por OS concluída no drawer oficial. Nenhuma rota ou
+tela paralela foi criada.
+
+
 ## PMOC — coleta e revisão
 
 - `/pmoc`: novo PMOC pode preparar fotos e assinatura; havendo coleta, a primeira OS é criada pelo
@@ -166,7 +172,7 @@ Menu lateral:
 - Operação: `/operacoes`, `/servicos`, `/ordens`, `/documentos`;
 - Cadastros: `/clientes`, `/equipamentos`, `/produtos`;
 - Gestão: `/reports`, `/financial`, `/usuarios`;
-- Sistema: `/settings`, `/profile`, `/demo-ready`.
+- Sistema: `/settings`, `/profile`.
 
 Novos fluxos:
 
@@ -254,7 +260,7 @@ Dois apps no mesmo runtime Next, separados por pathname (`app/app-providers.tsx`
 ## Platform (gestão · desktop-first)
 
 `/login`, `/trocar-senha` (escopo platform) + shell autenticado em `app/(platform)/…`:
-`/`, `/agenda`, `/operacoes` (**Backlog #004** — domínio operacional real, lista `/operations` + drawer), `/servicos`, `/ordens`, `/clientes` (+`/[id]`), `/equipamentos` (+`/[id]`), `/produtos`, `/budgets`, `/financial`, `/purchase-orders`, `/usuarios`, `/profile`, `/settings`, `/reports` (+`/visita`), `/documentos` (central documental real via Document Engine), `/demo-ready` (modo apresentação, fora do menu). Sprint 4: Ordens e Produtos passam a consumir o Demo Dataset (`demo.orders.v1`/`demo.products.v1`).
+`/`, `/agenda`, `/operacoes`, `/servicos`, `/ordens`, `/clientes` (+`/[id]`), `/equipamentos` (+`/[id]`), `/produtos`, `/budgets`, `/financial`, `/purchase-orders`, `/usuarios`, `/profile`, `/settings`, `/reports` (+`/visita`) e `/documentos`. Todas consomem domínios reais; `/servicos` e `/ordens` são redirects legados para operações.
 
 ### Budget / Comercial
 
@@ -279,7 +285,7 @@ Rotas operacionais legadas:
 - `/ordens` → redireciona para `/operacoes`;
 - `/ordens/[id]` → redireciona para `/ordens`;
 - `/produtos/[id]` → redireciona para `/produtos`;
-- `/demo-ready` → redireciona para `/`.
+- a antiga `/demo-ready` foi removida; não existe modo de apresentação baseado em dataset.
 
 Motivo: evitar dead UI, Demo Dataset e placeholders. A fonte operacional V1 é `Operation` + `Assignment` + `Document Engine`.
 
@@ -578,3 +584,7 @@ modo novo cria uma Operation DRAFT oficial e segue Preview → Render → Downlo
 - `/pmoc?tab` não cria rotas adicionais: as tabs locais **Visão geral** e **Agenda dos PMOCs** compartilham o mesmo estado oficial.
 - `/pmoc`: Visão geral mostra indicadores, status dos planos e criação; Agenda mostra calendário, busca, filtros e listas temporais.
 - `/pmoc/:id`: informações, edição, ajustes operacionais, documentos, execuções, timeline e finalização por OWNER.
+## DC-06
+
+- /budgets: central comercial, wizard manual/OS concluída, edição pré-emissão e documento oficial.
+- Nenhuma rota adicional: a aba Orçamentos da Operation abre o mesmo BudgetWizardDrawer com a OS preselecionada.

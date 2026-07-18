@@ -1,8 +1,9 @@
 import { Role } from '@prisma/client';
 import { ERROR_CODES } from '../../src/shared/constants/error-codes.constants';
-import { createOrganization, createProductWithInventory, prisma } from '../integration/helpers';
+import { createOperation, createOrganization, createProductWithInventory, prisma } from '../integration/helpers';
 import {
   authGet,
+  authPost,
   closeSecurityApp,
   createSecurityActor,
   createSecurityApp,
@@ -91,6 +92,34 @@ describe('AppSec RBAC and commercial confidentiality', () => {
     await expectAllowed(manager, '/api/v1/purchase-orders');
     await expectForbidden(operator, '/api/v1/purchase-orders');
     await expectForbidden(viewer, '/api/v1/purchase-orders');
+  });
+
+  it('rejects a Budget origin that is not a completed Work Order', async () => {
+    await createOrganization();
+    const operation = await createOperation(owner.user);
+    const response = await authPost(owner, '/api/v1/budgets').send({
+      operationId: operation.id,
+      customerId: operation.customerId,
+      customerAddressId: operation.addressId,
+      equipmentId: operation.equipmentId,
+      title: 'Orçamento indevido para OS aberta',
+      introduction: 'Proposta comercial.',
+      validityDays: 30,
+      paymentMethods: ['PIX'],
+      status: 'DRAFT',
+      items: [
+        {
+          type: 'SERVICE',
+          description: 'Serviço técnico',
+          quantity: 1,
+          unit: 'SERV',
+          unitPrice: 100,
+        },
+      ],
+    });
+
+    expect(response.status).toBe(409);
+    expect(errorCode(response)).toBe(ERROR_CODES.BUDGET_OPERATION_NOT_COMPLETED);
   });
 });
 

@@ -119,7 +119,9 @@ export class DocumentBuilderService {
       ),
       footer: {
         content: this.clean(
-          type === DocumentTemplateType.PMOC
+          type === DocumentTemplateType.RECEIPT
+            ? ''
+            : type === DocumentTemplateType.PMOC
             ? `${organization.tradeName || organization.legalName} · ${organization.phone} · ${organization.email} · ${document.number} · Versão documental 1 · Emissão ${this.date(generatedAt)}`
             : context.template?.footerContent ||
                 `${organization.tradeName || organization.legalName} · ${document.number}`,
@@ -199,7 +201,7 @@ export class DocumentBuilderService {
     return {
       version: '1.0',
       metadata: {
-        operationId: budget.operationId ?? budget.id,
+        operationId: budget.operationId,
         budgetId: budget.id,
         documentId: budget.document?.id ?? null,
         documentType: DocumentTemplateType.BUDGET,
@@ -258,7 +260,9 @@ export class DocumentBuilderService {
     documentNumber: string,
   ): DocumentSection[] {
     const sections =
-      context.configuration.type === DocumentTemplateType.WORK_ORDER
+      context.configuration.type === DocumentTemplateType.RECEIPT
+        ? this.receiptSections(context, generatedAt, documentNumber)
+        : context.configuration.type === DocumentTemplateType.WORK_ORDER
         ? this.workOrderSections(context, generatedAt, documentNumber)
         : context.configuration.type === DocumentTemplateType.TECHNICAL_REPORT
           ? this.visitReportSections(context, generatedAt, documentNumber)
@@ -281,7 +285,6 @@ export class DocumentBuilderService {
       case DocumentTemplateType.PMOC:
         break;
       case DocumentTemplateType.RECEIPT:
-        sections.push(...this.receiptSections(context));
         break;
       case DocumentTemplateType.QUOTE:
         sections.push(...this.operationQuoteSections(context));
@@ -291,7 +294,9 @@ export class DocumentBuilderService {
         break;
     }
 
-    sections.push(...this.evidenceAndRelatedSections(context));
+    if (context.configuration.type !== DocumentTemplateType.RECEIPT) {
+      sections.push(...this.evidenceAndRelatedSections(context));
+    }
 
     const signature = this.signatureComponent(
       context,
@@ -302,7 +307,10 @@ export class DocumentBuilderService {
     if (signature) {
       sections.push({
         id: 'signature',
-        title: 'Assinatura',
+        title:
+          context.configuration.type === DocumentTemplateType.RECEIPT
+            ? 'Responsável técnico'
+            : 'Assinatura',
         critical: true,
         components: [signature],
       });
@@ -958,38 +966,71 @@ export class DocumentBuilderService {
     }));
   }
 
-  private receiptSections(context: DocumentContext): DocumentSection[] {
+  private receiptSections(
+    context: DocumentContext,
+    generatedAt: string,
+    documentNumber: string,
+  ): DocumentSection[] {
     const { operation } = context;
+    const address = operation.address ?? operation.customer.addresses[0] ?? null;
+    const warranty = operation.receiptWarrantyDays
+      ? `${operation.receiptWarrantyDays} ${operation.receiptWarrantyDays === 1 ? 'dia' : 'dias'}`
+      : 'Sem garantia';
+    const amount = operation.receiptAmount
+      ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
+          Number(operation.receiptAmount),
+        )
+      : 'R$ 0,00';
+    const declaration =
+      operation.receiptDeclaration ??
+      [
+        `Recebemos de ${operation.customer.tradeName ?? operation.customer.name} a importância de ${amount} (${operation.receiptAmountInWords ?? 'valor não informado'}), referente ao serviço de ${operation.receiptService ?? 'serviço prestado'}, descrito como ${operation.receiptDescription ?? 'sem descrição complementar'}.`,
+        operation.receiptWarrantyDays
+          ? `Damos por este recibo a devida quitação e garantia de ${warranty}, contados a partir da data deste documento.`
+          : 'Damos por este recibo a devida quitação.',
+      ].join('\n\n');
     return [
       {
-        id: 'receipt-confirmation',
-        title: 'Confirmação de atendimento',
+        id: 'receipt-identification',
+        title: 'Identificação do recibo',
         critical: true,
         components: [
-          this.metadata('receipt-confirmation-metadata', [
+          this.metadata('receipt-identification-metadata', [
+            ['Número', operation.receiptNumber ?? documentNumber],
+            ['Data', this.date(operation.receiptIssuedAt ?? generatedAt)],
             ['Cliente', operation.customer.tradeName ?? operation.customer.name],
-            ['Operação', String(operation.number).padStart(6, '0')],
-            ['Operador', operation.operator.name],
-            ['Concluído em', this.date(operation.completedAt)],
-            ['Assinado em', this.date(operation.signedAt)],
-            ['Status', operation.status],
+            ['Endereço', address ? this.address(address) : '—'],
+            ['Valor', amount],
+            ['Valor por extenso', operation.receiptAmountInWords ?? '—'],
+            ['Operação relacionada', `OP-${String(operation.number).padStart(6, '0')}`],
           ]),
         ],
       },
       {
-        id: 'receipt-reference',
-        title: 'Referência e recebimento',
+        id: 'receipt-declaration',
+        title: 'Declaração',
         critical: true,
         components: [
-          this.metadata('receipt-reference-metadata', [
-            ['Referência', operation.reportedIssue ?? '—'],
-            ['Detalhes do recebimento', operation.serviceDescription ?? '—'],
+          {
+            id: 'receipt-declaration-text',
+            kind: 'paragraph',
+            text: this.clean(declaration),
+            keepTogether: true,
+          },
+        ],
+      },
+      {
+        id: 'receipt-warranty',
+        title: 'Garantia',
+        critical: true,
+        components: [
+          this.metadata('receipt-warranty-metadata', [
+            ['Prazo', warranty],
+            ['Início da contagem', this.date(operation.receiptIssuedAt ?? generatedAt)],
           ]),
         ],
       },
-      this.materialsSection(operation),
-      this.observationSection(operation, 'Observações do recibo'),
-    ].filter((section): section is DocumentSection => Boolean(section));
+    ];
   }
 
   private operationQuoteSections(context: DocumentContext): DocumentSection[] {
@@ -1405,7 +1446,7 @@ export class DocumentBuilderService {
       BUDGET: 'Finalidade do documento',
       QUOTE: 'Origem do orçamento operacional',
       WORK_ORDER: 'Ordem de serviço',
-      RECEIPT: 'Recibo de atendimento',
+      RECEIPT: 'Recibo / Garantia',
       REPORT: 'Relatório legado',
       TECHNICAL_REPORT: 'Relatório de visita técnica',
       TECHNICAL_OPINION: 'Laudo técnico',
@@ -1556,19 +1597,47 @@ export class DocumentBuilderService {
     const { budget, template } = context;
     const address = budget.customerAddress ?? budget.customer.addresses[0] ?? null;
     const primaryContact = budget.customer.contacts[0] ?? null;
+    const services = budget.items.filter((item) => item.type === 'SERVICE');
+    const materials = budget.items.filter((item) => item.type === 'MATERIAL');
+    const paymentLabels: Record<string, string> = {
+      CASH: 'Espécie',
+      PIX: 'PIX',
+      CREDIT_CARD: 'Cartão de crédito',
+    };
+    const itemTable = (
+      id: string,
+      items: typeof budget.items,
+    ): Extract<DocumentBlueprintComponent, { kind: 'table' }> => ({
+      id,
+      kind: 'table',
+      columns: [
+        { key: 'item', label: 'Descrição', width: 0.48 },
+        { key: 'quantity', label: 'Qtd.', width: 0.12 },
+        { key: 'unit', label: 'Un.', width: 0.1 },
+        { key: 'unitPrice', label: 'Valor unit.', width: 0.15 },
+        { key: 'total', label: 'Subtotal', width: 0.15 },
+      ],
+      rows: items.map((item) => ({
+        item: this.clean(item.description || item.product?.name || 'Item'),
+        quantity: this.decimal(item.quantity),
+        unit: this.clean(item.unit),
+        unitPrice: this.money(item.unitPrice),
+        total: this.money(item.total),
+      })),
+    });
     const sections: DocumentSection[] = [
       {
-        id: 'budget-summary',
-        title: 'Resumo do orçamento',
+        id: 'budget-identification',
+        title: 'Identificação do orçamento',
         critical: true,
         components: [
           this.metadata('budget-metadata', [
             ['Número', `ORC-${String(budget.number).padStart(6, '0')}`],
             ['Título', budget.title],
             ['Status', budget.status],
-            ['Validade', this.date(budget.expirationDate)],
+            ['Data', this.dateOnly(budget.issuedAt)],
+            ['Válido até', this.dateOnly(budget.expirationDate)],
             ['Responsável', budget.creator.name],
-            ['Criado em', this.date(budget.createdAt)],
           ]),
         ],
       },
@@ -1627,71 +1696,78 @@ export class DocumentBuilderService {
     }
 
     sections.push({
-      id: 'budget-items',
-      title: 'Itens do orçamento',
-      critical: true,
-      components: [
-        {
-          id: 'budget-items-table',
-          kind: 'table',
-          columns: [
-            { key: 'item', label: 'Item', width: 0.34 },
-            { key: 'quantity', label: 'Qtd.', width: 0.12 },
-            { key: 'unit', label: 'Un.', width: 0.1 },
-            { key: 'unitPrice', label: 'Valor un.', width: 0.18 },
-            { key: 'margin', label: 'Margem', width: 0.12 },
-            { key: 'total', label: 'Total', width: 0.14 },
-          ],
-          rows: budget.items.map((item) => ({
-            item: this.clean(item.description || item.product.name),
-            quantity: this.decimal(item.quantity),
-            unit: this.clean(item.unit),
-            unitPrice: this.money(item.snapshotSalePrice),
-            margin: `${this.decimal(item.snapshotMargin)}%`,
-            total: this.money(item.total),
-          })),
-        },
-      ],
+      id: 'budget-introduction',
+      title: 'Apresentação',
+      components: [{ id: 'budget-introduction-text', kind: 'paragraph', text: this.clean(budget.introduction) }],
     });
+
+    if (services.length) {
+      sections.push({
+        id: 'budget-services',
+        title: 'Serviços',
+        critical: true,
+        components: [itemTable('budget-services-table', services)],
+      });
+    }
+    if (materials.length) {
+      sections.push({
+        id: 'budget-materials',
+        title: 'Materiais',
+        critical: true,
+        components: [itemTable('budget-materials-table', materials)],
+      });
+    }
 
     sections.push({
       id: 'budget-totals',
-      title: 'Totais',
+      title: 'Valores',
       critical: true,
       components: [
         this.metadata('budget-totals-metadata', [
-          ['Subtotal', this.money(budget.subtotal)],
+          ['Subtotal dos serviços', this.money(budget.serviceSubtotal)],
+          ['Subtotal dos materiais', this.money(budget.materialSubtotal)],
           ['Desconto', this.money(budget.discount)],
           ['Adicional', this.money(budget.additional)],
-          ['Total', this.money(budget.total)],
+          ['Valor total', this.money(budget.total)],
+          ['Valor por extenso', budget.amountInWords],
         ]),
       ],
     });
 
-    if (budget.description || budget.observations || template?.observations) {
-      sections.push({
-        id: 'budget-observations',
-        title: 'Observações',
-        components: [
-          {
-            id: 'budget-observations-content',
-            kind: 'observation',
-            text: this.clean(
-              [budget.description, budget.observations, template?.observations]
-                .filter(Boolean)
-                .join('\n'),
-            ),
-            keepTogether: true,
-          },
-        ],
-      });
-    }
+    sections.push({
+      id: 'budget-commercial-conditions',
+      title: 'Condições comerciais',
+      components: [
+        this.metadata('budget-commercial-metadata', [
+          ['Validade da proposta', `${budget.validityDays} dias`],
+          [
+            'Formas de pagamento',
+            budget.paymentMethods.length
+              ? budget.paymentMethods.map((method) => paymentLabels[method] ?? method).join(', ')
+              : 'A combinar',
+          ],
+        ]),
+        ...([budget.description, budget.commercialNotes, budget.observations, template?.observations]
+          .filter(Boolean).length
+          ? [{
+              id: 'budget-commercial-observations',
+              kind: 'observation' as const,
+              text: this.clean(
+                [budget.description, budget.commercialNotes, budget.observations, template?.observations]
+                  .filter(Boolean)
+                  .join('\n\n'),
+              ),
+              keepTogether: true,
+            }]
+          : []),
+      ],
+    });
 
     const signature = this.signatureComponent(context);
     if (signature) {
       sections.push({
         id: 'signature',
-        title: 'Assinatura',
+        title: 'Assinaturas',
         critical: true,
         components: [signature],
       });
@@ -2040,7 +2116,7 @@ export class DocumentBuilderService {
       BUDGET: 'Orçamento',
       QUOTE: 'Orçamento',
       WORK_ORDER: 'Ordem de Serviço',
-      RECEIPT: 'Recibo',
+      RECEIPT: 'RECIBO / GARANTIA',
       REPORT: 'Relatório legado',
       TECHNICAL_REPORT: 'Relatório de Visita Técnica',
       TECHNICAL_OPINION: 'Laudo Técnico',

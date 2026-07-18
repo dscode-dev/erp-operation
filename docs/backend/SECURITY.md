@@ -1,5 +1,14 @@
 # Security
 
+## DC-05 — controles do Recibo / Garantia
+
+- RECEIPT permite OWNER/MANAGER; QUOTE permanece OWNER-only e demais papéis não recebem o tipo.
+- Valor, data, número, prazo e textos possuem whitelist/limites DTO; PostgreSQL impede valor negativo
+  e prazo fora de 1–3650 dias.
+- A assinatura técnica ativa é snapshotada pelo Handoff. Assinatura do cliente não é aceita/exigida.
+- Preview/download seguem autenticados e não expõem path, `storageKey`, Base64 ou token.
+
+
 ## PMOC — segurança da coleta consolidada (2026-07-18)
 
 - Evidências continuam sob validação binária/MIME/tamanho e autorização da Operation; o plano PMOC
@@ -314,8 +323,7 @@ da instalação, não um tenant compartilhado.
 
 Sprint 3 adiciona gestão de equipe, permissões granulares, senha temporária obrigatória e avatares.
 
-Sprint 3.5 adiciona somente infraestrutura opcional de desenvolvimento e demonstração, sem novas
-entidades ou regras operacionais.
+Datasets demonstrativos e endpoints internos de reset foram removidos da distribuição de produção.
 
 ## Official roles V1
 
@@ -815,6 +823,9 @@ Configurar:
 
 ```text
 OWNER_EMAIL=owner@example.com
+OWNER_USERNAME=owner
+OWNER_NAME=Proprietário da instalação
+OWNER_PASSWORD=<senha forte com no mínimo 12 caracteres>
 ```
 
 Após subir a stack:
@@ -825,15 +836,18 @@ docker compose exec api npm run prisma:seed
 
 O seed:
 
-- cria o OWNER `ninja` quando ausente;
-- imprime a senha aleatória somente na primeira criação do OWNER;
-- cria uma organização padrão quando ausente;
-- cria settings padrão;
-- garante templates vazios padrão para todos os tipos oficiais.
+- só pode criar o primeiro usuário de um banco ainda sem usuários;
+- cria exclusivamente o OWNER informado no ambiente;
 - garante preferências e permissões completas para o OWNER;
-- marca templates padrão como `isSystem=true`.
+- armazena somente o hash Argon2id da senha;
+- rejeita placeholders comuns de senha presentes em arquivos de exemplo;
+- obriga a troca da senha no primeiro acesso;
+- nunca imprime senha, hash ou segredo no log;
+- não cria organização, templates ou qualquer dado operacional.
 
-Reexecutar o seed não redefine senha e não reexibe credenciais.
+Reexecutar o seed para o mesmo OWNER é idempotente e não redefine credenciais. Se o banco já possuir
+usuários e as credenciais configuradas não identificarem o OWNER existente, o bootstrap falha em vez
+de criar outro usuário privilegiado.
 
 ## Existing platform controls
 
@@ -849,39 +863,11 @@ Permanecem ativos:
 - migrations antes do startup;
 - shutdown gracioso.
 
-## Demo environment isolation
+## Production-only data policy
 
-Flags:
-
-- `ENABLE_DEMO_DATA`;
-- `ENABLE_DEMO_ENDPOINTS`.
-
-Ambas assumem `false` quando ausentes. Em `NODE_ENV=production`, qualquer uma com valor `true`
-interrompe o startup por configuração insegura.
-
-O seed demo:
-
-- não roda quando `ENABLE_DEMO_DATA=false`;
-- falha explicitamente quando executado com demo habilitado em produção;
-- cria somente usuários ausentes;
-- nunca troca senha, papel ou perfil de usuário real existente;
-- usa marker e manifesto para reconhecer registros que ele próprio criou;
-- usa somente chaves reservadas `demo.*` em `SystemSetting`;
-- não altera chaves reais;
-- só converte a organização quando ela corresponde exatamente ao placeholder bootstrap conhecido;
-- preserva qualquer organização personalizada.
-
-Endpoints internos:
-
-- exigem ambiente `development`;
-- exigem os dois flags habilitados;
-- exigem JWT válido e papel `OWNER`;
-- retornam 404 quando desabilitados;
-- não expõem o manifesto interno;
-- reset remove somente usuários registrados no manifesto e ainda marcados como demo.
-
-Senhas demo são geradas com `randomBytes(24)`, armazenadas somente como Argon2id e exibidas apenas no
-log da execução que cria a conta. O endpoint HTTP de reset nunca retorna senhas.
+Não existem flags de demo, endpoints `/internal/demo`, reset remoto, snapshots `demo.*` nem seed de
+dados operacionais. Fixtures de testes de integração e performance permanecem confinadas aos seus
+harnesses, exigem banco identificado como teste e não são executadas pelo runtime ou bootstrap.
 
 ## Dependency security
 
@@ -1779,11 +1765,10 @@ Risco residual movido para Production Readiness:
 Hardening applied:
 
 - `NODE_ENV` is mandatory.
-- In `NODE_ENV=production`, demo data and demo endpoints remain forbidden.
+- Demo data, demo endpoints and the frontend demo bridge are absent from the production code path.
 - In `NODE_ENV=production`, placeholder/example JWT secrets are rejected.
 - In `NODE_ENV=production`, placeholder/example/local database URLs are rejected.
 - Wildcard CORS remains rejected.
-- Frontend demo bridge is opt-in (`NEXT_PUBLIC_ENABLE_DEMO=false` by default).
 - A representative reverse proxy topology was added in `docker-compose.rc.yml` and
   `deploy/nginx/orbit.conf`.
 
@@ -2037,3 +2022,12 @@ The catalog is scoped to the installation Organization in every query. Reads req
 - A tomada de execução PMOC valida status, plano ativo, UUID e operador planejado, impedindo apropriação de atividade reservada a terceiro.
 - `requestedDocumentType` é validado pelo enum oficial; a matriz de tipos permitidos no handoff permanece aplicada.
 - Lifecycle de conclusão só é publicado na primeira transição efetiva para `COMPLETED`, evitando histórico falso ou duplicado.
+## DC-06 — controles do Orçamento
+
+- `operationId`, quando informado, precisa referenciar uma Ordem de Serviço `COMPLETED`; a restrição é validada no backend e não depende do filtro do Wizard.
+
+- Somente OWNER/MANAGER criam, editam, assinam, visualizam, renderizam e baixam orçamentos.
+- DTOs validam UUIDs, valores monetários não negativos, quantidades positivas, limites textuais, datas, enums e ao menos um item/forma de pagamento.
+- Totais não são aceitos como autoridade do request: o backend recalcula e o documento usa os valores persistidos, sem consultar Pricing durante renderização.
+- Assinaturas reutilizam validação MIME/binária, limite e Storage UUID do handoff oficial.
+- PDF e imagens passam por endpoints autenticados; contratos não expõem storageKey, paths, tokens ou Base64 documental.

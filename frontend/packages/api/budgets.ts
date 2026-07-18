@@ -88,6 +88,10 @@ export function renderBudget(id: string): Promise<BudgetRenderResult> {
   return api.post<BudgetRenderResult>(`/budgets/${id}/render`, {});
 }
 
+export function previewBudget(id: string, opts?: { signal?: AbortSignal }): Promise<DocumentBlueprint> {
+  return api.get<DocumentBlueprint>(`/budgets/${id}/preview`, opts);
+}
+
 export function downloadBudget(id: string, opts?: { signal?: AbortSignal }): Promise<DocumentDownloadResult> {
   return api.blob(`/budgets/${id}/download`, opts);
 }

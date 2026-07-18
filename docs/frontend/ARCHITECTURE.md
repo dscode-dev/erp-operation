@@ -1,5 +1,12 @@
 # ARCHITECTURE — Frontend
 
+## DC-05 — arquitetura do Recibo
+
+O frontend coleta snapshots e orquestra APIs oficiais. `currency-words.ts` converte o valor para
+texto pt-BR como conveniência editável, sem calcular preço. Blueprint, assinatura e PDF permanecem
+exclusivamente no backend Document Engine.
+
+
 ## PMOC — ownership dos artefatos de campo
 
 - `PmocPlan` mantém configuração e responsável técnico; `Operation` mantém fotos; o Handoff do
@@ -562,8 +569,8 @@ Platform exibe o QR (matriz visual determinística + código real) com copiar/ba
 - **Branding**: `@erp/ui/brand` (BrandLogo) + `public/brand/*` + `app/icon.png`/`apple-icon.png`. Tema azul/branco definitivo; cores dinâmicas do OWNER preservadas.
 - **Central documental** antiga (`/reports`) e **Serviços/histórico** (`/servicos`) consumiam `demo.documents.v1`/`demo.services.v1` via `@erp/api/operations`; a Sprint 6 substituiu documentos oficiais pelo Document Engine.
 - **Timeline** (`@erp/ui/timeline`) reutilizada em Serviço/Cliente/Equipamento.
-- **Docker**: `frontend/Dockerfile` (Next `output: standalone`) + serviço `frontend` no compose (serve Platform e Operator; subdomínios via proxy em produção). Vars: `FRONTEND_PORT`, `NEXT_PUBLIC_API_BASE_URL`, `NEXT_PUBLIC_ENABLE_DEMO`.
-- **Demo guiado** (`/demo-ready`): roteiro comercial de ponta a ponta.
+- **Docker**: `frontend/Dockerfile` (Next `output: standalone`) + serviço `frontend` no compose (serve Platform e Operator; subdomínios via proxy em produção). Vars: `FRONTEND_PORT`, `NEXT_PUBLIC_API_BASE_URL`.
+- Não existe bridge, rota ou flag de dataset demonstrativo no runtime.
 
 ## Subdomínios / deploy futuro
 
@@ -1094,3 +1101,15 @@ O frontend apenas apresenta `workflowStatus`; a origem e a transição são deci
 ```
 
 O calendário e as listas usam as mesmas Execution Requests retornadas pelo backend. Os filtros não recalculam recorrência nem status. Finalização chama a desativação oficial e não remove histórico.
+## DC-06 — fluxo comercial documental
+
+```text
+BudgetWizardDrawer
+  → Budget API (itens comerciais independentes)
+  → OperationDocument(BUDGET)
+  → Handoff oficial de assinaturas
+  → DocumentContext → DocumentBuilder → Blueprint
+  → DocumentViewer → Render → PdfEngine → Download autenticado
+```
+
+A seleção opcional da OS apenas preenche campos editáveis. Product, Pricing e Inventory não participam da composição DC-06. Preview e PDF consomem o mesmo Blueprint.

@@ -1,5 +1,13 @@
 # COMPONENTS — Frontend
 
+## DC-05 — Wizard de Recibo
+
+- `ReceiptDataStep`: snapshots administrativos e declaração editável.
+- `ReceiptWarrantyStep`: sem garantia, presets e prazo personalizado.
+- `ReceiptSignatureStep`/`ReceiptSignatureOption`: assinatura institucional ativa por documento.
+- `DocumentViewer`: único Preview/Render/Download.
+
+
 ## PMOC — componentes consolidados de coleta
 
 - `PmocPlanWizard`: compartilha evidências e assinaturas entre criação, edição e revisão; dados de
@@ -352,10 +360,9 @@ Inalterado em estrutura; ajustes: Financeiro (métricas + grid de alturas iguais
 | ---------------------------------------------------- | ------------------------------------ | ------------------------------------------- |
 | `useInstallPrompt` / `InstallButton`                 | `@erp/ui/pwa`                        | instalação do PWA (Chromium + fallback iOS) |
 | `QrFoundation` (atualizado)                          | `@platform/components/qr-foundation` | QR + copiar código + baixar PNG             |
-| `operationsApi` (`getOrders`/`getProducts`)          | `@erp/api/operations`                | snapshots demo de OS e Produtos             |
 | `app/manifest.ts` + `public/icons/operator-icon.svg` | `app/`                               | manifest PWA + ícone                        |
 
-Telas demo: `/documentos` (DocumentViewer + RBAC), `/demo-ready` (apresentação), Ordens/Produtos (Demo Dataset), QR do operador (`/operator/qr`).
+`/documentos` usa DocumentViewer + RBAC e `/operator/qr` consulta equipamentos reais.
 
 ## Sprint 5 — novos
 
@@ -363,23 +370,14 @@ Telas demo: `/documentos` (DocumentViewer + RBAC), `/demo-ready` (apresentação
 | ---------------------------- | --------------------- | ---------------------------------------- |
 | `BrandLogo`                  | `@erp/ui/brand`       | logo do cliente (login/sidebar/operator) |
 | `Timeline` / `TimelineEvent` | `@erp/ui/timeline`    | histórico (Serviço/Cliente/Equipamento)  |
-| `operationsApi.getServices`  | `@erp/api/operations` | snapshot `demo.services.v1`              |
 
-Telas: `/reports` (central documental), `/servicos` (histórico timeline), `/operator/{equipamentos,documents,sync}`, `/demo-ready` (roteiro guiado). Docker: `frontend/Dockerfile` + serviço `frontend` no compose.
+Telas: `/reports` (central documental), `/servicos` (redirect para operações) e `/operator/{equipamentos,documents,sync}`. Docker: `frontend/Dockerfile` + serviço `frontend` no compose.
 
 ## Regras
 
 - Dados via `@erp/api`; nunca `fetch` direto, nunca mocks. Operator escreve no outbox local até o backend de Serviços existir.
 - Reutilizáveis ficam em `packages/ui`; layouts completos não são compartilhados.
 - RBAC sempre do backend; sessões Platform/Operator isoladas por escopo.
-
-## Backlog #001 — Agenda
-
-| Item                                     | Local                                      | Uso                                                             |
-| ---------------------------------------- | ------------------------------------------ | --------------------------------------------------------------- |
-| `AgendaEventDrawer`                      | `@platform/components/agenda-event-drawer` | detalhe lateral do evento + ações RBAC                          |
-| `financialApi.getScheduleRange(from,to)` | `@erp/api`                                 | schedule por intervalo (navegação do calendário)                |
-| `DemoScheduleItem`                       | `@erp/types`                               | item de agenda enriquecido (equipment/serviceType/endsAt/notes) |
 
 ## Backlog #002 — QR Code
 
@@ -776,3 +774,8 @@ Tipos:
 - `ExecutionList`: agora apresenta o status de negócio enviado pelo backend, além de cliente, equipamentos e data.
 - `PmocPlanWizard(editMode)`: modo adicional do Wizard oficial para atualizar um plano existente; cliente permanece readonly para preservar relacionamentos.
 - `PmocDetailPage`: reúne editar, evidências, assinaturas, pausa/retomada, responsáveis e finalização confirmada.
+## DC-06
+
+- BudgetWizardDrawer: wizard oficial reutilizado em /budgets e OperationDetailDrawer; suporta origem, dados, itens, valores, condições e assinaturas.
+- BudgetItemsEditor: etapa interna do wizard para SERVICE/MATERIAL, com adicionar, remover e reordenar.
+- Reutilizados SignaturePad, CustomerSignaturePreview, TechnicalSignaturePreview e DocumentViewer; nenhum capturador, preview ou gerador PDF paralelo foi criado.

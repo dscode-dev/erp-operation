@@ -48,6 +48,16 @@ export class BudgetsController {
   }
 
   @Roles(Role.OWNER, Role.MANAGER)
+  @Get('budgets/:id/preview')
+  previewDocument(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @CurrentUser() actor: AuthenticatedUser,
+    @Req() request: RequestWithId,
+  ): Promise<unknown> {
+    return this.documents.previewBudget(id, actor, contextFromRequest(request));
+  }
+
+  @Roles(Role.OWNER, Role.MANAGER)
   @Post('budgets/:id/render')
   renderDocument(
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,

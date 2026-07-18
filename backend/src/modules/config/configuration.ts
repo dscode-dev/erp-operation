@@ -26,8 +26,6 @@ export interface EnvironmentVariables {
   RATE_LIMIT_TTL_MS: number;
   RATE_LIMIT_MAX: number;
   LOG_LEVEL: 'debug' | 'info' | 'warn' | 'error';
-  ENABLE_DEMO_DATA: boolean;
-  ENABLE_DEMO_ENDPOINTS: boolean;
 }
 
 const REQUIRED_VARIABLES = [
@@ -82,16 +80,6 @@ function parsePositiveInteger(value: string, key: string, maximum?: number): num
     );
   }
   return parsed;
-}
-
-function parseBoolean(value: string, key: string): boolean {
-  if (value === 'true') {
-    return true;
-  }
-  if (value === 'false') {
-    return false;
-  }
-  throw new Error(`Environment variable ${key} must be true or false`);
 }
 
 function parseCorsOrigins(rawOrigins: string): string[] {
@@ -183,17 +171,6 @@ export function validateEnvironment(config: Record<string, unknown>): Environmen
   if (!['debug', 'info', 'warn', 'error'].includes(logLevel)) {
     throw new Error('LOG_LEVEL must be debug, info, warn, or error');
   }
-  const enableDemoData = parseBoolean(
-    optionalString(config, 'ENABLE_DEMO_DATA', 'false'),
-    'ENABLE_DEMO_DATA',
-  );
-  const enableDemoEndpoints = parseBoolean(
-    optionalString(config, 'ENABLE_DEMO_ENDPOINTS', 'false'),
-    'ENABLE_DEMO_ENDPOINTS',
-  );
-  if (nodeEnv === 'production' && (enableDemoData || enableDemoEndpoints)) {
-    throw new Error('Demo data and demo endpoints must be disabled in production');
-  }
   if (nodeEnv === 'production') {
     assertProductionSecret(jwtSecret, 'JWT_SECRET');
     assertProductionSecret(jwtRefreshSecret, 'JWT_REFRESH_SECRET');
@@ -243,7 +220,5 @@ export function validateEnvironment(config: Record<string, unknown>): Environmen
       'RATE_LIMIT_MAX',
     ),
     LOG_LEVEL: logLevel as EnvironmentVariables['LOG_LEVEL'],
-    ENABLE_DEMO_DATA: enableDemoData,
-    ENABLE_DEMO_ENDPOINTS: enableDemoEndpoints,
   };
 }

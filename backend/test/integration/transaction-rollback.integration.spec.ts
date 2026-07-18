@@ -3,7 +3,6 @@ import { LifecyclePublisher } from '../../src/modules/asset-lifecycle/lifecycle-
 import { BudgetsService } from '../../src/modules/budgets/budgets.service';
 import { InventoryService } from '../../src/modules/inventory/inventory.service';
 import { ProcurementService } from '../../src/modules/procurement/procurement.service';
-import { PricingService } from '../../src/modules/pricing/pricing.service';
 import {
   context,
   createActor,
@@ -100,7 +99,6 @@ describe('cross-domain transaction rollback with real PostgreSQL', () => {
     const fixture = await createBudgetFixture(actor);
     const budgets = new BudgetsService(
       prisma as never,
-      new PricingService(prisma as never),
       new ThrowingLifecyclePublisher(prisma as never),
       { notifyBudgetDecisionTx: jest.fn() } as never,
     );

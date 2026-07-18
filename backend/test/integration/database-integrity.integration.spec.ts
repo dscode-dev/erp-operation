@@ -38,6 +38,8 @@ describe('database integrity constraints with real PostgreSQL', () => {
           customerAddressId: budget.customerAddressId,
           equipmentId: budget.equipmentId,
           title: 'violating budget',
+          introduction: 'Integrity verification',
+          amountInWords: 'um real',
           status: BudgetStatus.APPROVED,
           subtotal: 1,
           total: 1,

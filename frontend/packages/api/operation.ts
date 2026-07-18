@@ -5,8 +5,6 @@
  * document (OS, PMOC, Laudo, Relatório, Orçamento, Recibo). Creating one also
  * generates a Work Order (OS) in DRAFT on the backend.
  *
- * Note: this is the real `operations` domain. The legacy `operationsApi`
- * (operations.ts) only serves commercial demo snapshots and is unrelated.
  */
 import { api } from './client';
 import type {
@@ -84,6 +82,14 @@ export function updateOperation(
       | 'observations'
       | 'reportedIssue'
       | 'serviceDescription'
+      | 'receiptNumber'
+      | 'receiptIssuedAt'
+      | 'receiptAmount'
+      | 'receiptAmountInWords'
+      | 'receiptService'
+      | 'receiptDescription'
+      | 'receiptWarrantyDays'
+      | 'receiptDeclaration'
       | 'technicalDiagnosis'
       | 'technicalRecommendations'
       | 'technicalOpinionObjective'

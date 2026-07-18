@@ -5,4 +5,5 @@
 export { cn } from "./cn";
 export * from "./format";
 export * from "./export";
+export * from "./currency-words";
 export { useDebounce } from "./use-debounce";

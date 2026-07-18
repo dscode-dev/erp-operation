@@ -91,7 +91,7 @@ describe('AppSec rate-limit and forwarded-header trust closure', () => {
       const response = await request(lowLimit.http)
         .post('/api/v1/auth/login')
         .set('X-Forwarded-For', `203.0.113.${index + 1}`)
-        .send({ email: `missing-${index}@orbit.test`, password: 'invalid' });
+        .send({ email: `missing-${index}@orbit.test`, password: 'invalid-password' });
       if (response.status === 429) {
         throttled = response;
         break;

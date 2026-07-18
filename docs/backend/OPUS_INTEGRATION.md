@@ -1,5 +1,12 @@
 # OPUS Frontend Integration
 
+## DC-05 — Recibo / Garantia
+
+Exponha RECEIPT somente para OWNER/MANAGER. O Wizard possui origem manual ou OS `COMPLETED`, dados
+editáveis, garantia, assinatura técnica e Preview. Envie os campos `receipt*` descritos em
+`API_CONTRACTS.md`; não envie fotos nem assinatura do cliente. Use Handoff e DocumentViewer oficiais.
+
+
 ## PMOC — coleta consolidada
 
 - Wizard e Operator exibem fotos persistidas da `Operation` e adicionam novas pelo contrato atual.
@@ -251,8 +258,8 @@ Login payload:
 
 ```json
 {
-  "email": "ricardo@climatize.com",
-  "password": "<password printed by demo seed>"
+  "email": "<OWNER_EMAIL configurado no ambiente>",
+  "password": "<OWNER_PASSWORD configurado no ambiente>"
 }
 ```
 
@@ -267,7 +274,6 @@ Login payload:
 | Organization | organization, settings, templates, branding assets                    |
 | Health       | health                                                                |
 | Customers    | customers CRUD/stats, addresses, contacts and attachments             |
-| Demo bridge  | internal/demo/dataset and internal/demo/reset when explicitly enabled |
 
 Full production contracts remain in `API_CONTRACTS.md`.
 
@@ -283,7 +289,7 @@ Important fields:
 - `permissions`: complementary feature flags;
 - `preferences.theme`: `SYSTEM`, `LIGHT`, `DARK`;
 - `organization.primaryColor` and `secondaryColor`: theme;
-- `organization.segment`: currently `HVAC` in the demo dataset.
+- `organization.segment`: opcional e configurado com os dados reais da instalação.
 
 Optional fields:
 
@@ -315,111 +321,20 @@ type UserPage = {
 Search covers name, email, username, phone and job title. Disabled users remain visible and have
 `isActive=false`.
 
-## Demo integration bridge
+## Production-only bootstrap
 
-Enable only in local development:
-
-```env
-ENABLE_DEMO_DATA=true
-ENABLE_DEMO_ENDPOINTS=true
-```
-
-Authenticated OWNER:
-
-```http
-GET /internal/demo/dataset
-```
-
-Response data shape:
-
-```ts
-type DemoDataset = {
-  'demo.dashboard.v1': {
-    generatedAt: string;
-    counters: {
-      atendimentosHoje: number;
-      ordensPendentes: number;
-      operadoresAtivos: number;
-      servicosEmAndamento: number;
-    };
-  };
-  'demo.schedule.v1': {
-    generatedAt: string;
-    items: Array<{
-      id: string;
-      title: string;
-      customer: string;
-      operator: string;
-      startsAt: string;
-      state: 'OVERDUE' | 'IN_PROGRESS' | 'SCHEDULED' | 'DONE';
-      // Enriched for the production Agenda (optional, backward compatible):
-      equipment?: string;
-      serviceType?: 'PREVENTIVA' | 'CORRETIVA' | 'INSTALACAO' | 'PROJETO';
-      endsAt?: string;
-      notes?: string;
-    }>;
-  };
-  'demo.finance.v1': {
-    generatedAt: string;
-    currency: 'BRL';
-    summary: {
-      entradas: number;
-      saidas: number;
-      despesas: number;
-      projecao30Dias: number;
-    };
-    entries: Array<{
-      id: string;
-      kind: 'ENTRY' | 'EXPENSE';
-      description: string;
-      amount: number;
-    }>;
-  };
-  // Commercial-demo snapshots (no production domain yet):
-  'demo.orders.v1': {
-    generatedAt: string;
-    items: Array<{
-      id: string;
-      number: string;
-      title: string;
-      customer: string;
-      type: 'PREVENTIVA' | 'CORRETIVA' | 'INSTALACAO' | 'PROJETO';
-      operator: string;
-      value: number;
-      scheduledFor: string;
-      status: 'OVERDUE' | 'IN_PROGRESS' | 'SCHEDULED' | 'DONE';
-    }>;
-  };
-  'demo.products.v1': {
-    generatedAt: string;
-    items: Array<{
-      id: string;
-      sku: string;
-      name: string;
-      category: string;
-      unit: string;
-      stock: number;
-      minStock: number;
-      price: number;
-      status: 'ok' | 'low' | 'out';
-    }>;
-  };
-};
-```
-
-Amounts are BRL decimal values, not cents. Dates are ISO 8601. The dataset endpoint returns every
-`demo.*` snapshot dynamically; `demo.orders.v1` and `demo.products.v1` feed the commercial demo
-screens (Ordens de Serviço e Produtos) until their production domains exist.
+Não existe bridge de demonstração. O bootstrap cria somente o primeiro OWNER configurado por
+ambiente; todo usuário posterior deve ser criado pelos endpoints oficiais de equipe. Listagens sem
+registros devem usar o estado vazio normal, sem arrays locais ou fallback de dados.
 
 ## UX states
 
 - Loading: use skeletons, especially for dashboard and lists.
-- Empty team: valid state when demo data is disabled.
+- Empty list: valid production state; never synthesize records.
 - Disabled user: retain in list with status badge.
 - Mandatory password: block normal shell and navigation.
 - 401: attempt one refresh; on failure go to login.
 - 403: show permission state, never silently retry.
-- 404 `DEMO_ENDPOINT_DISABLED`: hide demo controls and keep production behavior.
 - 409 `USER_CONFLICT`: field-level email/username feedback.
 - 409 `USER_LAST_OWNER`: explain protected last OWNER.
 - Upload errors: show 2 MiB avatar or 5 MiB branding limits.
@@ -447,36 +362,11 @@ Frontend notes:
 - use `total === 0` for empty states;
 - Asset Lifecycle may include additional `timelineGroups` next to `items` and `pagination`.
 
-## Mocks that can be removed now
+## Production data rule
 
-- authentication/session mocks;
-- current-user/profile mocks;
-- organization and branding mocks;
-- team list/detail/preferences mocks;
-- avatar mocks;
-- customer list/detail/form mocks: use the production `/customers` API;
-- equipment list/detail/cards/metrics mocks: use production `/equipments`;
-- local dashboard/schedule/finance fixtures when the demo bridge is enabled.
-
-Do not ship calls to `/internal/demo/*` in a production build. Keep the bridge behind frontend
-development configuration.
-
-## Mocks that must return later
-
-When demo endpoints are disabled and before remaining operational modules exist, dashboard,
-schedule and finance have no production API. The frontend should render honest empty/coming-soon
-states rather than treating demo snapshots as permanent contracts.
-
-## Next expected production endpoints
-
-Customer and Equipment domains are now available. Future contracts:
-
-- service/work-order lifecycle;
-- schedule endpoints;
-- dashboard aggregations;
-- finance only under OWNER authorization.
-
-Do not infer final payloads from demo snapshot IDs or states.
+All frontend modules must consume the official domain clients. Authentication, profile,
+organization, team, customers, equipment, operations, documents, finance and procurement have no
+mock or snapshot fallback. Empty API results are valid product states.
 
 ## Customer screens
 
@@ -540,11 +430,6 @@ JPEG. Read `/customers/attachments/:attachmentId`, then build a data URL from MI
 
 `GET /customers/stats` returns `total`, `active`, `inactive`, `people`, `companies`.
 
-### Demo
-
-The demo seed creates Hospital Santa Clara, Condomínio Atlântico Sul, Shopping Recife and Colégio
-Boa Viagem in real Customer tables. Consume `/customers`; no customer demo snapshot remains.
-
 ## Equipment screens
 
 ### List and cards
@@ -588,12 +473,6 @@ Categories: PHOTO, MANUAL, WARRANTY, DOCUMENT. Upload multipart; read base64; OW
 
 Display or generate a visual QR from `qrCode`. Store no QR image. `qrToken` and `qrCode` are stable
 identifiers, not access credentials. Use `GET /equipments/lookup/:qrCode` to resolve scans.
-
-### Demo
-
-Real `/equipments` returns Samsung split, LG VRF condenser/evaporator, Trane chiller and Fronius
-inverter linked to demo customers and addresses. Each includes a metric and manual. Remove the
-equipment demo snapshot/mock.
 
 ## Equipment QR lookup
 
@@ -1770,7 +1649,6 @@ No business endpoint was added or removed.
 For production-like frontend integration, use:
 
 - API base URL: `/api/v1` when served behind the same reverse proxy;
-- demo flag: `NEXT_PUBLIC_ENABLE_DEMO=false`;
 - metrics endpoint: `GET /api/v1/metrics`;
 - health endpoints: `GET /api/v1/health` and `GET /api/v1/health/ready`.
 
@@ -1785,8 +1663,8 @@ The critical workflow runner validates real API flows for auth, users, customers
 inventory, pricing, delegated operations, Assignment workflow, Asset Lifecycle, budgets/document
 rendering, financial entries and procurement receipts.
 
-Opus/frontend should not depend on Demo Dataset being enabled in production. Demo bridge is now
-disabled by default and must be enabled explicitly only in demo/dev environments.
+Opus/frontend must consume only production domain APIs. No demo flag, dataset bridge or example
+fallback exists.
 
 ## Sprint 22.5 — Opus external closure notes
 
@@ -2004,3 +1882,10 @@ Na etapa Evidências do `PmocPlanWizard`, consuma somente `operationApi`: detalh
 - `assignmentOrigin: OPERATOR` + `workflowStatus: DRAFT`: criado no campo e aguardando aprovação.
 - `assignmentOrigin: MANAGEMENT` + `workflowStatus: REVIEW`: delegado pela gestão, executado e devolvido.
 - PMOC iniciado no PWA significa assumir uma Execution Request elegível; não criar plano nem Operation paralela.
+## DC-06 — Orçamento
+
+- Wizard oficial: origem, dados gerais, serviços, materiais, valores, condições e assinaturas.
+- BudgetItem.type: SERVICE | MATERIAL. description, quantity, unit e unitPrice são obrigatórios; productId é opcional e não deve ser exigido.
+- Formas de pagamento: CASH, PIX e CREDIT_CARD, com seleção múltipla.
+- Preview: GET /budgets/:id/preview. Render/download continuam nos endpoints Budget.
+- O OperationDocument criado com o Budget fornece o documentId para handoff e DocumentViewer.

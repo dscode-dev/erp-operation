@@ -1,5 +1,19 @@
 # Backend State
 
+## DC-05 — Recibo / Garantia certificado (2026-07-18)
+
+- `RECEIPT` reutiliza o Document Engine oficial; não houve domínio, renderer, PDF ou Storage paralelo.
+- `Operation` recebeu snapshots aditivos de número/data, valor numérico e por extenso, serviço,
+  descrição, garantia e declaração final editável.
+- Recibo manual não cria OS documental artificial; a origem por OS reutiliza uma Operation concluída.
+- O Blueprint contém identificação, declaração, garantia e somente a assinatura técnica selecionada.
+- OWNER/MANAGER podem emitir; OPERATOR/VIEWER não acessam. Migration:
+  `20260718170000_dc05_receipt_certification`.
+- Runtime certificado em `REC-000057`: PDF válido (15.316 bytes) e Repositório confirmado. Unitários
+  85/85, integração 12/12 e concorrência 24/24. A suíte global de segurança mantém uma falha PMOC
+  preexistente e reproduzível (48/49), documentada no relatório DC-05 como risco fora do escopo.
+
+
 ## PMOC — evidências e identidade da coleta consolidadas (2026-07-18)
 
 - O Handoff oficial agora prioriza `PmocPlan.signatureOverrideId` ao preparar o documento da
@@ -2932,3 +2946,27 @@ Status: implementado e validado em PostgreSQL/Docker.
 - Atendimento delegado por OWNER/MANAGER retorna do campo como `PENDING`, projetado no contrato como `workflowStatus: REVIEW`, até finalização da gestão.
 - Geração PMOC pelo Operator reutiliza uma `PmocExecutionRequest` pendente; solicitações reservadas a outro operador são rejeitadas.
 - A publicação de conclusão de Operation deixou de ocorrer em criações/edições não concluídas; Lifecycle e Maintenance só sincronizam na transição real para `COMPLETED`.
+
+## Production-only bootstrap (2026-07-18)
+
+- Removidos o dataset demo, suas factories/constantes, o módulo `internal-demo`, os endpoints de
+  dataset/reset e as flags `ENABLE_DEMO_DATA`/`ENABLE_DEMO_ENDPOINTS`.
+- O seed principal deixou de criar organização fictícia, templates, catálogos, fornecedores,
+  produtos, estoque, pricing, budgets, financeiro, procurement e quaisquer usuários de exemplo.
+- `npm run prisma:seed` agora executa somente o bootstrap idempotente do primeiro OWNER usando
+  `OWNER_EMAIL`, `OWNER_USERNAME`, `OWNER_NAME` e `OWNER_PASSWORD`.
+- O bootstrap recusa criar um OWNER adicional quando o banco já possui outros usuários, não redefine
+  credenciais em reexecuções e nunca registra senha/hash em logs.
+- O OWNER recebe preferências, permissões integrais e `mustChangePassword=true`; os demais usuários
+  devem ser criados pelo fluxo oficial de gestão de equipe após o primeiro acesso.
+- Nenhuma migration foi necessária: a alteração remove somente código e dados de inicialização.
+## DC-06 — certificação do Orçamento (2026-07-18)
+
+- A origem por OS é aceita somente quando a Operation está `COMPLETED`; chamadas diretas com OS aberta retornam `409 BUDGET_OPERATION_NOT_COMPLETED`.
+
+- Budget persiste emissão, introdução, subtotais de serviços/materiais, valor por extenso, validade, formas de pagamento e observações comerciais.
+- BudgetItem diferencia SERVICE e MATERIAL, aceita item independente de Product, preserva valor unitário e ordenação; snapshots legados continuam compatíveis.
+- Migration aditiva: 20260718190000_dc06_budget_certification, com backfill e sem perda de histórico.
+- Cada Budget recebe OperationDocument próprio; Budget.operationId mantém apenas a origem comercial opcional e não disputa a unicidade documental da OS.
+- Preview, render e download usam o mesmo BudgetContext → DocumentBuilder → Blueprint → LayoutEngine → Renderer → PdfEngine.
+- Assinaturas do cliente e técnica reutilizam o handoff oficial; Budget e frontend não acessam Storage nem geram PDF.

@@ -66,7 +66,11 @@ export class DocumentEngineService {
       ...(query.type ? { type: query.type } : {}),
       ...(query.status ? { status: query.status } : {}),
       ...(query.editorialStatus ? { editorialStatus: query.editorialStatus } : {}),
-      ...(actor.role === Role.OWNER ? {} : { type: { notIn: [...FINANCIAL_DOCUMENT_TYPES] } }),
+      ...(actor.role === Role.OWNER
+        ? {}
+        : actor.role === Role.MANAGER
+          ? { type: { not: DocumentTemplateType.QUOTE } }
+          : { type: { notIn: [...FINANCIAL_DOCUMENT_TYPES] } }),
       ...(query.operatorId ? { operation: { operatorId: query.operatorId } } : {}),
       ...(actor.role === Role.OPERATOR ? { operation: { operatorId: actor.id } } : {}),
       AND: [
@@ -248,14 +252,12 @@ export class DocumentEngineService {
       where: { budgetId },
       create: {
         budgetId,
-        operationId: budget.operationId,
+        operationId: null,
         type: DocumentTemplateType.BUDGET,
         number: `ORC-${String(budget.number).padStart(6, '0')}`,
         status: 'DRAFT',
       },
-      update: {
-        operationId: budget.operationId,
-      },
+      update: {},
     });
     const rendered = (await this.renderDocumentFromRequest(request, document.id, actor, context)) as Record<string, unknown>;
     const preview = await this.builder.buildBudget(budgetId);
@@ -280,6 +282,36 @@ export class DocumentEngineService {
       status: rendered.status,
       document: rendered,
     };
+  }
+
+  async previewBudget(
+    budgetId: string,
+    actor: AuthenticatedUser,
+    context: DocumentAuditContext,
+  ): Promise<unknown> {
+    this.assertTypeAccess(DocumentTemplateType.BUDGET, actor);
+    const budget = await this.budgetOrThrow(budgetId);
+    this.assertBudgetRenderable(budget.status);
+    const document = await this.prisma.operationDocument.upsert({
+      where: { budgetId },
+      create: {
+        budgetId,
+        operationId: null,
+        type: DocumentTemplateType.BUDGET,
+        number: `ORC-${String(budget.number).padStart(6, '0')}`,
+        status: 'DRAFT',
+      },
+      update: {},
+    });
+    const blueprint = this.withSourceFingerprint(await this.builder.buildBudget(budgetId));
+    await this.audit(
+      DOCUMENT_ENGINE_AUDIT_ACTIONS.DOCUMENT_PREVIEWED,
+      DOCUMENT_ENGINE_RESOURCE,
+      actor,
+      context,
+      { budgetId, documentId: document.id, documentType: DocumentTemplateType.BUDGET },
+    );
+    return blueprint;
   }
 
   async renderDocument(
@@ -497,10 +529,15 @@ export class DocumentEngineService {
   }
 
   private assertTypeAccess(type: DocumentTemplateType, actor: AuthenticatedUser): void {
-    if (FINANCIAL_DOCUMENT_TYPES.includes(type as never) && actor.role !== Role.OWNER) {
+    const forbidden =
+      (type === DocumentTemplateType.QUOTE && actor.role !== Role.OWNER) ||
+      (type === DocumentTemplateType.RECEIPT &&
+        actor.role !== Role.OWNER &&
+        actor.role !== Role.MANAGER);
+    if (forbidden) {
       throw new ApplicationException(
         ERROR_CODES.DOCUMENT_FORBIDDEN_TYPE,
-        'Only OWNER can access financial document types',
+        'The actor cannot access this financial document type',
         HttpStatus.FORBIDDEN,
       );
     }

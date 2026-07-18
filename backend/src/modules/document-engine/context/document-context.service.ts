@@ -190,7 +190,24 @@ const DOCUMENT_CONTEXT_BUDGET_INCLUDE = {
     },
     orderBy: { createdAt: 'asc' as const },
   },
-  document: true,
+  document: {
+    include: {
+      technicalSignature: {
+        select: {
+          id: true,
+          name: true,
+          title: true,
+          profession: true,
+          professionalCouncil: true,
+          registrationNumber: true,
+          department: true,
+          imageStorageKey: true,
+          mimeType: true,
+          fileSize: true,
+        },
+      },
+    },
+  },
 } satisfies Prisma.BudgetInclude;
 
 export type DocumentContextOperation = Prisma.OperationGetPayload<{
@@ -495,7 +512,9 @@ export class DocumentContextService {
     }
 
     const template = configuration.defaultTemplate;
-    const signature = await this.resolveSignature(template, null);
+    const signature = budget.document
+      ? await this.resolveBudgetHandoffSignatures(budget.document)
+      : await this.resolveSignature(template, null);
     const logo = await this.resolveLatestBrandAsset(
       configuration.organization.id,
       BrandAssetType.LOGO,
@@ -775,6 +794,88 @@ export class DocumentContextService {
       executionSignatures: collected
         ? [{ role: 'client', label: collected.label, name: collected.name, title: collected.title, signedAt: collected.signedAt, caption: collected.caption, image: collected.image }]
         : [],
+    };
+  }
+
+  private async resolveBudgetHandoffSignatures(
+    handoff: NonNullable<DocumentContextBudget['document']>,
+  ): Promise<DocumentSignatureContext> {
+    const customer = this.signatureSnapshot(handoff.customerSignatureSnapshot);
+    const technical = this.signatureSnapshot(handoff.technicalSignatureSnapshot);
+    const collectedImage = customer
+      ? await this.assets.resolveSignature(customer.storageKey, {
+          mimeType: customer.mimeType,
+          fileSize: customer.fileSize,
+        })
+      : null;
+    const technicalSource =
+      technical ??
+      (handoff.technicalSignature?.imageStorageKey &&
+      handoff.technicalSignature.mimeType &&
+      handoff.technicalSignature.fileSize
+        ? {
+            id: handoff.technicalSignature.id,
+            name: handoff.technicalSignature.name,
+            title: handoff.technicalSignature.title,
+            profession: handoff.technicalSignature.profession,
+            professionalCouncil: handoff.technicalSignature.professionalCouncil,
+            registrationNumber: handoff.technicalSignature.registrationNumber,
+            department: handoff.technicalSignature.department,
+            storageKey: handoff.technicalSignature.imageStorageKey,
+            mimeType: handoff.technicalSignature.mimeType,
+            fileSize: handoff.technicalSignature.fileSize,
+          }
+        : null);
+    const institutional = technicalSource
+      ? [
+          {
+            id: technicalSource.id ?? handoff.technicalSignatureId ?? `snapshot:${handoff.id}`,
+            name: technicalSource.name,
+            title: technicalSource.title ?? '',
+            profession: technicalSource.profession ?? null,
+            professionalCouncil: technicalSource.professionalCouncil ?? null,
+            registrationNumber: technicalSource.registrationNumber ?? null,
+            department: technicalSource.department ?? null,
+            image: await this.assets.resolveSignature(technicalSource.storageKey, {
+              mimeType: technicalSource.mimeType,
+              fileSize: technicalSource.fileSize,
+            }),
+          },
+        ]
+      : [];
+    const collected = {
+      label: 'Assinatura do cliente/responsável',
+      name: customer?.name ?? null,
+      title: customer?.title ?? null,
+      signedAt: customer?.collectedAt ?? null,
+      caption: collectedImage ? 'Assinatura do cliente' : 'Assinatura do cliente pendente',
+      image: collectedImage,
+    };
+    return {
+      requiresSignature: true,
+      signatureMode: SignatureMode.HYBRID,
+      signatureId: institutional[0]?.id ?? null,
+      fixedSignature: institutional[0]
+        ? {
+            id: institutional[0].id,
+            name: institutional[0].name,
+            title: institutional[0].title,
+            image: institutional[0].image,
+          }
+        : null,
+      institutionalSignatures: institutional,
+      collectedSignature: collected,
+      executionSignatures: [
+        {
+          role: 'client',
+          label: collected.label,
+          name: collected.name,
+          title: collected.title,
+          signedAt: collected.signedAt,
+          caption: collected.caption,
+          image: collected.image,
+        },
+      ],
     };
   }
 

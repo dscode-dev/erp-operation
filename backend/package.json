@@ -28,8 +28,7 @@
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:validate": "prisma validate",
-    "prisma:seed": "node dist/seed.js",
-    "prisma:seed:demo": "node dist/seeds/demo/demo.seed.js"
+    "prisma:seed": "node dist/seed.js"
   },
   "dependencies": {
     "@fontsource/noto-sans": "^5.2.10",

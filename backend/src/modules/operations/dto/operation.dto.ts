@@ -14,12 +14,14 @@ import {
   IsDateString,
   IsEnum,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
   Max,
   MaxLength,
   Min,
+  Matches,
   ValidateNested,
 } from 'class-validator';
 
@@ -139,6 +141,14 @@ export class CreateOperationDto {
   @IsString()
   @MaxLength(20000)
   serviceDescription?: string;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(40) @Matches(/^[A-Za-z0-9._/-]+$/) receiptNumber?: string;
+  @IsOptional() @IsDateString() receiptIssuedAt?: string;
+  @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) @Max(999_999_999.99) receiptAmount?: number;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(500) receiptAmountInWords?: string;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(500) receiptService?: string;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(10000) receiptDescription?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(3650) receiptWarrantyDays?: number;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(20000) receiptDeclaration?: string;
   @IsOptional()
   @Transform(({ value }) => trim(value))
   @IsString()
@@ -254,6 +264,14 @@ export class UpdateOperationDto {
   @IsString()
   @MaxLength(20000)
   serviceDescription?: string;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(40) @Matches(/^[A-Za-z0-9._/-]+$/) receiptNumber?: string;
+  @IsOptional() @IsDateString() receiptIssuedAt?: string;
+  @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) @Max(999_999_999.99) receiptAmount?: number;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(500) receiptAmountInWords?: string;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(500) receiptService?: string;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(10000) receiptDescription?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(3650) receiptWarrantyDays?: number;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(20000) receiptDeclaration?: string;
   @IsOptional()
   @Transform(({ value }) => trim(value))
   @IsString()

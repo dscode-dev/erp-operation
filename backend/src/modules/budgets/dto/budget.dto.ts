@@ -1,7 +1,8 @@
-import { BudgetStatus } from '@prisma/client';
+import { BudgetItemType, BudgetPaymentMethod, BudgetStatus } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMinSize,
+  ArrayUnique,
   IsArray,
   IsBoolean,
   IsDateString,
@@ -38,9 +39,13 @@ export class ListBudgetsQueryDto extends BudgetPageQueryDto {
 }
 
 export class BudgetItemInputDto {
-  @IsUUID('4') productId!: string;
-  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(2000) description?: string;
+  @IsOptional() @IsUUID('4') productId?: string;
+  @IsEnum(BudgetItemType) type!: BudgetItemType;
+  @Transform(({ value }) => trim(value)) @IsString() @MinLength(2) @MaxLength(2000) description!: string;
   @Type(() => Number) @IsNumber({ maxDecimalPlaces: 3 }) @Min(0.001) quantity!: number;
+  @Transform(({ value }) => upper(value)) @IsString() @MinLength(1) @MaxLength(20) unit!: string;
+  @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) unitPrice!: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(999) sortOrder?: number;
 }
 
 export class CreateBudgetDto {
@@ -50,9 +55,15 @@ export class CreateBudgetDto {
   @IsOptional() @IsUUID('4') equipmentId?: string;
   @Transform(({ value }) => trim(value)) @IsString() @MinLength(2) @MaxLength(180) title!: string;
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(5000) description?: string;
+  @IsOptional() @IsDateString() issuedAt?: string;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(5000) introduction?: string;
   @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) discount?: number;
   @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) additional?: number;
-  @IsDateString() expirationDate!: string;
+  @IsOptional() @IsDateString() expirationDate?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(3650) validityDays?: number;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(500) amountInWords?: string;
+  @IsArray() @ArrayMinSize(1) @ArrayUnique() @IsEnum(BudgetPaymentMethod, { each: true }) paymentMethods!: BudgetPaymentMethod[];
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(5000) commercialNotes?: string;
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(5000) observations?: string;
   @IsOptional() @Transform(({ value }) => upper(value)) @IsEnum(BudgetStatus) status?: BudgetStatus;
   @IsArray() @ArrayMinSize(1) @ValidateNested({ each: true }) @Type(() => BudgetItemInputDto) items!: BudgetItemInputDto[];
@@ -65,9 +76,15 @@ export class UpdateBudgetDto {
   @IsOptional() @IsUUID('4') equipmentId?: string;
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MinLength(2) @MaxLength(180) title?: string;
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(5000) description?: string;
+  @IsOptional() @IsDateString() issuedAt?: string;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(5000) introduction?: string;
   @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) discount?: number;
   @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) additional?: number;
   @IsOptional() @IsDateString() expirationDate?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(3650) validityDays?: number;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(500) amountInWords?: string;
+  @IsOptional() @IsArray() @ArrayMinSize(1) @ArrayUnique() @IsEnum(BudgetPaymentMethod, { each: true }) paymentMethods?: BudgetPaymentMethod[];
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(5000) commercialNotes?: string;
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(5000) observations?: string;
   @IsOptional() @Transform(({ value }) => upper(value)) @IsEnum(BudgetStatus) status?: BudgetStatus;
   @IsOptional()

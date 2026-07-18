@@ -1,5 +1,14 @@
 # STATE — Frontend
 
+## DC-05 — Recibo / Garantia (2026-07-18)
+
+- Central de Relatórios oferece Recibo para OWNER/MANAGER em cinco etapas: origem, dados, garantia,
+  assinatura técnica e Preview.
+- Origem manual e OS concluída compartilham campos editáveis; orçamento aprovado apenas acelera o
+  valor. Valor por extenso pt-BR e declaração são gerados e permanecem editáveis.
+- RECEIPT não mostra assinatura do cliente nem evidência fotográfica.
+
+
 ## PMOC — evidências e assinaturas em todos os fluxos (2026-07-18)
 
 - Wizard Platform de criação/edição/revisão possui etapas funcionais de evidências e assinaturas.
@@ -1101,3 +1110,20 @@ Status: concluído.
 - O detalhe reutiliza o `PmocPlanWizard` em modo de edição completa para cobertura, planejamento, responsáveis e política documental.
 - OWNER pode finalizar o PMOC mediante confirmação; o backend desativa o plano e preserva histórico, OS e documentos.
 - Nenhum endpoint, calendário, scheduler ou domínio paralelo foi criado.
+
+## Production-only data path (2026-07-18)
+
+- Removidos o client `demo`, o agregador `dashboard` legado, `operationsApi` de snapshots e seus
+  tipos `Demo*`.
+- Removidos componentes sem consumidores baseados no antigo dataset e a rota `/demo-ready`.
+- Docker/Next não recebem mais `NEXT_PUBLIC_ENABLE_DEMO`; o frontend possui somente
+  `NEXT_PUBLIC_API_BASE_URL` para integração.
+- Estados vazios agora representam respostas reais da API, sem registros locais de fallback.
+## DC-06 — Orçamento certificado (2026-07-18)
+
+- /budgets usa um único BudgetWizardDrawer para criação manual, criação pela OS concluída e edição pré-emissão.
+- O fluxo antigo acoplado a Product/Pricing foi removido também do drawer da Operation.
+- Serviços e materiais são listas dinâmicas independentes, reordenáveis e com subtotal imediato; o backend permanece autoridade dos totais.
+- Wizard inclui valor por extenso editável, validade, formas de pagamento e assinaturas oficiais.
+- A etapa de assinaturas mostra a imagem autenticada do responsável técnico e, ao editar, a assinatura do cliente já coletada com nome, data/hora e coletor; uma nova captura substitui somente o snapshot desse orçamento.
+- Detalhe oferece Preview, emissão/reemissão, download e estado Sem PDF/PDF disponível/STALE pelo DocumentViewer.

@@ -633,6 +633,7 @@ describe('AppSec Maintenance Planning and PMOC closure', () => {
 
   it('allows only one concurrent generation for the same Execution Request', async () => {
     const graph = await createCustomerGraph();
+    const unrelatedOperator = await createSecurityActor(Role.OPERATOR, 'mnt-unrelated-operator');
     const created = await authPost(owner, '/api/v1/pmoc').send({
       customerId: graph.customerId,
       equipmentId: graph.equipmentId,
@@ -648,7 +649,7 @@ describe('AppSec Maintenance Planning and PMOC closure', () => {
     expect(
       (
         await authPost(
-          operator,
+          unrelatedOperator,
           `/api/v1/pmoc/execution-requests/${requestId}/generate-work-order`,
         ).send({})
       ).status,

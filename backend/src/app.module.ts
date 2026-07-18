@@ -13,7 +13,6 @@ import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
 import { RoleGuard } from './modules/auth/guards/role.guard';
 import { PasswordChangeRequiredGuard } from './modules/auth/guards/password-change-required.guard';
 import { UsersModule } from './modules/users/users.module';
-import { InternalDemoModule } from './modules/internal-demo/internal-demo.module';
 import { CustomersModule } from './modules/customers/customers.module';
 import { EquipmentsModule } from './modules/equipments/equipments.module';
 import { OperationsModule } from './modules/operations/operations.module';
@@ -54,7 +53,6 @@ import { ResponseEnvelopeInterceptor } from './shared/interceptors/response-enve
     AuthModule,
     OrganizationModule,
     UsersModule,
-    InternalDemoModule,
     CustomersModule,
     ListExportModule,
     EquipmentsModule,

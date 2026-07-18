@@ -19,10 +19,6 @@ export const API_BASE_URL = (
   (process.env.NODE_ENV === "production" ? "/api/v1" : "http://localhost:3000/api/v1")
 ).replace(/\/$/, "");
 
-/** Whether the development demo bridge (dashboard/schedule/finance) is enabled. */
-export const DEMO_BRIDGE_ENABLED =
-  (process.env.NEXT_PUBLIC_ENABLE_DEMO ?? "false").toLowerCase() === "true";
-
 export class ApiClientError extends Error {
   readonly code: string;
   readonly status: number;

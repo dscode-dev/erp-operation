@@ -78,11 +78,4 @@ export class AppConfigService {
     return this.configService.get('NODE_ENV', { infer: true });
   }
 
-  get enableDemoData(): boolean {
-    return this.configService.get('ENABLE_DEMO_DATA', { infer: true });
-  }
-
-  get enableDemoEndpoints(): boolean {
-    return this.configService.get('ENABLE_DEMO_ENDPOINTS', { infer: true });
-  }
 }

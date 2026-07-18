@@ -688,7 +688,7 @@ describe('DocumentEngine foundation', () => {
     [DocumentTemplateType.TECHNICAL_REPORT, 'visit-objective'],
     [DocumentTemplateType.TECHNICAL_OPINION, 'technical-opinion-site-conditions'],
     [DocumentTemplateType.PMOC, 'pmoc-identification'],
-    [DocumentTemplateType.RECEIPT, 'receipt-reference'],
+    [DocumentTemplateType.RECEIPT, 'receipt-declaration'],
   ])('builds and renders the official report-center workflow %s', async (type, expectedSection) => {
     const context = operationContext(type);
     const operation = context.operation as Record<string, unknown>;
@@ -708,6 +708,45 @@ describe('DocumentEngine foundation', () => {
       tradeName: 'Orbit',
       cnpj: '00.000.000/0001-00',
     });
+    expect(rendered.blueprint).toBe(built);
+    expect(pdf.buffer.subarray(0, 5).toString('latin1')).toBe('%PDF-');
+  });
+
+  it('certifies the DC-05 receipt snapshots, technical-only signature and PDF parity', async () => {
+    const context = operationContext(DocumentTemplateType.RECEIPT);
+    const operation = context.operation as Record<string, unknown>;
+    Object.assign(operation, {
+      receiptNumber: 'REC-000125',
+      receiptIssuedAt: new Date('2026-07-18T00:00:00.000Z'),
+      receiptAmount: 1275.9,
+      receiptAmountInWords: 'um mil duzentos e setenta e cinco reais e noventa centavos',
+      receiptService: 'manutenção preventiva',
+      receiptDescription: 'Higienização e revisão do sistema de climatização',
+      receiptWarrantyDays: 90,
+      receiptDeclaration: 'Declaração administrativa oficial do recibo.',
+      photos: [{ id: 'photo-not-allowed', storageKey: 'private/photo.png', caption: 'Não deve aparecer', mimeType: 'image/png', fileSize: 68, createdAt: new Date() }],
+    });
+    context.signature = {
+      requiresSignature: true,
+      signatureMode: 'FIXED',
+      signatureId: 'technical-signature',
+      fixedSignature: null,
+      institutionalSignatures: [{ id: 'technical-signature', name: 'Ana Técnica', title: 'Engenheira', professionalCouncil: 'CREA-PE 123', department: 'Engenharia', image: { storageKey: 'private/signature.png', mimeType: 'image/png', fileSize: 68, contentBase64: ONE_PIXEL_PNG } }],
+      collectedSignature: null,
+      executionSignatures: [],
+    };
+    const built = (new DocumentBuilderService({} as never) as unknown as {
+      buildFromContext: (ctx: unknown) => DocumentBlueprint;
+    }).buildFromContext(context);
+    const ids = built.sections.map((section) => section.id);
+    expect(built.header.title).toBe('RECIBO / GARANTIA');
+    expect(ids).toEqual(['receipt-identification', 'receipt-declaration', 'receipt-warranty', 'signature']);
+    expect(ids.some((id) => id.startsWith('photos-'))).toBe(false);
+    const signature = built.sections.find((section) => section.id === 'signature')?.components[0];
+    expect(signature?.kind === 'signature' ? signature.signatures : []).toHaveLength(1);
+    expect(signature?.kind === 'signature' ? signature.signatures[0]?.role : null).toBe('fixed');
+    const rendered = renderer().render(built);
+    const pdf = await new PdfEngineService().create(rendered);
     expect(rendered.blueprint).toBe(built);
     expect(pdf.buffer.subarray(0, 5).toString('latin1')).toBe('%PDF-');
   });
@@ -1617,6 +1656,60 @@ describe('DocumentEngine foundation', () => {
     expect(result.items[0]).toMatchObject({ number: 'OS-1', origin: 'OPERATION' });
     expect(result.pagination.total).toBe(1);
     expect(prisma.$transaction).toHaveBeenCalled();
+  });
+
+  it('certifies DC-06 services, materials, commercial terms, signatures and PDF parity', async () => {
+    const base = operationContext(DocumentTemplateType.BUDGET);
+    const now = new Date('2026-07-18T12:00:00.000Z');
+    const context = {
+      kind: 'budget',
+      configuration: base.configuration,
+      template: null,
+      signature: {
+        requiresSignature: true,
+        signatureMode: 'HYBRID',
+        signatureId: 'technical-signature',
+        fixedSignature: null,
+        institutionalSignatures: [{ id: 'technical-signature', name: 'Ana Técnica', title: 'Engenheira', professionalCouncil: 'CREA-PE 123', department: 'Engenharia', image: { storageKey: 'private/technical.png', mimeType: 'image/png', fileSize: 68, contentBase64: ONE_PIXEL_PNG } }],
+        collectedSignature: { label: 'Assinatura do cliente/responsável', name: 'Carlos Cliente', title: 'Responsável', signedAt: now.toISOString(), caption: 'Assinatura do cliente', image: { storageKey: 'private/customer.png', mimeType: 'image/png', fileSize: 68, contentBase64: ONE_PIXEL_PNG } },
+        executionSignatures: [{ role: 'client', label: 'Assinatura do cliente/responsável', name: 'Carlos Cliente', title: 'Responsável', signedAt: now.toISOString(), caption: 'Assinatura do cliente', image: { storageKey: 'private/customer.png', mimeType: 'image/png', fileSize: 68, contentBase64: ONE_PIXEL_PNG } }],
+      },
+      assets: { signature: null, logo: null, watermark: null, qrCode: null, images: [] },
+      budget: {
+        id: '10000000-0000-4000-8000-000000000001', operationId: null, number: 27,
+        status: 'DRAFT', title: 'Climatização do laboratório', description: 'Escopo técnico conforme vistoria.',
+        issuedAt: now, introduction: 'Atendendo à honrosa solicitação de V.Sa., apresentamos nosso orçamento conforme solicitado.',
+        serviceSubtotal: 850, materialSubtotal: 425, subtotal: 1275, discount: 0, additional: 0,
+        total: 1275, amountInWords: 'um mil duzentos e setenta e cinco reais', validityDays: 30,
+        paymentMethods: ['PIX', 'CREDIT_CARD'], commercialNotes: 'Pagamento após aprovação.',
+        expirationDate: new Date('2026-08-17T12:00:00.000Z'), observations: 'Validade sujeita à disponibilidade.',
+        createdAt: now, creator: { name: 'Darlan Owner' }, operation: null, equipment: null,
+        customerAddress: { name: 'Unidade Recife', street: 'Rua A', number: '100', district: 'Boa Viagem', city: 'Recife', state: 'PE' },
+        customer: { name: 'Hospital Santa Clara', tradeName: 'Hospital Santa Clara', cnpj: '00.000.000/0001-00', cpf: null, phone: '+55 81 3000-0000', addresses: [], contacts: [{ name: 'Carlos', phone: '+55 81 99999-0000' }] },
+        document: { id: '20000000-0000-4000-8000-000000000001', number: 'ORC-000027' },
+        items: [
+          { id: 'service', type: 'SERVICE', description: 'Higienização técnica', quantity: 1, unit: 'SERV', unitPrice: 850, total: 850, product: null },
+          { id: 'material', type: 'MATERIAL', description: 'Filtro de reposição', quantity: 5, unit: 'UN', unitPrice: 85, total: 425, product: null },
+        ],
+      },
+    };
+    const built = (new DocumentBuilderService({} as never) as unknown as {
+      buildFromContext: (ctx: unknown) => DocumentBlueprint;
+    }).buildFromContext(context);
+    expect(built.sections.map((section) => section.id)).toEqual([
+      'budget-identification', 'budget-customer', 'budget-introduction', 'budget-services',
+      'budget-materials', 'budget-totals', 'budget-commercial-conditions', 'signature',
+    ]);
+    const services = built.sections.find((section) => section.id === 'budget-services')?.components[0];
+    const materials = built.sections.find((section) => section.id === 'budget-materials')?.components[0];
+    expect(services?.kind === 'table' ? services.rows : []).toHaveLength(1);
+    expect(materials?.kind === 'table' ? materials.rows : []).toHaveLength(1);
+    const signature = built.sections.find((section) => section.id === 'signature')?.components[0];
+    expect(signature?.kind === 'signature' ? signature.signatures.map((item) => item.role) : []).toEqual(['collected', 'fixed']);
+    const rendered = renderer().render(built);
+    const pdf = await new PdfEngineService().create(rendered);
+    expect(rendered.blueprint).toBe(built);
+    expect(pdf.buffer.subarray(0, 5).toString('latin1')).toBe('%PDF-');
   });
 });
 

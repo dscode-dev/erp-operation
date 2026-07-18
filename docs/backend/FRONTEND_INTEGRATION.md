@@ -1,5 +1,13 @@
 # Frontend Integration
 
+## DC-05 — fluxo do Recibo / Garantia
+
+Escolha origem manual ou OS concluída; preencha snapshots editáveis; envie garantia nula ou 1–3650
+dias; salve o Handoff e selecione uma assinatura institucional ativa. Não envie assinatura do
+cliente, fotos ou relacionados. Finalize a revisão e reutilize `DocumentViewer` em Preview → Render
+→ Download. Somente OWNER/MANAGER devem visualizar o fluxo.
+
+
 ## PMOC — fotos, assinatura técnica e assinatura do cliente
 
 - Em cadastro sem OS, fotos e assinatura ficam somente em memória. Ao concluir, a primeira OS é
@@ -944,51 +952,18 @@ endpoint access is determined by the role matrix above.
 - HTTP 200: aplicação e banco disponíveis;
 - HTTP 503: processo disponível, banco indisponível.
 
-## Sprint 3.5 development dataset
+## Production bootstrap
 
-The optional demo environment provides real persisted organization, users and preferences plus
-temporary integration snapshots for domains that are not modeled yet.
+The application has no demo datasets, demo endpoints, example credentials or fallback snapshots.
+After migrations, an operator runs the one-time OWNER bootstrap. The frontend authenticates with
+that OWNER and uses the official team endpoints to create every additional user.
 
-Enable locally:
-
-```env
-NODE_ENV=development
-ENABLE_DEMO_DATA=true
-ENABLE_DEMO_ENDPOINTS=true
-```
-
-Run:
-
-```bash
-npm run build
-npm run prisma:seed:demo
-```
-
-Use the passwords printed once by the seed. Existing matching users are preserved and do not receive
-new passwords.
-
-Real endpoints ready for frontend:
-
-- auth and refresh flow;
-- `/users/me`;
-- team CRUD/read according to role;
-- preferences and avatar;
-- organization/settings/templates/assets.
-
-Temporary local bridge:
-
-- `GET /internal/demo/dataset`: dashboard, schedule and finance snapshots;
-- `POST /internal/demo/reset`: OWNER-only dataset reset.
-
-Never include the internal demo bridge in production builds. When disabled, it returns
-`DEMO_ENDPOINT_DISABLED` as HTTP 404.
-
-The complete frontend-oriented reference is `docs/backend/OPUS_INTEGRATION.md`. Dataset operation is
-documented in `docs/backend/DEMO_DATA.md`.
+Empty installations must render the normal empty states returned by production APIs. There is no
+frontend demo flag and no `/internal/demo/*` contract.
 
 ## Customer Domain
 
-Production endpoints are ready; remove customer mocks and `demo.customers.v1`.
+Production endpoints are ready and must be consumed without local fallback records.
 
 ```ts
 type CustomerType = 'PERSON' | 'COMPANY';
@@ -1048,7 +1023,7 @@ Important UX states:
 
 ## Equipment Domain
 
-Production API is ready. Remove equipment mocks and `demo.equipment.v1`.
+Production API is ready and must be consumed without local fallback records.
 
 ```ts
 type EquipmentType =
@@ -1101,15 +1076,9 @@ Errors to map: `EQUIPMENT_NOT_FOUND`, `CUSTOMER_NOT_FOUND`, `EQUIPMENT_ADDRESS_M
 
 ## Agenda (calendário mensal)
 
-A Agenda da Platform é um calendário mensal de produção. Cada navegação
-(mês anterior/próximo, seleção de mês/ano, "Hoje") consulta o backend para o
-intervalo visível da grade (`getScheduleRange(from, to)`), hoje sobre o snapshot
-`demo.schedule.v1` (enriquecido com `equipment`, `serviceType`, `endsAt`,
-`notes` e estado `DONE`). Eventos são clicáveis e abrem um Drawer lateral com
-cliente, equipamento, operador, tipo, data/horário, status e observações; ações
-de edição/reagendamento são gated por RBAC e pertencem ao domínio futuro de
-Agenda. Quando `GET /schedule?from=&to=` existir, troca-se apenas a
-implementação de `getScheduleRange` — a UI permanece igual.
+A Agenda da Platform deve usar exclusivamente os contratos reais de Operations, Assignments,
+Maintenance e PMOC. Não existe snapshot ou fallback local de agenda. Eventos exibem cliente,
+equipamento, operador, tipo, data/horário e status conforme o domínio oficial de origem.
 
 ## QR Code operacional
 
@@ -1127,7 +1096,7 @@ equipamento inexistente (404). O formato do QR não muda.
 Responsabilidades separadas:
 
 - **Relatórios** (`/reports`): gestão de **modelos** de documento. Consome `GET /organization/templates`; OWNER cria/edita/exclui (`POST/PATCH/DELETE /organization/templates/:id`), define padrão (`isDefault`), ativa/desativa (`isActive`) e importa modelo do cliente (`POST /organization/assets`). Modelos profissionais (OS, Relatório Técnico, Visita Técnica, PMOC, Laudo, Orçamento, Recibo) compartilham identidade/cabeçalho/rodapé/tipografia e são pré-visualizados no `DocumentPaper` (preparado para a renderização dinâmica do backend).
-- **Documentos** (`/documentos`): **central** de documentos emitidos. Mescla os documentos reais gerados por Operations (`GET /operations` → `documents[]`, incluindo a OS rascunho) com o snapshot `demo.documents.v1`, com filtros cumulativos (cliente, equipamento, operador, tipo, status, período). A Sprint 6 adiciona preview oficial via Blueprint e render/download PDF pelo backend.
+- **Documentos** (`/documentos`): **central** de documentos emitidos. Lista exclusivamente documentos reais do Document Engine, com filtros cumulativos (cliente, equipamento, operador, tipo, status, período), preview oficial e render/download PDF pelo backend.
 
 ## Operations (atendimentos)
 
@@ -1149,8 +1118,7 @@ A **Platform** lista em `/operacoes` (`GET /operations`) e abre um drawer com
 Timeline + Checklist + Fotos (`GET /operations/photos/:id`) + Observações +
 Assinatura + Documentos relacionados (preview via `DocumentPaper`). O histórico de
 cada equipamento/cliente é derivado de `GET /operations?equipmentId=` /
-`?customerId=` (sem duplicação de dados). API no frontend: `operationApi`
-(`@erp/api`) — distinto do `operationsApi` (snapshots de demo).
+`?customerId=` (sem duplicação de dados). API no frontend: `operationApi` (`@erp/api`).
 
 ## Document Engine (produção)
 
@@ -2169,7 +2137,6 @@ Builds de produção do frontend devem usar:
 
 ```bash
 NEXT_PUBLIC_API_BASE_URL=/api/v1
-NEXT_PUBLIC_ENABLE_DEMO=false
 ```
 
 Quando frontend e backend estiverem atrás do mesmo proxy, `/api/v1` é a base browser-facing
@@ -2200,7 +2167,7 @@ Frontend dependency audit was closed with `postcss@8.5.16` override. No API cont
 Production integration assumptions:
 
 - frontend should continue to use `/api/v1` behind same-origin proxy deployments;
-- demo bridge must remain disabled in production;
+- no demo bridge or demo build flag exists;
 - each white-label customer deployment must point to its own isolated API/database/storage scope.
 
 External HTTPS smoke remains required before RC promotion.
@@ -2476,3 +2443,11 @@ Drawer. OWNER/MANAGER podem renderizar; o backend permanece a autoridade.
 3. Exiba `workflowStatus`, não derive o estado comparando roles: `DRAFT` significa aguardando aprovação e `REVIEW` significa atividade delegada devolvida à gestão.
 4. Para PMOC, liste planos/execuções existentes e use `prefill → generate-work-order`; nunca crie uma Operation PMOC avulsa.
 5. Em atividade delegada, bloqueie a troca do tipo documental no campo e use `operation.requestedDocumentType`.
+## DC-06 — Wizard e documento de Orçamento
+
+1. Origem manual não envia operationId; origem OS lista status=COMPLETED e usa a Operation apenas como preenchimento inicial editável.
+2. Envie serviços e materiais diretamente em items, diferenciados por type. Não consulte Product, Pricing ou Inventory para compor o orçamento nesta versão.
+3. Somas no cliente são feedback de UX; a resposta da API é a autoridade dos totais.
+4. Após criar, use budget.document.id para escolher assinatura técnica e coletar assinatura do cliente pelo handoff oficial.
+5. Preview usa GET /budgets/:id/preview; emissão usa POST /budgets/:id/render; download usa GET /budgets/:id/download.
+6. document.editorialStatus=STALE exige nova emissão. DocumentViewer permanece o único visualizador.

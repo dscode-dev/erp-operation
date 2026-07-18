@@ -686,7 +686,7 @@ export type DocumentHandoffOrigin = 'OPERATOR' | 'PLATFORM' | 'SYSTEM';
 
 export type DocumentHandoff = {
   id: string;
-  operationId: string;
+  operationId: string | null;
   number: string;
   type: DocumentTemplateType;
   artifactStatus: OperationDocumentStatus;
@@ -835,6 +835,10 @@ export type OperationDocument = {
   type: DocumentTemplateType;
   number: string;
   status: OperationDocumentStatus;
+  editorialStatus?: DocumentEditorialStatus;
+  revision?: number;
+  technicalSignatureId?: string | null;
+  customerSignatureSnapshot?: Record<string, unknown> | null;
   storageKey?: string | null;
   mimeType?: string | null;
   fileSize?: number | null;
@@ -885,6 +889,14 @@ export type OperationDetail = Omit<OperationSummary, 'equipment'> & {
   observations: string | null;
   reportedIssue: string | null;
   serviceDescription: string | null;
+  receiptNumber: string | null;
+  receiptIssuedAt: string | null;
+  receiptAmount: string | number | null;
+  receiptAmountInWords: string | null;
+  receiptService: string | null;
+  receiptDescription: string | null;
+  receiptWarrantyDays: number | null;
+  receiptDeclaration: string | null;
   technicalDiagnosis: string | null;
   technicalRecommendations: string | null;
   technicalOpinionObjective: string | null;
@@ -953,6 +965,14 @@ export type CreateOperationPayload = {
   observations?: string | null;
   reportedIssue?: string | null;
   serviceDescription?: string | null;
+  receiptNumber?: string | null;
+  receiptIssuedAt?: string | null;
+  receiptAmount?: number | null;
+  receiptAmountInWords?: string | null;
+  receiptService?: string | null;
+  receiptDescription?: string | null;
+  receiptWarrantyDays?: number | null;
+  receiptDeclaration?: string | null;
   technicalDiagnosis?: string | null;
   technicalRecommendations?: string | null;
   technicalOpinionObjective?: string | null;
@@ -1784,6 +1804,8 @@ export type PurchaseReceiptPayload = {
 /* ============ Budget ============ */
 
 export type BudgetStatus = 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'EXPIRED' | 'CANCELED';
+export type BudgetItemType = 'SERVICE' | 'MATERIAL';
+export type BudgetPaymentMethod = 'CASH' | 'PIX' | 'CREDIT_CARD';
 
 export type BudgetHistoryAction =
   | 'CREATED'
@@ -1801,10 +1823,13 @@ export type BudgetHistoryAction =
 export type BudgetItem = {
   id: string;
   budgetId: string;
-  productId: string;
+  productId: string | null;
+  type: BudgetItemType;
   description: string;
   quantity: string | number;
   unit: string;
+  unitPrice: string | number;
+  sortOrder: number;
   snapshotCost: string | number;
   snapshotSalePrice: string | number;
   snapshotMargin: string | number;
@@ -1834,10 +1859,18 @@ export type Budget = {
   status: BudgetStatus;
   title: string;
   description: string | null;
+  issuedAt: string;
+  introduction: string;
+  serviceSubtotal: string | number;
+  materialSubtotal: string | number;
   subtotal: string | number;
   discount: string | number;
   additional: string | number;
   total: string | number;
+  amountInWords: string;
+  validityDays: number;
+  paymentMethods: BudgetPaymentMethod[];
+  commercialNotes: string | null;
   expirationDate: string;
   observations: string | null;
   createdBy: string;
@@ -1885,9 +1918,13 @@ export type BudgetStats = {
 };
 
 export type BudgetItemPayload = {
-  productId: string;
-  description?: string;
+  productId?: string | null;
+  type: BudgetItemType;
+  description: string;
   quantity: number;
+  unit: string;
+  unitPrice: number;
+  sortOrder?: number;
 };
 
 export type BudgetPayload = {
@@ -1897,140 +1934,18 @@ export type BudgetPayload = {
   equipmentId?: string | null;
   title: string;
   description?: string | null;
+  issuedAt?: string;
+  introduction?: string;
   discount?: number;
   additional?: number;
-  expirationDate: string;
+  expirationDate?: string;
+  validityDays?: number;
+  amountInWords?: string;
+  paymentMethods: BudgetPaymentMethod[];
+  commercialNotes?: string | null;
   observations?: string | null;
   status?: Extract<BudgetStatus, 'DRAFT' | 'PENDING'>;
   items: BudgetItemPayload[];
-};
-
-/* ============ Demo bridge (dashboard / schedule / finance) ============ */
-
-export type DemoScheduleState = 'OVERDUE' | 'IN_PROGRESS' | 'SCHEDULED' | 'DONE';
-
-export type DemoScheduleItem = {
-  id: string;
-  title: string;
-  customer: string;
-  operator: string;
-  startsAt: string;
-  state: DemoScheduleState;
-  /** Enriched fields (optional for backward compatibility). */
-  equipment?: string;
-  serviceType?: DemoOrderType;
-  endsAt?: string;
-  notes?: string;
-};
-
-export type DemoDataset = {
-  'demo.dashboard.v1': {
-    generatedAt: string;
-    counters: {
-      atendimentosHoje: number;
-      ordensPendentes: number;
-      operadoresAtivos: number;
-      servicosEmAndamento: number;
-    };
-  };
-  'demo.schedule.v1': {
-    generatedAt: string;
-    items: DemoScheduleItem[];
-  };
-  'demo.finance.v1': {
-    generatedAt: string;
-    currency: 'BRL';
-    summary: {
-      entradas: number;
-      saidas: number;
-      despesas: number;
-      projecao30Dias: number;
-    };
-    entries: Array<{
-      id: string;
-      kind: 'ENTRY' | 'EXPENSE';
-      description: string;
-      amount: number;
-    }>;
-  };
-  /** Commercial-demo snapshots (no production domain yet). */
-  'demo.orders.v1': {
-    generatedAt: string;
-    items: DemoOrder[];
-  };
-  'demo.products.v1': {
-    generatedAt: string;
-    items: DemoProduct[];
-  };
-  'demo.documents.v1': {
-    generatedAt: string;
-    items: DemoDocument[];
-  };
-  'demo.services.v1': {
-    generatedAt: string;
-    items: DemoService[];
-  };
-};
-
-export type DemoOrderStatus = 'OVERDUE' | 'IN_PROGRESS' | 'SCHEDULED' | 'DONE';
-export type DemoOrderType = 'PREVENTIVA' | 'CORRETIVA' | 'INSTALACAO' | 'PROJETO';
-
-export type DemoOrder = {
-  id: string;
-  number: string;
-  title: string;
-  customer: string;
-  type: DemoOrderType;
-  operator: string;
-  value: number;
-  scheduledFor: string;
-  status: DemoOrderStatus;
-};
-
-export type DemoProductStatus = 'ok' | 'low' | 'out';
-
-export type DemoProduct = {
-  id: string;
-  sku: string;
-  name: string;
-  category: string;
-  unit: string;
-  stock: number;
-  minStock: number;
-  price: number;
-  status: DemoProductStatus;
-};
-
-export type DemoDocumentStatus = 'DRAFT' | 'READY' | 'VALIDATED' | 'SENT';
-
-export type DemoDocument = {
-  id: string;
-  /** Maps to DocumentTemplateType (WORK_ORDER, TECHNICAL_REPORT, TECHNICAL_OPINION, PMOC, REPORT, QUOTE, RECEIPT). */
-  kind: DocumentTemplateType;
-  number: string;
-  customer: string;
-  equipment: string;
-  operator: string;
-  date: string;
-  status: DemoDocumentStatus;
-  value: number;
-};
-
-export type DemoServiceStatus = 'SCHEDULED' | 'IN_PROGRESS' | 'DONE';
-export type DemoTimelineKind = 'INSTALL' | 'MAINTENANCE' | 'VISIT' | 'DOCUMENT' | 'NOTE';
-
-export type DemoServiceEvent = { at: string; kind: DemoTimelineKind; label: string };
-
-export type DemoService = {
-  id: string;
-  customer: string;
-  equipment: string;
-  operator: string;
-  type: DemoOrderType;
-  date: string;
-  status: DemoServiceStatus;
-  documents: string[];
-  history: DemoServiceEvent[];
 };
 
 export * from './documents';

@@ -1,5 +1,28 @@
 # API Contracts
 
+## DC-05 — Recibo / Garantia
+
+`POST /api/v1/operations` e `PATCH /api/v1/operations/:id` aceitam os campos aditivos:
+
+```json
+{
+  "documentType": "RECEIPT",
+  "receiptNumber": "REC-000125",
+  "receiptIssuedAt": "2026-07-18",
+  "receiptAmount": 1275.90,
+  "receiptAmountInWords": "um mil duzentos e setenta e cinco reais e noventa centavos",
+  "receiptService": "manutenção preventiva",
+  "receiptDescription": "Higienização e revisão do sistema",
+  "receiptWarrantyDays": 90,
+  "receiptDeclaration": "Texto final editável da declaração."
+}
+```
+
+`receiptNumber` omitido usa `REC-<operação>`; garantia nula significa “Sem garantia”. Preview,
+seleção da assinatura técnica, revisão, render e download reutilizam os endpoints oficiais de
+`/documents`. O download é PDF binário autenticado.
+
+
 ## PMOC — evidências e assinaturas no wizard
 
 Nenhum endpoint novo. Os fluxos Platform e Operator reutilizam:
@@ -1765,78 +1788,6 @@ Deletion is idempotent when the user has no avatar.
 | 400  | `UPLOAD_INVALID_EXTENSION`   | Avatar extension not allowed           |
 | 413  | `UPLOAD_FILE_TOO_LARGE`      | Multipart exceeded the hard size limit |
 
-## Internal demo integration
-
-These endpoints are not production domain contracts. They exist only when:
-
-- `NODE_ENV=development`;
-- `ENABLE_DEMO_DATA=true`;
-- `ENABLE_DEMO_ENDPOINTS=true`;
-- caller is authenticated as `OWNER`.
-
-Otherwise they return HTTP 404 `DEMO_ENDPOINT_DISABLED`. Production configuration rejects enabled
-demo flags during startup.
-
-### GET `/api/v1/internal/demo/dataset`
-
-Response 200:
-
-```json
-{
-  "success": true,
-  "data": {
-    "demo.dashboard.v1": {
-      "generatedAt": "2026-06-24T12:00:00.000Z",
-      "counters": {
-        "atendimentosHoje": 8,
-        "ordensPendentes": 5,
-        "operadoresAtivos": 2,
-        "servicosEmAndamento": 3
-      }
-    },
-    "demo.schedule.v1": {
-      "generatedAt": "2026-06-24T12:00:00.000Z",
-      "items": []
-    },
-    "demo.finance.v1": {
-      "generatedAt": "2026-06-24T12:00:00.000Z",
-      "currency": "BRL",
-      "summary": {
-        "entradas": 48750,
-        "saidas": 18320,
-        "despesas": 7650,
-        "projecao30Dias": 62400
-      },
-      "entries": []
-    }
-  }
-}
-```
-
-The actual seed returns populated arrays. `demo.manifest.v1` is never exposed.
-
-### POST `/api/v1/internal/demo/reset`
-
-No request body.
-
-Response 200:
-
-```json
-{
-  "success": true,
-  "data": {
-    "reset": true,
-    "organization": "preserved",
-    "usersCreated": ["ricardo", "joao", "maria", "financeiro"],
-    "usersPreserved": ["ninja"],
-    "snapshotKeys": ["demo.dashboard.v1", "demo.schedule.v1", "demo.finance.v1"]
-  }
-}
-```
-
-`organization` is `created`, `converted-bootstrap` or `preserved`. Generated passwords are not
-returned by HTTP; they are emitted only in the seed execution log.
-
 ## Customers
 
 `CustomerType`: `PERSON` ou `COMPANY`. CPF e CNPJ são opcionais; quando informados, são únicos.
@@ -1866,7 +1817,7 @@ Response 200:
         "tradeName": "Hospital Santa Clara",
         "cpf": null,
         "cnpj": "27.584.162/0001-08",
-        "email": "hospital@demo.example",
+        "email": "contato@hospital.example",
         "phone": "+55 81 3030-4040",
         "secondaryPhone": null,
         "notes": null,
@@ -2087,41 +2038,9 @@ Errors: `EQUIPMENT_NOT_FOUND`, `EQUIPMENT_ADDRESS_MISMATCH`, `EQUIPMENT_HIERARCH
 
 ## Schedule (Agenda)
 
-> Domínio operacional de Agenda é escopo futuro. Hoje o frontend consome o
-> snapshot `demo.schedule.v1` via o bridge `/internal/demo/dataset` e aplica o
-> filtro de intervalo no cliente. Quando o domínio existir, expor:
-
-```http
-GET /api/v1/schedule?from=<ISO>&to=<ISO>
-```
-
-Query (todos opcionais; combinam com AND):
-
-- `from` / `to`: intervalo ISO 8601 (inclusive) — usado pela navegação do calendário;
-- `month` (1–12) + `year`: alternativa ao intervalo;
-- `operatorId`, `customerId`, `status`: filtros;
-- `page` / `limit`: paginação quando o volume exigir.
-
-Item (alinhado ao snapshot demo, campos enriquecidos opcionais):
-
-```ts
-type ScheduleItem = {
-  id: string;
-  title: string;
-  customer: string; // futuramente customerId + nome
-  operator: string; // futuramente operatorId + nome
-  startsAt: string; // ISO 8601
-  endsAt?: string;
-  state: 'OVERDUE' | 'IN_PROGRESS' | 'SCHEDULED' | 'DONE';
-  equipment?: string;
-  serviceType?: 'PREVENTIVA' | 'CORRETIVA' | 'INSTALACAO' | 'PROJETO';
-  notes?: string;
-};
-```
-
-O calendário mensal consulta o backend a cada navegação (mês/ano/Hoje) usando
-`from`/`to` da grade visível (6 semanas). Drag-and-drop, criação e edição
-pertencem ao domínio operacional (fora do escopo desta entrega).
+Não existe endpoint nem dataset paralelo de Agenda. A interface compõe o calendário exclusivamente
+a partir dos contratos oficiais de Operations, Assignments, Maintenance e PMOC descritos neste
+documento. `/api/v1/schedule` não é um contrato ativo.
 
 ## Equipment lookup by QR
 
@@ -4045,7 +3964,7 @@ Lista paginada dos orçamentos vinculados à Operation.
 
 ### POST `/api/v1/budgets`
 
-Cria orçamento com snapshots de preço usando `PricingService`.
+Cria orçamento comercial com itens documentais independentes. O contrato DC-06 detalhado ao fim desta seção substitui o antigo vínculo obrigatório com `Product`/`PricingService`.
 
 Payload:
 
@@ -4059,10 +3978,13 @@ Payload:
   "description": "Proposta para manutenção corretiva",
   "discount": 0,
   "additional": 0,
-  "expirationDate": "2026-07-17T00:00:00.000Z",
+  "issuedAt": "2026-06-17T00:00:00.000Z",
+  "introduction": "Atendendo à honrosa solicitação de V.Sa., apresentamos nosso orçamento conforme solicitado.",
+  "validityDays": 30,
+  "paymentMethods": ["PIX"],
   "observations": "Condições comerciais",
   "status": "PENDING",
-  "items": [{ "productId": "uuid", "description": "Filtro G4", "quantity": 2 }]
+  "items": [{ "type": "MATERIAL", "description": "Filtro G4", "quantity": 2, "unit": "UN", "unitPrice": 78 }]
 }
 ```
 
@@ -4070,20 +3992,19 @@ Response 201: Budget criado. Cada item retorna:
 
 ```json
 {
-  "productId": "uuid",
+  "productId": null,
+  "type": "MATERIAL",
   "description": "Filtro G4",
   "quantity": "2.000",
   "unit": "UN",
-  "snapshotCost": "42.50",
-  "snapshotSalePrice": "78.00",
-  "snapshotMargin": "43.85",
+  "unitPrice": "78.00",
   "total": "156.00"
 }
 ```
 
 ### PATCH `/api/v1/budgets/:id`
 
-Atualiza orçamento editável. Enviar `items` substitui a lista inteira e recalcula snapshots.
+Atualiza orçamento editável. Enviar `items` substitui a lista inteira e recalcula os totais no backend.
 Orçamentos `APPROVED`, `REJECTED`, `EXPIRED` ou `CANCELED` não são editáveis.
 
 Payload parcial:
@@ -4092,7 +4013,7 @@ Payload parcial:
 {
   "title": "Troca de componentes revisada",
   "discount": 25,
-  "items": [{ "productId": "uuid", "quantity": 3 }]
+  "items": [{ "type": "MATERIAL", "description": "Filtro G4", "quantity": 3, "unit": "UN", "unitPrice": 78 }]
 }
 ```
 
@@ -4169,6 +4090,7 @@ Erros:
 | 409  | `BUDGET_APPROVED_IMMUTABLE`   | Tentativa de alterar orçamento aprovado             |
 | 409  | `BUDGET_EXPIRED`              | Tentativa de aprovar orçamento vencido              |
 | 409  | `BUDGET_MULTIPLE_APPROVAL`    | Já existe Budget aprovado para a Operation          |
+| 409  | `BUDGET_OPERATION_NOT_COMPLETED` | Origem informada não é uma Ordem de Serviço concluída |
 
 Eventos de auditoria:
 
@@ -5468,3 +5390,47 @@ A resposta mantém `editorialStatus` e adiciona:
 ### PMOC assumido pelo Operator
 
 `GET /api/v1/pmoc/execution-requests/:id/prefill` e `POST /api/v1/pmoc/execution-requests/:id/generate-work-order` aceitam OPERATOR somente quando a solicitação não possui operador planejado ou está planejada para o próprio ator. Solicitação reservada a terceiro retorna `403 FORBIDDEN`.
+## DC-06 — Orçamento certificado
+
+### POST /api/v1/budgets
+
+OWNER/MANAGER. Criação manual omite operationId; criação pela OS informa o UUID de uma Operation concluída. A API rejeita outras situações com `409 BUDGET_OPERATION_NOT_COMPLETED`. Campos documentais:
+
+```json
+{
+  "operationId": "uuid opcional",
+  "customerId": "uuid",
+  "customerAddressId": "uuid opcional",
+  "equipmentId": "uuid opcional",
+  "title": "Orçamento de manutenção",
+  "description": "Escopo editável",
+  "issuedAt": "2026-07-18T12:00:00.000Z",
+  "introduction": "Atendendo à honrosa solicitação...",
+  "validityDays": 30,
+  "amountInWords": "um mil duzentos e setenta e cinco reais",
+  "paymentMethods": ["PIX", "CREDIT_CARD"],
+  "commercialNotes": "Pagamento após aprovação.",
+  "status": "DRAFT",
+  "items": [
+    { "type": "SERVICE", "description": "Higienização", "quantity": 1, "unit": "SERV", "unitPrice": 850, "sortOrder": 0 },
+    { "type": "MATERIAL", "description": "Filtro", "quantity": 5, "unit": "UN", "unitPrice": 85, "sortOrder": 1 }
+  ]
+}
+```
+
+productId é opcional. A resposta inclui serviceSubtotal, materialSubtotal, subtotal, total, amountInWords, paymentMethods e document. Totais são calculados pelo backend.
+
+### PATCH /api/v1/budgets/:id
+
+Atualização parcial enquanto editável. Alterar orçamento renderizado marca o documento STALE.
+
+### GET /api/v1/budgets/:id/preview
+
+Retorna o DocumentBlueprint oficial sem gerar PDF. Erros: 403 FORBIDDEN, 404 BUDGET_NOT_FOUND e 409 BUDGET_INVALID_STATUS.
+
+### Emissão e assinaturas
+
+- POST /api/v1/budgets/:id/render — gera/regera PDF e retorna documentId, preview, download e status.
+- GET /api/v1/budgets/:id/download — binário autenticado application/pdf.
+- PATCH /api/v1/documents/:documentId/handoff/customer-signature — coleta/substitui assinatura do cliente para Budget.
+- PATCH /api/v1/documents/:documentId/handoff/technical-signature — seleciona a assinatura técnica.

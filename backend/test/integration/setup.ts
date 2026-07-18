@@ -36,8 +36,6 @@ process.env.STORAGE_PATH = process.env.STORAGE_PATH ?? '/tmp/orbit-security-stor
 process.env.RATE_LIMIT_TTL_MS = '60000';
 process.env.RATE_LIMIT_MAX = '10000';
 process.env.LOG_LEVEL = process.env.LOG_LEVEL ?? 'error';
-process.env.ENABLE_DEMO_DATA = process.env.ENABLE_DEMO_DATA ?? 'false';
-process.env.ENABLE_DEMO_ENDPOINTS = process.env.ENABLE_DEMO_ENDPOINTS ?? 'false';
 
 beforeAll(() => {
   if (process.env.ORBIT_TEST_SKIP_MIGRATE === 'true') return;

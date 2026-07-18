@@ -66,7 +66,6 @@ services:
       args:
         # NEXT_PUBLIC_* são embutidos no build (acessados pelo navegador).
         NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-https://erp.allblue-labs.com/api/v1}
-        NEXT_PUBLIC_ENABLE_DEMO: ${NEXT_PUBLIC_ENABLE_DEMO:-true}
     restart: unless-stopped
     environment:
       NODE_ENV: production

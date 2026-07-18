@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { BadgeCheck, Ban, Download, FileText, History, Plus, ReceiptText, RefreshCw, ShoppingCart, XCircle } from "lucide-react";
 import { PageHeader } from "@platform/components/page-header";
+import { BudgetWizardDrawer } from "@platform/components/budget-wizard-drawer";
 import { DataTable, type Column } from "@platform/components/data-table";
 import { Pagination } from "@platform/components/pagination";
 import { Drawer } from "@erp/ui/drawer";
@@ -21,20 +22,11 @@ import {
   budgetsApi,
   customersApi,
   equipmentsApi,
-  inventoryApi,
-  pricingApi,
   useQuery,
   type Budget,
   type BudgetHistory as BudgetHistoryItem,
-  type BudgetItemPayload,
-  type BudgetPayload,
   type BudgetStatus,
-  type Customer,
-  type CustomerDetail,
   type DocumentDownloadResult,
-  type EquipmentSummary,
-  type Product,
-  type ProductPricing,
 } from "@erp/api";
 import { formatCurrencyBRL, formatDateTime, formatNumber } from "@erp/utils";
 
@@ -73,6 +65,7 @@ export default function BudgetsPage() {
   const [to, setTo] = useState("");
   const [selected, setSelected] = useState<Budget | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [editing, setEditing] = useState<Budget | null>(null);
   const [feedback, setFeedback] = useState<Feedback>(null);
 
   const budgets = useQuery(
@@ -200,8 +193,8 @@ export default function BudgetsPage() {
         </div>
       )}
 
-      <BudgetDetailDrawer budget={selected} onClose={() => setSelected(null)} canWrite={canWrite} onChanged={(message) => { refresh(message); if (selected) budgetsApi.getBudget(selected.id).then(setSelected).catch(() => setSelected(null)); }} />
-      <BudgetCreationDrawer open={createOpen} onClose={() => setCreateOpen(false)} onSaved={(budget) => { setCreateOpen(false); setSelected(budget); refresh("Orçamento criado."); }} />
+      <BudgetDetailDrawer budget={selected} onClose={() => setSelected(null)} canWrite={canWrite} onEdit={(budget) => { setSelected(null); setEditing(budget); }} onChanged={(message) => { refresh(message); if (selected) budgetsApi.getBudget(selected.id).then(setSelected).catch(() => setSelected(null)); }} />
+      <BudgetWizardDrawer budget={editing} open={createOpen || editing !== null} onClose={() => { setCreateOpen(false); setEditing(null); }} onSaved={(budget) => { const edited = Boolean(editing); setCreateOpen(false); setEditing(null); setSelected(budget); refresh(edited ? "Orçamento atualizado." : "Orçamento criado."); }} />
     </div>
   );
 }
@@ -210,11 +203,13 @@ function BudgetDetailDrawer({
   budget,
   onClose,
   canWrite,
+  onEdit,
   onChanged,
 }: {
   budget: Budget | null;
   onClose: () => void;
   canWrite: boolean;
+  onEdit: (budget: Budget) => void;
   onChanged: (message: string) => void;
 }) {
   const [tab, setTab] = useState<DetailTab>("summary");
@@ -263,6 +258,7 @@ function BudgetDetailDrawer({
             </div>
             <Gate roles={["OWNER", "MANAGER"]}>
               <div className="flex flex-wrap gap-2">
+                <button onClick={() => onEdit(budget)} disabled={saving || final || Boolean(budget.document?.renderedAt)} className={secondaryBtn}>Editar</button>
                 <button onClick={() => decide("approve")} disabled={saving || final || isExpired(budget)} className={successBtn}><BadgeCheck className="h-4 w-4" /> Aprovar</button>
                 <button onClick={() => decide("reject")} disabled={saving || final} className={secondaryBtn}><XCircle className="h-4 w-4" /> Rejeitar</button>
                 <button onClick={() => decide("cancel")} disabled={saving || final} className={dangerBtn}><Ban className="h-4 w-4" /> Cancelar</button>
@@ -319,18 +315,21 @@ function BudgetSummary({ budget }: { budget: Budget }) {
       </InfoCard>
       <InfoCard title="Orçamento">
         <Info label="Título" value={budget.title} />
+        <Info label="Data" value={dateOnly(budget.issuedAt)} />
         <Info label="Vencimento" value={dateOnly(budget.expirationDate)} />
         <Info label="Responsável" value={budget.creator?.name ?? "—"} />
       </InfoCard>
       <InfoCard title="Totais">
-        <Info label="Subtotal" value={money(budget.subtotal)} />
+        <Info label="Serviços" value={money(budget.serviceSubtotal)} />
+        <Info label="Materiais" value={money(budget.materialSubtotal)} />
         <Info label="Desconto" value={money(budget.discount)} />
         <Info label="Adicional" value={money(budget.additional)} />
         <Info label="Total" value={money(budget.total)} strong />
       </InfoCard>
       <div className="lg:col-span-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
-        <h3 className="text-sm font-semibold">Descrição e observações</h3>
-        <p className="mt-2 text-sm text-[var(--color-muted-foreground)] whitespace-pre-wrap">{budget.description || budget.observations || "Sem observações."}</p>
+        <h3 className="text-sm font-semibold">Apresentação e condições comerciais</h3>
+        <p className="mt-2 text-sm whitespace-pre-wrap">{budget.introduction}</p>
+        <p className="mt-3 text-sm text-[var(--color-muted-foreground)] whitespace-pre-wrap">{[budget.description, budget.commercialNotes, budget.observations].filter(Boolean).join("\n\n") || "Sem observações."}</p>
       </div>
     </div>
   );
@@ -343,20 +342,18 @@ function BudgetItems({ budget }: { budget: Budget }) {
       <table className="w-full text-sm">
         <thead className="bg-[var(--color-muted)]/40 text-[11px] uppercase tracking-wider text-[var(--color-muted-foreground)]">
           <tr>
-            <th className="px-4 py-2 text-left">Item</th>
+            <th className="px-4 py-2 text-left">Tipo / item</th>
             <th className="px-4 py-2 text-right">Qtd.</th>
-            <th className="px-4 py-2 text-right">Preço snapshot</th>
-            <th className="px-4 py-2 text-right">Margem</th>
+            <th className="px-4 py-2 text-right">Valor unitário</th>
             <th className="px-4 py-2 text-right">Total</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-[var(--color-border)]">
           {budget.items.map((item) => (
             <tr key={item.id}>
-              <td className="px-4 py-3"><div className="font-medium">{item.description}</div><div className="text-caption">{item.product?.sku ?? item.productId}</div></td>
+              <td className="px-4 py-3"><div className="font-medium">{item.description}</div><div className="text-caption">{item.type === "SERVICE" ? "Serviço" : "Material"}</div></td>
               <td className="px-4 py-3 text-right font-mono">{formatNumber(Number(item.quantity))} {item.unit}</td>
-              <td className="px-4 py-3 text-right">{money(item.snapshotSalePrice)}</td>
-              <td className="px-4 py-3 text-right">{Number(item.snapshotMargin).toFixed(2)}%</td>
+              <td className="px-4 py-3 text-right">{money(item.unitPrice)}</td>
               <td className="px-4 py-3 text-right font-semibold">{money(item.total)}</td>
             </tr>
           ))}
@@ -419,7 +416,7 @@ function BudgetDocumentPanel({
   onRendered: (message: string) => void;
 }) {
   const [documentId, setDocumentId] = useState<string | null>(budget.document?.id ?? null);
-  const [loading, setLoading] = useState<"render" | "download" | null>(null);
+  const [loading, setLoading] = useState<"preview" | "render" | "download" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const blocked = budget.status === "CANCELED" || budget.status === "REJECTED";
 
@@ -438,6 +435,20 @@ function BudgetDocumentPanel({
       onRendered("Documento oficial do orçamento emitido.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Não foi possível emitir o documento.");
+    } finally {
+      setLoading(null);
+    }
+  }
+
+  async function previewOfficialDocument() {
+    setLoading("preview");
+    setError(null);
+    try {
+      await budgetsApi.previewBudget(budget.id);
+      const refreshed = await budgetsApi.getBudget(budget.id);
+      setDocumentId(refreshed.document?.id ?? null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Não foi possível gerar o Preview.");
     } finally {
       setLoading(null);
     }
@@ -467,10 +478,14 @@ function BudgetDocumentPanel({
           {budget.document?.renderedAt && (
             <p className="mt-1 text-caption">Última emissão: {formatDateTime(budget.document.renderedAt)}</p>
           )}
+          <p className="mt-1 text-caption">Estado: {budget.document?.editorialStatus === "STALE" ? "PDF desatualizado" : budget.document?.renderedAt ? "PDF disponível" : "Sem PDF"}</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <button onClick={previewOfficialDocument} disabled={blocked || loading !== null} className={secondaryBtn}>
+            <FileText className="h-4 w-4" /> Pré-visualizar
+          </button>
           <button onClick={renderOfficialDocument} disabled={!canWrite || blocked || loading !== null} className={primaryBtn}>
-            <RefreshCw className={`h-4 w-4 ${loading === "render" ? "animate-spin" : ""}`} /> Emitir Documento
+            <RefreshCw className={`h-4 w-4 ${loading === "render" ? "animate-spin" : ""}`} /> {budget.document?.editorialStatus === "STALE" ? "Gerar novamente" : "Emitir documento"}
           </button>
           <button onClick={downloadOfficialDocument} disabled={!documentId || loading !== null} className={secondaryBtn}>
             <Download className="h-4 w-4" /> Baixar PDF
@@ -491,184 +506,6 @@ function BudgetDocumentPanel({
         <EmptyState icon={FileText} title="Documento ainda não emitido" description="Clique em Emitir Documento para gerar o PDF oficial vinculado ao orçamento." />
       )}
     </div>
-  );
-}
-
-function BudgetCreationDrawer({
-  open,
-  onClose,
-  onSaved,
-  operationId,
-  initialCustomerId,
-  initialEquipmentId,
-}: {
-  open: boolean;
-  onClose: () => void;
-  onSaved: (budget: Budget) => void;
-  operationId?: string | null;
-  initialCustomerId?: string | null;
-  initialEquipmentId?: string | null;
-}) {
-  const [customerId, setCustomerId] = useState(initialCustomerId ?? "");
-  const [equipmentId, setEquipmentId] = useState(initialEquipmentId ?? "");
-  const [title, setTitle] = useState("Orçamento de manutenção");
-  const [expirationDate, setExpirationDate] = useState(nextDate(15));
-  const [observations, setObservations] = useState("");
-  const [productId, setProductId] = useState("");
-  const [quantity, setQuantity] = useState("1");
-  const [description, setDescription] = useState("");
-  const [items, setItems] = useState<BudgetItemPayload[]>([]);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const customers = useQuery((signal) => (open ? customersApi.listCustomers({ limit: 100, signal }) : Promise.resolve(null)), [open]);
-  const customer = useQuery<CustomerDetail | null>((signal) => (open && customerId ? customersApi.getCustomer(customerId, { signal }) : Promise.resolve(null)), [open, customerId]);
-  const equipments = useQuery((signal) => (open && customerId ? equipmentsApi.listEquipments({ limit: 100, customerId, signal }) : Promise.resolve(null)), [open, customerId]);
-  const products = useQuery((signal) => (open ? inventoryApi.listProducts({ limit: 100, active: true, signal }) : Promise.resolve(null)), [open]);
-  const pricing = useQuery((signal) => (open ? pricingApi.listPricing({ limit: 100, active: true, signal }) : Promise.resolve(null)), [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    setCustomerId(initialCustomerId ?? "");
-    setEquipmentId(initialEquipmentId ?? "");
-    setTitle("Orçamento de manutenção");
-    setExpirationDate(nextDate(15));
-    setObservations("");
-    setItems([]);
-    setProductId("");
-    setQuantity("1");
-    setDescription("");
-    setError(null);
-  }, [open, initialCustomerId, initialEquipmentId]);
-
-  useEffect(() => {
-    if (!productId && products.data?.items[0]) setProductId(products.data.items[0].id);
-  }, [productId, products.data]);
-
-  const pricingByProduct = useMemo(() => {
-    const map = new Map<string, ProductPricing>();
-    for (const row of pricing.data?.items ?? []) map.set(row.productId, row);
-    return map;
-  }, [pricing.data]);
-  const selectedProduct = products.data?.items.find((product) => product.id === productId) ?? null;
-  const selectedPricing = productId ? pricingByProduct.get(productId) ?? null : null;
-
-  function addItem() {
-    if (!productId || Number(quantity) <= 0) return;
-    setItems((current) => [...current, { productId, quantity: Number(quantity), description: description || undefined }]);
-    setQuantity("1");
-    setDescription("");
-  }
-
-  async function submit() {
-    setSaving(true);
-    setError(null);
-    try {
-      const payload: BudgetPayload = {
-        operationId: operationId ?? undefined,
-        customerId,
-        customerAddressId: customer.data?.addresses?.[0]?.id ?? undefined,
-        equipmentId: equipmentId || undefined,
-        title,
-        expirationDate: new Date(expirationDate).toISOString(),
-        observations: observations || undefined,
-        status: "PENDING",
-        items,
-      };
-      const budget = await budgetsApi.createBudget(payload);
-      onSaved(budget);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Não foi possível criar o orçamento.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <Drawer
-      open={open}
-      onClose={onClose}
-      eyebrow="Orçamento"
-      title="Novo orçamento"
-      width="max-w-3xl"
-      footer={
-        <>
-          <button onClick={onClose} className={secondaryBtn}>Cancelar</button>
-          <button onClick={submit} disabled={saving || !customerId || !title || items.length === 0} className={primaryBtn}>{saving ? "Salvando…" : "Salvar orçamento"}</button>
-        </>
-      }
-    >
-      <div className="space-y-5">
-        {error && <div className="rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 px-3 py-2 text-sm text-[var(--color-danger)]">{error}</div>}
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Cliente">
-            <select value={customerId} onChange={(event) => { setCustomerId(event.target.value); setEquipmentId(""); }} className={inputCls}>
-              <option value="">Selecione</option>
-              {customers.data?.items.map((customerRow: Customer) => <option key={customerRow.id} value={customerRow.id}>{customerRow.tradeName || customerRow.name}</option>)}
-            </select>
-          </Field>
-          <Field label="Equipamento">
-            <select value={equipmentId} onChange={(event) => setEquipmentId(event.target.value)} className={inputCls}>
-              <option value="">Opcional</option>
-              {equipments.data?.items.map((equipment: EquipmentSummary) => <option key={equipment.id} value={equipment.id}>{equipment.name}</option>)}
-            </select>
-          </Field>
-          <Field label="Título">
-            <input value={title} onChange={(event) => setTitle(event.target.value)} className={inputCls} />
-          </Field>
-          <Field label="Vencimento">
-            <input type="date" value={expirationDate} onChange={(event) => setExpirationDate(event.target.value)} className={inputCls} />
-          </Field>
-        </div>
-
-        <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
-          <h3 className="text-sm font-semibold">Produtos e Pricing</h3>
-          <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">O frontend envia produto e quantidade. Totais e snapshots são calculados exclusivamente pelo backend.</p>
-          <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_120px]">
-            <Field label="Produto">
-              <select value={productId} onChange={(event) => setProductId(event.target.value)} className={inputCls}>
-                {(products.data?.items ?? []).map((product: Product) => <option key={product.id} value={product.id}>{product.sku} · {product.name}</option>)}
-              </select>
-            </Field>
-            <Field label="Quantidade">
-              <input type="number" min="0.001" step="0.001" value={quantity} onChange={(event) => setQuantity(event.target.value)} className={inputCls} />
-            </Field>
-          </div>
-          <Field label="Descrição opcional">
-            <input value={description} onChange={(event) => setDescription(event.target.value)} className={inputCls} placeholder={selectedProduct?.name ?? ""} />
-          </Field>
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-            <span className="text-xs text-[var(--color-muted-foreground)]">
-              Pricing vigente: {selectedPricing ? `${money(selectedPricing.salePrice)} · margem ${Number(selectedPricing.marginPercentage).toFixed(2)}%` : "não carregado ou inexistente"}
-            </span>
-            <button onClick={addItem} disabled={!productId || !quantity} className={secondaryBtn}><Plus className="h-4 w-4" /> Adicionar item</button>
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <h3 className="text-sm font-semibold">Resumo antes de salvar</h3>
-          {items.length === 0 ? (
-            <EmptyState icon={ShoppingCart} title="Sem itens" description="Adicione pelo menos um produto." />
-          ) : (
-            <ul className="space-y-2">
-              {items.map((item, index) => {
-                const product = products.data?.items.find((row) => row.id === item.productId);
-                return (
-                  <li key={`${item.productId}-${index}`} className="flex items-center justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--color-border)] p-3">
-                    <span><span className="block text-sm font-medium">{item.description || product?.name || item.productId}</span><span className="text-caption">{product?.sku ?? "produto"}</span></span>
-                    <span className="font-mono text-sm">{formatNumber(item.quantity)}</span>
-                    <button onClick={() => setItems((current) => current.filter((_, i) => i !== index))} className="text-xs text-[var(--color-danger)] hover:underline">remover</button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </div>
-        <Field label="Observações">
-          <textarea value={observations} onChange={(event) => setObservations(event.target.value)} className={`${inputCls} min-h-24 py-2`} />
-        </Field>
-      </div>
-    </Drawer>
   );
 }
 
@@ -731,11 +568,6 @@ function downloadDocumentFile(file: DocumentDownloadResult) {
 function dateOnly(value: string): string {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "—" : date.toLocaleDateString("pt-BR");
-}
-
-function nextDate(days: number): string {
-  const date = new Date(Date.now() + days * 86_400_000);
-  return date.toISOString().slice(0, 10);
 }
 
 const inputCls = "w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-3 h-9 text-sm outline-none focus:border-[var(--color-primary)]";

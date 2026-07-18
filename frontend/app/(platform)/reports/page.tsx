@@ -18,6 +18,7 @@ import { OperationCreationDrawer } from '@platform/components/operation-creation
 import { DocumentHandoffInbox } from '@platform/components/document-handoff-inbox';
 import {
   ApiClientError,
+  budgetsApi,
   customersApi,
   documentsApi,
   equipmentsApi,
@@ -56,7 +57,7 @@ import { SignaturePad } from '@erp/ui/documents/signature-pad';
 import { MultiSelect } from '@erp/ui/multi-select';
 import { TechnicalCatalogSelector } from '@erp/ui/technical-catalog/technical-catalog-selector';
 import { DOCUMENT_KIND_LABEL } from '@erp/types';
-import { formatDate } from '@erp/utils';
+import { brlAmountInWords, formatBrl, formatDate, parseBrl } from '@erp/utils';
 
 const REPORT_TYPES: Array<{
   type: DocumentKind;
@@ -98,6 +99,7 @@ const REPORT_TYPES: Array<{
 
 type WorkflowForm = {
   workOrderSource: '' | 'EXISTING' | 'NEW';
+  receiptSource: '' | 'MANUAL' | 'OPERATION';
   operationId: string;
   customerId: string;
   addressId: string;
@@ -135,6 +137,15 @@ type WorkflowForm = {
   reference: string;
   amount: string;
   receivedFrom: string;
+  receiptNumber: string;
+  receiptDate: string;
+  receiptAmountInWords: string;
+  receiptService: string;
+  receiptDescription: string;
+  receiptWarrantyPreset: 'NONE' | '30' | '60' | '90' | '180' | '365' | 'CUSTOM';
+  receiptWarrantyDays: string;
+  receiptDeclaration: string;
+  receiptDeclarationEdited: boolean;
   checklist: string;
   signatureData: string | null;
   customerSignerName: string;
@@ -166,6 +177,7 @@ defaultPmocEnd.setUTCFullYear(defaultPmocEnd.getUTCFullYear() + 1);
 
 const emptyForm: WorkflowForm = {
   workOrderSource: '',
+  receiptSource: '',
   operationId: '',
   customerId: '',
   addressId: '',
@@ -203,6 +215,15 @@ const emptyForm: WorkflowForm = {
   reference: '',
   amount: '',
   receivedFrom: '',
+  receiptNumber: '',
+  receiptDate: new Date().toISOString().slice(0, 10),
+  receiptAmountInWords: '',
+  receiptService: '',
+  receiptDescription: '',
+  receiptWarrantyPreset: '90',
+  receiptWarrantyDays: '90',
+  receiptDeclaration: '',
+  receiptDeclarationEdited: false,
   checklist: '',
   signatureData: null,
   customerSignerName: '',
@@ -214,6 +235,22 @@ const emptyForm: WorkflowForm = {
   maintenanceChecklist: [],
   inspectedEquipments: [],
 };
+
+function receiptWarrantyLabel(days: string): string {
+  const value = Number(days);
+  if (!value) return 'sem garantia';
+  if (value === 365) return '1 ano';
+  return `${value} ${value === 1 ? 'dia' : 'dias'}`;
+}
+
+function receiptDeclaration(form: WorkflowForm, customerName: string): string {
+  const amount = parseBrl(form.amount);
+  const first = `Recebemos de ${customerName || '{CLIENTE}'} a importância de ${amount === null ? '{VALOR_NUMÉRICO}' : formatBrl(amount)} (${form.receiptAmountInWords || '{VALOR_EXTENSO}'}), referente ao serviço de ${form.receiptService || '{SERVIÇO}'}, descrito como ${form.receiptDescription || '{DESCRIÇÃO}'}.`;
+  const second = Number(form.receiptWarrantyDays)
+    ? `Damos por este recibo a devida quitação e garantia de ${receiptWarrantyLabel(form.receiptWarrantyDays)}, contados a partir da data deste documento.`
+    : 'Damos por este recibo a devida quitação.';
+  return `${first}\n\n${second}`;
+}
 
 export default function ReportCenterPage() {
   const router = useRouter();
@@ -239,7 +276,7 @@ export default function ReportCenterPage() {
   );
   const supported = new Set(REPORT_TYPES.map((item) => item.type));
   const availableReports = REPORT_TYPES.filter(
-    (item) => item.type !== 'RECEIPT' || hasRole('OWNER'),
+    (item) => item.type !== 'RECEIPT' || hasRole('OWNER', 'MANAGER'),
   );
   const items = (documents.data?.items ?? []).filter((item) => supported.has(item.type));
   const metrics = useMemo(
@@ -465,7 +502,7 @@ function ReportWorkflowDrawer({
   onClose: () => void;
   onRendered: () => void;
 }) {
-  const { hasRole } = useAuth();
+  const { hasRole, session } = useAuth();
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<WorkflowForm>(emptyForm);
   const [operation, setOperation] = useState<OperationDetail | null>(null);
@@ -517,6 +554,24 @@ function ReportWorkflowDrawer({
   const isWorkOrder = type === 'WORK_ORDER';
 
   useEffect(() => {
+    if (type !== 'RECEIPT' || form.technicalSignatureId) return;
+    const available = signatures.data?.items ?? [];
+    const selected = available.find((item) => item.isDefault && item.active) ??
+      (available.filter((item) => item.active).length === 1
+        ? available.find((item) => item.active)
+        : undefined);
+    if (selected) set('technicalSignatureId', selected.id);
+    // Selection only follows the organization default while the receipt has no override.
+  }, [type, signatures.data, form.technicalSignatureId]);
+
+  useEffect(() => {
+    if (type !== 'RECEIPT' || form.receiptDeclaration || !form.receiptSource) return;
+    set('receiptDeclaration', receiptDeclaration(form, selectedCustomer?.tradeName ?? selectedCustomer?.name ?? ''));
+    // Initial automatic text remains editable after it is populated.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [type, form.receiptSource, selectedCustomer]);
+
+  useEffect(() => {
     if (initialOperationId) void selectOperation(initialOperationId);
     // Initial source is immutable for the drawer lifetime.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -558,6 +613,17 @@ function ReportWorkflowDrawer({
     setForm({ ...emptyForm, workOrderSource: source });
   }
 
+  function selectReceiptSource(source: 'MANUAL' | 'OPERATION') {
+    setOperation(null);
+    setHandoff(null);
+    setError(null);
+    setForm({
+      ...emptyForm,
+      receiptSource: source,
+      operatorId: source === 'MANUAL' ? (session?.user.id ?? '') : '',
+    });
+  }
+
   async function selectOperation(id: string) {
     set('operationId', id);
     setError(null);
@@ -567,6 +633,19 @@ function ReportWorkflowDrawer({
     }
     try {
       const detail = await operationApi.getOperation(id);
+      const receiptBudget =
+        type === 'RECEIPT'
+          ? (
+              await budgetsApi.listOperationBudgets(id, {
+                page: 1,
+                limit: 20,
+                status: 'APPROVED',
+              })
+            ).items[0]
+          : null;
+      const receiptAmount = receiptBudget ? Number(receiptBudget.total) : null;
+      const receiptDescription =
+        [detail.serviceDescription, detail.observations].filter(Boolean).join('\n') || '';
       setOperation(detail);
       setForm((current) => ({
         ...current,
@@ -575,6 +654,23 @@ function ReportWorkflowDrawer({
         addressId: detail.address?.id ?? '',
         equipmentId: detail.equipment?.id ?? '',
         operatorId: detail.operator?.id ?? '',
+        ...(type === 'RECEIPT'
+          ? {
+              receiptSource: 'OPERATION' as const,
+              receiptNumber:
+                detail.receiptNumber ?? `REC-${String(detail.number).padStart(6, '0')}`,
+              receiptDate: (detail.completedAt ?? new Date().toISOString()).slice(0, 10),
+              amount: receiptAmount === null ? '' : receiptAmount.toFixed(2).replace('.', ','),
+              receiptAmountInWords:
+                receiptAmount === null ? '' : brlAmountInWords(receiptAmount),
+              receiptService:
+                detail.receiptService ?? detail.serviceDescription ?? 'serviços técnicos prestados',
+              receiptDescription: detail.receiptDescription ?? receiptDescription,
+              receiptWarrantyPreset: '90' as const,
+              receiptWarrantyDays: '90',
+              receiptDeclarationEdited: Boolean(detail.receiptDeclaration),
+            }
+          : {}),
         objective: detail.reportedIssue ?? '',
         diagnosis: detail.technicalDiagnosis ?? '',
         observations: detail.observations ?? '',
@@ -619,6 +715,17 @@ function ReportWorkflowDrawer({
           currentSituation: item.currentSituationSnapshot ?? '',
         })),
       }));
+      if (type === 'RECEIPT') {
+        setForm((current) => ({
+          ...current,
+          receiptDeclaration:
+            detail.receiptDeclaration ??
+            receiptDeclaration(
+              current,
+              detail.customer?.name ?? selectedCustomer?.tradeName ?? selectedCustomer?.name ?? '',
+            ),
+        }));
+      }
     } catch (cause) {
       setError(message(cause));
     }
@@ -853,7 +960,43 @@ function ReportWorkflowDrawer({
     setError(null);
     try {
       let detail = operation;
-      if (isWorkOrder && form.workOrderSource === 'EXISTING') {
+      if (type === 'RECEIPT') {
+        if (!form.receiptSource) throw new Error('Escolha a origem do Recibo.');
+        if (form.receiptSource === 'OPERATION' && !form.operationId)
+          throw new Error('Selecione uma Ordem de Serviço concluída.');
+        if (!form.customerId || !form.addressId)
+          throw new Error('Cliente e endereço são obrigatórios.');
+        if (!form.receiptDate || parseBrl(form.amount) === null)
+          throw new Error('Informe uma data e um valor monetário válido.');
+        if (
+          !form.receiptAmountInWords.trim() ||
+          !form.receiptService.trim() ||
+          !form.receiptDescription.trim() ||
+          !form.receiptDeclaration.trim()
+        )
+          throw new Error('Preencha os dados e a declaração do Recibo.');
+        if (!form.technicalSignatureId)
+          throw new Error('Selecione a assinatura do responsável técnico.');
+        if (form.receiptSource === 'OPERATION') {
+          detail = detail ?? (await operationApi.getOperation(form.operationId));
+          if (detail.status !== 'COMPLETED')
+            throw new Error('Somente Ordens de Serviço concluídas podem originar um Recibo.');
+        }
+        const content = contentFor(type, form);
+        if (detail) detail = await operationApi.updateOperation(detail.id, content);
+        else {
+          detail = await operationApi.createOperation({
+            customerId: form.customerId,
+            addressId: form.addressId,
+            equipmentId: null,
+            operatorId: form.operatorId || session?.user.id,
+            type: 'PROJETO',
+            documentType: 'RECEIPT',
+            status: 'DRAFT',
+            ...content,
+          });
+        }
+      } else if (isWorkOrder && form.workOrderSource === 'EXISTING') {
         if (!form.operationId)
           throw new Error('Selecione uma Operation para emitir a Ordem de Serviço.');
         detail = detail ?? (await operationApi.getOperation(form.operationId));
@@ -927,7 +1070,7 @@ function ReportWorkflowDrawer({
         documentDraft = await documentsApi.selectHandoffTechnicalSignature(documentDraft.id, form.technicalSignatureId);
       }
       setHandoff(documentDraft);
-      setStep(3);
+      setStep(type === 'RECEIPT' ? 4 : 3);
     } catch (cause) {
       setError(message(cause));
     } finally {
@@ -935,12 +1078,16 @@ function ReportWorkflowDrawer({
     }
   }
 
-  const steps = [
-    'Origem',
-    'Conteúdo',
-    type === 'TECHNICAL_OPINION' ? 'Assinatura' : 'Evidências',
-    'Preview',
-  ];
+  const steps =
+    type === 'RECEIPT'
+      ? ['Origem', 'Dados do recibo', 'Garantia', 'Assinatura técnica', 'Preview']
+      : [
+          'Origem',
+          'Conteúdo',
+          type === 'TECHNICAL_OPINION' ? 'Assinatura' : 'Evidências',
+          'Preview',
+        ];
+  const previewStep = steps.length - 1;
   return (
     <>
     <Drawer
@@ -958,11 +1105,12 @@ function ReportWorkflowDrawer({
           >
             {step > 0 ? 'Voltar' : 'Cancelar'}
           </button>
-          {step < 2 && (
+          {step < previewStep - 1 && (
             <button
               type="button"
               disabled={
                 creatingPmoc ||
+                (type === 'RECEIPT' && step === 0 && !form.receiptSource) ||
                 (type === 'PMOC' && step === 0 && (!form.pmocId || !operation))
               }
               onClick={() => setStep(step + 1)}
@@ -971,7 +1119,7 @@ function ReportWorkflowDrawer({
               Continuar
             </button>
           )}
-          {step === 2 && (
+          {step === previewStep - 1 && (
             <button
               type="button"
               disabled={busy}
@@ -984,7 +1132,9 @@ function ReportWorkflowDrawer({
         </>
       }
     >
-      <div className="mb-5 grid grid-cols-4 gap-2">
+      <div
+        className={`mb-5 grid gap-2 ${type === 'RECEIPT' ? 'grid-cols-2 md:grid-cols-5' : 'grid-cols-4'}`}
+      >
         {steps.map((label, index) => (
           <div
             key={label}
@@ -1027,6 +1177,7 @@ function ReportWorkflowDrawer({
           selectedCustomer={selectedCustomer}
           onSet={set}
           onWorkOrderSource={selectWorkOrderSource}
+          onReceiptSource={selectReceiptSource}
           onOperation={selectOperation}
           onPmoc={selectPmoc}
           canCreatePmoc={hasRole('OWNER', 'MANAGER')}
@@ -1038,7 +1189,30 @@ function ReportWorkflowDrawer({
           pmocOperation={operation}
         />
       )}
-      {step === 1 && (
+      {type === 'RECEIPT' && step === 1 && (
+        <ReceiptDataStep
+          form={form}
+          customers={customers.data?.items ?? []}
+          addresses={addresses}
+          customerName={selectedCustomer?.tradeName ?? selectedCustomer?.name ?? ''}
+          onSet={set}
+        />
+      )}
+      {type === 'RECEIPT' && step === 2 && (
+        <ReceiptWarrantyStep
+          form={form}
+          customerName={selectedCustomer?.tradeName ?? selectedCustomer?.name ?? ''}
+          onSet={set}
+        />
+      )}
+      {type === 'RECEIPT' && step === 3 && (
+        <ReceiptSignatureStep
+          form={form}
+          signatures={signatures.data?.items ?? []}
+          onSet={set}
+        />
+      )}
+      {type !== 'RECEIPT' && step === 1 && (
         <ContentStep
           type={type}
           form={form}
@@ -1051,8 +1225,8 @@ function ReportWorkflowDrawer({
           onSet={set}
         />
       )}
-      {step === 2 && <EvidenceStep type={type} form={form} signatures={signatures.data?.items ?? []} onSet={set} />}
-      {step === 3 && operation && (
+      {type !== 'RECEIPT' && step === 2 && <EvidenceStep type={type} form={form} signatures={signatures.data?.items ?? []} onSet={set} />}
+      {step === previewStep && operation && (
         <div className="space-y-4">
           {handoff && <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--color-border)] p-3"><div><strong>{handoff.editorialStatus === 'DRAFT' ? 'Rascunho' : handoff.editorialStatus === 'PENDING' ? 'Revisão pendente' : handoff.editorialStatus === 'READY' ? 'Pronto para emissão' : 'Desatualizado'}</strong><p className="text-caption">A criação manual utiliza o mesmo ciclo editorial das coletas do Operator.</p></div><div className="flex gap-2"><button className="h-9 rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 text-sm" onClick={async () => { try { setHandoff(await documentsApi.startHandoffReview(handoff.id)); } catch (cause) { setError(message(cause)); } }}>Salvar como pendente</button><button className="h-9 rounded-[var(--radius-md)] bg-[var(--color-primary)] px-3 text-sm text-[var(--color-primary-foreground)]" onClick={async () => { try { await documentsApi.startHandoffReview(handoff.id); setHandoff(await documentsApi.finalizeHandoffReview(handoff.id)); } catch (cause) { setError(message(cause)); } }}>Finalizar revisão</button></div></div>}
           <DocumentViewer
@@ -1090,6 +1264,7 @@ function OriginStep({
   selectedCustomer,
   onSet,
   onWorkOrderSource,
+  onReceiptSource,
   onOperation,
   onPmoc,
   canCreatePmoc,
@@ -1112,6 +1287,7 @@ function OriginStep({
   selectedCustomer: CustomerDetail | null;
   onSet: <K extends keyof WorkflowForm>(key: K, value: WorkflowForm[K]) => void;
   onWorkOrderSource: (source: 'EXISTING' | 'NEW') => void;
+  onReceiptSource: (source: 'MANUAL' | 'OPERATION') => void;
   onOperation: (id: string) => void;
   onPmoc: (id: string) => void;
   canCreatePmoc: boolean;
@@ -1122,6 +1298,58 @@ function OriginStep({
   onGeneratePmocWorkOrder: () => void;
   pmocOperation: OperationDetail | null;
 }) {
+  if (type === 'RECEIPT') {
+    const completedWorkOrders = operations.filter(
+      (item) => item.status === 'COMPLETED' && item.requestedDocumentType === 'WORK_ORDER',
+    );
+    return (
+      <div className="space-y-5">
+        <div className="grid gap-3 md:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => onReceiptSource('MANUAL')}
+            className={`rounded-[var(--radius-lg)] border p-4 text-left transition ${form.receiptSource === 'MANUAL' ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5' : 'border-[var(--color-border)] hover:bg-[var(--color-muted)]'}`}
+          >
+            <strong className="block text-sm">Preenchimento manual</strong>
+            <span className="mt-1 block text-caption">
+              Cria um Recibo administrativo independente, com todos os campos editáveis.
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => onReceiptSource('OPERATION')}
+            className={`rounded-[var(--radius-lg)] border p-4 text-left transition ${form.receiptSource === 'OPERATION' ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5' : 'border-[var(--color-border)] hover:bg-[var(--color-muted)]'}`}
+          >
+            <strong className="block text-sm">A partir de Ordem de Serviço</strong>
+            <span className="mt-1 block text-caption">
+              Preenche cliente, endereço, serviço, data e valor disponível; tudo permanece editável.
+            </span>
+          </button>
+        </div>
+        {form.receiptSource === 'OPERATION' && (
+          <Field label="Ordem de Serviço concluída">
+            <select value={form.operationId} onChange={(event) => void onOperation(event.target.value)}>
+              <option value="">Selecione…</option>
+              {completedWorkOrders.map((item) => (
+                <option key={item.id} value={item.id}>
+                  OS-{String(item.number).padStart(6, '0')} · {item.customer?.name ?? 'Cliente'}
+                </option>
+              ))}
+            </select>
+            {completedWorkOrders.length === 0 && (
+              <span className="text-caption">Nenhuma Ordem de Serviço concluída foi encontrada.</span>
+            )}
+          </Field>
+        )}
+        {form.receiptSource === 'MANUAL' && (
+          <p className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-muted)]/40 p-3 text-sm">
+            Os dados do cliente e do recibo serão informados na próxima etapa.
+          </p>
+        )}
+        {!form.receiptSource && <p className="text-caption">Selecione uma origem para continuar.</p>}
+      </div>
+    );
+  }
   if (type === 'WORK_ORDER')
     return (
       <div className="space-y-5">
@@ -1605,6 +1833,193 @@ function RequesterSummary({
         </div>
       </dl>
     </section>
+  );
+}
+
+function ReceiptDataStep({
+  form,
+  customers,
+  addresses,
+  customerName,
+  onSet,
+}: {
+  form: WorkflowForm;
+  customers: Customer[];
+  addresses: CustomerAddress[];
+  customerName: string;
+  onSet: <K extends keyof WorkflowForm>(key: K, value: WorkflowForm[K]) => void;
+}) {
+  function updateAmount(value: string) {
+    const amount = parseBrl(value);
+    const words = amount === null ? form.receiptAmountInWords : brlAmountInWords(amount);
+    onSet('amount', value);
+    if (amount !== null) onSet('receiptAmountInWords', words);
+    if (!form.receiptDeclarationEdited) {
+      onSet('receiptDeclaration', receiptDeclaration({ ...form, amount: value, receiptAmountInWords: words }, customerName));
+    }
+  }
+  return (
+    <div className="space-y-5">
+      <div className="grid gap-4 md:grid-cols-2">
+        <Text
+          label="Número"
+          value={form.receiptNumber}
+          onChange={(value) => onSet('receiptNumber', value)}
+        />
+        <Field label="Data">
+          <input type="date" value={form.receiptDate} onChange={(event) => onSet('receiptDate', event.target.value)} />
+        </Field>
+        <Field label="Cliente">
+          <select
+            value={form.customerId}
+            onChange={(event) => {
+              const selected = customers.find((item) => item.id === event.target.value);
+              onSet('customerId', event.target.value);
+              onSet('addressId', '');
+              if (!form.receiptDeclarationEdited) {
+                onSet('receiptDeclaration', receiptDeclaration(form, selected?.tradeName ?? selected?.name ?? ''));
+              }
+            }}
+          >
+            <option value="">Selecione…</option>
+            {customers.map((item) => <option key={item.id} value={item.id}>{item.tradeName ?? item.name}</option>)}
+          </select>
+        </Field>
+        <Field label="Endereço">
+          <select value={form.addressId} onChange={(event) => onSet('addressId', event.target.value)}>
+            <option value="">Selecione…</option>
+            {addresses.map((item) => <option key={item.id} value={item.id}>{item.name ?? 'Endereço'} · {item.street}</option>)}
+          </select>
+        </Field>
+        <Text label="Valor" value={form.amount} onChange={updateAmount} inputMode="decimal" />
+        <Text
+          label="Valor por extenso"
+          value={form.receiptAmountInWords}
+          onChange={(value) => {
+            onSet('receiptAmountInWords', value);
+            if (!form.receiptDeclarationEdited) onSet('receiptDeclaration', receiptDeclaration({ ...form, receiptAmountInWords: value }, customerName));
+          }}
+        />
+        <div className="md:col-span-2">
+          <Text label="Serviço" value={form.receiptService} onChange={(value) => {
+            onSet('receiptService', value);
+            if (!form.receiptDeclarationEdited) onSet('receiptDeclaration', receiptDeclaration({ ...form, receiptService: value }, customerName));
+          }} />
+        </div>
+        <div className="md:col-span-2">
+          <Area label="Descrição" value={form.receiptDescription} onChange={(value) => {
+            onSet('receiptDescription', value);
+            if (!form.receiptDeclarationEdited) onSet('receiptDeclaration', receiptDeclaration({ ...form, receiptDescription: value }, customerName));
+          }} />
+        </div>
+      </div>
+      <section className="space-y-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div><h3 className="text-sm font-semibold">Texto da declaração</h3><p className="text-caption">Gerado automaticamente e livremente editável.</p></div>
+          <button
+            type="button"
+            className="h-9 rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 text-sm"
+            onClick={() => {
+              onSet('receiptDeclarationEdited', false);
+              onSet('receiptDeclaration', receiptDeclaration(form, customerName));
+            }}
+          >
+            Restaurar texto automático
+          </button>
+        </div>
+        <Area label="Declaração final" value={form.receiptDeclaration} onChange={(value) => {
+          onSet('receiptDeclaration', value);
+          onSet('receiptDeclarationEdited', true);
+        }} />
+      </section>
+    </div>
+  );
+}
+
+function ReceiptWarrantyStep({ form, customerName, onSet }: {
+  form: WorkflowForm;
+  customerName: string;
+  onSet: <K extends keyof WorkflowForm>(key: K, value: WorkflowForm[K]) => void;
+}) {
+  const options: Array<[WorkflowForm['receiptWarrantyPreset'], string]> = [
+    ['NONE', 'Sem garantia'], ['30', '30 dias'], ['60', '60 dias'], ['90', '90 dias'],
+    ['180', '180 dias'], ['365', '1 ano'], ['CUSTOM', 'Personalizado'],
+  ];
+  function select(preset: WorkflowForm['receiptWarrantyPreset']) {
+    const days = preset === 'NONE' ? '' : preset === 'CUSTOM' ? form.receiptWarrantyDays : preset;
+    const next = { ...form, receiptWarrantyPreset: preset, receiptWarrantyDays: days };
+    onSet('receiptWarrantyPreset', preset);
+    onSet('receiptWarrantyDays', days);
+    if (!form.receiptDeclarationEdited) onSet('receiptDeclaration', receiptDeclaration(next, customerName));
+  }
+  return (
+    <div className="space-y-4">
+      <Field label="Prazo da garantia">
+        <select value={form.receiptWarrantyPreset} onChange={(event) => select(event.target.value as WorkflowForm['receiptWarrantyPreset'])}>
+          {options.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        </select>
+      </Field>
+      {form.receiptWarrantyPreset === 'CUSTOM' && (
+        <Field label="Prazo personalizado em dias">
+          <input
+            type="number"
+            min={1}
+            max={3650}
+            value={form.receiptWarrantyDays}
+            onChange={(event) => {
+              onSet('receiptWarrantyDays', event.target.value);
+              if (!form.receiptDeclarationEdited) onSet('receiptDeclaration', receiptDeclaration({ ...form, receiptWarrantyDays: event.target.value }, customerName));
+            }}
+          />
+        </Field>
+      )}
+      <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-muted)]/40 p-4">
+        <p className="text-sm font-medium">Declaração resultante</p>
+        <p className="mt-2 whitespace-pre-line text-sm text-[var(--color-muted-foreground)]">{form.receiptDeclaration || receiptDeclaration(form, customerName)}</p>
+      </div>
+    </div>
+  );
+}
+
+function ReceiptSignatureStep({ form, signatures, onSet }: {
+  form: WorkflowForm;
+  signatures: Signature[];
+  onSet: <K extends keyof WorkflowForm>(key: K, value: WorkflowForm[K]) => void;
+}) {
+  return (
+    <div className="space-y-4">
+      <div><h3 className="text-base font-semibold">Responsável técnico</h3><p className="text-caption">A escolha vale somente para este Recibo. Nenhuma assinatura do cliente será solicitada.</p></div>
+      <div className="grid gap-3 md:grid-cols-2">
+        {signatures.filter((item) => item.active).map((signature) => (
+          <ReceiptSignatureOption
+            key={signature.id}
+            signature={signature}
+            selected={form.technicalSignatureId === signature.id}
+            onSelect={() => onSet('technicalSignatureId', signature.id)}
+          />
+        ))}
+      </div>
+      {signatures.length === 0 && <EmptyState icon={ShieldCheck} title="Nenhuma assinatura ativa" description="Cadastre uma assinatura institucional antes de emitir o Recibo." />}
+    </div>
+  );
+}
+
+function ReceiptSignatureOption({ signature, selected, onSelect }: { signature: Signature; selected: boolean; onSelect: () => void }) {
+  const image = useQuery((signal) => signaturesApi.downloadSignatureImage(signature.id, { signal }), [signature.id]);
+  return (
+    <button type="button" onClick={onSelect} className={`rounded-[var(--radius-lg)] border p-4 text-left transition ${selected ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5' : 'border-[var(--color-border)] hover:bg-[var(--color-muted)]'}`}>
+      <div className="grid h-20 place-items-center rounded-md bg-white p-2">
+        {image.data ? <img // eslint-disable-line @next/next/no-img-element
+          src={`data:${image.data.mimeType};base64,${image.data.contentBase64}`}
+          alt={`Assinatura de ${signature.name}`}
+          className="max-h-16 max-w-full object-contain"
+        /> : <span className="text-caption">Carregando assinatura…</span>}
+      </div>
+      <p className="mt-3 font-semibold">{signature.name}</p>
+      <p className="text-sm text-[var(--color-muted-foreground)]">{signature.title}</p>
+      {signature.professionalCouncil && <p className="text-caption">{signature.professionalCouncil}</p>}
+      {signature.isDefault && <span className="mt-2 inline-flex rounded-full bg-emerald-500/10 px-2 py-1 text-xs text-emerald-700">Assinatura padrão</span>}
+    </button>
   );
 }
 
@@ -2392,10 +2807,19 @@ function contentFor(type: DocumentKind, form: WorkflowForm) {
   };
   if (type === 'RECEIPT')
     return {
-      ...common,
-      reportedIssue: form.reference,
-      serviceDescription: `Valor recebido: R$ ${form.amount || '0,00'}\nRecebido de: ${form.receivedFrom || 'Não informado'}`,
-      observations: form.observations,
+      checklist: [],
+      photos: [],
+      signatureData: null,
+      customerSignerName: null,
+      customerSignerRole: null,
+      receiptNumber: form.receiptNumber.trim() || null,
+      receiptIssuedAt: form.receiptDate,
+      receiptAmount: parseBrl(form.amount),
+      receiptAmountInWords: form.receiptAmountInWords.trim(),
+      receiptService: form.receiptService.trim(),
+      receiptDescription: form.receiptDescription.trim(),
+      receiptWarrantyDays: Number(form.receiptWarrantyDays) || null,
+      receiptDeclaration: form.receiptDeclaration.trim(),
     };
   if (type === 'TECHNICAL_OPINION')
     return {

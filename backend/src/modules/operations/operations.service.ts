@@ -232,6 +232,14 @@ export class OperationsService {
           observations: dto.observations ?? null,
           reportedIssue: dto.reportedIssue ?? null,
           serviceDescription: dto.serviceDescription ?? null,
+          receiptNumber: dto.receiptNumber ?? null,
+          receiptIssuedAt: dto.receiptIssuedAt ? new Date(dto.receiptIssuedAt) : null,
+          receiptAmount: dto.receiptAmount ?? null,
+          receiptAmountInWords: dto.receiptAmountInWords ?? null,
+          receiptService: dto.receiptService ?? null,
+          receiptDescription: dto.receiptDescription ?? null,
+          receiptWarrantyDays: dto.receiptWarrantyDays ?? null,
+          receiptDeclaration: dto.receiptDeclaration ?? null,
           technicalDiagnosis: dto.technicalDiagnosis ?? null,
           technicalRecommendations: dto.technicalRecommendations ?? null,
           technicalOpinionObjective: dto.technicalOpinionObjective ?? null,
@@ -264,20 +272,25 @@ export class OperationsService {
           signedAt: signatureData ? (dto.signedAt ? new Date(dto.signedAt) : new Date()) : null,
         },
       });
-      await tx.operationDocument.create({
-        data: {
-          operationId: operation.id,
-          type: DocumentTemplateType.WORK_ORDER,
-          number: formatDocumentNumber(OPERATION_DOCUMENT_PREFIX.WORK_ORDER, operation.number),
-          status: 'DRAFT',
-        },
-      });
+      if (dto.documentType !== DocumentTemplateType.RECEIPT) {
+        await tx.operationDocument.create({
+          data: {
+            operationId: operation.id,
+            type: DocumentTemplateType.WORK_ORDER,
+            number: formatDocumentNumber(OPERATION_DOCUMENT_PREFIX.WORK_ORDER, operation.number),
+            status: 'DRAFT',
+          },
+        });
+      }
       if (dto.documentType && dto.documentType !== DocumentTemplateType.WORK_ORDER) {
         await tx.operationDocument.create({
           data: {
             operationId: operation.id,
             type: dto.documentType,
-            number: formatDocumentNumber(OPERATION_DOCUMENT_PREFIX[dto.documentType], operation.number),
+            number:
+              dto.documentType === DocumentTemplateType.RECEIPT && dto.receiptNumber
+                ? dto.receiptNumber
+                : formatDocumentNumber(OPERATION_DOCUMENT_PREFIX[dto.documentType], operation.number),
             status: 'DRAFT',
           },
         });
@@ -439,6 +452,24 @@ export class OperationsService {
           ...(dto.reportedIssue !== undefined ? { reportedIssue: dto.reportedIssue } : {}),
           ...(dto.serviceDescription !== undefined
             ? { serviceDescription: dto.serviceDescription }
+            : {}),
+          ...(dto.receiptNumber !== undefined ? { receiptNumber: dto.receiptNumber } : {}),
+          ...(dto.receiptIssuedAt !== undefined
+            ? { receiptIssuedAt: new Date(dto.receiptIssuedAt) }
+            : {}),
+          ...(dto.receiptAmount !== undefined ? { receiptAmount: dto.receiptAmount } : {}),
+          ...(dto.receiptAmountInWords !== undefined
+            ? { receiptAmountInWords: dto.receiptAmountInWords }
+            : {}),
+          ...(dto.receiptService !== undefined ? { receiptService: dto.receiptService } : {}),
+          ...(dto.receiptDescription !== undefined
+            ? { receiptDescription: dto.receiptDescription }
+            : {}),
+          ...(dto.receiptWarrantyDays !== undefined
+            ? { receiptWarrantyDays: dto.receiptWarrantyDays }
+            : {}),
+          ...(dto.receiptDeclaration !== undefined
+            ? { receiptDeclaration: dto.receiptDeclaration }
             : {}),
           ...(dto.technicalDiagnosis !== undefined
             ? { technicalDiagnosis: dto.technicalDiagnosis }

@@ -1,5 +1,5 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { AssetLifecycleEventType, BudgetHistoryAction, BudgetStatus, DocumentTemplateType, NotificationType, Prisma } from '@prisma/client';
+import { AssetLifecycleEventType, BudgetHistoryAction, BudgetItemType, BudgetStatus, DocumentTemplateType, NotificationType, OperationStatus, Prisma } from '@prisma/client';
 import { BUDGET_AUDIT_ACTIONS, BUDGET_RESOURCE } from '../../shared/constants/budgets.constants';
 import { ERROR_CODES } from '../../shared/constants/error-codes.constants';
 import { ApplicationException } from '../../shared/exceptions/application.exception';
@@ -8,7 +8,6 @@ import { buildPaginatedResponse, type PaginatedResponse } from '../../shared/typ
 import { LifecyclePublisher } from '../asset-lifecycle/lifecycle-publisher.service';
 import { PrismaService } from '../database/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { PricingService } from '../pricing/pricing.service';
 import type { BudgetDecisionDto, BudgetItemInputDto, CreateBudgetDto, ListBudgetsQueryDto, UpdateBudgetDto } from './dto/budget.dto';
 
 export interface BudgetAuditContext {
@@ -24,7 +23,7 @@ const BUDGET_INCLUDE = {
   customerAddress: true,
   equipment: { select: { id: true, name: true, tag: true, type: true, status: true } },
   creator: { select: { id: true, name: true, email: true, username: true, role: true } },
-  items: { include: { product: true }, orderBy: { createdAt: 'asc' } },
+  items: { include: { product: true }, orderBy: [{ type: 'asc' as const }, { sortOrder: 'asc' as const }, { createdAt: 'asc' as const }] },
   document: {
     select: {
       id: true,
@@ -37,6 +36,10 @@ const BUDGET_INCLUDE = {
       fileSize: true,
       renderedAt: true,
       renderMetadata: true,
+      editorialStatus: true,
+      revision: true,
+      technicalSignatureId: true,
+      customerSignatureSnapshot: true,
       createdAt: true,
       updatedAt: true,
     },
@@ -58,21 +61,26 @@ type BudgetRelations = {
 };
 
 type SnapshotItem = {
-  productId: string;
+  productId: string | null;
+  type: BudgetItemType;
   description: string;
   quantity: number;
   unit: string;
+  unitPrice: string;
+  sortOrder: number;
   snapshotCost: string;
   snapshotSalePrice: string;
   snapshotMargin: string;
   total: string;
 };
 
+const DEFAULT_BUDGET_INTRODUCTION =
+  'Atendendo à honrosa solicitação de V.Sa., apresentamos nosso orçamento conforme solicitado.';
+
 @Injectable()
 export class BudgetsService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly pricing: PricingService,
     private readonly lifecycle: LifecyclePublisher,
     private readonly notifications: NotificationsService,
   ) {}
@@ -106,10 +114,13 @@ export class BudgetsService {
     const relations = await this.resolveRelations(dto);
     const items = await this.resolveSnapshotItems(dto.items);
     const totals = this.calculateTotals(items, dto.discount, dto.additional);
-    const expirationDate = new Date(dto.expirationDate);
-    if (Number.isNaN(expirationDate.getTime())) {
-      throw new ApplicationException(ERROR_CODES.VALIDATION_ERROR, 'Invalid expiration date', HttpStatus.BAD_REQUEST);
-    }
+    const issuedAt = dto.issuedAt ? new Date(dto.issuedAt) : new Date();
+    const validityDays = dto.validityDays ?? 30;
+    const expirationDate = dto.expirationDate
+      ? new Date(dto.expirationDate)
+      : new Date(issuedAt.getTime() + validityDays * 86_400_000);
+    this.assertDates(issuedAt, expirationDate);
+    const technicalSignatureId = await this.defaultTechnicalSignatureId();
 
     return this.prisma.$transaction(async (tx) => {
       const budget = await tx.budget.create({
@@ -118,16 +129,36 @@ export class BudgetsService {
           status: dto.status ?? BudgetStatus.DRAFT,
           title: this.clean(dto.title),
           description: this.optionalClean(dto.description),
+          issuedAt,
+          introduction: this.clean(dto.introduction || DEFAULT_BUDGET_INTRODUCTION),
+          serviceSubtotal: totals.serviceSubtotal,
+          materialSubtotal: totals.materialSubtotal,
           subtotal: totals.subtotal,
           discount: totals.discount,
           additional: totals.additional,
           total: totals.total,
+          amountInWords: this.clean(dto.amountInWords || this.amountInWords(Number(totals.total))),
+          validityDays,
+          paymentMethods: dto.paymentMethods,
+          commercialNotes: this.optionalClean(dto.commercialNotes),
           expirationDate,
           observations: this.optionalClean(dto.observations),
           createdBy: actor.id,
           items: { createMany: { data: items } },
         },
         include: BUDGET_INCLUDE,
+      });
+      await tx.operationDocument.create({
+        data: {
+          budgetId: budget.id,
+          operationId: null,
+          type: DocumentTemplateType.BUDGET,
+          number: `ORC-${String(budget.number).padStart(6, '0')}`,
+          status: 'DRAFT',
+          handoffOrigin: 'PLATFORM',
+          collectedById: actor.id,
+          technicalSignatureId,
+        },
       });
       await this.createHistoryTx(tx, budget.id, actor.id, BudgetHistoryAction.CREATED, null, budget.status, {
         documentTemplateType: DocumentTemplateType.BUDGET,
@@ -139,7 +170,7 @@ export class BudgetsService {
         status: budget.status,
         total: budget.total.toString(),
       });
-      return budget;
+      return tx.budget.findUniqueOrThrow({ where: { id: budget.id }, include: BUDGET_INCLUDE });
     });
   }
 
@@ -163,9 +194,12 @@ export class BudgetsService {
       : this.calculateTotals(
           current.items.map((item) => ({
             productId: item.productId,
+            type: item.type,
             description: item.description,
             quantity: Number(item.quantity),
             unit: item.unit,
+            unitPrice: item.unitPrice.toString(),
+            sortOrder: item.sortOrder,
             snapshotCost: item.snapshotCost.toString(),
             snapshotSalePrice: item.snapshotSalePrice.toString(),
             snapshotMargin: item.snapshotMargin.toString(),
@@ -174,6 +208,14 @@ export class BudgetsService {
           dto.discount ?? Number(current.discount),
           dto.additional ?? Number(current.additional),
         );
+    const issuedAt = dto.issuedAt ? new Date(dto.issuedAt) : current.issuedAt;
+    const validityDays = dto.validityDays ?? current.validityDays;
+    const expirationDate = dto.expirationDate
+      ? new Date(dto.expirationDate)
+      : dto.issuedAt !== undefined || dto.validityDays !== undefined
+        ? new Date(issuedAt.getTime() + validityDays * 86_400_000)
+        : current.expirationDate;
+    this.assertDates(issuedAt, expirationDate);
 
     return this.prisma.$transaction(async (tx) => {
       if (items) {
@@ -186,17 +228,33 @@ export class BudgetsService {
           ...(relations ?? {}),
           ...(dto.title !== undefined ? { title: this.clean(dto.title) } : {}),
           ...(dto.description !== undefined ? { description: this.optionalClean(dto.description) } : {}),
-          ...(dto.expirationDate !== undefined ? { expirationDate: new Date(dto.expirationDate) } : {}),
+          ...(dto.issuedAt !== undefined ? { issuedAt } : {}),
+          ...(dto.introduction !== undefined ? { introduction: this.clean(dto.introduction) } : {}),
+          ...(dto.expirationDate !== undefined || dto.issuedAt !== undefined || dto.validityDays !== undefined
+            ? { expirationDate }
+            : {}),
+          ...(dto.validityDays !== undefined ? { validityDays: dto.validityDays } : {}),
+          ...(dto.paymentMethods !== undefined ? { paymentMethods: dto.paymentMethods } : {}),
+          ...(dto.commercialNotes !== undefined ? { commercialNotes: this.optionalClean(dto.commercialNotes) } : {}),
           ...(dto.observations !== undefined ? { observations: this.optionalClean(dto.observations) } : {}),
           status: nextStatus,
+          serviceSubtotal: totals.serviceSubtotal,
+          materialSubtotal: totals.materialSubtotal,
           subtotal: totals.subtotal,
           discount: totals.discount,
           additional: totals.additional,
           total: totals.total,
+          amountInWords: this.clean(dto.amountInWords || this.amountInWords(Number(totals.total))),
           ...(items ? { items: { createMany: { data: items } } } : {}),
         },
         include: BUDGET_INCLUDE,
       });
+      if (current.document?.renderedAt) {
+        await tx.operationDocument.update({
+          where: { id: current.document.id },
+          data: { editorialStatus: 'STALE' },
+        });
+      }
       await this.createHistoryTx(
         tx,
         id,
@@ -400,9 +458,16 @@ export class BudgetsService {
     if (dto.operationId) {
       const operation = await this.prisma.operation.findUnique({
         where: { id: dto.operationId },
-        select: { id: true, customerId: true, addressId: true, equipmentId: true },
+        select: { id: true, customerId: true, addressId: true, equipmentId: true, status: true },
       });
       if (!operation) throw new ApplicationException(ERROR_CODES.OPERATION_NOT_FOUND, 'Operation was not found', HttpStatus.NOT_FOUND);
+      if (operation.status !== OperationStatus.COMPLETED) {
+        throw new ApplicationException(
+          ERROR_CODES.BUDGET_OPERATION_NOT_COMPLETED,
+          'Budget origin must be a completed Work Order',
+          HttpStatus.CONFLICT,
+        );
+      }
       if (operation.customerId !== dto.customerId) {
         throw new ApplicationException(ERROR_CODES.BUDGET_INVALID_RELATIONSHIP, 'Operation belongs to another customer', HttpStatus.BAD_REQUEST);
       }
@@ -439,37 +504,129 @@ export class BudgetsService {
       throw new ApplicationException(ERROR_CODES.BUDGET_ITEM_REQUIRED, 'Budget must have at least one item', HttpStatus.BAD_REQUEST);
     }
     const items: SnapshotItem[] = [];
-    for (const item of dtoItems) {
-      const [product, pricing] = await Promise.all([
-        this.prisma.product.findUnique({ where: { id: item.productId }, select: { id: true, name: true, unit: true, isActive: true } }),
-        this.pricing.resolveForConsumer(item.productId, 'BUDGET'),
-      ]);
-      if (!product?.isActive) {
-        throw new ApplicationException(ERROR_CODES.PRODUCT_NOT_FOUND, 'Product was not found or is inactive', HttpStatus.NOT_FOUND);
+    for (const [index, item] of dtoItems.entries()) {
+      if (item.productId) {
+        const product = await this.prisma.product.findUnique({
+          where: { id: item.productId },
+          select: { id: true, isActive: true },
+        });
+        if (!product?.isActive) {
+          throw new ApplicationException(
+            ERROR_CODES.PRODUCT_NOT_FOUND,
+            'Product was not found or is inactive',
+            HttpStatus.NOT_FOUND,
+          );
+        }
       }
       const quantity = Number(item.quantity);
-      const salePrice = Number(pricing.salePrice);
+      const unitPrice = Number(item.unitPrice);
       items.push({
-        productId: item.productId,
-        description: this.clean(item.description || product.name),
+        productId: item.productId ?? null,
+        type: item.type,
+        description: this.clean(item.description),
         quantity,
-        unit: product.unit,
-        snapshotCost: pricing.costPrice,
-        snapshotSalePrice: pricing.salePrice,
-        snapshotMargin: pricing.marginPercentage,
-        total: this.money(quantity * salePrice),
+        unit: this.clean(item.unit).toUpperCase(),
+        unitPrice: this.money(unitPrice),
+        sortOrder: item.sortOrder ?? index,
+        snapshotCost: '0.00',
+        snapshotSalePrice: this.money(unitPrice),
+        snapshotMargin: '0.00',
+        total: this.money(quantity * unitPrice),
       });
     }
     return items;
   }
 
-  private calculateTotals(items: SnapshotItem[], discount = 0, additional = 0): { subtotal: string; discount: string; additional: string; total: string } {
-    const subtotal = items.reduce((sum, item) => sum + Number(item.total), 0);
+  private calculateTotals(items: SnapshotItem[], discount = 0, additional = 0): {
+    serviceSubtotal: string;
+    materialSubtotal: string;
+    subtotal: string;
+    discount: string;
+    additional: string;
+    total: string;
+  } {
+    const serviceSubtotal = items
+      .filter((item) => item.type === BudgetItemType.SERVICE)
+      .reduce((sum, item) => sum + Number(item.total), 0);
+    const materialSubtotal = items
+      .filter((item) => item.type === BudgetItemType.MATERIAL)
+      .reduce((sum, item) => sum + Number(item.total), 0);
+    const subtotal = serviceSubtotal + materialSubtotal;
     const total = subtotal - discount + additional;
     if (total < 0) {
       throw new ApplicationException(ERROR_CODES.VALIDATION_ERROR, 'Budget total cannot be negative', HttpStatus.BAD_REQUEST);
     }
-    return { subtotal: this.money(subtotal), discount: this.money(discount), additional: this.money(additional), total: this.money(total) };
+    return {
+      serviceSubtotal: this.money(serviceSubtotal),
+      materialSubtotal: this.money(materialSubtotal),
+      subtotal: this.money(subtotal),
+      discount: this.money(discount),
+      additional: this.money(additional),
+      total: this.money(total),
+    };
+  }
+
+  private async defaultTechnicalSignatureId(): Promise<string | null> {
+    const signature = await this.prisma.signature.findFirst({
+      where: { active: true, deletedAt: null, imageStorageKey: { not: null } },
+      orderBy: [{ isDefault: 'desc' }, { position: 'asc' }, { name: 'asc' }],
+      select: { id: true },
+    });
+    return signature?.id ?? null;
+  }
+
+  private assertDates(issuedAt: Date, expirationDate: Date): void {
+    if (
+      Number.isNaN(issuedAt.getTime()) ||
+      Number.isNaN(expirationDate.getTime()) ||
+      expirationDate < issuedAt
+    ) {
+      throw new ApplicationException(
+        ERROR_CODES.VALIDATION_ERROR,
+        'Budget issue and expiration dates are inconsistent',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
+  private amountInWords(value: number): string {
+    const units = ['', 'um', 'dois', 'três', 'quatro', 'cinco', 'seis', 'sete', 'oito', 'nove'];
+    const teens = ['dez', 'onze', 'doze', 'treze', 'quatorze', 'quinze', 'dezesseis', 'dezessete', 'dezoito', 'dezenove'];
+    const tens = ['', '', 'vinte', 'trinta', 'quarenta', 'cinquenta', 'sessenta', 'setenta', 'oitenta', 'noventa'];
+    const hundreds = ['', 'cento', 'duzentos', 'trezentos', 'quatrocentos', 'quinhentos', 'seiscentos', 'setecentos', 'oitocentos', 'novecentos'];
+    const group = (input: number): string => {
+      if (input === 100) return 'cem';
+      const parts: string[] = [];
+      const hundred = Math.floor(input / 100);
+      const rest = input % 100;
+      if (hundred) parts.push(hundreds[hundred]);
+      if (rest >= 10 && rest < 20) parts.push(teens[rest - 10]);
+      else {
+        if (Math.floor(rest / 10)) parts.push(tens[Math.floor(rest / 10)]);
+        if (rest % 10) parts.push(units[rest % 10]);
+      }
+      return parts.join(' e ');
+    };
+    const integer = (input: number): string => {
+      if (!input) return 'zero';
+      const parts: string[] = [];
+      const millions = Math.floor(input / 1_000_000);
+      const thousands = Math.floor((input % 1_000_000) / 1_000);
+      const remainder = input % 1_000;
+      if (millions) parts.push(`${group(millions)} ${millions === 1 ? 'milhão' : 'milhões'}`);
+      if (thousands) parts.push(thousands === 1 ? 'mil' : `${group(thousands)} mil`);
+      if (remainder) parts.push(group(remainder));
+      return parts.join(' e ');
+    };
+    const centsTotal = Math.round(value * 100);
+    const reais = Math.floor(centsTotal / 100);
+    const cents = centsTotal % 100;
+    return [
+      reais || !cents ? `${integer(reais)} ${reais === 1 ? 'real' : 'reais'}` : '',
+      cents ? `${integer(cents)} ${cents === 1 ? 'centavo' : 'centavos'}` : '',
+    ]
+      .filter(Boolean)
+      .join(' e ');
   }
 
   private async budgetOrThrow(id: string): Promise<BudgetWithRelations> {

@@ -58,6 +58,14 @@ type SignatureSnapshot = {
 };
 
 const DOCUMENT_HANDOFF_INCLUDE = {
+  budget: {
+    select: {
+      id: true,
+      number: true,
+      status: true,
+      customer: { select: { id: true, name: true, tradeName: true } },
+    },
+  },
   operation: {
     include: {
       customer: { select: { id: true, name: true, tradeName: true } },
@@ -171,13 +179,17 @@ export class DocumentHandoffService {
     const defaultTechnicalSignatureId = await this.defaultTechnicalSignatureId(
       operation.maintenanceExecution?.plan.pmocPlan?.signatureOverrideId ?? null,
     );
+    const documentNumber =
+      dto.type === DocumentTemplateType.RECEIPT && operation.receiptNumber
+        ? operation.receiptNumber
+        : formatDocumentNumber(OPERATION_DOCUMENT_PREFIX[dto.type], operation.number);
     const document = await this.prisma.$transaction(async (tx) => {
       const saved = await tx.operationDocument.upsert({
         where: { operationId_type: { operationId: dto.operationId, type: dto.type } },
         create: {
           operationId: dto.operationId,
           type: dto.type,
-          number: formatDocumentNumber(OPERATION_DOCUMENT_PREFIX[dto.type], operation.number),
+          number: documentNumber,
           status: 'DRAFT',
           editorialStatus: DocumentEditorialStatus.DRAFT,
           handoffOrigin: origin,
@@ -186,6 +198,7 @@ export class DocumentHandoffService {
           collectionSnapshot: this.operationSnapshot(operation),
         },
         update: {
+          number: documentNumber,
           handoffOrigin: origin,
           ...(operation.documents[0]?.id ? {} : { collectedById: actor.id }),
           ...(operation.documents[0]?.id ? {} : { technicalSignatureId: defaultTechnicalSignatureId }),
@@ -210,7 +223,9 @@ export class DocumentHandoffService {
   ): Promise<unknown> {
     const document = await this.documentOrThrow(documentId);
     this.assertAccess(document, actor);
-    if (!document.operationId) throw this.invalid('Document has no Operation');
+    if (!document.operationId && !document.budgetId) {
+      throw this.invalid('O documento não possui uma origem válida');
+    }
     const decoded = this.decodeSignature(dto.signatureData);
     const stored = await this.assets.saveSignatureImage({ content: decoded.buffer, extension: decoded.extension });
     const snapshot: SignatureSnapshot = {
@@ -240,7 +255,7 @@ export class DocumentHandoffService {
           },
         });
         await this.appendRevisionTx(tx, saved.id, DocumentRevisionAction.REVIEW_UPDATED, snapshot.origin, actor.id, ['customerSignature']);
-        await tx.auditLog.create({ data: this.audit(DOCUMENT_ENGINE_AUDIT_ACTIONS.DOCUMENT_REVIEW_UPDATED, actor, context, saved.id, document.operationId, { customerSignatureCollected: true, origin: snapshot.origin }) });
+        await tx.auditLog.create({ data: this.audit(DOCUMENT_ENGINE_AUDIT_ACTIONS.DOCUMENT_REVIEW_UPDATED, actor, context, saved.id, document.operationId, { budgetId: document.budgetId, customerSignatureCollected: true, origin: snapshot.origin }) });
         return tx.operationDocument.findUniqueOrThrow({ where: { id: saved.id }, include: DOCUMENT_HANDOFF_INCLUDE });
       });
       return this.response(updated, true);
@@ -474,7 +489,7 @@ export class DocumentHandoffService {
     if (CUSTOMER_SIGNATURE_TYPES.has(document.type) && !document.customerSignatureSnapshot) issues.push('CUSTOMER_SIGNATURE_REQUIRED');
     if (final && !document.technicalSignatureId) issues.push('TECHNICAL_SIGNATURE_REQUIRED');
     if (document.type === DocumentTemplateType.PMOC && (document.operation?.photos.length ?? 0) < PMOC_MIN_PROCEDURE_IMAGES) issues.push('PMOC_EVIDENCE_REQUIRED');
-    if (!document.operation) issues.push('OPERATION_REQUIRED');
+    if (!document.operation && !document.budget) issues.push('DOCUMENT_SOURCE_REQUIRED');
     return issues;
   }
 
@@ -496,12 +511,17 @@ export class DocumentHandoffService {
     return {
       id: document.id,
       operationId: document.operationId,
+      budgetId: document.budgetId,
       number: document.number,
       type: document.type,
       artifactStatus: document.status,
       editorialStatus: document.editorialStatus,
       workflowStatus: this.workflowStatus(document.editorialStatus),
-      assignmentOrigin: this.isManagementAssigned(document) ? 'MANAGEMENT' : 'OPERATOR',
+      assignmentOrigin: document.budgetId
+        ? 'MANAGEMENT'
+        : this.isManagementAssigned(document)
+          ? 'MANAGEMENT'
+          : 'OPERATOR',
       origin: document.handoffOrigin,
       submittedAt: document.submittedAt,
       reviewStartedAt: document.reviewStartedAt,
@@ -515,6 +535,9 @@ export class DocumentHandoffService {
       reviewedBy: document.reviewedBy,
       finalizedBy: document.finalizedBy,
       operation: document.operation ? { id: document.operation.id, number: document.operation.number, status: document.operation.status, customer: document.operation.customer, operator: document.operation.operator, equipment: document.operation.equipment, equipmentCount: document.operation.inspectedEquipments.length, evidenceCount: document.operation.photos.length } : null,
+      budget: document.budget
+        ? { id: document.budget.id, number: document.budget.number, status: document.budget.status, customer: document.budget.customer }
+        : null,
       revisionCount: document._count?.revisions ?? 0,
       ...(detail ? { customerSignatureRequired: CUSTOMER_SIGNATURE_TYPES.has(document.type), technicalSignatureRequired: true } : {}),
       createdAt: document.createdAt,

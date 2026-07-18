@@ -67,7 +67,7 @@ function services(): {
       notifyAssignmentCompletedTx: jest.fn(),
     } as never),
     pricing: new PricingService(prisma as never),
-    budgets: new BudgetsService(prisma as never, new PricingService(prisma as never), lifecycle, {
+    budgets: new BudgetsService(prisma as never, lifecycle, {
       notifyBudgetDecisionTx: jest.fn(),
     } as never),
   };
@@ -353,6 +353,8 @@ describe('critical workflows with real PostgreSQL concurrency', () => {
         customerAddressId: budgetA.customerAddressId,
         equipmentId: budgetA.equipmentId,
         title: 'Budget B',
+        introduction: 'Concurrency verification',
+        amountInWords: 'cem reais',
         status: BudgetStatus.PENDING,
         subtotal: 100,
         total: 100,
@@ -408,7 +410,7 @@ describe('critical workflows with real PostgreSQL concurrency', () => {
     }
   });
 
-  it('Budget: snapshots remain stable after Pricing revision and blueprint uses snapshots', async () => {
+  it('Budget: persisted commercial values remain stable after Pricing revision', async () => {
     const actor = await createActor();
     const fixture = await createBudgetFixture(actor);
     const originalItem = await prisma.budgetItem.findFirstOrThrow({ where: { budgetId: fixture.budgetId } });
@@ -427,11 +429,11 @@ describe('critical workflows with real PostgreSQL concurrency', () => {
     expect(item.snapshotMargin.toString()).toBe(originalItem.snapshotMargin.toString());
     const { builder } = createDocumentEngine();
     const blueprint = await builder.buildBudget(fixture.budgetId);
-    const itemsTable = blueprint.sections.find((section) => section.id === 'budget-items')?.components[0];
+    const itemsTable = blueprint.sections.find((section) => section.id === 'budget-materials')?.components[0];
     expect(itemsTable?.kind).toBe('table');
     if (itemsTable?.kind === 'table') {
       expect(itemsTable.rows[0].unitPrice).toContain('100,00');
-      expect(itemsTable.rows[0].margin).toBe('50,00%');
+      expect(itemsTable.rows[0].total).toContain('100,00');
     }
   });
 

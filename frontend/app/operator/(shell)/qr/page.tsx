@@ -111,7 +111,7 @@ export default function OperatorQrPage() {
         {resolveError && <p className="text-[11px] text-[var(--color-danger)]">{resolveError}</p>}
       </section>
 
-      {/* Selecionar QR demo */}
+      {/* Selecionar equipamento cadastrado */}
       <section className="space-y-2">
         <div className="text-caption uppercase tracking-wider">Selecionar equipamento</div>
         <SearchInput value={search} onChange={setSearch} placeholder="Buscar equipamento…" className="w-full" />
