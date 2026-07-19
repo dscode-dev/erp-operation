@@ -56,6 +56,9 @@ function ownerBootstrapInput(): OwnerBootstrapInput {
 
 async function main(): Promise<void> {
   const input = ownerBootstrapInput();
+  // The whole application assumes a single Organization exists (profile, settings,
+  // templates all resolve `findFirst`). Guarantee one so first login works.
+  await ensureDefaultOrganization();
   const [emailUser, usernameUser, userCount] = await Promise.all([
     prisma.user.findUnique({ where: { email: input.email } }),
     prisma.user.findUnique({ where: { username: input.username } }),
@@ -149,6 +152,130 @@ async function ensureOwnerFoundation(userId: string): Promise<void> {
       },
     }),
   ]);
+}
+
+type OrganizationBootstrapInput = {
+  legalName: string;
+  tradeName: string;
+  cnpj: string;
+  email: string;
+  phone: string;
+  city: string;
+  state: string;
+  primaryColor: string;
+  secondaryColor: string;
+  segment: string | null;
+  language: string;
+  timezone: string;
+  currency: string;
+  documentPrefix: string;
+};
+
+/** Read an optional environment variable, falling back to a default when unset. */
+function optionalEnvironment(name: string, fallback: string): string {
+  const value = process.env[name]?.trim();
+  return value && value.length > 0 ? value : fallback;
+}
+
+/**
+ * Read the initial Organization from the environment — same approach as the OWNER
+ * bootstrap. Identity fields are required; presentational/locale fields fall back
+ * to sensible defaults. Validated against the schema column limits.
+ */
+function organizationBootstrapInput(): OrganizationBootstrapInput {
+  const input: OrganizationBootstrapInput = {
+    legalName: requiredEnvironment('ORGANIZATION_LEGAL_NAME'),
+    tradeName: requiredEnvironment('ORGANIZATION_TRADE_NAME'),
+    cnpj: requiredEnvironment('ORGANIZATION_CNPJ'),
+    email: requiredEnvironment('ORGANIZATION_EMAIL').toLowerCase(),
+    phone: requiredEnvironment('ORGANIZATION_PHONE'),
+    city: requiredEnvironment('ORGANIZATION_CITY'),
+    state: requiredEnvironment('ORGANIZATION_STATE').toUpperCase(),
+    primaryColor: optionalEnvironment('ORGANIZATION_PRIMARY_COLOR', '#2563EB'),
+    secondaryColor: optionalEnvironment('ORGANIZATION_SECONDARY_COLOR', '#1E3A8A'),
+    segment: process.env.ORGANIZATION_SEGMENT?.trim() || null,
+    language: optionalEnvironment('ORGANIZATION_LANGUAGE', 'pt-BR'),
+    timezone: optionalEnvironment('ORGANIZATION_TIMEZONE', 'America/Sao_Paulo'),
+    currency: optionalEnvironment('ORGANIZATION_CURRENCY', 'BRL').toUpperCase(),
+    documentPrefix: optionalEnvironment('ORGANIZATION_DOCUMENT_PREFIX', 'DOC'),
+  };
+
+  if (input.legalName.length < 2 || input.legalName.length > 180) {
+    throw new Error('ORGANIZATION_LEGAL_NAME must contain between 2 and 180 characters');
+  }
+  if (input.tradeName.length < 2 || input.tradeName.length > 120) {
+    throw new Error('ORGANIZATION_TRADE_NAME must contain between 2 and 120 characters');
+  }
+  if (input.cnpj.length < 14 || input.cnpj.length > 18) {
+    throw new Error('ORGANIZATION_CNPJ must contain between 14 and 18 characters');
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email) || input.email.length > 254) {
+    throw new Error('ORGANIZATION_EMAIL must be a valid email address with at most 254 characters');
+  }
+  if (input.phone.length < 8 || input.phone.length > 30) {
+    throw new Error('ORGANIZATION_PHONE must contain between 8 and 30 characters');
+  }
+  if (input.city.length < 2 || input.city.length > 100) {
+    throw new Error('ORGANIZATION_CITY must contain between 2 and 100 characters');
+  }
+  if (!/^[A-Z]{2}$/.test(input.state)) {
+    throw new Error('ORGANIZATION_STATE must be a 2-letter state code (e.g. SP)');
+  }
+  if (!/^#[0-9a-fA-F]{6}$/.test(input.primaryColor) || !/^#[0-9a-fA-F]{6}$/.test(input.secondaryColor)) {
+    throw new Error('ORGANIZATION_PRIMARY_COLOR and ORGANIZATION_SECONDARY_COLOR must be hex colors (e.g. #2563EB)');
+  }
+  if (input.segment && input.segment.length > 80) {
+    throw new Error('ORGANIZATION_SEGMENT must contain at most 80 characters');
+  }
+  if (input.language.length > 10) throw new Error('ORGANIZATION_LANGUAGE must contain at most 10 characters');
+  if (input.timezone.length > 80) throw new Error('ORGANIZATION_TIMEZONE must contain at most 80 characters');
+  if (input.currency.length !== 3) throw new Error('ORGANIZATION_CURRENCY must be a 3-letter code (e.g. BRL)');
+  if (input.documentPrefix.length < 1 || input.documentPrefix.length > 20) {
+    throw new Error('ORGANIZATION_DOCUMENT_PREFIX must contain between 1 and 20 characters');
+  }
+
+  return input;
+}
+
+/**
+ * Guarantee a single Organization (+ settings) from the environment. Every request
+ * path resolves the organization via `findFirst`, so the app is unusable without
+ * one. Idempotent: does nothing when an organization already exists (so it never
+ * requires the ORGANIZATION_* variables on subsequent runs) and repairs databases
+ * bootstrapped before this step existed.
+ */
+async function ensureDefaultOrganization(): Promise<void> {
+  const existing = await prisma.organization.findFirst({ select: { id: true } });
+  if (existing) return;
+
+  const input = organizationBootstrapInput();
+  const organization = await prisma.organization.create({
+    data: {
+      legalName: input.legalName,
+      tradeName: input.tradeName,
+      cnpj: input.cnpj,
+      email: input.email,
+      phone: input.phone,
+      city: input.city,
+      state: input.state,
+      primaryColor: input.primaryColor,
+      secondaryColor: input.secondaryColor,
+      segment: input.segment,
+      isActive: true,
+      settings: {
+        create: {
+          language: input.language,
+          timezone: input.timezone,
+          currency: input.currency,
+          documentPrefix: input.documentPrefix,
+        },
+      },
+    },
+    select: { id: true },
+  });
+  process.stdout.write(
+    `${JSON.stringify({ event: 'organization_bootstrap_created', organizationId: organization.id })}\n`,
+  );
 }
 
 main()
