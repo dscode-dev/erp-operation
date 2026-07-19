@@ -127,6 +127,16 @@ function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; oper
           return { equipmentId: id, sector: existing?.sector ?? equipment?.address?.name ?? equipment?.name ?? "Não informado" };
         }),
         photos: await Promise.all(photos.map(async (photo) => ({ dataUrl: await fileToDataUrl(photo.file), caption: photo.caption || photo.name }))),
+        // A assinatura também é persistida na Operation (igual ao fluxo
+        // self-service): é ela que o drawer da Platform e a Identificação exibem.
+        ...(signature
+          ? {
+              signatureData: signature,
+              customerSignerName: signerName.trim(),
+              customerSignerRole: signerRole.trim() || null,
+              signedAt: new Date().toISOString(),
+            }
+          : {}),
       });
       let handoff = await documentsApi.saveHandoffDraft(operation.id, type);
       if (signature) {

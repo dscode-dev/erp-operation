@@ -319,7 +319,9 @@ export class DocumentHandoffService {
         },
       });
       await this.appendRevisionTx(tx, saved.id, DocumentRevisionAction.SUBMITTED, origin, actor.id, ['submittedAt', 'collectionSnapshot']);
-      await this.notifyManagementTx(tx, saved.id, operation.number, document.type, actor.id, managementAssigned);
+      // Sem notificação aqui: o envio do documento faz parte da conclusão do
+      // atendimento — a gestão é notificada uma única vez pelo evento completo
+      // ("Atendimento aguardando revisão", ao concluir o assignment).
       await tx.auditLog.create({ data: this.audit(DOCUMENT_ENGINE_AUDIT_ACTIONS.DOCUMENT_SUBMITTED, actor, context, saved.id, document.operationId, { origin, issues, managementAssigned, workflowStatus: this.workflowStatus(editorialStatus) }) });
       return tx.operationDocument.findUniqueOrThrow({ where: { id: saved.id }, include: DOCUMENT_HANDOFF_INCLUDE });
     });
@@ -598,13 +600,6 @@ export class DocumentHandoffService {
 
   private audit(action: string, actor: AuthenticatedUser, context: DocumentAuditContext, documentId: string, operationId: string | null, extra: Record<string, unknown> = {}): Prisma.AuditLogCreateInput {
     return { action, resource: DOCUMENT_ENGINE_RESOURCE, actor: actor.id, metadata: { documentId, operationId, requestId: context.requestId, ip: context.ip, userAgent: context.userAgent, ...extra } };
-  }
-
-  private async notifyManagementTx(tx: Prisma.TransactionClient, documentId: string, operationNumber: number, type: DocumentTemplateType, actorId: string, managementAssigned: boolean): Promise<void> {
-    const organization = await tx.organization.findFirst({ select: { id: true } });
-    if (!organization) return;
-    const recipients = await tx.user.findMany({ where: { role: { in: MANAGEMENT_ROLES }, isActive: true, disabledAt: null, id: { not: actorId } }, select: { id: true } });
-    await tx.notification.createMany({ data: recipients.map(({ id }) => ({ organizationId: organization.id, recipientUserId: id, type: NotificationType.DOCUMENT_SUBMITTED, severity: NotificationSeverity.INFO, title: managementAssigned ? 'Atendimento devolvido para revisão' : 'Novo atendimento aguardando aprovação', message: managementAssigned ? `${type} da operação #${operationNumber} foi executado e devolvido para revisão.` : `${type} da operação #${operationNumber} foi iniciado pelo operador e aguarda aprovação.`, entityType: NotificationEntityType.DOCUMENT, entityId: documentId, actionUrl: '/reports', eventKey: `document:${documentId}:submitted` })), skipDuplicates: true });
   }
 
   private async notifyOperatorReadyTx(tx: Prisma.TransactionClient, documentId: string, operatorId: string | null): Promise<void> {

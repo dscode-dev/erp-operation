@@ -6,6 +6,7 @@
  * large cards and fast one-handed actions.
  */
 import Link from "next/link";
+import { useEffect } from "react";
 import { Calendar, ClipboardList, FileText, Plus, QrCode, RefreshCw, Wrench } from "lucide-react";
 import { AssignmentCard } from "@operator/components/assignment-card";
 import { useAuth } from "@erp/ui/auth/auth-provider";
@@ -14,6 +15,8 @@ import { EmptyState } from "@erp/ui/empty-state";
 import { ErrorState } from "@erp/ui/states";
 import { assignmentsApi, useQuery, type Assignment } from "@erp/api";
 import { firstName, greeting } from "@erp/utils";
+
+const HOME_REFRESH_MS = 30_000;
 
 function isSameDay(iso: string | null | undefined, target = new Date()) {
   if (!iso) return false;
@@ -30,6 +33,26 @@ function isPast(assignment: Assignment) {
 export function OperatorHome() {
   const { session } = useAuth();
   const assignments = useQuery((signal) => assignmentsApi.listMyAssignments({ limit: 50, signal }), []);
+
+  // Auto-atualização: novos atendimentos chegam sem o operador precisar
+  // recarregar — intervalo curto + refetch ao voltar o foco para o app.
+  const { refetch } = assignments;
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") refetch();
+    }, HOME_REFRESH_MS);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refetch();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
+  }, [refetch]);
+
   const items = assignments.data?.items ?? [];
   const today = items.filter((item) => isSameDay(item.operation.scheduledFor));
   const ongoing = items.filter((item) => item.status === "STARTED");

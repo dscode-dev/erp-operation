@@ -184,7 +184,10 @@ export function OperationCreationDrawer({
         }),
         type,
         documentType,
-        status: initialValues?.status ?? (mode === "schedule" ? "DRAFT" : "IN_PROGRESS"),
+        // Nasce como rascunho; a atribuição ao operador leva a operação para
+        // "Pendente" no backend, e só o início da execução muda para
+        // "Em andamento".
+        status: initialValues?.status ?? "DRAFT",
         scheduledFor,
         operatorId: operatorId || null,
         checklist: checklist.map((label) => ({ label, done: false })),

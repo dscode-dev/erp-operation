@@ -44,7 +44,8 @@ function OperacoesInner() {
   const [status, setStatus] = useState<"all" | OperationStatus>(initialStatus);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
-  const [detailId, setDetailId] = useState<string | null>(null);
+  // Deep link (ex.: clique em uma notificação) abre o drawer da operação direto.
+  const [detailId, setDetailId] = useState<string | null>(params.get("operationId"));
   const [createOpen, setCreateOpen] = useState(false);
   const debounced = useDebounce(search, 300);
 

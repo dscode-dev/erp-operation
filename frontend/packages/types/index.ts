@@ -152,6 +152,7 @@ export type AvatarMeta = {
 export type NotificationType =
   | 'ASSIGNMENT_ASSIGNED'
   | 'ASSIGNMENT_REASSIGNED'
+  | 'ASSIGNMENT_REJECTED'
   | 'ASSIGNMENT_OVERDUE'
   | 'OPERATION_STARTED'
   | 'OPERATION_COMPLETED'

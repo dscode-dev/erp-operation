@@ -368,6 +368,7 @@ export class AssignmentsService {
         operationId: assignment.operationId,
         reason: dto.rejectionReason,
       });
+      await this.notifications.notifyAssignmentRejectedTx(tx, assignment.id, dto.rejectionReason ?? null);
       return tx.assignment.findUniqueOrThrow({ where: { id }, include: ASSIGNMENT_INCLUDE });
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
@@ -503,9 +504,8 @@ export class AssignmentsService {
         await this.lifecycle.publishOperationCompletedTx(tx, assignment.operationId, actor.id, context);
         await this.maintenance.syncOperationCompletedTx(tx, assignment.operationId, actor.id, context);
       }
-      if (config.status === AssignmentStatus.STARTED) {
-        await this.notifications.notifyAssignmentStartedTx(tx, assignment.id);
-      }
+      // Notificação apenas no evento completo (conclusão de campo). Passos
+      // intermediários (aceite/início) ficam visíveis na tela de Operações.
       if (config.status === AssignmentStatus.COMPLETED) {
         await this.notifications.notifyAssignmentCompletedTx(tx, assignment.id);
       }

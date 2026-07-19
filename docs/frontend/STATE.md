@@ -1154,3 +1154,19 @@ Status: concluído.
 
 - Nova seção **"Revisão dos relatórios"** no drawer da operação (OWNER/MANAGER): para cada documento enviado, o responsável seleciona qual **assinatura do técnico responsável** (pré-definidas na plataforma, com imagem) vai para o relatório e clica em "Aplicar assinatura e finalizar" (`startHandoffReview → selectHandoffTechnicalSignature → finalizeHandoffReview`) — isso libera a geração do PDF na Central de Relatórios. Visível também em operações já concluídas com documentos pendentes (reparo de legado).
 - Preview do documento (`DocumentViewer`): assinaturas em duas colunas (cliente à esquerda, técnico à direita).
+
+## Ajustes de fluxo owner→operador + alertas no mobile (2026-07-19)
+
+- **Status inicial correto**: operação criada pelo owner nasce `DRAFT` e a atribuição a leva a **Pendente** (backend); só o início da execução pelo operador muda para "Em andamento" (antes o drawer criava direto como IN_PROGRESS).
+- **Assinatura no fluxo atribuído**: o wizard de execução passou a persistir a assinatura coletada também na **Operation** (`signatureData` + signatário + `signedAt`), além do handoff — o drawer da Platform passa a exibi-la igual ao fluxo self-service.
+- **Alertas no operator**: `useAssignmentAlerts` (montado no `OperatorShell`) consulta as atribuições a cada 30s (e ao voltar o foco) e dispara **notificação local** (Notification API / service worker) quando chega um atendimento `ASSIGNED` ainda não visto; a home do operador também se auto-atualiza (30s + foco). Web Push real com o app fechado (VAPID) fica para uma etapa futura.
+
+## Agenda do operador como calendário real (2026-07-19)
+
+- `/operator/agenda` deixou de repetir a lista de atendimentos: agora é um **calendário mensal mobile** (inspirado na Agenda da Platform) — grade Seg–Dom com navegação de mês e "Hoje", dia atual destacado, **marcadores coloridos por status** em cada dia e seleção de dia por toque.
+- Abaixo do calendário, a **lista cronológica do dia selecionado** (horário + cliente + equipamento + status, borda colorida por status) com link direto para o atendimento; seção "Sem data definida" lista atribuições ativas sem agendamento.
+
+## Notificações organizadas + deep link (2026-07-19)
+
+- `/operacoes?operationId=` abre o drawer da operação diretamente — o clique no sino agora leva ao item real, não só à listagem.
+- `NotificationType` ganhou `ASSIGNMENT_REJECTED`.

@@ -8,6 +8,7 @@
  */
 import type { ReactNode } from "react";
 import { OperatorBottomNav } from "@operator/components/bottom-nav";
+import { useAssignmentAlerts } from "@operator/lib/assignment-alerts";
 import { useAuth } from "@erp/ui/auth/auth-provider";
 import { BrandLogo } from "@erp/ui/brand";
 import { firstName } from "@erp/utils";
@@ -25,6 +26,8 @@ function OperatorTopBar() {
 }
 
 export function OperatorShell({ children }: { children: ReactNode }) {
+  // Alerta de novos atendimentos atribuídos (notificação local + polling).
+  useAssignmentAlerts();
   return (
     <div className="min-h-dvh flex flex-col bg-[var(--color-background)] text-[var(--color-foreground)] max-w-[640px] mx-auto">
       <OperatorTopBar />

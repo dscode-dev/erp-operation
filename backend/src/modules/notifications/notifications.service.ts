@@ -18,7 +18,13 @@ const SAFE_ACTION_URLS = {
   operations: '/operacoes',
   budgets: '/budgets',
   pmoc: '/reports',
+  operatorServices: '/operator/services',
 } as const;
+
+/** Deep link que abre o drawer da operação na Platform. */
+function operationActionUrl(operationId: string): string {
+  return `${SAFE_ACTION_URLS.operations}?operationId=${operationId}`;
+}
 
 const NOTIFICATION_SELECT = {
   id: true,
@@ -116,35 +122,17 @@ export class NotificationsService {
         message: `Você recebeu a operação #${assignment.operation.number}.`,
         entityType: NotificationEntityType.ASSIGNMENT,
         entityId: assignment.id,
-        actionUrl: SAFE_ACTION_URLS.operations,
+        actionUrl: SAFE_ACTION_URLS.operatorServices,
         eventKey: `assignment:${assignment.id}:assigned`,
       },
     ]);
   }
 
-  async notifyAssignmentStartedTx(
-    tx: Prisma.TransactionClient,
-    assignmentId: string,
-  ): Promise<void> {
-    const assignment = await this.assignmentForNotificationTx(tx, assignmentId);
-    const organizationId = await this.organizationIdTx(tx);
-    const managers = await this.managementRecipientsTx(tx);
-    await this.createManyIdempotentTx(tx, [
-      ...managers.map((recipientUserId) => ({
-        organizationId,
-        recipientUserId,
-        type: NotificationType.OPERATION_STARTED,
-        severity: NotificationSeverity.INFO,
-        title: 'Operação iniciada',
-        message: `Operação #${assignment.operation.number} foi iniciada por ${assignment.assignee.name}.`,
-        entityType: NotificationEntityType.OPERATION,
-        entityId: assignment.operationId,
-        actionUrl: SAFE_ACTION_URLS.operations,
-        eventKey: `operation:${assignment.operationId}:started`,
-      })),
-    ]);
-  }
-
+  /**
+   * Evento completo de campo: o atendimento foi concluído pelo operador e a
+   * operação aguarda revisão/aprovação. Passos intermediários (aceite, início,
+   * envio de documento) não geram notificação — apenas este evento.
+   */
   async notifyAssignmentCompletedTx(
     tx: Prisma.TransactionClient,
     assignmentId: string,
@@ -159,12 +147,38 @@ export class NotificationsService {
         recipientUserId,
         type: NotificationType.OPERATION_COMPLETED,
         severity: NotificationSeverity.SUCCESS,
-        title: 'Operação concluída',
-        message: `Operação #${assignment.operation.number} foi concluída por ${assignment.assignee.name}.`,
+        title: 'Atendimento aguardando revisão',
+        message: `Operação #${assignment.operation.number} foi concluída em campo por ${assignment.assignee.name} e aguarda sua revisão e aprovação.`,
         entityType: NotificationEntityType.OPERATION,
         entityId: assignment.operationId,
-        actionUrl: SAFE_ACTION_URLS.operations,
+        actionUrl: operationActionUrl(assignment.operationId),
         eventKey: `operation:${assignment.operationId}:completed`,
+      })),
+    );
+  }
+
+  /** Atendimento recusado pelo operador — a gestão precisa reatribuir. */
+  async notifyAssignmentRejectedTx(
+    tx: Prisma.TransactionClient,
+    assignmentId: string,
+    reason: string | null,
+  ): Promise<void> {
+    const assignment = await this.assignmentForNotificationTx(tx, assignmentId);
+    const organizationId = await this.organizationIdTx(tx);
+    const managers = await this.managementRecipientsTx(tx);
+    await this.createManyIdempotentTx(
+      tx,
+      managers.map((recipientUserId) => ({
+        organizationId,
+        recipientUserId,
+        type: NotificationType.ASSIGNMENT_REJECTED,
+        severity: NotificationSeverity.WARNING,
+        title: 'Atendimento recusado',
+        message: `Operação #${assignment.operation.number} foi recusada por ${assignment.assignee.name}${reason ? `: ${reason}` : '.'}`,
+        entityType: NotificationEntityType.ASSIGNMENT,
+        entityId: assignment.id,
+        actionUrl: operationActionUrl(assignment.operationId),
+        eventKey: `assignment:${assignment.id}:rejected`,
       })),
     );
   }
@@ -296,7 +310,12 @@ export class NotificationsService {
             message: `Operação #${assignment.operation.number} está atrasada.`,
             entityType: NotificationEntityType.ASSIGNMENT,
             entityId: assignment.id,
-            actionUrl: SAFE_ACTION_URLS.operations,
+            // Cada destinatário cai no app certo: gestor abre o drawer da
+            // operação; o operador cai na sua fila de campo.
+            actionUrl:
+              recipientUserId === assignment.assignedTo
+                ? SAFE_ACTION_URLS.operatorServices
+                : operationActionUrl(assignment.operationId),
             eventKey: `assignment:${assignment.id}:overdue`,
           });
         }
@@ -371,7 +390,10 @@ export class NotificationsService {
   }
 
   private safeActionUrl(value: string): boolean {
-    return Object.values(SAFE_ACTION_URLS).includes(value as (typeof SAFE_ACTION_URLS)[keyof typeof SAFE_ACTION_URLS]);
+    const bases = Object.values(SAFE_ACTION_URLS) as string[];
+    if (bases.includes(value)) return true;
+    // Deep link controlado: base conhecida + operationId UUID.
+    return /^\/operacoes\?operationId=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
   }
 
   private clean(value: string, max: number): string {

@@ -3011,3 +3011,10 @@ Status: implementado e validado em PostgreSQL/Docker.
 - **Assinaturas ao final dos modelos**: todos os modelos exibem, no preview e no PDF, a assinatura coletada do cliente (coluna esquerda) e a do responsável técnico (coluna direita) — exceto Recibo e Laudo Técnico, que mantêm apenas a institucional. Renderer (`signatureComponentBlock`) passou a diagramar em pares lado a lado; `resolveHandoffSignatures` inclui REPORT/QUOTE no conjunto com assinatura do cliente.
 - **Identificação**: OS, Relatório de Visita e PMOC passam a exibir o **Responsável técnico** = assinatura institucional selecionada na revisão (`technicalResponsibleName/Title`); o operador que coletou os dados aparece como "Operador em campo" (OS) e em "Local da visita" (Visita).
 - **Bloqueio de PDF** ("Finalize a revisão antes de gerar o PDF oficial"): causa era handoff enviado sem revisão finalizada (`editorialStatus !== READY`), mesmo com a operação concluída. O fluxo de finalização (startReview → selectTechnicalSignature → finalize) agora é exposto no drawer da operação na Platform.
+
+## Curadoria de notificações (2026-07-19)
+
+- **Um evento completo por acontecimento**: removidas as notificações de passo — "Operação iniciada" (gestores) e `DOCUMENT_SUBMITTED` (gestores, duplicava a conclusão). A conclusão de campo notifica uma única vez: **"Atendimento aguardando revisão"** (`OPERATION_COMPLETED`).
+- **Novo evento**: `ASSIGNMENT_REJECTED` — "Atendimento recusado" para a gestão, com o motivo (migration `20260719190000_notification_rejected_type`).
+- **Deep links reais**: notificações de operação usam `/operacoes?operationId=<uuid>` (whitelist validada por regex) — o clique abre o drawer da operação; destinatário operador cai em `/operator/services`. "Atividade em atraso" escolhe a URL pelo destinatário.
+- Mantidos: nova atribuição (operador), atraso, orçamento aprovado/rejeitado, PMOC (gerado/falha/manual), relatório revisado (operador).
