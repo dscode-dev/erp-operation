@@ -620,8 +620,9 @@ function ComponentPreview({
     );
   }
   if (component.kind === 'signature') {
+    // Cliente (coletada) à esquerda e responsável técnico à direita.
     return (
-      <div className="grid gap-4 rounded-md border border-slate-200 p-4">
+      <div className={`grid gap-4 rounded-md border border-slate-200 p-4 ${component.signatures.length > 1 ? 'sm:grid-cols-2' : ''}`}>
         {component.signatures.map((signature) => (
           <div key={signature.id} className="text-center">
             {signature.image ? (

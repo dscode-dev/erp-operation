@@ -3005,3 +3005,9 @@ Status: implementado e validado em PostgreSQL/Docker.
 - Ciclo sincronizado com o Assignment: atribuir (create/reassign) → operação `PENDING`; operador inicia (`PATCH /assignments/:id/start`) → `IN_PROGRESS`; operador conclui (`/complete`) → **`REVIEW`** (com `completedAt`; side-effects de conclusão adiados para a aprovação).
 - Aprovação do responsável técnico: `PATCH /operations/:id/approve` (OWNER/MANAGER) → `REVIEW` → `COMPLETED` + `publishOperationCompletedTx` + `syncOperationCompletedTx` (PMOC) + audit `OPERATION_APPROVED`. Erro `OPERATION_INVALID_TRANSITION` (409) fora de `REVIEW`.
 - `GET /operations/stats` inclui `PENDING`/`REVIEW` em `byStatus`; list-exports usa os novos rótulos (Pendente/Revisão).
+
+## Assinaturas nos relatórios + revisão documental (2026-07-19)
+
+- **Assinaturas ao final dos modelos**: todos os modelos exibem, no preview e no PDF, a assinatura coletada do cliente (coluna esquerda) e a do responsável técnico (coluna direita) — exceto Recibo e Laudo Técnico, que mantêm apenas a institucional. Renderer (`signatureComponentBlock`) passou a diagramar em pares lado a lado; `resolveHandoffSignatures` inclui REPORT/QUOTE no conjunto com assinatura do cliente.
+- **Identificação**: OS, Relatório de Visita e PMOC passam a exibir o **Responsável técnico** = assinatura institucional selecionada na revisão (`technicalResponsibleName/Title`); o operador que coletou os dados aparece como "Operador em campo" (OS) e em "Local da visita" (Visita).
+- **Bloqueio de PDF** ("Finalize a revisão antes de gerar o PDF oficial"): causa era handoff enviado sem revisão finalizada (`editorialStatus !== READY`), mesmo com a operação concluída. O fluxo de finalização (startReview → selectTechnicalSignature → finalize) agora é exposto no drawer da operação na Platform.

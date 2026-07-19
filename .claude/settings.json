@@ -5,7 +5,8 @@
       "Bash(ls docs/backend docs/frontend)",
       "Bash(tail -20 docs/backend/STATE.md)",
       "Bash(echo \"---exit $?---\")",
-      "Bash(echo \"BACKEND=$?\")"
+      "Bash(echo \"BACKEND=$?\")",
+      "Bash(echo \"FRONTEND_EXIT=$?\")"
     ]
   }
 }

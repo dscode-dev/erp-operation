@@ -727,11 +727,16 @@ export class DocumentContextService {
     operation: DocumentContextOperation,
     handoff: DocumentContextOperation['documents'][number],
   ): Promise<DocumentSignatureContext> {
+    // Todos os modelos exibem cliente (esq.) + responsável técnico (dir.) ao
+    // final, exceto Recibo (RECEIPT) e Laudo Técnico (TECHNICAL_OPINION), que
+    // permanecem apenas com a assinatura institucional.
     const customerRequired = ([
       DocumentTemplateType.WORK_ORDER,
       DocumentTemplateType.TECHNICAL_REPORT,
       DocumentTemplateType.BUDGET,
       DocumentTemplateType.PMOC,
+      DocumentTemplateType.REPORT,
+      DocumentTemplateType.QUOTE,
     ] as DocumentTemplateType[]).includes(handoff.type);
     const customer = this.signatureSnapshot(handoff.customerSignatureSnapshot);
     const technical = this.signatureSnapshot(handoff.technicalSignatureSnapshot);

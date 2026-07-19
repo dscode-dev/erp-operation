@@ -19,7 +19,7 @@ import { SignaturePad } from "@erp/ui/documents/signature-pad";
 import { CustomerSignaturePreview } from "@erp/ui/documents/customer-signature-preview";
 import { PhotoInput, type CapturedPhoto } from "@erp/ui/photo-input";
 import { Gate } from "@erp/ui/auth/gate";
-import { assignmentsApi, budgetsApi, documentsApi, inventoryApi, operationApi, useQuery, type Assignment, type Budget, type InventoryItem, type OperationDetail, type OperationDocument, type OperationPart, type Product } from "@erp/api";
+import { assignmentsApi, budgetsApi, documentsApi, inventoryApi, operationApi, signaturesApi, useQuery, type Assignment, type Budget, type DocumentHandoff, type InventoryItem, type OperationDetail, type OperationDocument, type OperationPart, type Product } from "@erp/api";
 import type { DocumentConfiguration, SignatureMode } from "@erp/types";
 import { formatCurrencyBRL, formatDateTime, formatNumber } from "@erp/utils";
 import { ASSIGNMENT_STATUS_LABEL, assignmentTime } from "@erp/ui/assignments/assignment-shared";
@@ -88,6 +88,8 @@ export function OperationDetailDrawer({
 
           {op.status === "REVIEW" && <ApprovalSection operation={op} onApproved={detail.refetch} />}
 
+          <DocumentReviewSection operation={op} onSaved={detail.refetch} />
+
           <AssignmentSection assignment={assignmentQuery.data?.items[0] ?? null} loading={assignmentQuery.loading} onRefresh={() => { assignmentQuery.refetch(); detail.refetch(); }} />
 
           <OperationDates operation={op} assignment={assignmentQuery.data?.items[0] ?? null} />
@@ -151,7 +153,7 @@ function ApprovalSection({ operation, onApproved }: { operation: OperationDetail
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-info)]">Aguardando aprovação</p>
           <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">
-            O operador concluiu o atendimento em campo. Revise o checklist, as fotos, as observações e a assinatura do cliente abaixo e aprove para concluir a operação.
+            O operador concluiu o atendimento em campo. Revise os dados abaixo, selecione a assinatura do <strong>técnico responsável</strong> em “Revisão dos relatórios” (ela vai para o PDF) e aprove para concluir a operação.
           </p>
         </div>
         {error && <p className="text-sm text-[var(--color-danger)]">{error}</p>}
@@ -165,6 +167,156 @@ function ApprovalSection({ operation, onApproved }: { operation: OperationDetail
         </button>
       </section>
     </Gate>
+  );
+}
+
+const EDITORIAL_LABEL: Record<string, string> = {
+  DRAFT: "Rascunho",
+  PENDING: "Aguardando finalização",
+  READY: "Pronto — PDF liberado",
+  STALE: "Desatualizado — finalize novamente",
+};
+
+/**
+ * Revisão documental da operação: o responsável (OWNER/MANAGER) seleciona qual
+ * assinatura de técnico responsável vai para o relatório e finaliza a revisão.
+ * Sem isso o PDF fica bloqueado ("Finalize a revisão antes de gerar o PDF").
+ * Visível sempre que houver documento enviado — cobre também operações já
+ * concluídas com documentos pendentes de finalização.
+ */
+function DocumentReviewSection({ operation, onSaved }: { operation: OperationDetail; onSaved: () => void }) {
+  const handoffs = useQuery<Array<DocumentHandoff | null>>(
+    (signal) =>
+      Promise.all(
+        operation.documents.map((doc) => documentsApi.getHandoff(doc.id, { signal }).catch(() => null)),
+      ),
+    [operation.documents.map((doc) => doc.id).join(",")],
+  );
+  const signatures = useQuery(
+    (signal) => signaturesApi.listSignatures({ active: true, limit: 100, signal }),
+    [],
+  );
+
+  const submitted = (handoffs.data ?? []).filter(
+    (h): h is DocumentHandoff => Boolean(h?.submittedAt),
+  );
+  if (submitted.length === 0) return null;
+
+  const availableSignatures = (signatures.data?.items ?? []).filter((s) => s.hasImage);
+  const pending = submitted.filter((h) => h.editorialStatus !== "READY");
+
+  return (
+    <Gate roles={["OWNER", "MANAGER"]}>
+      <section className="space-y-2">
+        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)]">Revisão dos relatórios</h3>
+        <div className="space-y-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
+          {pending.length > 0 && (
+            <p className="text-sm text-[var(--color-muted-foreground)]">
+              Selecione a assinatura do <strong>técnico responsável</strong> que vai para o relatório (ela também aparece na Identificação) e finalize para liberar o PDF.
+            </p>
+          )}
+          {submitted.map((handoff) => (
+            <HandoffReviewRow
+              key={handoff.id}
+              handoff={handoff}
+              signatures={availableSignatures}
+              signaturesLoading={signatures.loading}
+              onSaved={() => { handoffs.refetch(); onSaved(); }}
+            />
+          ))}
+        </div>
+      </section>
+    </Gate>
+  );
+}
+
+function HandoffReviewRow({
+  handoff,
+  signatures,
+  signaturesLoading,
+  onSaved,
+}: {
+  handoff: DocumentHandoff;
+  signatures: Array<{ id: string; name: string; title: string; isDefault: boolean }>;
+  signaturesLoading: boolean;
+  onSaved: () => void;
+}) {
+  const [signatureId, setSignatureId] = useState(
+    handoff.technicalSignature?.id ?? signatures.find((s) => s.isDefault)?.id ?? "",
+  );
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!signatureId && signatures.length > 0) {
+      setSignatureId(handoff.technicalSignature?.id ?? signatures.find((s) => s.isDefault)?.id ?? signatures[0].id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signatures, handoff.technicalSignature?.id]);
+
+  const ready = handoff.editorialStatus === "READY";
+
+  async function finalize() {
+    if (!signatureId) { setError("Selecione a assinatura do técnico responsável."); return; }
+    setBusy(true);
+    setError(null);
+    try {
+      await documentsApi.startHandoffReview(handoff.id);
+      await documentsApi.selectHandoffTechnicalSignature(handoff.id, signatureId);
+      await documentsApi.finalizeHandoffReview(handoff.id);
+      onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Não foi possível finalizar a revisão.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="rounded-[var(--radius-md)] border border-[var(--color-border)] p-3 space-y-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-sm font-medium truncate">{handoff.number}</p>
+          <p className="text-xs text-[var(--color-muted-foreground)]">{handoff.type} · revisão {handoff.revision}</p>
+        </div>
+        <StatusChip tone={ready ? "success" : "warning"} dot>{EDITORIAL_LABEL[handoff.editorialStatus] ?? handoff.editorialStatus}</StatusChip>
+      </div>
+      {ready && handoff.technicalSignature ? (
+        <p className="text-sm text-[var(--color-muted-foreground)]">
+          Técnico responsável: <strong className="text-[var(--color-foreground)]">{handoff.technicalSignature.name}</strong>
+          {handoff.technicalSignature.title ? ` · ${handoff.technicalSignature.title}` : ""}
+        </p>
+      ) : (
+        <>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={signatureId}
+              onChange={(e) => setSignatureId(e.target.value)}
+              className="h-9 flex-1 min-w-[220px] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-2 text-sm outline-none focus:border-[var(--color-primary)]"
+              aria-label="Assinatura do técnico responsável"
+            >
+              {signaturesLoading && <option value="">Carregando assinaturas…</option>}
+              {!signaturesLoading && signatures.length === 0 && <option value="">Nenhuma assinatura cadastrada com imagem</option>}
+              {signatures.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}{s.title ? ` — ${s.title}` : ""}{s.isDefault ? " (padrão)" : ""}</option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={finalize}
+              disabled={busy || !signatureId}
+              className="h-9 rounded-[var(--radius-md)] bg-[var(--color-primary)] px-3 text-sm font-medium text-[var(--color-primary-foreground)] disabled:opacity-50"
+            >
+              {busy ? "Finalizando…" : "Aplicar assinatura e finalizar"}
+            </button>
+          </div>
+          {error && <p className="text-sm text-[var(--color-danger)]">{error}</p>}
+          {signatures.length === 0 && !signaturesLoading && (
+            <p className="text-xs text-[var(--color-warning)]">Cadastre assinaturas do responsável técnico (com imagem) em Configurações para finalizar relatórios.</p>
+          )}
+        </>
+      )}
+    </div>
   );
 }
 

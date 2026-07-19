@@ -414,8 +414,9 @@ export class DocumentBuilderService {
             ['Data de criação', this.date(operation.createdAt)],
             ['Data do agendamento', this.date(operation.scheduledFor)],
             ['Status', operation.status],
-            ['Responsável', operation.assignment?.assignee.name ?? operation.operator.name],
-            ['Operador', operation.operator.name],
+            // Responsável técnico = assinatura selecionada na revisão da Platform.
+            ['Responsável técnico', this.technicalResponsibleName(context) ?? 'A definir na revisão'],
+            ['Operador em campo', operation.operator.name],
           ]),
         ],
       },
@@ -477,11 +478,10 @@ export class DocumentBuilderService {
           this.metadata('technical-report-identification-metadata', [
             ['Número', documentNumber],
             ['Emissão', this.date(generatedAt)],
-            ['Responsável', operation.assignment?.assignee.name ?? operation.operator.name],
-            [
-              'Função',
-              operation.assignment?.assignee.jobTitle ?? operation.operator.jobTitle ?? '—',
-            ],
+            // Responsável técnico = assinatura selecionada na revisão; o operador
+            // que coletou os dados aparece em "Local da visita".
+            ['Responsável técnico', this.technicalResponsibleName(context) ?? 'A definir na revisão'],
+            ['Registro profissional', this.technicalResponsibleTitle(context) ?? '—'],
             ['Situação', operation.status],
             ['Referência operacional', `OP-${String(operation.number).padStart(6, '0')}`],
           ]),
@@ -879,7 +879,7 @@ export class DocumentBuilderService {
             ['Número', documentNumber],
             ['Emissão', this.date(generatedAt)],
             ['Situação', signatureStatus],
-            ['Responsável técnico', pmoc.responsibleTechnician],
+            ['Responsável técnico', this.technicalResponsibleName(context) ?? pmoc.responsibleTechnician],
             ['ART/registro', pmoc.artNumber ?? '—'],
             ['Contrato', pmoc.contractNumber ?? '—'],
             ['Cliente', operation.customer.tradeName ?? operation.customer.name],
@@ -1774,6 +1774,27 @@ export class DocumentBuilderService {
     }
 
     return sections;
+  }
+
+  /** Nome do responsável técnico = assinatura institucional selecionada na revisão. */
+  private technicalResponsibleName(context: DocumentBuildContext): string | null {
+    const responsible = context.signature.institutionalSignatures[0] ?? null;
+    return responsible ? this.clean(responsible.name) : null;
+  }
+
+  /** Título/registro do responsável técnico (profissão · conselho · registro). */
+  private technicalResponsibleTitle(context: DocumentBuildContext): string | null {
+    const responsible = context.signature.institutionalSignatures[0] ?? null;
+    if (!responsible) return null;
+    const title = [
+      responsible.profession,
+      responsible.title,
+      responsible.professionalCouncil,
+      responsible.registrationNumber,
+    ]
+      .filter(Boolean)
+      .join(' · ');
+    return title ? this.clean(title) : null;
   }
 
   private signatureComponent(

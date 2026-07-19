@@ -607,8 +607,12 @@ export class DocumentRendererService {
   }
 
   private signatureComponentBlock(component: SignatureComponent): LayoutBlock {
+    // Assinaturas em pares lado a lado: a coletada do cliente ocupa a coluna
+    // esquerda e a do responsável técnico a direita (ordem vinda do builder).
     const itemHeight = 96;
-    const height = 18 + Math.max(1, component.signatures.length) * itemHeight;
+    const columns = Math.min(2, Math.max(1, component.signatures.length));
+    const rows = Math.max(1, Math.ceil(component.signatures.length / 2));
+    const height = 18 + rows * itemHeight;
     return {
       component,
       height,
@@ -621,15 +625,21 @@ export class DocumentRendererService {
           text: 'Assinaturas',
           size: 8,
         });
+        const gap = 24;
+        const columnWidth = (width - gap * (columns - 1)) / columns;
         component.signatures.forEach((signature, index) => {
-          const top = y - 18 - index * itemHeight;
-          const centerX = x + width / 2;
+          const row = Math.floor(index / columns);
+          const column = index % columns;
+          const left = x + column * (columnWidth + gap);
+          const top = y - 18 - row * itemHeight;
+          const centerX = left + columnWidth / 2;
+          const imageWidth = Math.min(190, columnWidth - 20);
           if (signature.image) {
             elements.push({
               type: 'image',
-              x: centerX - 95,
+              x: centerX - imageWidth / 2,
               y: top - 42,
-              width: 190,
+              width: imageWidth,
               height: 44,
               mimeType: signature.image.mimeType,
               contentBase64: signature.image.contentBase64,
@@ -637,38 +647,43 @@ export class DocumentRendererService {
           } else {
             elements.push({
               type: 'text',
-              x: centerX - 80,
+              x: centerX - 60,
               y: top - 28,
-              text: 'Assinatura coletada manualmente',
+              text: 'Assinatura pendente',
               size: 8,
             });
           }
           elements.push({
             type: 'line',
-            x1: x + 70,
+            x1: left + 16,
             y1: top - 54,
-            x2: x + width - 70,
+            x2: left + columnWidth - 16,
             y2: top - 54,
           });
+          const nameMaxChars = Math.max(16, Math.floor((columnWidth - 32) / 5));
+          const detailMaxChars = Math.max(20, Math.floor((columnWidth - 32) / 4.4));
           elements.push({
             type: 'text',
-            x: x + 70,
+            x: left + 16,
             y: top - 68,
-            text: signature.name ?? signature.label,
+            text: this.truncate(signature.name ?? signature.label, nameMaxChars),
             size: 9,
             bold: true,
           });
           elements.push({
             type: 'text',
-            x: x + 70,
+            x: left + 16,
             y: top - 81,
-            text: [
-              signature.title,
-              signature.caption,
-              signature.signedAt ? `Data: ${this.formatDate(signature.signedAt)}` : null,
-            ]
-              .filter(Boolean)
-              .join(' · '),
+            text: this.truncate(
+              [
+                signature.title,
+                signature.caption,
+                signature.signedAt ? `Data: ${this.formatDate(signature.signedAt)}` : null,
+              ]
+                .filter(Boolean)
+                .join(' · '),
+              detailMaxChars,
+            ),
             size: 8,
           });
         });
@@ -859,6 +874,10 @@ export class DocumentRendererService {
       timeStyle: 'short',
       timeZone: 'America/Recife',
     }).format(new Date(value));
+  }
+
+  private truncate(value: string, maxChars: number): string {
+    return value.length > maxChars ? `${value.slice(0, Math.max(1, maxChars - 1))}…` : value;
   }
 
   private chunk<T>(items: T[], size: number): T[][] {

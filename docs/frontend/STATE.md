@@ -1149,3 +1149,8 @@ Status: concluído.
 - **Identificação**: `buildOperationSections` inclui "Assinado por" (nome + função) quando a assinatura foi coletada; a seção "Assinatura do cliente" do `OperationView` mostra signatário e data.
 - **Platform drawer (fix)**: `WorkOrderSignatureSection` deixou de exibir sempre o pad — com assinatura coletada mostra os dados do signatário, quem coletou e a **imagem da assinatura** (via handoff/`CustomerSignaturePreview`), com "Substituir assinatura" opcional; a coleta pela Platform também passou a exigir o nome do signatário.
 - **Organização do drawer**: dados do atendimento primeiro (`OperationView`), depois assinatura/evidências, orçamentos, materiais e Timeline ao final.
+
+## Revisão dos relatórios no drawer da operação (2026-07-19)
+
+- Nova seção **"Revisão dos relatórios"** no drawer da operação (OWNER/MANAGER): para cada documento enviado, o responsável seleciona qual **assinatura do técnico responsável** (pré-definidas na plataforma, com imagem) vai para o relatório e clica em "Aplicar assinatura e finalizar" (`startHandoffReview → selectHandoffTechnicalSignature → finalizeHandoffReview`) — isso libera a geração do PDF na Central de Relatórios. Visível também em operações já concluídas com documentos pendentes (reparo de legado).
+- Preview do documento (`DocumentViewer`): assinaturas em duas colunas (cliente à esquerda, técnico à direita).
