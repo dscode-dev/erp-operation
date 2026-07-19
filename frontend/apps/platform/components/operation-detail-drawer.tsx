@@ -16,6 +16,7 @@ import { OperationView } from "@erp/ui/operations/operation-view";
 import { OPERATION_STATUS, OPERATION_TYPE_LABEL, operationCode } from "@erp/ui/operations/operation-shared";
 import { DocumentViewer } from "@erp/ui/documents/document-viewer";
 import { SignaturePad } from "@erp/ui/documents/signature-pad";
+import { CustomerSignaturePreview } from "@erp/ui/documents/customer-signature-preview";
 import { PhotoInput, type CapturedPhoto } from "@erp/ui/photo-input";
 import { Gate } from "@erp/ui/auth/gate";
 import { assignmentsApi, budgetsApi, documentsApi, inventoryApi, operationApi, useQuery, type Assignment, type Budget, type InventoryItem, type OperationDetail, type OperationDocument, type OperationPart, type Product } from "@erp/api";
@@ -91,6 +92,10 @@ export function OperationDetailDrawer({
 
           <OperationDates operation={op} assignment={assignmentQuery.data?.items[0] ?? null} />
 
+          {/* Dados do atendimento primeiro (Identificação, checklist, fotos,
+              assinatura, documentos); ações e histórico na sequência. */}
+          <OperationView operation={op} photoSources={photoSources} onOpenDocument={(id) => setPreviewDoc(op.documents.find((d) => d.id === id) ?? null)} />
+
           {isPmoc ? (
             <PmocExecutionEvidenceSection operation={op} configuration={pmocConfiguration.data} configurationLoading={pmocConfiguration.loading} onSaved={detail.refetch} />
           ) : (
@@ -99,16 +104,14 @@ export function OperationDetailDrawer({
 
           <OperationBudgetsSection operation={op} />
 
+          <OperationMaterialsSection operationId={op.id} />
+
           <section className="space-y-2">
             <h3 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)]">Timeline</h3>
             <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
               <AssetTimeline operationId={op.id} compact />
             </div>
           </section>
-
-          <OperationView operation={op} photoSources={photoSources} onOpenDocument={(id) => setPreviewDoc(op.documents.find((d) => d.id === id) ?? null)} />
-
-          <OperationMaterialsSection operationId={op.id} />
         </div>
       ) : null}
 
@@ -251,19 +254,48 @@ function PmocExecutionEvidenceSection({ operation, configuration, configurationL
 
 function WorkOrderSignatureSection({ operation, onSaved }: { operation: OperationDetail; onSaved: () => void }) {
   const [signature, setSignature] = useState<string | null>(null);
+  const [signerName, setSignerName] = useState(operation.customerSignerName ?? "");
+  const [signerRole, setSignerRole] = useState(operation.customerSignerRole ?? "");
+  const [replacing, setReplacing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const captured = Boolean(operation.signatureCaptured);
+  // O registro oficial (imagem + quem coletou) vive no handoff do documento.
+  const signedDocument =
+    operation.documents.find((d) => d.type === operation.requestedDocumentType) ??
+    operation.documents.find((d) => d.type === "WORK_ORDER") ??
+    operation.documents[0] ?? null;
+  const handoff = useQuery(
+    (signal) =>
+      captured && signedDocument
+        ? documentsApi.getHandoff(signedDocument.id, { signal }).catch(() => null)
+        : Promise.resolve(null),
+    [captured, signedDocument?.id],
+  );
+
+  useEffect(() => {
+    setSignerName(operation.customerSignerName ?? "");
+    setSignerRole(operation.customerSignerRole ?? "");
+  }, [operation.customerSignerName, operation.customerSignerRole]);
+
   async function save(value = signature) {
     if (!value || saving) return;
+    if (!signerName.trim()) {
+      setError("Informe o nome de quem assinou.");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
       await operationApi.updateOperation(operation.id, {
         signatureData: value,
+        customerSignerName: signerName.trim(),
+        customerSignerRole: signerRole.trim() || null,
         signedAt: new Date().toISOString(),
       });
       setSignature(null);
+      setReplacing(false);
       await Promise.resolve(onSaved());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Não foi possível salvar a assinatura.");
@@ -272,18 +304,53 @@ function WorkOrderSignatureSection({ operation, onSaved }: { operation: Operatio
     }
   }
 
+  const customerSignature = handoff.data?.customerSignature ?? null;
+
   return (
     <Gate roles={["OWNER", "MANAGER", "OPERATOR"]}>
       <section className="space-y-2">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)]">Assinatura da Ordem de Serviço</h3>
+        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)]">Assinatura do cliente</h3>
         <div className="space-y-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
-          {operation.signedAt && <p className="text-sm text-[var(--color-success)]">Assinatura persistida em {formatDateTime(operation.signedAt)}.</p>}
-          <SignaturePad onChange={setSignature} onConfirm={(value) => { setSignature(value); void save(value); }} />
-          {error && <p className="text-sm text-[var(--color-danger)]">{error}</p>}
-          <button type="button" onClick={() => void save()} disabled={!signature || saving} className="h-9 rounded-[var(--radius-md)] bg-[var(--color-primary)] px-3 text-sm font-medium text-[var(--color-primary-foreground)] disabled:opacity-50">
-            {saving ? "Salvando assinatura…" : "Salvar assinatura"}
-          </button>
-          <p className="text-xs text-[var(--color-muted-foreground)]">Após a confirmação do backend, abra a OS e renderize novamente. PDFs anteriores ficam bloqueados como desatualizados.</p>
+          {captured && !replacing ? (
+            <>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Info label="Assinado por" value={`${customerSignature?.name ?? operation.customerSignerName ?? "Não identificado"}${(customerSignature?.role ?? operation.customerSignerRole) ? ` · ${customerSignature?.role ?? operation.customerSignerRole}` : ""}`} />
+                <Info label="Assinada em" value={operation.signedAt ? formatDateTime(operation.signedAt) : customerSignature ? formatDateTime(customerSignature.collectedAt) : "—"} />
+                {customerSignature?.collectedBy && <Info label="Coletada por" value={customerSignature.collectedBy.name} />}
+              </div>
+              {handoff.data && customerSignature ? (
+                <CustomerSignaturePreview documentId={handoff.data.id} name={customerSignature.name} />
+              ) : handoff.loading ? (
+                <p className="text-sm text-[var(--color-muted-foreground)]">Carregando assinatura…</p>
+              ) : (
+                <p className="text-sm text-[var(--color-success)]">Assinatura coletada e protegida pelo backend.</p>
+              )}
+              <button type="button" onClick={() => setReplacing(true)} className="h-9 rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 text-sm font-medium hover:bg-[var(--color-muted)]">
+                Substituir assinatura
+              </button>
+            </>
+          ) : (
+            <>
+              {replacing && <p className="text-sm text-[var(--color-warning)]">A nova assinatura substituirá a atual e invalidará PDFs anteriores.</p>}
+              <div className="grid gap-2 sm:grid-cols-2">
+                <input value={signerName} onChange={(e) => setSignerName(e.target.value)} placeholder="Nome do cliente/responsável *" className="h-10 w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-3 text-sm outline-none focus:border-[var(--color-primary)]" />
+                <input value={signerRole} onChange={(e) => setSignerRole(e.target.value)} placeholder="Função ou vínculo (opcional)" className="h-10 w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-3 text-sm outline-none focus:border-[var(--color-primary)]" />
+              </div>
+              <SignaturePad onChange={setSignature} onConfirm={setSignature} />
+              {error && <p className="text-sm text-[var(--color-danger)]">{error}</p>}
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={() => void save()} disabled={!signature || !signerName.trim() || saving} className="h-9 rounded-[var(--radius-md)] bg-[var(--color-primary)] px-3 text-sm font-medium text-[var(--color-primary-foreground)] disabled:opacity-50">
+                  {saving ? "Salvando assinatura…" : "Salvar assinatura"}
+                </button>
+                {replacing && (
+                  <button type="button" onClick={() => { setReplacing(false); setSignature(null); setError(null); }} className="h-9 rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 text-sm font-medium hover:bg-[var(--color-muted)]">
+                    Cancelar
+                  </button>
+                )}
+              </div>
+              <p className="text-xs text-[var(--color-muted-foreground)]">Os dados do signatário acompanham a assinatura no relatório final. PDFs anteriores ficam bloqueados como desatualizados.</p>
+            </>
+          )}
         </div>
       </section>
     </Gate>

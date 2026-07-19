@@ -1141,3 +1141,11 @@ Status: concluído.
 - **Operator**: "Iniciar atendimento" em uma ordem atribuída inicia a execução e navega para o **wizard de execução** (`/operator/execucao/[assignmentId]`, full-screen): Checklist → Coleta (documento/equipamentos/relato) → Fotos → Materiais → **Revisão do cliente** (visão geral organizada de tudo que foi feito + assinatura com aceite). Concluir envia handoff + completa o assignment → operação vai para **Revisão**. PMOC mantém o fluxo inline especializado.
 - **Platform**: drawer da operação mostra "Aguardando aprovação" quando em `REVIEW`, com botão **Aprovar atendimento** (OWNER/MANAGER) → `PATCH /operations/:id/approve` → Concluída.
 - API: `operationApi.approveOperation(id)`.
+
+## Assinatura com identificação do signatário + revisão do fluxo self-service (2026-07-19)
+
+- **Self-service em Revisão**: o atendimento iniciado pelo operador sem atribuição (OS, Laudo, Visita, Orçamento) já percorre o ciclo oficial (accept→start→complete) e termina com a operação em **Revisão**, aguardando o aprove do responsável; a tela de sucesso comunica isso.
+- **Wizard de atendimento**: o passo de assinatura agora exige o **nome de quem assina** (+ função opcional); os dados vão para a Operation (`customerSignerName/Role`) e para o **registro oficial do handoff** (`collectCustomerSignature`) — usados pelo relatório final.
+- **Identificação**: `buildOperationSections` inclui "Assinado por" (nome + função) quando a assinatura foi coletada; a seção "Assinatura do cliente" do `OperationView` mostra signatário e data.
+- **Platform drawer (fix)**: `WorkOrderSignatureSection` deixou de exibir sempre o pad — com assinatura coletada mostra os dados do signatário, quem coletou e a **imagem da assinatura** (via handoff/`CustomerSignaturePreview`), com "Substituir assinatura" opcional; a coleta pela Platform também passou a exigir o nome do signatário.
+- **Organização do drawer**: dados do atendimento primeiro (`OperationView`), depois assinatura/evidências, orçamentos, materiais e Timeline ao final.
