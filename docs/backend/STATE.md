@@ -3018,3 +3018,8 @@ Status: implementado e validado em PostgreSQL/Docker.
 - **Novo evento**: `ASSIGNMENT_REJECTED` — "Atendimento recusado" para a gestão, com o motivo (migration `20260719190000_notification_rejected_type`).
 - **Deep links reais**: notificações de operação usam `/operacoes?operationId=<uuid>` (whitelist validada por regex) — o clique abre o drawer da operação; destinatário operador cai em `/operator/services`. "Atividade em atraso" escolhe a URL pelo destinatário.
 - Mantidos: nova atribuição (operador), atraso, orçamento aprovado/rejeitado, PMOC (gerado/falha/manual), relatório revisado (operador).
+
+## Sessões persistentes com refresh seguro (2026-07-19)
+
+- **Graça de rotação** no `POST /auth/refresh`: reapresentar um refresh token rotacionado há ≤60s (corrida entre abas) devolve 401 simples, sem revogar a família; reuso fora da graça continua revogando todas as sessões (detecção de vazamento preservada). Rotação single-use, hash de token e revogação em logout permanecem intactos.
+- **TTL**: `JWT_ACCESS_EXPIRES_IN_SECONDS` recomendado em 1800 (30 min) — a permanência real da sessão vem do refresh de 30 dias com rotação, não de access longo (AppSec preservado).

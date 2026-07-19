@@ -23,7 +23,7 @@ import {
   type ReactNode,
 } from "react";
 import { authApi, usersApi, setSessionScope, type SessionScope } from "@erp/api";
-import { hasSession, onSessionInvalid } from "@erp/api";
+import { ensureFreshSession, hasSession, onSessionInvalid } from "@erp/api";
 import type { Role, SessionUser, UserPermissions } from "@erp/api";
 
 export type SessionStatus =
@@ -114,6 +114,30 @@ export function AuthProvider({ scope = "platform", children }: { scope?: Session
         setStatus("unauthenticated");
       }
     });
+  }, []);
+
+  // Renovação proativa da sessão: mantém o access token fresco enquanto o app
+  // está aberto e renova imediatamente ao voltar o foco/visibilidade — evita o
+  // "voltei para a página e caí no login" quando o access expirou em segundo
+  // plano (o refresh token continua válido).
+  useEffect(() => {
+    const tick = () => {
+      if (typeof document === "undefined" || document.visibilityState === "visible") {
+        void ensureFreshSession();
+      }
+    };
+    tick();
+    const interval = setInterval(tick, 60_000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void ensureFreshSession();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
   }, []);
 
   const login = useCallback(

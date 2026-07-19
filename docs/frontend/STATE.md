@@ -1170,3 +1170,16 @@ Status: concluído.
 
 - `/operacoes?operationId=` abre o drawer da operação diretamente — o clique no sino agora leva ao item real, não só à listagem.
 - `NotificationType` ganhou `ASSIGNMENT_REJECTED`.
+
+## Compartilhamento de PDFs no app do operador (2026-07-19)
+
+- `/operator/documents`: cada documento mostra a disponibilidade real — **"PDF disponível"** (renderizado), **"Em revisão"** ou **"Aguardando geração do PDF"**.
+- PDFs disponíveis ganham ações **Compartilhar** (Web Share API com arquivo → share sheet nativo do dispositivo: WhatsApp, E-mail, Telegram…) e **Baixar** (download direto), na lista e no drawer de visualização. Navegador sem Web Share com arquivos cai para download com aviso.
+- Documentos em revisão continuam visualizáveis (preview), com aviso claro e **sem** download/compartilhamento — o operador não gera PDF (a emissão exige aprovação do responsável na Platform; o backend já restringe `render` a OWNER/MANAGER e o `download` só serve PDFs emitidos e atualizados).
+- Erros tratados: `DOCUMENT_STALE` (PDF desatualizado — pedir nova emissão) e `DOCUMENT_DOWNLOAD_NOT_READY`.
+
+## Sessão que não cai mais ao voltar à página (2026-07-19)
+
+- **Refresh proativo**: o AuthProvider renova o access token antes do vencimento (checagem a cada 60s com a página visível + imediatamente no `visibilitychange`/`focus`) via `ensureFreshSession()` — o retorno ao app não gera mais tempestade de 401/login.
+- **Refresh serializado entre abas**: `refreshSession` usa Web Locks por escopo (`erp.session.refresh.<scope>`); ao entrar no lock, se outra aba já rotacionou (access token mudou no storage), reutiliza sem chamar o endpoint — elimina a corrida que revogava a sessão.
+- Fluxo 401→refresh→replay e limpeza em erro fatal inalterados.

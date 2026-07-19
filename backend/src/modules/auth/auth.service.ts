@@ -17,6 +17,13 @@ import type {
 import type { LoginDto } from './dto/login.dto';
 import { LogoutResponseDto, MeResponseDto, TokenPairResponseDto } from './dto/auth-response.dto';
 
+/**
+ * Corridas de rotação (várias abas renovando quase juntas) não são reuso
+ * malicioso: dentro desta janela o token já rotacionado gera 401 sem derrubar
+ * as demais sessões do usuário. Fora dela, o reuso revoga a família inteira.
+ */
+const REFRESH_ROTATION_GRACE_SECONDS = 60;
+
 const USER_PUBLIC_SELECT = {
   id: true,
   email: true,
@@ -94,10 +101,19 @@ export class AuthService {
     }
 
     if (storedToken.revokedAt) {
-      await this.prisma.refreshToken.updateMany({
-        where: { userId: storedToken.userId, revokedAt: null },
-        data: { revokedAt: new Date() },
-      });
+      // Janela de graça para corridas benignas de rotação (duas abas do mesmo
+      // navegador renovando ao mesmo tempo): um token rotacionado há poucos
+      // segundos recebe 401 simples e a aba recupera o token novo do storage.
+      // Reuso FORA da graça é sinal real de vazamento e continua revogando a
+      // família inteira de sessões (detecção de reuso preservada).
+      const graceMs = REFRESH_ROTATION_GRACE_SECONDS * 1000;
+      const withinGrace = Date.now() - storedToken.revokedAt.getTime() <= graceMs;
+      if (!withinGrace) {
+        await this.prisma.refreshToken.updateMany({
+          where: { userId: storedToken.userId, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
+      }
       throw new ApplicationException(
         ERROR_CODES.AUTH_SESSION_REVOKED,
         'Refresh token has already been used or revoked',

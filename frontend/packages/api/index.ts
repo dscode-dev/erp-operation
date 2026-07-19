@@ -11,6 +11,7 @@ export {
   ApiClientError,
   API_BASE_URL,
   onSessionInvalid,
+  ensureFreshSession,
 } from './client';
 export { useQuery, errorMessage, type QueryState } from './use-query';
 export {

@@ -12,7 +12,7 @@
  * modules in `lib/api/*`, which build on this client.
  */
 import type { ApiErrorBody } from "@erp/types";
-import { clearTokens, getAccessToken, getRefreshToken, setTokens } from "./tokens";
+import { clearTokens, getAccessToken, getRefreshToken, getSessionScope, setTokens } from "./tokens";
 
 export const API_BASE_URL = (
   process.env.NEXT_PUBLIC_API_BASE_URL ??
@@ -81,30 +81,27 @@ function requestId(): string {
 
 let refreshInFlight: Promise<boolean> | null = null;
 
+/**
+ * Refresh com rotação segura:
+ * - single-flight dentro da aba (uma renovação por vez);
+ * - serializado ENTRE abas via Web Locks (mesmo escopo de sessão), evitando a
+ *   corrida em que duas abas rotacionam o mesmo refresh token;
+ * - ao entrar no lock, se outra aba já renovou (access token mudou), reutiliza
+ *   o resultado sem chamar o endpoint.
+ */
 async function refreshSession(): Promise<boolean> {
-  const refreshToken = getRefreshToken();
-  if (!refreshToken) return false;
+  if (!getRefreshToken()) return false;
 
   if (!refreshInFlight) {
     refreshInFlight = (async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Request-Id": requestId() },
-          body: JSON.stringify({ refreshToken }),
-        });
-        const body = (await res.json().catch(() => null)) as
-          | { success: true; data: { accessToken: string; refreshToken: string } }
-          | ApiErrorBody
-          | null;
-        if (res.ok && body && body.success) {
-          setTokens({
-            accessToken: body.data.accessToken,
-            refreshToken: body.data.refreshToken,
-          });
-          return true;
+        const accessBefore = getAccessToken();
+        const run = () => performRefresh(accessBefore);
+        const locks = typeof navigator !== "undefined" ? navigator.locks : undefined;
+        if (locks?.request) {
+          return await locks.request(`erp.session.refresh.${getSessionScope()}`, run);
         }
-        return false;
+        return await run();
       } catch {
         return false;
       } finally {
@@ -117,6 +114,67 @@ async function refreshSession(): Promise<boolean> {
   }
 
   return refreshInFlight;
+}
+
+async function performRefresh(accessBefore: string | null): Promise<boolean> {
+  // Outra aba pode ter renovado enquanto aguardávamos o lock.
+  const currentAccess = getAccessToken();
+  if (currentAccess && currentAccess !== accessBefore && !tokenNearExpiry(currentAccess)) {
+    return true;
+  }
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) return false;
+  try {
+    const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Request-Id": requestId() },
+      body: JSON.stringify({ refreshToken }),
+    });
+    const body = (await res.json().catch(() => null)) as
+      | { success: true; data: { accessToken: string; refreshToken: string } }
+      | ApiErrorBody
+      | null;
+    if (res.ok && body && body.success) {
+      setTokens({
+        accessToken: body.data.accessToken,
+        refreshToken: body.data.refreshToken,
+      });
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/** Segundos até o `exp` do JWT; null quando o token não é decodificável. */
+function tokenSecondsToExpiry(token: string): number | null {
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))) as { exp?: number };
+    if (typeof payload.exp !== "number") return null;
+    return payload.exp - Math.floor(Date.now() / 1000);
+  } catch {
+    return null;
+  }
+}
+
+function tokenNearExpiry(token: string, thresholdSeconds = 120): boolean {
+  const remaining = tokenSecondsToExpiry(token);
+  return remaining !== null && remaining <= thresholdSeconds;
+}
+
+/**
+ * Renovação proativa: se o access token está expirado ou perto de expirar
+ * (< 2 min) e existe refresh token, renova antes que as chamadas tomem 401.
+ * Chamada pelo AuthProvider em intervalo e ao voltar o foco para a página.
+ */
+export async function ensureFreshSession(): Promise<void> {
+  const access = getAccessToken();
+  if (!access || !getRefreshToken()) return;
+  if (!tokenNearExpiry(access)) return;
+  // Falha aqui não desloga: pode ser rede. O fluxo de 401 das chamadas reais
+  // decide quando a sessão é irrecuperável.
+  await refreshSession();
 }
 
 /* ---------- request core ---------- */
