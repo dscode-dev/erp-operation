@@ -171,16 +171,25 @@ export class OperationsService {
 
   async stats(actor: AuthenticatedUser): Promise<Record<string, unknown>> {
     const where = this.access.operationScope(actor);
-    const [total, draft, inProgress, completed, canceled] = await this.prisma.$transaction([
+    const [total, draft, pending, inProgress, review, completed, canceled] = await this.prisma.$transaction([
       this.prisma.operation.count({ where }),
       this.prisma.operation.count({ where: { ...where, status: 'DRAFT' } }),
+      this.prisma.operation.count({ where: { ...where, status: 'PENDING' } }),
       this.prisma.operation.count({ where: { ...where, status: 'IN_PROGRESS' } }),
+      this.prisma.operation.count({ where: { ...where, status: 'REVIEW' } }),
       this.prisma.operation.count({ where: { ...where, status: 'COMPLETED' } }),
       this.prisma.operation.count({ where: { ...where, status: 'CANCELED' } }),
     ]);
     return {
       total,
-      byStatus: { DRAFT: draft, IN_PROGRESS: inProgress, COMPLETED: completed, CANCELED: canceled },
+      byStatus: {
+        DRAFT: draft,
+        PENDING: pending,
+        IN_PROGRESS: inProgress,
+        REVIEW: review,
+        COMPLETED: completed,
+        CANCELED: canceled,
+      },
     };
   }
 
@@ -590,6 +599,51 @@ export class OperationsService {
         throw error;
       }
     }
+    return this.operationOrThrow(id);
+  }
+
+  /**
+   * Technical-responsible approval: REVIEW → COMPLETED. Fires the completion
+   * side-effects (asset lifecycle event + maintenance/PMOC execution sync) that
+   * are intentionally deferred while the operation awaits review.
+   */
+  async approve(
+    id: string,
+    actor: AuthenticatedUser,
+    context: OperationAuditContext,
+  ): Promise<unknown> {
+    await this.prisma.$transaction(async (tx) => {
+      const transition = await tx.operation.updateMany({
+        where: { id, status: 'REVIEW' },
+        data: { status: 'COMPLETED' },
+      });
+      if (transition.count !== 1) {
+        const exists = await tx.operation.findUnique({ where: { id }, select: { status: true } });
+        if (!exists)
+          throw new ApplicationException(
+            ERROR_CODES.OPERATION_NOT_FOUND,
+            'Operation was not found',
+            HttpStatus.NOT_FOUND,
+          );
+        throw new ApplicationException(
+          ERROR_CODES.OPERATION_INVALID_TRANSITION,
+          'Only operations awaiting review can be approved',
+          HttpStatus.CONFLICT,
+          { status: exists.status },
+        );
+      }
+      await tx.auditLog.create({
+        data: this.audit(
+          OPERATION_AUDIT_ACTIONS.OPERATION_APPROVED,
+          OPERATION_RESOURCE,
+          actor,
+          context,
+          { operationId: id },
+        ),
+      });
+      await this.lifecycle.publishOperationCompletedTx(tx, id, actor.id, context);
+      await this.maintenance.syncOperationCompletedTx(tx, id, actor.id, context);
+    });
     return this.operationOrThrow(id);
   }
 

@@ -85,6 +85,8 @@ export function OperationDetailDrawer({
             <StatusChip tone={OPERATION_STATUS[op.status].tone} dot>{OPERATION_STATUS[op.status].label}</StatusChip>
           </div>
 
+          {op.status === "REVIEW" && <ApprovalSection operation={op} onApproved={detail.refetch} />}
+
           <AssignmentSection assignment={assignmentQuery.data?.items[0] ?? null} loading={assignmentQuery.loading} onRefresh={() => { assignmentQuery.refetch(); detail.refetch(); }} />
 
           <OperationDates operation={op} assignment={assignmentQuery.data?.items[0] ?? null} />
@@ -120,6 +122,46 @@ export function OperationDetailDrawer({
         )}
       </Drawer>
     </Drawer>
+  );
+}
+
+function ApprovalSection({ operation, onApproved }: { operation: OperationDetail; onApproved: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function approve() {
+    setBusy(true);
+    setError(null);
+    try {
+      await operationApi.approveOperation(operation.id);
+      onApproved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Não foi possível aprovar o atendimento.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Gate roles={["OWNER", "MANAGER"]}>
+      <section className="rounded-[var(--radius-lg)] border border-[var(--color-info)]/30 bg-[var(--color-info)]/5 p-4 space-y-3">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-info)]">Aguardando aprovação</p>
+          <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">
+            O operador concluiu o atendimento em campo. Revise o checklist, as fotos, as observações e a assinatura do cliente abaixo e aprove para concluir a operação.
+          </p>
+        </div>
+        {error && <p className="text-sm text-[var(--color-danger)]">{error}</p>}
+        <button
+          type="button"
+          onClick={approve}
+          disabled={busy}
+          className="inline-flex h-10 items-center justify-center gap-2 rounded-[var(--radius-md)] bg-[var(--color-primary)] px-4 text-sm font-semibold text-[var(--color-primary-foreground)] disabled:opacity-50"
+        >
+          {busy ? "Aprovando…" : "Aprovar atendimento"}
+        </button>
+      </section>
+    </Gate>
   );
 }
 

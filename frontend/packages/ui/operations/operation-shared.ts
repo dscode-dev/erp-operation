@@ -18,7 +18,9 @@ export const OPERATION_TYPE_LABEL: Record<OperationType, string> = {
 
 export const OPERATION_STATUS: Record<OperationStatus, { tone: ChipTone; label: string }> = {
   DRAFT: { tone: "neutral", label: "Rascunho" },
+  PENDING: { tone: "warning", label: "Pendente" },
   IN_PROGRESS: { tone: "primary", label: "Em andamento" },
+  REVIEW: { tone: "info", label: "Revisão" },
   COMPLETED: { tone: "success", label: "Concluída" },
   CANCELED: { tone: "danger", label: "Cancelada" },
 };

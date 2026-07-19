@@ -671,7 +671,7 @@ export type CreateEquipmentPayload = {
 /* ============ Operations (central operational domain) ============ */
 
 export type OperationType = 'PREVENTIVA' | 'CORRETIVA' | 'INSTALACAO' | 'PROJETO';
-export type OperationStatus = 'DRAFT' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELED';
+export type OperationStatus = 'DRAFT' | 'PENDING' | 'IN_PROGRESS' | 'REVIEW' | 'COMPLETED' | 'CANCELED';
 export type OperationMaintenanceType =
   | 'WEEKLY'
   | 'MONTHLY'

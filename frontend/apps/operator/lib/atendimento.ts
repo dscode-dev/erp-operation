@@ -26,6 +26,9 @@ export type AtendimentoDraft = {
   conclusion: string[];
   photos: CapturedPhoto[];
   signature: string | null;
+  /** Quem assinou pelo cliente — obrigatório quando há assinatura. */
+  signerName: string;
+  signerRole: string;
   startedAt: string | null;
 };
 
@@ -52,6 +55,7 @@ export function workOrderNumber(operation: OperationDetail): string | null {
 export async function createOperationFromDraft(draft: AtendimentoDraft): Promise<AtendimentoSubmission> {
   if (!draft.customerId) throw new Error('Cliente é obrigatório');
   if (!draft.serviceType) throw new Error('Tipo de atendimento é obrigatório');
+  if (draft.signature && !draft.signerName.trim()) throw new Error('Informe o nome de quem assinou.');
 
   const photos = await Promise.all(
     draft.photos.map(async (p) => ({ dataUrl: await fileToDataUrl(p.file), caption: p.name })),
@@ -73,6 +77,8 @@ export async function createOperationFromDraft(draft: AtendimentoDraft): Promise
     technicalOpinionRecommendations: draft.recommendations.join('\n') || null,
     technicalOpinionConclusion: draft.conclusion.join('\n') || null,
     signatureData: draft.signature,
+    customerSignerName: draft.signature ? draft.signerName.trim() : null,
+    customerSignerRole: draft.signature ? draft.signerRole.trim() || null : null,
     signedAt: draft.signature ? now : null,
     photos,
   };
@@ -82,11 +88,24 @@ export async function createOperationFromDraft(draft: AtendimentoDraft): Promise
   const assignment = assignments.items[0];
   if (!assignment) throw new Error('O atendimento foi criado, mas sua execução não foi localizada.');
 
+  // Self-service também passa pelo ciclo oficial: ao concluir, a Operation fica
+  // em "Revisão" aguardando a aprovação do responsável técnico na Platform.
   await assignmentsApi.acceptAssignment(assignment.id);
   await assignmentsApi.startAssignment(assignment.id);
   await assignmentsApi.completeAssignment(assignment.id, 'Atendimento iniciado e executado pelo operador.');
 
-  const draftDocument = await documentsApi.saveHandoffDraft(created.id, draft.documentType);
+  let draftDocument = await documentsApi.saveHandoffDraft(created.id, draft.documentType);
+  if (draft.signature) {
+    // Registro oficial da assinatura no documento (nome/função/quando/por quem),
+    // usado pelos relatórios e pela validação na Platform.
+    draftDocument = await documentsApi.collectCustomerSignature(draftDocument.id, {
+      signerName: draft.signerName.trim(),
+      signerRole: draft.signerRole.trim() || undefined,
+      signatureData: draft.signature,
+      collectedAt: now,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Recife',
+    });
+  }
   const handoff = await documentsApi.submitHandoff(draftDocument.id);
   const operation = await operationApi.getOperation(created.id);
   return { operation, handoff };

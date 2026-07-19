@@ -113,6 +113,8 @@ export function AtendimentoWizard({
   const [conclusions, setConclusions] = useState<string[]>([]);
   const [photos, setPhotos] = useState<CapturedPhoto[]>([]);
   const [signature, setSignature] = useState<string | null>(null);
+  const [signerName, setSignerName] = useState('');
+  const [signerRole, setSignerRole] = useState('');
 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -177,13 +179,15 @@ export function AtendimentoWizard({
       case 6:
         return true;
       case 7:
-        return documentType ? !CUSTOMER_SIGNATURE_TYPES.has(documentType) || !!signature : false;
+        return documentType
+          ? !CUSTOMER_SIGNATURE_TYPES.has(documentType) || (!!signature && signerName.trim().length > 0)
+          : false;
       case 8:
         return true;
       default:
         return false;
     }
-  }, [step, customer, address, serviceType, signature, documentType]);
+  }, [step, customer, address, serviceType, signature, signerName, documentType]);
 
   function back() {
     if (step === 0) router.push('/operator');
@@ -218,6 +222,8 @@ export function AtendimentoWizard({
         conclusion: conclusions,
         photos,
         signature,
+        signerName,
+        signerRole,
         startedAt,
       });
       setResult({
@@ -323,7 +329,7 @@ export function AtendimentoWizard({
           />
         )}
         {step === 6 && <FotosStep photos={photos} onChange={setPhotos} />}
-        {step === 7 && (CUSTOMER_SIGNATURE_TYPES.has(documentType) ? <AssinaturaStep onChange={setSignature} /> : <EmptyState icon={PenLine} title="Assinatura não exigida" description="Este tipo de documento não exige assinatura do cliente nesta coleta." />)}
+        {step === 7 && (CUSTOMER_SIGNATURE_TYPES.has(documentType) ? <AssinaturaStep signerName={signerName} signerRole={signerRole} onSignerName={setSignerName} onSignerRole={setSignerRole} onChange={setSignature} /> : <EmptyState icon={PenLine} title="Assinatura não exigida" description="Este tipo de documento não exige assinatura do cliente nesta coleta." />)}
         {step === 8 && (
           <ResumoStep
             customer={customer}
@@ -334,6 +340,8 @@ export function AtendimentoWizard({
             notes={notes}
             photoCount={photos.length}
             signed={!!signature}
+            signerName={signerName}
+            signerRole={signerRole}
             documentType={documentType}
           />
         )}
@@ -948,13 +956,38 @@ function FotosStep({
   );
 }
 
-function AssinaturaStep({ onChange }: { onChange: (s: string | null) => void }) {
+function AssinaturaStep({
+  signerName,
+  signerRole,
+  onSignerName,
+  onSignerRole,
+  onChange,
+}: {
+  signerName: string;
+  signerRole: string;
+  onSignerName: (v: string) => void;
+  onSignerRole: (v: string) => void;
+  onChange: (s: string | null) => void;
+}) {
   return (
     <div className="space-y-3">
       <p className="text-sm text-[var(--color-muted-foreground)]">
-        Colete a assinatura do cliente para concluir.
+        Identifique quem assina pelo cliente e colete a assinatura. Esses dados vão para o relatório final.
       </p>
+      <input
+        value={signerName}
+        onChange={(e) => onSignerName(e.target.value)}
+        placeholder="Nome do cliente/responsável que assina *"
+        className="w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-3 h-11 text-sm outline-none focus:border-[var(--color-primary)]"
+      />
+      <input
+        value={signerRole}
+        onChange={(e) => onSignerRole(e.target.value)}
+        placeholder="Função ou vínculo (opcional)"
+        className="w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-3 h-11 text-sm outline-none focus:border-[var(--color-primary)]"
+      />
       <SignaturePad onChange={onChange} onConfirm={onChange} />
+      {!signerName.trim() && <p className="text-[11px] text-[var(--color-warning)]">Informe o nome de quem assina para continuar.</p>}
     </div>
   );
 }
@@ -968,6 +1001,8 @@ function ResumoStep({
   notes,
   photoCount,
   signed,
+  signerName,
+  signerRole,
   documentType,
 }: {
   customer: Customer | null;
@@ -978,6 +1013,8 @@ function ResumoStep({
   notes: string;
   photoCount: number;
   signed: boolean;
+  signerName?: string;
+  signerRole?: string;
   documentType: DocumentKind;
 }) {
   const done = checklist.filter((c) => c.done).length;
@@ -1011,7 +1048,7 @@ function ResumoStep({
       <SummaryRow
         icon={<PenLine className="h-4 w-4" />}
         label="Assinatura"
-        value={signed ? 'Coletada' : 'Pendente'}
+        value={signed ? `Coletada${signerName?.trim() ? ` · ${signerName.trim()}${signerRole?.trim() ? ` (${signerRole.trim()})` : ''}` : ''}` : 'Pendente'}
         tone={signed ? 'success' : 'warning'}
       />
       {notes && (
@@ -1048,7 +1085,7 @@ function SuccessView({
           <FileText className="h-4 w-4" /> {documentNumber}
         </p>
         <p className="text-sm text-[var(--color-muted-foreground)] mt-2">
-          {DOCUMENT_KIND_LABEL[documentType]} registrado como {workflowStatus === 'DRAFT' ? 'rascunho aguardando aprovação' : 'em revisão'} pela equipe responsável.
+          {DOCUMENT_KIND_LABEL[documentType]} registrado como {workflowStatus === 'DRAFT' ? 'rascunho aguardando aprovação' : 'em revisão'} pela equipe responsável. A operação ficou em <strong>Revisão</strong> até o aprove do responsável técnico.
         </p>
         <div className="mt-6 space-y-2">
           <button

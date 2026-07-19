@@ -71,7 +71,9 @@ enum OperationType {
 
 enum OperationStatus {
   DRAFT
+  PENDING
   IN_PROGRESS
+  REVIEW
   COMPLETED
   CANCELED
 }

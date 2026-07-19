@@ -79,6 +79,16 @@ export class OperationsController {
     return this.operations.get(id, actor, this.context(request));
   }
 
+  @Roles(Role.OWNER, Role.MANAGER)
+  @Patch(':id/approve')
+  approve(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @CurrentUser() actor: AuthenticatedUser,
+    @Req() request: RequestWithId,
+  ): Promise<unknown> {
+    return this.operations.approve(id, actor, this.context(request));
+  }
+
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR)
   @Patch(':id')
   update(

@@ -2998,3 +2998,10 @@ Status: implementado e validado em PostgreSQL/Docker.
 - Bloqueadores confirmados: bypass da máquina Operation/Assignment, escopo insuficiente para OPERATOR, submissão PWA não atômica, caminhos documentais comerciais paralelos, ausência de binário histórico por revisão, política de assinatura divergente no handoff, exposição de assets em JSON, lacunas de integridade relacional e truncamentos em consultas de produção.
 - Validações aprovadas: Prisma, lint/build, 80 testes unitários, 12 testes PostgreSQL de integração, 24 de concorrência e 50 de segurança.
 - Nenhuma migration ou regra de negócio foi criada nesta auditoria.
+
+## Fluxo de revisão de Operações (execução em campo · 2026-07-19)
+
+- `OperationStatus` ganhou `PENDING` e `REVIEW` (migration `20260719140000_operation_review_flow`, `ALTER TYPE ... ADD VALUE`).
+- Ciclo sincronizado com o Assignment: atribuir (create/reassign) → operação `PENDING`; operador inicia (`PATCH /assignments/:id/start`) → `IN_PROGRESS`; operador conclui (`/complete`) → **`REVIEW`** (com `completedAt`; side-effects de conclusão adiados para a aprovação).
+- Aprovação do responsável técnico: `PATCH /operations/:id/approve` (OWNER/MANAGER) → `REVIEW` → `COMPLETED` + `publishOperationCompletedTx` + `syncOperationCompletedTx` (PMOC) + audit `OPERATION_APPROVED`. Erro `OPERATION_INVALID_TRANSITION` (409) fora de `REVIEW`.
+- `GET /operations/stats` inclui `PENDING`/`REVIEW` em `byStatus`; list-exports usa os novos rótulos (Pendente/Revisão).

@@ -108,7 +108,15 @@ function SectionRenderer({
 
         {section.kind === "signature" && (
           section.captured ? (
-            <p className="text-sm text-[var(--color-success)]">Assinatura coletada e protegida pelo backend{section.signedAt ? ` em ${new Date(section.signedAt).toLocaleString('pt-BR')}` : ''}.</p>
+            <div className="space-y-1 text-sm">
+              <p className="font-medium">
+                {section.signerName ?? "Signatário não identificado"}
+                {section.signerRole ? <span className="text-[var(--color-muted-foreground)] font-normal"> · {section.signerRole}</span> : null}
+              </p>
+              <p className="text-[var(--color-success)]">
+                Assinatura coletada{section.signedAt ? ` em ${new Date(section.signedAt).toLocaleString("pt-BR")}` : ""} e protegida pelo backend.
+              </p>
+            </div>
           ) : (
             <Empty>Assinatura não coletada.</Empty>
           )

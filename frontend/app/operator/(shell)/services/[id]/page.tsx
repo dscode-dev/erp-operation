@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, CalendarClock, Camera, CheckCircle2, ClipboardCheck, Clock, FileText, MapPin, Package, PenLine, Play, XCircle } from "lucide-react";
 import { SkeletonCard, SkeletonList } from "@erp/ui/skeletons";
 import { EmptyState } from "@erp/ui/empty-state";
@@ -35,6 +35,7 @@ const workflow = [
 
 export default function OperatorServiceDetail() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const assignment = useQuery((signal) => assignmentsApi.getAssignment(params.id, { signal }), [params.id]);
   const history = useQuery(
     (signal) => assignment.data ? assignmentsApi.getAssignmentHistory(assignment.data.operationId, { signal }) : Promise.resolve([]),
@@ -53,7 +54,15 @@ export default function OperatorServiceDetail() {
     setError(null);
     try {
       if (action === "accept") await assignmentsApi.acceptAssignment(assignment.data.id);
-      if (action === "start") await assignmentsApi.startAssignment(assignment.data.id);
+      if (action === "start") {
+        await assignmentsApi.startAssignment(assignment.data.id);
+        // Non-PMOC executions continue in the guided wizard (PMOC keeps the
+        // specialized inline flow on this page).
+        if (!assignment.data.operation.maintenanceExecution?.plan.pmocPlan) {
+          router.push(`/operator/execucao/${assignment.data.id}`);
+          return;
+        }
+      }
       if (action === "complete") await assignmentsApi.completeAssignment(assignment.data.id, "Concluído pelo operador em campo");
       if (action === "reject") await assignmentsApi.rejectAssignment(assignment.data.id, "Recusado pelo operador");
       assignment.refetch();
@@ -186,8 +195,14 @@ function AssignmentWorkflow({
             </button>
           </>
         )}
-        {assignment.status === "ACCEPTED" && <BigButton icon={Play} label="Iniciar execução" busy={busy === "start"} onClick={() => onAction("start")} />}
-        {assignment.status === "STARTED" && <><BigButton icon={CheckCircle2} label="Concluir atendimento" busy={busy === "complete"} disabled={isPmoc && (operation.data?.photos.length ?? 0) < 4} onClick={() => onAction("complete")} />{isPmoc && (operation.data?.photos.length ?? 0) < 4 && <p className="text-center text-xs text-[var(--color-warning)]">Registre ao menos quatro imagens do procedimento antes de concluir.</p>}</>}
+        {assignment.status === "ACCEPTED" && <BigButton icon={Play} label="Iniciar atendimento" busy={busy === "start"} onClick={() => onAction("start")} />}
+        {assignment.status === "STARTED" && (isPmoc ? (
+          <><BigButton icon={CheckCircle2} label="Concluir atendimento" busy={busy === "complete"} disabled={(operation.data?.photos.length ?? 0) < 4} onClick={() => onAction("complete")} />{(operation.data?.photos.length ?? 0) < 4 && <p className="text-center text-xs text-[var(--color-warning)]">Registre ao menos quatro imagens do procedimento antes de concluir.</p>}</>
+        ) : (
+          <Link href={`/operator/execucao/${assignment.id}`} className="inline-flex h-14 items-center justify-center gap-2 rounded-[var(--radius-xl)] bg-[var(--color-primary)] px-4 text-base font-semibold text-white shadow-[var(--shadow-hover)] active:scale-[0.99]">
+            <Play className="h-5 w-5" /> Continuar atendimento
+          </Link>
+        ))}
       </section>
 
       <section className="space-y-2">
@@ -217,7 +232,9 @@ function AssignmentWorkflow({
         <PmocFieldExecution operation={operation.data} signatureMode={pmocSignatureMode} technicalSignature={pmocTechnicalSignature} configurationLoading={pmocConfiguration.loading} onSaved={operation.refetch} />
       )}
 
-      {operation.data && (assignment.status === "ACCEPTED" || assignment.status === "STARTED" || assignment.status === "COMPLETED") && (
+      {/* Non-PMOC data collection happens in the execution wizard; the inline
+          handoff form remains only for the specialized PMOC flow. */}
+      {operation.data && isPmoc && (assignment.status === "ACCEPTED" || assignment.status === "STARTED" || assignment.status === "COMPLETED") && (
         <FieldReportHandoff operation={operation.data} onSaved={operation.refetch} />
       )}
 

@@ -21,6 +21,13 @@ import { FinancialStatusBadge, FinancialTypeBadge } from "./financial-procuremen
 const accountTypes: FinancialAccountType[] = ["CASH", "BANK", "CREDIT_CARD", "DIGITAL_WALLET", "OTHER"];
 const categoryTypes: FinancialCategoryType[] = ["INCOME", "EXPENSE", "TRANSFER"];
 const entryTypes: FinancialEntryType[] = ["RECEIVABLE", "PAYABLE", "TRANSFER"];
+
+/** Backend rule (assertAccountCategory): each entry type accepts one category type. */
+const ENTRY_CATEGORY_TYPE: Record<FinancialEntryType, FinancialCategoryType> = {
+  RECEIVABLE: "INCOME",
+  PAYABLE: "EXPENSE",
+  TRANSFER: "TRANSFER",
+};
 const origins: FinancialEntryOrigin[] = ["MANUAL", "BUDGET", "PURCHASE", "OPERATION", "PMOC", "OTHER"];
 
 type MutationState = { loading: boolean; error: unknown | null };
@@ -53,12 +60,20 @@ export function FinancialEntryDrawer({
   const [history, setHistory] = useState<Paginated<FinancialHistory> | null>(null);
   const [state, setState] = useState<MutationState>({ loading: false, error: null });
 
+  // Only categories whose type matches the selected entry type are valid
+  // (backend rejects the pair with FINANCIAL_INVALID_RELATIONSHIP otherwise).
+  const compatibleCategories = categories.filter((c) => c.active && c.type === ENTRY_CATEGORY_TYPE[form.type]);
+
   useEffect(() => {
     if (!open) return;
+    const initialType = entry?.type ?? "RECEIVABLE";
     setForm({
       accountId: entry?.accountId ?? accounts[0]?.id ?? "",
-      categoryId: entry?.categoryId ?? categories[0]?.id ?? "",
-      type: entry?.type ?? "RECEIVABLE",
+      categoryId:
+        entry?.categoryId ??
+        categories.find((c) => c.active && c.type === ENTRY_CATEGORY_TYPE[initialType])?.id ??
+        "",
+      type: initialType,
       origin: entry?.origin ?? "MANUAL",
       amount: entry ? String(entry.amount) : "",
       dueDate: entry?.dueDate ? entry.dueDate.slice(0, 10) : "",
@@ -155,11 +170,25 @@ export function FinancialEntryDrawer({
           </Field>
           <Field label="Categoria">
             <select value={form.categoryId} onChange={(e) => setForm((s) => ({ ...s, categoryId: e.target.value }))} className="input">
-              {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+              {compatibleCategories.length === 0 && <option value="">Nenhuma categoria compatível</option>}
+              {compatibleCategories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
             </select>
           </Field>
           <Field label="Tipo">
-            <select value={form.type} onChange={(e) => setForm((s) => ({ ...s, type: e.target.value as FinancialEntryType }))} className="input">
+            <select
+              value={form.type}
+              onChange={(e) => {
+                const type = e.target.value as FinancialEntryType;
+                // Changing the type invalidates the current category; pick the
+                // first compatible one for the new type.
+                setForm((s) => ({
+                  ...s,
+                  type,
+                  categoryId: categories.find((c) => c.active && c.type === ENTRY_CATEGORY_TYPE[type])?.id ?? "",
+                }));
+              }}
+              className="input"
+            >
               {entryTypes.map((type) => <option key={type} value={type}>{type}</option>)}
             </select>
           </Field>

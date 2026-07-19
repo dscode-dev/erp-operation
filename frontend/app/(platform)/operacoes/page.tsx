@@ -26,7 +26,9 @@ import { useDebounce, formatDateTime } from "@erp/utils";
 
 const STATUS_FILTERS: Array<{ key: "all" | OperationStatus; label: string }> = [
   { key: "all", label: "Todas" },
+  { key: "PENDING", label: "Pendentes" },
   { key: "IN_PROGRESS", label: "Em andamento" },
+  { key: "REVIEW", label: "Em revisão" },
   { key: "COMPLETED", label: "Concluídas" },
   { key: "DRAFT", label: "Rascunho" },
   { key: "CANCELED", label: "Canceladas" },
@@ -153,5 +155,5 @@ export default function OperacoesPage() {
 }
 
 function parseStatus(value: string | null): "all" | OperationStatus {
-  return value === "DRAFT" || value === "IN_PROGRESS" || value === "COMPLETED" || value === "CANCELED" ? value : "all";
+  return value === "DRAFT" || value === "PENDING" || value === "IN_PROGRESS" || value === "REVIEW" || value === "COMPLETED" || value === "CANCELED" ? value : "all";
 }

@@ -1134,3 +1134,10 @@ Status: concluído.
 - Veredito global: `ORBIT_OPERATION_AUDIT_V1_NOT_READY`.
 - Gaps frontend prioritários: submissão Operator composta por chamadas não atômicas, caminho BUDGET baseado em Operation, filtros de Documentos derivados apenas da página atual, selects limitados a 100 registros e tela de sincronização legada sem flush real.
 - Lint e build passaram; a certificação fica bloqueada pelos desvios de domínio, autorização, histórico e produção descritos no relatório.
+
+## Fluxo de execução com revisão (Operator + Platform · 2026-07-19)
+
+- **Status**: `OperationStatus` agora tem `PENDING` (Pendente) e `REVIEW` (Revisão) — labels/tones em `@erp/ui/operations/operation-shared`; filtros e deep-link `?status=` em `/operacoes`.
+- **Operator**: "Iniciar atendimento" em uma ordem atribuída inicia a execução e navega para o **wizard de execução** (`/operator/execucao/[assignmentId]`, full-screen): Checklist → Coleta (documento/equipamentos/relato) → Fotos → Materiais → **Revisão do cliente** (visão geral organizada de tudo que foi feito + assinatura com aceite). Concluir envia handoff + completa o assignment → operação vai para **Revisão**. PMOC mantém o fluxo inline especializado.
+- **Platform**: drawer da operação mostra "Aguardando aprovação" quando em `REVIEW`, com botão **Aprovar atendimento** (OWNER/MANAGER) → `PATCH /operations/:id/approve` → Concluída.
+- API: `operationApi.approveOperation(id)`.

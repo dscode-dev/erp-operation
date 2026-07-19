@@ -3,6 +3,7 @@ import {
   AssetLifecycleEventType,
   AssignmentEventType,
   AssignmentStatus,
+  OperationStatus,
   Prisma,
   Role,
 } from '@prisma/client';
@@ -221,6 +222,15 @@ export class AssignmentsService {
       }
       const assignment = await tx.assignment.findUniqueOrThrow({ where: { id } });
       await tx.operation.update({ where: { id: assignment.operationId }, data: { operatorId: dto.assignedTo } });
+      // Reassignment restarts the field flow: the operation waits for the new
+      // operator again (never resurrects COMPLETED/CANCELED operations).
+      await tx.operation.updateMany({
+        where: {
+          id: assignment.operationId,
+          status: { in: [OperationStatus.DRAFT, OperationStatus.IN_PROGRESS, OperationStatus.REVIEW] },
+        },
+        data: { status: OperationStatus.PENDING },
+      });
       await this.historyTx(tx, assignment, AssignmentEventType.REASSIGNED, actor.id, previousStatus, dto.notes);
       await this.auditTx(tx, ASSIGNMENT_AUDIT_ACTIONS.ASSIGNMENT_REASSIGNED, actor.id, context, {
         assignmentId: assignment.id,
@@ -312,8 +322,9 @@ export class AssignmentsService {
       allowedFrom: [AssignmentStatus.STARTED],
       description: 'Assignment completed',
       notes: dto.notes,
-      operationStatus: 'COMPLETED',
-      syncOperationCompletion: true,
+      // Field completion sends the operation to REVIEW; the completion
+      // side-effects (lifecycle + maintenance sync) fire on approval.
+      operationStatus: 'REVIEW',
     });
   }
 
@@ -381,6 +392,11 @@ export class AssignmentsService {
         notes: input.notes ?? null,
       },
     });
+    // An assigned operation becomes PENDING until the operator starts it.
+    await tx.operation.updateMany({
+      where: { id: input.operationId, status: OperationStatus.DRAFT },
+      data: { status: OperationStatus.PENDING },
+    });
     await this.historyTx(tx, assignment, AssignmentEventType.ASSIGNED, actorId, null, input.notes ?? null);
     await this.auditTx(tx, ASSIGNMENT_AUDIT_ACTIONS.ASSIGNMENT_CREATED, actorId, this.safeContext(context), {
       assignmentId: assignment.id,
@@ -418,7 +434,7 @@ export class AssignmentsService {
       allowedFrom: AssignmentStatus[];
       description: string;
       notes?: string;
-      operationStatus?: 'IN_PROGRESS' | 'COMPLETED';
+      operationStatus?: 'IN_PROGRESS' | 'REVIEW' | 'COMPLETED';
       syncOperationCompletion?: boolean;
     },
   ): Promise<AssignmentPayload> {
@@ -448,7 +464,11 @@ export class AssignmentsService {
           where: { id: assignment.operationId },
           data: {
             status: config.operationStatus,
-            ...(config.operationStatus === 'COMPLETED' ? { completedAt: now } : {}),
+            // REVIEW also stamps completedAt: the field work is done; what
+            // remains is the technical responsible's administrative approval.
+            ...(config.operationStatus === 'COMPLETED' || config.operationStatus === 'REVIEW'
+              ? { completedAt: now }
+              : {}),
             ...(config.operationStatus === 'IN_PROGRESS' ? { startedAt: now } : {}),
           },
         });

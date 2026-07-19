@@ -22,7 +22,7 @@ export type OperationSection =
   | { kind: "checklist"; id: string; title: string; items: OperationChecklistItem[] }
   | { kind: "text"; id: string; title: string; text: string }
   | { kind: "photos"; id: string; title: string; photos: OperationPhoto[] }
-  | { kind: "signature"; id: string; title: string; captured: boolean; signedAt: string | null }
+  | { kind: "signature"; id: string; title: string; captured: boolean; signedAt: string | null; signerName: string | null; signerRole: string | null }
   | { kind: "documents"; id: string; title: string; documents: OperationDocument[] };
 
 function fmtDate(iso: string | null): string {
@@ -54,12 +54,19 @@ export function buildOperationSections(op: OperationDetail): OperationSection[] 
         { label: "Status", value: OPERATION_STATUS[op.status].label },
         { label: "Início", value: fmtDate(op.startedAt) },
         { label: "Conclusão", value: fmtDate(op.completedAt) },
+        // Quem assinou pelo cliente — vai também para o relatório final.
+        ...(op.signatureCaptured
+          ? [{
+              label: "Assinado por",
+              value: `${op.customerSignerName ?? "Não identificado"}${op.customerSignerRole ? ` (${op.customerSignerRole})` : ""}`,
+            }]
+          : []),
       ],
     },
     { kind: "checklist", id: "checklist", title: "Checklist", items: op.checklist },
     { kind: "text", id: "observacoes", title: "Observações", text: op.observations ?? "" },
     { kind: "photos", id: "fotos", title: "Fotos", photos: op.photos },
-    { kind: "signature", id: "assinatura", title: "Assinatura", captured: Boolean(op.signatureCaptured), signedAt: op.signedAt },
+    { kind: "signature", id: "assinatura", title: "Assinatura do cliente", captured: Boolean(op.signatureCaptured), signedAt: op.signedAt, signerName: op.customerSignerName, signerRole: op.customerSignerRole },
     { kind: "documents", id: "documentos", title: "Documentos relacionados", documents: op.documents },
   ];
 }

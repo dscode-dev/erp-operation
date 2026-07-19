@@ -396,7 +396,7 @@ export class ListExportService {
   }
 
   private operationStatusLabel(status: OperationStatus): string {
-    return { DRAFT: 'Rascunho', IN_PROGRESS: 'Em andamento', COMPLETED: 'Concluída', CANCELED: 'Cancelada' }[status];
+    return { DRAFT: 'Rascunho', PENDING: 'Pendente', IN_PROGRESS: 'Em andamento', REVIEW: 'Revisão', COMPLETED: 'Concluída', CANCELED: 'Cancelada' }[status];
   }
 
   private equipmentTypeLabel(type: EquipmentType): string {

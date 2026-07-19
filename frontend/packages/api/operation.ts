@@ -117,6 +117,11 @@ export function updateOperation(
   return api.patch<OperationDetail>(`/operations/${id}`, payload);
 }
 
+/** Technical-responsible approval: REVIEW → COMPLETED (OWNER/MANAGER). */
+export function approveOperation(id: string): Promise<OperationDetail> {
+  return api.patch<OperationDetail>(`/operations/${id}/approve`);
+}
+
 export function getOperationPhoto(
   photoId: string,
   opts?: { signal?: AbortSignal },

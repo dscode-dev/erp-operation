@@ -1899,3 +1899,18 @@ Na etapa Evidências do `PmocPlanWizard`, consuma somente `operationApi`: detalh
 - Formas de pagamento: CASH, PIX e CREDIT_CARD, com seleção múltipla.
 - Preview: GET /budgets/:id/preview. Render/download continuam nos endpoints Budget.
 - O OperationDocument criado com o Budget fornece o documentId para handoff e DocumentViewer.
+
+## Operation review flow (assigned executions)
+
+`OperationStatus` now includes `PENDING` and `REVIEW`. Lifecycle synced with the
+Assignment: assignment created/reassigned → operation `PENDING`; operator starts →
+`IN_PROGRESS`; operator completes the field execution → `REVIEW` (awaiting the
+technical responsible). Approval: `PATCH /operations/:id/approve` (OWNER/MANAGER)
+moves `REVIEW` → `COMPLETED` and fires the completion side-effects (asset
+lifecycle + PMOC execution sync). Invalid transitions return
+`OPERATION_INVALID_TRANSITION` (409). Migration: `20260719140000_operation_review_flow`.
+
+Operator PWA: starting a non-PMOC assignment opens the guided execution wizard
+(`/operator/execucao/:assignmentId`) — Checklist → Coleta → Fotos → Materiais →
+Revisão do cliente (overview + assinatura). Finishing submits the handoff and
+completes the assignment, sending the operation to `REVIEW`.
