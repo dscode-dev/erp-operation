@@ -4,10 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import { Check, ChevronLeft, ChevronRight } from "lucide-react";
 import { Drawer } from "@erp/ui/drawer";
 import { MultiSelect } from "@erp/ui/multi-select";
+import { TechnicalCatalogSelector } from "@erp/ui/technical-catalog/technical-catalog-selector";
 import {
   ApiClientError,
   equipmentsApi,
   operationApi,
+  technicalCatalogsApi,
   useQuery,
   type CreateOperationPayload,
   type DocumentKind,
@@ -29,14 +31,6 @@ type Mode = "operation" | "schedule" | "service" | "work-order";
 type Step = 0 | 1 | 2 | 3 | 4;
 
 const STEPS = ["Cliente", "Escopo", "Execução", "Checklist", "Confirmar"];
-
-const DEFAULT_CHECKLIST = [
-  "Conferir EPI e isolamento",
-  "Diagnóstico inicial",
-  "Executar serviço planejado",
-  "Testar funcionamento",
-  "Registrar evidências",
-];
 
 const ATTENDANCE_DOCUMENT_TYPES: DocumentKind[] = [
   "WORK_ORDER",
@@ -102,8 +96,7 @@ export function OperationCreationDrawer({
   const [documentType, setDocumentType] = useState<DocumentKind>("WORK_ORDER");
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
-  const [checklist, setChecklist] = useState(DEFAULT_CHECKLIST);
-  const [newItem, setNewItem] = useState("");
+  const [checklist, setChecklist] = useState<string[]>([]);
   const [observations, setObservations] = useState("");
   const [reportedIssue, setReportedIssue] = useState("");
   const [serviceDescription, setServiceDescription] = useState("");
@@ -133,8 +126,7 @@ export function OperationCreationDrawer({
     const schedule = initialValues?.scheduledFor ? localDateTime(initialValues.scheduledFor) : null;
     setDate(schedule?.date ?? "");
     setTime(schedule?.time ?? "");
-    setChecklist(initialValues?.checklist?.map((item) => item.label) ?? DEFAULT_CHECKLIST);
-    setNewItem("");
+    setChecklist(initialValues?.checklist?.map((item) => item.label) ?? []);
     setObservations(initialValues?.observations ?? "");
     setReportedIssue(initialValues?.reportedIssue ?? "");
     setServiceDescription(initialValues?.serviceDescription ?? "");
@@ -153,15 +145,7 @@ export function OperationCreationDrawer({
     step === 0 ? Boolean(customerId)
     : step === 1 ? true
     : step === 2 ? Boolean(type) && (mode === "schedule" ? Boolean(scheduledFor) : true)
-    : step === 3 ? checklist.length > 0
-    : true;
-
-  function addChecklistItem() {
-    const label = newItem.trim();
-    if (!label) return;
-    setChecklist((items) => [...items, label]);
-    setNewItem("");
-  }
+    : true; // checklist é opcional (depende do que houver em Catálogos Técnicos)
 
   async function submit() {
     setSaving(true);
@@ -296,18 +280,16 @@ export function OperationCreationDrawer({
             )}
             {step === 3 && (
               <div className="space-y-3">
-                <div className="flex gap-2">
-                  <input value={newItem} onChange={(event) => setNewItem(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addChecklistItem(); } }} className={inputCls} placeholder="Adicionar item de checklist" />
-                  <button onClick={addChecklistItem} className={secondaryBtn}>Adicionar</button>
-                </div>
-                <ul className="space-y-2">
-                  {checklist.map((item, index) => (
-                    <li key={`${item}-${index}`} className="flex items-center justify-between rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 py-2 text-sm">
-                      <span>{item}</span>
-                      <button onClick={() => setChecklist((items) => items.filter((_, i) => i !== index))} className="text-xs text-[var(--color-danger)] hover:underline">remover</button>
-                    </li>
-                  ))}
-                </ul>
+                <p className="text-caption">
+                  Selecione os checks que o operador deverá seguir. Os itens vêm de <strong>Catálogos Técnicos</strong> para o documento <strong>{DOCUMENT_KIND_LABEL[documentType]}</strong>; você também pode adicionar itens personalizados.
+                </p>
+                <TechnicalCatalogSelector
+                  type="CHECKLIST"
+                  workflow={technicalCatalogsApi.documentWorkflow(documentType)}
+                  label="Item de checklist"
+                  values={checklist}
+                  onChange={setChecklist}
+                />
               </div>
             )}
             {step === 4 && (

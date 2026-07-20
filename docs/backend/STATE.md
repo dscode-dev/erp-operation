@@ -3023,3 +3023,10 @@ Status: implementado e validado em PostgreSQL/Docker.
 
 - **Graça de rotação** no `POST /auth/refresh`: reapresentar um refresh token rotacionado há ≤60s (corrida entre abas) devolve 401 simples, sem revogar a família; reuso fora da graça continua revogando todas as sessões (detecção de vazamento preservada). Rotação single-use, hash de token e revogação em logout permanecem intactos.
 - **TTL**: `JWT_ACCESS_EXPIRES_IN_SECONDS` recomendado em 1800 (30 min) — a permanência real da sessão vem do refresh de 30 dias com rotação, não de access longo (AppSec preservado).
+
+## ORBIT_CATALOG_SEED_HVAC — catálogo técnico padrão HVAC (2026-07-19)
+
+- Migration aditiva e idempotente `20260719200000_orbit_catalog_seed_hvac`: popula, para todas as organizações, o Catálogo Técnico do segmento Refrigeração/Climatização — Checklist (Elétrica/Mecânica/Sistema Frigorífico/Limpeza/Drenagem/Segurança/Operação), Objetivos, Condições Observadas, Conclusões, Recomendações e Escopos de Plano.
+- Cada item traz áreas por disciplina, tags coerentes e workflows (Geral por padrão; PMOC/MANUTENÇÃO nos escopos de plano). Escopos de plano carregam a periodicidade (Mensal→Anual, Corretiva) + Instalação/Desinstalação. Checklist com periodicidade nula (aplicável a qualquer atendimento; aparece em todos os documentos via includeGeneral).
+- Idempotência por `WHERE NOT EXISTS` em (org, type, LOWER(title), deleted_at IS NULL [, maintenance_type]); reexecução não duplica nem sobrescreve ajustes manuais. Não cria entidades/endpoints/regras. Validada por equivalência estrutural à migration `20260716223100` (Docker indisponível para dry-run neste ambiente).
+- Integração com o fluxo real já concluída: wizard do operador e drawer de nova operação consomem CHECKLIST do catálogo; objetivos/condições/recomendações/conclusões e escopos usam `TechnicalCatalogSelector`. Removidos componentes mortos com mock (`new-service-sheet`/`new-service-button`).

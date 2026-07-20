@@ -8,7 +8,7 @@
  * Reads clients/equipments from the real backend; on submit, enqueues to the
  * offline outbox (no Service endpoint yet — Backend Sprint 6).
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Loader2,
@@ -46,6 +46,7 @@ import {
   assignmentsApi,
   equipmentsApi,
   pmocApi,
+  technicalCatalogsApi,
   useQuery,
   ApiClientError,
   type Customer,
@@ -158,9 +159,32 @@ export function AtendimentoWizard({
 
   function pickServiceType(key: ServiceTypeKey) {
     setServiceType(key);
-    const cfg = SERVICE_TYPES.find((t) => t.key === key);
-    setChecklist((cfg?.defaultChecklist ?? []).map((label) => ({ label, done: false })));
   }
+
+  // Checklist real de Catálogos Técnicos (type CHECKLIST) para o documento em
+  // andamento — substitui o checklist mock por tipo de serviço.
+  const checklistCatalog = useQuery(
+    (signal) =>
+      documentType && documentType !== 'PMOC'
+        ? technicalCatalogsApi.listChecklistItems(technicalCatalogsApi.documentWorkflow(documentType), { signal })
+        : Promise.resolve([]),
+    [documentType],
+  );
+  const checklistSeededRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!documentType || checklistCatalog.loading) return;
+    // Semeia uma única vez por tipo de documento, preservando eventuais toggles
+    // já feitos se o operador reabrir o passo.
+    if (checklistSeededRef.current === documentType) return;
+    checklistSeededRef.current = documentType;
+    setChecklist(
+      (checklistCatalog.data ?? []).map((item) => ({
+        label: item.title,
+        done: false,
+        note: item.description ?? undefined,
+      })),
+    );
+  }, [documentType, checklistCatalog.data, checklistCatalog.loading]);
 
   const canNext = useMemo(() => {
     switch (step) {
@@ -306,6 +330,7 @@ export function AtendimentoWizard({
         {step === 4 && (
           <ChecklistStep
             items={checklist}
+            loading={checklistCatalog.loading && checklist.length === 0}
             onToggle={(i) =>
               setChecklist((arr) =>
                 arr.map((it, idx) => (idx === i ? { ...it, done: !it.done } : it)),
@@ -796,17 +821,20 @@ function TipoStep({
 
 function ChecklistStep({
   items,
+  loading,
   onToggle,
 }: {
   items: ChecklistItem[];
+  loading?: boolean;
   onToggle: (i: number) => void;
 }) {
+  if (loading) return <SkeletonList rows={5} />;
   if (items.length === 0)
     return (
       <EmptyState
         icon={ClipboardList}
-        title="Selecione o tipo de serviço"
-        description="O checklist é gerado a partir do tipo."
+        title="Sem checklist para este documento"
+        description="Nenhum item de checklist está cadastrado em Catálogos Técnicos para este tipo de atendimento. Você pode seguir para a próxima etapa."
       />
     );
   return (

@@ -6,7 +6,10 @@
       "Bash(tail -20 docs/backend/STATE.md)",
       "Bash(echo \"---exit $?---\")",
       "Bash(echo \"BACKEND=$?\")",
-      "Bash(echo \"FRONTEND_EXIT=$?\")"
+      "Bash(echo \"FRONTEND_EXIT=$?\")",
+      "Bash(head-15)",
+      "Bash(head-12)",
+      "Bash(echo \"exit=$? \\(vazio = morto\\)\")"
     ]
   }
 }

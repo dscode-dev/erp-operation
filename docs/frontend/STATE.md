@@ -1183,3 +1183,10 @@ Status: concluído.
 - **Refresh proativo**: o AuthProvider renova o access token antes do vencimento (checagem a cada 60s com a página visível + imediatamente no `visibilitychange`/`focus`) via `ensureFreshSession()` — o retorno ao app não gera mais tempestade de 401/login.
 - **Refresh serializado entre abas**: `refreshSession` usa Web Locks por escopo (`erp.session.refresh.<scope>`); ao entrar no lock, se outra aba já rotacionou (access token mudou no storage), reutiliza sem chamar o endpoint — elimina a corrida que revogava a sessão.
 - Fluxo 401→refresh→replay e limpeza em erro fatal inalterados.
+
+## Checklists reais de Catálogos Técnicos no wizard e no drawer (2026-07-19)
+
+- Os "checks de atendimento" deixaram de ser mock: passam a vir de **Catálogos Técnicos** (`type: CHECKLIST`) filtrados pelo **workflow do documento** (WORK_ORDER/TECHNICAL_REPORT/TECHNICAL_OPINION/PMOC → mapeados por `technicalCatalogsApi.documentWorkflow`) + itens GERAIS, apenas ativos.
+- **Operator (wizard de atendimento)**: o passo Checklist é semeado com os itens reais do catálogo para o documento em curso (`listChecklistItems`), com loading/vazio honestos; removido `defaultChecklist` de `service-types.ts` (agora só rótulos de tipo).
+- **Platform (drawer de nova operação)**: o passo Checklist usa o `TechnicalCatalogSelector` (type CHECKLIST + workflow do documento) — o owner seleciona os checks cadastrados (e pode adicionar personalizados); removido o `DEFAULT_CHECKLIST` mock. Checklist passou a ser opcional.
+- API: `technicalCatalogsApi.documentWorkflow(documentType)` e `technicalCatalogsApi.listChecklistItems(workflow, { maintenanceType? })`.

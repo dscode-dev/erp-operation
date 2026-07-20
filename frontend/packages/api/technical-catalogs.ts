@@ -1,5 +1,6 @@
 import { api } from './client';
 import type {
+  DocumentTemplateType,
   OperationMaintenanceType,
   Paginated,
   TechnicalCatalog,
@@ -79,4 +80,42 @@ export function reorder(
 
 export function remove(id: string): Promise<{ deleted: true }> {
   return api.delete<{ deleted: true }>(`/technical-catalogs/${id}`);
+}
+
+/** Mapeia o tipo de documento do atendimento para o workflow do catálogo. */
+export function documentWorkflow(type: DocumentTemplateType): TechnicalCatalogWorkflow {
+  switch (type) {
+    case 'WORK_ORDER':
+      return 'WORK_ORDER';
+    case 'TECHNICAL_REPORT':
+      return 'TECHNICAL_REPORT';
+    case 'TECHNICAL_OPINION':
+      return 'TECHNICAL_OPINION';
+    case 'PMOC':
+      return 'PMOC';
+    default:
+      return 'GENERAL';
+  }
+}
+
+/**
+ * Itens de checklist ATIVOS registrados em Catálogos Técnicos para um workflow
+ * (inclui os itens GERAIS). Fonte única dos "checks de atendimento" usados pelo
+ * wizard do operador e pelo drawer de nova operação — sem mocks.
+ */
+export function listChecklistItems(
+  workflow: TechnicalCatalogWorkflow,
+  opts?: { maintenanceType?: OperationMaintenanceType; signal?: AbortSignal },
+): Promise<TechnicalCatalog[]> {
+  return list({
+    type: 'CHECKLIST',
+    workflow,
+    includeGeneral: true,
+    active: true,
+    maintenanceType: opts?.maintenanceType,
+    sortBy: 'sortOrder',
+    order: 'asc',
+    limit: 100,
+    signal: opts?.signal,
+  }).then((page) => page.items);
 }
