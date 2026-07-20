@@ -9,7 +9,10 @@
       "Bash(echo \"FRONTEND_EXIT=$?\")",
       "Bash(head-15)",
       "Bash(head-12)",
-      "Bash(echo \"exit=$? \\(vazio = morto\\)\")"
+      "Bash(echo \"exit=$? \\(vazio = morto\\)\")",
+      "Bash(echo \"TSC=$?\")",
+      "Bash(npx eslint *)",
+      "Bash(echo \"LINT=$?\")"
     ]
   }
 }

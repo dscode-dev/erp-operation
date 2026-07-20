@@ -1200,3 +1200,8 @@ Status: concluído.
   - **Comparativo operacional**: mês atual × anterior para Operações concluídas, Ordens de Serviço, PMOCs e Visitas Técnicas — contagens exatas via `documentsApi.listHandoffs({type,from,to})` (WORK_ORDER/TECHNICAL_REPORT/PMOC) + assignments concluídos por mês.
   - **Feed inteligente**: lista única (alertas + pendências + atividades recentes de `asset-lifecycle`), scroll interno, com marcador "preparado para IA" — estrutura `FeedItem` pronta para receber insights futuros.
 - Sem novas regras/entidades/IA e sem alterações em Financeiro/PMOC/OS/Document Engine. Build, lint e typecheck aprovados.
+
+## Dashboard V2 — reorganização (2026-07-19b)
+
+- Layout final em 4 linhas: (1) Resumo executivo (6 KPIs clicáveis); (2) Comparativo operacional (barras mês atual × anterior) à esquerda + Saúde financeira (gráfico único Receitas×Despesas×Saldo) à direita; (3) **Cobertura de atividades** (gráfico radar/teia de aranha comparando mês atual × anterior por tipo de documento: OS, Visitas, Laudos, PMOC, Orçamentos, Recibos) à esquerda com width menor + **Atividades relevantes e recentes** (asset-lifecycle) à direita com width maior — substitui o antigo "feed inteligente" (removido, junto do texto "preparado para IA"); (4) Timeline operacional (Hoje / 7 dias) à esquerda com width maior + **Carga por operador** à direita.
+- Radar usa contagens exatas por período via `documentsApi.listHandoffs({type,from,to})`. Sem novas regras/entidades/IA. Build, lint e typecheck aprovados.
