@@ -513,7 +513,10 @@ export class DocumentContextService {
 
     const template = configuration.defaultTemplate;
     const signature = budget.document
-      ? await this.resolveBudgetHandoffSignatures(budget.document)
+      ? await this.resolveBudgetHandoffSignatures(
+          budget.document,
+          budget.customer?.tradeName?.trim() || budget.customer?.name?.trim() || null,
+        )
       : await this.resolveSignature(template, null);
     const logo = await this.resolveLatestBrandAsset(
       configuration.organization.id,
@@ -577,7 +580,7 @@ export class DocumentContextService {
               role: 'client' as const,
               label: 'Assinatura do cliente/responsável',
               name: operation?.customerSignerName ?? null,
-              title: operation?.customerSignerRole ?? null,
+              title: this.composeClientSignerTitle(operation?.customerSignerRole, this.operationCompanyName(operation)),
               signedAt: operation?.signedAt?.toISOString() ?? null,
               caption: executionSignature
                 ? 'Assinatura coletada na execução'
@@ -624,7 +627,7 @@ export class DocumentContextService {
         ? {
             label: 'Assinatura do cliente/responsável',
             name: operation?.customerSignerName ?? null,
-            title: operation?.customerSignerRole ?? null,
+            title: this.composeClientSignerTitle(operation?.customerSignerRole, this.operationCompanyName(operation)),
             signedAt: operation?.signedAt?.toISOString() ?? null,
             caption: executionSignature
               ? 'Assinatura coletada na execução'
@@ -723,6 +726,27 @@ export class DocumentContextService {
     };
   }
 
+  /** Nome comercial (ou razão social) do cliente da operação. */
+  private operationCompanyName(operation: DocumentContextOperation | null): string | null {
+    const customer = operation?.customer;
+    if (!customer) return null;
+    return customer.tradeName?.trim() || customer.name?.trim() || null;
+  }
+
+  /**
+   * Rótulo do signatário do cliente no relatório: cargo/função ao lado do nome
+   * do cliente/empresa. Ex.: "Gerente | Empresa X". Omite as partes vazias.
+   */
+  private composeClientSignerTitle(
+    role: string | null | undefined,
+    companyName: string | null | undefined,
+  ): string | null {
+    const parts = [role?.trim() || null, companyName?.trim() || null].filter(
+      (part): part is string => Boolean(part),
+    );
+    return parts.length > 0 ? parts.join(' | ') : null;
+  }
+
   private async resolveHandoffSignatures(
     operation: DocumentContextOperation,
     handoff: DocumentContextOperation['documents'][number],
@@ -780,7 +804,7 @@ export class DocumentContextService {
       ? {
           label: 'Assinatura do cliente/responsável',
           name: customer?.name ?? operation.customerSignerName ?? null,
-          title: customer?.title ?? operation.customerSignerRole ?? null,
+          title: this.composeClientSignerTitle(customer?.title ?? operation.customerSignerRole, this.operationCompanyName(operation)),
           signedAt: customer?.collectedAt ?? operation.signedAt?.toISOString() ?? null,
           caption: collectedImage ? 'Assinatura coletada na execução' : 'Assinatura do cliente pendente',
           image: collectedImage,
@@ -804,6 +828,7 @@ export class DocumentContextService {
 
   private async resolveBudgetHandoffSignatures(
     handoff: NonNullable<DocumentContextBudget['document']>,
+    companyName: string | null = null,
   ): Promise<DocumentSignatureContext> {
     const customer = this.signatureSnapshot(handoff.customerSignatureSnapshot);
     const technical = this.signatureSnapshot(handoff.technicalSignatureSnapshot);
@@ -851,7 +876,7 @@ export class DocumentContextService {
     const collected = {
       label: 'Assinatura do cliente/responsável',
       name: customer?.name ?? null,
-      title: customer?.title ?? null,
+      title: this.composeClientSignerTitle(customer?.title, companyName),
       signedAt: customer?.collectedAt ?? null,
       caption: collectedImage ? 'Assinatura do cliente' : 'Assinatura do cliente pendente',
       image: collectedImage,

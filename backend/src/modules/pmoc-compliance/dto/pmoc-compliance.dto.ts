@@ -332,6 +332,14 @@ export class GeneratePmocWorkOrderDto {
   @ValidateNested()
   @Type(() => CreateOperationDto)
   operation?: CreateOperationDto;
+
+  /**
+   * Confirma o adiantamento de uma execução prevista para muito no futuro.
+   * Sem esta confirmação, gerar uma execução muito antecipada é bloqueado.
+   */
+  @IsOptional()
+  @IsBoolean()
+  allowEarly?: boolean;
 }
 
 export class RunPmocSchedulerQueryDto {

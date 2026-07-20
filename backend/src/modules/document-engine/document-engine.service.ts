@@ -9,6 +9,7 @@ import {
   FINANCIAL_DOCUMENT_TYPES,
 } from '../../shared/constants/document-engine.constants';
 import { ERROR_CODES } from '../../shared/constants/error-codes.constants';
+import { dateRangeFilter } from '../../shared/utils/date-range.util';
 import { PMOC_MIN_PROCEDURE_IMAGES } from '../../shared/constants/pmoc.constants';
 import {
   formatDocumentNumber,
@@ -60,10 +61,7 @@ export class DocumentEngineService {
   ) {}
 
   async listDocuments(query: ListDocumentsQueryDto, actor: AuthenticatedUser): Promise<unknown> {
-    const period = {
-      ...(query.from ? { gte: new Date(query.from) } : {}),
-      ...(query.to ? { lte: new Date(`${query.to}T23:59:59.999Z`) } : {}),
-    };
+    const period = dateRangeFilter(query.from, query.to);
     const where: Prisma.OperationDocumentWhereInput = {
       ...(query.type ? { type: query.type } : {}),
       ...(query.status ? { status: query.status } : {}),

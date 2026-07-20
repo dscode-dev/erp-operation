@@ -145,8 +145,12 @@ export function getExecutionRequestPrefill(id: string): Promise<CreateOperationP
 export function generateWorkOrder(
   id: string,
   operation: CreateOperationPayload,
+  options?: { allowEarly?: boolean },
 ): Promise<PmocExecutionRequest> {
-  return api.post<PmocExecutionRequest>(`/pmoc/execution-requests/${id}/generate-work-order`, { operation });
+  return api.post<PmocExecutionRequest>(`/pmoc/execution-requests/${id}/generate-work-order`, {
+    operation,
+    ...(options?.allowEarly ? { allowEarly: true } : {}),
+  });
 }
 
 export function cancelExecutionRequest(id: string): Promise<PmocExecutionRequest> {

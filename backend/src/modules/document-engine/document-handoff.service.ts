@@ -18,6 +18,7 @@ import {
   OPERATOR_HANDOFF_DOCUMENT_TYPES,
 } from '../../shared/constants/document-engine.constants';
 import { ERROR_CODES } from '../../shared/constants/error-codes.constants';
+import { dateRangeFilter } from '../../shared/utils/date-range.util';
 import { PMOC_MIN_PROCEDURE_IMAGES } from '../../shared/constants/pmoc.constants';
 import { OPERATION_DOCUMENT_PREFIX, formatDocumentNumber } from '../../shared/constants/operations.constants';
 import { ApplicationException } from '../../shared/exceptions/application.exception';
@@ -130,13 +131,7 @@ export class DocumentHandoffService {
       ...(query.customerId ? { operation: { customerId: query.customerId } } : {}),
       ...(query.operatorId ? { operation: { operatorId: query.operatorId } } : {}),
       ...(query.from || query.to
-        ? {
-            submittedAt: {
-              not: null,
-              ...(query.from ? { gte: new Date(query.from) } : {}),
-              ...(query.to ? { lte: new Date(`${query.to}T23:59:59.999Z`) } : {}),
-            },
-          }
+        ? { submittedAt: { not: null, ...dateRangeFilter(query.from, query.to) } }
         : {}),
       ...(query.missingTechnicalSignature ? { technicalSignatureId: null } : {}),
       ...(query.missingCustomerSignature ? { customerSignatureSnapshot: { equals: Prisma.DbNull } } : {}),

@@ -3030,3 +3030,17 @@ Status: implementado e validado em PostgreSQL/Docker.
 - Cada item traz áreas por disciplina, tags coerentes e workflows (Geral por padrão; PMOC/MANUTENÇÃO nos escopos de plano). Escopos de plano carregam a periodicidade (Mensal→Anual, Corretiva) + Instalação/Desinstalação. Checklist com periodicidade nula (aplicável a qualquer atendimento; aparece em todos os documentos via includeGeneral).
 - Idempotência por `WHERE NOT EXISTS` em (org, type, LOWER(title), deleted_at IS NULL [, maintenance_type]); reexecução não duplica nem sobrescreve ajustes manuais. Não cria entidades/endpoints/regras. Validada por equivalência estrutural à migration `20260716223100` (Docker indisponível para dry-run neste ambiente).
 - Integração com o fluxo real já concluída: wizard do operador e drawer de nova operação consomem CHECKLIST do catálogo; objetivos/condições/recomendações/conclusões e escopos usam `TechnicalCatalogSelector`. Removidos componentes mortos com mock (`new-service-sheet`/`new-service-button`).
+
+## Assinatura do cliente no relatório: cargo + empresa (2026-07-19)
+
+- No bloco de assinatura do cliente dos relatórios (preview e PDF), o rótulo do cargo/função passou a exibir também o nome do cliente/empresa ao lado — ex.: "Gerente | Empresa X". Composto em `DocumentContextService.composeClientSignerTitle(role, companyName)`, com o nome da empresa vindo de `operation.customer.tradeName ?? name` (e do budget nos orçamentos avulsos). Aplica-se a WORK_ORDER/TECHNICAL_REPORT/PMOC/REPORT/QUOTE/BUDGET; partes vazias são omitidas. Sem mudança de dados, regras ou renderer — só a composição do título. Testes de unidade (80) e tsc aprovados.
+
+## PMOC → Operação: origem no drawer + guarda de adiantamento (2026-07-19)
+
+- **Criar OS a partir de um PMOC nos dois ambientes**: o fluxo `POST /pmoc/execution-requests/:id/generate-work-order` (já existente) cria a OS com todos os dados do plano (checklist do catálogo, equipamentos, tipos de serviço), vincula a MaintenanceExecution (cobertura), avança a recorrência e incrementa `last_generated_execution_number`. O Operator já tinha o fluxo (wizard → PMOC); agora a **Platform** também: nova origem "A partir de um PMOC" no drawer de nova operação (plano → execução pendente → operador → gerar OS), abrindo a operação criada.
+- **Guarda de adiantamento**: gerar uma execução prevista para mais de `EARLY_GENERATION_THRESHOLD_DAYS` (10) dias no futuro passou a exigir confirmação — sem `allowEarly`, retorna `PMOC_EXECUTION_TOO_EARLY` (409) com `daysEarly`/`scheduledFor`/`executionNumber`. Confirmado, registra no **histórico do PMOC** (`PmocHistoryAction.REQUEST_EARLY_GENERATION`, migration `20260719210000_pmoc_early_generation`) + auditoria (`PMOC_EXECUTION_REQUEST_EARLY`), garantindo controle na plataforma. Frontend (drawer e wizard) mostra badge "Adiantada" e confirma antes de reenviar com `allowEarly`.
+- Validado: `prisma generate`, `tsc` (backend+frontend), `eslint`, 80 testes unit e `next build`.
+
+## Fix: intervalo de datas em /documents e /documents/handoffs (2026-07-20)
+
+- `GET /documents` e `GET /documents/handoffs` quebravam com 500 (`PrismaClientValidationError: Invalid Date`) quando `to` vinha como timestamp ISO completo (ex.: dashboard V2 → radar/comparativo), pois o serviço anexava `T23:59:59.999Z` assumindo data-only, gerando `...ZT23:59:59.999Z`. Novo util `shared/utils/date-range.util.ts` (`dateRangeFilter`) aceita data-only (vira fim do dia UTC) e ISO completo (usado como está), e omite limites inválidos. Aplicado nos dois serviços. tsc + 80 testes unit aprovados.

@@ -1,20 +1,26 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Check, ChevronLeft, ChevronRight } from "lucide-react";
+import { CalendarClock, Check, ChevronLeft, ChevronRight, ClipboardList, Loader2, ShieldCheck } from "lucide-react";
 import { Drawer } from "@erp/ui/drawer";
 import { MultiSelect } from "@erp/ui/multi-select";
+import { SkeletonList } from "@erp/ui/skeletons";
+import { EmptyState } from "@erp/ui/empty-state";
+import { StatusChip } from "@erp/ui/status-chip";
 import { TechnicalCatalogSelector } from "@erp/ui/technical-catalog/technical-catalog-selector";
 import {
   ApiClientError,
   equipmentsApi,
   operationApi,
+  pmocApi,
   technicalCatalogsApi,
   useQuery,
   type CreateOperationPayload,
   type DocumentKind,
   type OperationDetail,
   type OperationType,
+  type PmocExecutionRequest,
+  type PmocPlan,
 } from "@erp/api";
 import { DOCUMENT_KIND_LABEL } from "@erp/types";
 import {
@@ -103,6 +109,8 @@ export function OperationCreationDrawer({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<OperationDetail | null>(null);
+  // Origem da operação: avulsa (fluxo manual) ou a partir de um PMOC existente.
+  const [source, setSource] = useState<"manual" | "pmoc">("manual");
   const equipments = useQuery(
     (signal) => customerId
       ? equipmentsApi.listEquipments({ customerId, limit: 100, signal })
@@ -113,6 +121,7 @@ export function OperationCreationDrawer({
   useEffect(() => {
     if (!open) return;
     setStep(0);
+    setSource("manual");
     setCustomerId(initialValues?.customerId ?? "");
     setAddressId(initialValues?.addressId ?? "");
     setEquipmentId(initialValues?.equipmentId ?? initialValues?.inspectedEquipments?.[0]?.equipmentId ?? "");
@@ -140,6 +149,8 @@ export function OperationCreationDrawer({
     return new Date(`${date}T${time}:00`).toISOString();
   }, [date, time]);
   const documentTypeLocked = initialValues?.documentType === "PMOC";
+  // Origem PMOC disponível ao criar uma operação/agendamento (não em contexto já travado em PMOC).
+  const canChooseSource = !documentTypeLocked && (mode === "operation" || mode === "schedule");
 
   const canNext =
     step === 0 ? Boolean(customerId)
@@ -201,6 +212,8 @@ export function OperationCreationDrawer({
       footer={
         created ? (
           <button onClick={onClose} className={primaryBtn}>Concluir</button>
+        ) : source === "pmoc" ? (
+          <button onClick={onClose} className={secondaryBtn}>Fechar</button>
         ) : (
           <>
             <button onClick={step === 0 ? onClose : () => setStep((s) => Math.max(0, s - 1) as Step)} className={secondaryBtn}>
@@ -221,22 +234,30 @@ export function OperationCreationDrawer({
     >
       <div className="space-y-5">
         <p className="text-sm text-[var(--color-muted-foreground)]">{copy.description}</p>
+        {!created && canChooseSource && (
+          <div className="grid grid-cols-2 gap-2">
+            <SourceCard active={source === "pmoc"} onClick={() => setSource("pmoc")} icon={ShieldCheck} title="A partir de um PMOC" description="Gera a OS de uma execução programada, com todos os dados do plano." />
+            <SourceCard active={source === "manual"} onClick={() => setSource("manual")} icon={ClipboardList} title="Operação avulsa" description="Cadastre um atendimento do zero." />
+          </div>
+        )}
         {contextNotice && (
           <div className="rounded-[var(--radius-md)] border border-[var(--color-primary)]/25 bg-[var(--color-primary)]/5 px-3 py-2 text-sm">
             {contextNotice}
           </div>
         )}
-        {operatorId && (
+        {operatorId && source === "manual" && (
           <div className="rounded-[var(--radius-md)] border border-[var(--color-info)]/30 bg-[var(--color-info)]/10 px-3 py-2 text-sm text-[var(--color-info)]">
             O atendimento será encaminhado ao operador selecionado e todo o histórico será preservado.
           </div>
         )}
-        {error && <div className="rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 px-3 py-2 text-sm text-[var(--color-danger)]">{error}</div>}
+        {error && source === "manual" && <div className="rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 px-3 py-2 text-sm text-[var(--color-danger)]">{error}</div>}
         {created ? (
           <div className="rounded-[var(--radius-lg)] border border-[var(--color-success)]/30 bg-[var(--color-success)]/10 p-5 text-[var(--color-success)]">
             <div className="flex items-center gap-2 font-semibold"><Check className="h-5 w-5" /> {copy.success}</div>
             <p className="mt-2 text-sm">Atendimento #{String(created.number).padStart(6, "0")}. A Ordem de Serviço fica disponível na área de documentos.</p>
           </div>
+        ) : source === "pmoc" ? (
+          <PmocOperationSource onCreated={(op) => { setCreated(op); onCreated?.(op); }} />
         ) : (
           <>
             <Stepper step={step} />
@@ -337,4 +358,130 @@ function localDateTime(value: string): { date: string; time: string } {
     date: `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`,
     time: `${pad(date.getHours())}:${pad(date.getMinutes())}`,
   };
+}
+
+/* ---------- Origem da operação ---------- */
+
+function SourceCard({ active, onClick, icon: Icon, title, description }: { active: boolean; onClick: () => void; icon: typeof ShieldCheck; title: string; description: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex flex-col gap-1 rounded-[var(--radius-lg)] border p-3 text-left transition ${active ? "border-[var(--color-primary)] bg-[var(--color-primary)]/5" : "border-[var(--color-border)] hover:bg-[var(--color-muted)]"}`}
+    >
+      <span className={`inline-flex items-center gap-2 text-sm font-semibold ${active ? "text-[var(--color-primary)]" : ""}`}><Icon className="h-4 w-4" /> {title}</span>
+      <span className="text-[11px] text-[var(--color-muted-foreground)]">{description}</span>
+    </button>
+  );
+}
+
+const EARLY_THRESHOLD_DAYS = 10;
+
+function daysUntil(iso: string): number {
+  const ms = new Date(iso).getTime() - Date.now();
+  return ms <= 0 ? 0 : Math.floor(ms / 86_400_000);
+}
+
+/**
+ * Geração de OS a partir de uma execução programada de um PMOC. Traz os dados do
+ * plano, permite atribuir um operador e confirma o adiantamento quando a execução
+ * é muito futura (registrado na plataforma pelo backend).
+ */
+function PmocOperationSource({ onCreated }: { onCreated: (operation: OperationDetail) => void }) {
+  const [planId, setPlanId] = useState("");
+  const [operatorId, setOperatorId] = useState("");
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const plans = useQuery<PmocPlan[]>(
+    (signal) => pmocApi.listPmoc({ active: true, limit: 100, signal }).then((r) => r.items),
+    [],
+  );
+  const requests = useQuery<PmocExecutionRequest[]>(
+    (signal) => (planId ? pmocApi.listExecutionRequests(planId, { status: "PENDING", limit: 100, signal }).then((r) => r.items) : Promise.resolve([])),
+    [planId],
+  );
+
+  async function generate(request: PmocExecutionRequest, allowEarly = false) {
+    setBusy(request.id);
+    setError(null);
+    try {
+      const prefill = await pmocApi.getExecutionRequestPrefill(request.id);
+      const generated = await pmocApi.generateWorkOrder(
+        request.id,
+        { ...prefill, documentType: "PMOC", operatorId: operatorId || prefill.operatorId },
+        { allowEarly },
+      );
+      const operationId = generated.operationId ?? generated.generatedOperationId;
+      if (!operationId) throw new Error("A execução foi gerada, mas a operação não foi localizada.");
+      const operation = await operationApi.getOperation(operationId);
+      onCreated(operation);
+    } catch (cause) {
+      if (cause instanceof ApiClientError && cause.code === "PMOC_EXECUTION_TOO_EARLY") {
+        setBusy(null);
+        if (window.confirm(`${cause.message}\n\nDeseja registrar o adiantamento e gerar a OS mesmo assim?`)) {
+          void generate(request, true);
+        }
+        return;
+      }
+      setError(cause instanceof ApiClientError ? cause.message : "Não foi possível gerar a OS do PMOC.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      {error && <div className="rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 px-3 py-2 text-sm text-[var(--color-danger)]">{error}</div>}
+      {plans.loading && !plans.data ? (
+        <SkeletonList rows={3} />
+      ) : (
+        <Field label="Plano PMOC">
+          <select value={planId} onChange={(e) => setPlanId(e.target.value)} className={inputCls}>
+            <option value="">Selecione um plano ativo</option>
+            {(plans.data ?? []).map((plan) => (
+              <option key={plan.id} value={plan.id}>PMOC-{String(plan.number).padStart(6, "0")} · {plan.customer?.tradeName ?? plan.customer?.name ?? plan.maintenancePlan?.name ?? "Plano PMOC"}</option>
+            ))}
+          </select>
+        </Field>
+      )}
+
+      {planId && (
+        <>
+          <Field label="Operador responsável (opcional)">
+            <UserSelect value={operatorId} onChange={setOperatorId} />
+          </Field>
+
+          <div className="space-y-1.5">
+            <span className="text-sm font-medium">Execuções pendentes</span>
+            {requests.loading && !requests.data ? (
+              <SkeletonList rows={3} />
+            ) : (requests.data ?? []).length === 0 ? (
+              <EmptyState icon={CalendarClock} title="Nenhuma execução pendente" description="As próximas execuções aparecerão conforme a programação do PMOC." />
+            ) : (
+              <ul className="space-y-2">
+                {(requests.data ?? []).map((request) => {
+                  const early = daysUntil(request.scheduledFor) > EARLY_THRESHOLD_DAYS;
+                  return (
+                    <li key={request.id}>
+                      <button type="button" disabled={Boolean(busy)} onClick={() => void generate(request)} className="flex w-full items-center justify-between gap-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-3 text-left transition hover:bg-[var(--color-muted)] disabled:opacity-60">
+                        <span className="min-w-0">
+                          <span className="block text-sm font-semibold">Execução {String(request.executionNumber).padStart(3, "0")}</span>
+                          <span className="block text-xs text-[var(--color-muted-foreground)]">Prevista para {new Date(request.scheduledFor).toLocaleDateString("pt-BR")}</span>
+                        </span>
+                        <span className="flex shrink-0 items-center gap-2">
+                          {early && <StatusChip tone="warning">Adiantada</StatusChip>}
+                          {busy === request.id ? <Loader2 className="h-5 w-5 animate-spin" /> : <ChevronRight className="h-5 w-5 text-[var(--color-muted-foreground)]" />}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
 }

@@ -38,6 +38,13 @@ import type {
   ReschedulePmocExecutionRequestDto,
 } from './dto/pmoc-compliance.dto';
 
+/**
+ * Gerar uma execução programada mais do que este número de dias antes da data
+ * prevista é considerado "adiantamento" e exige confirmação explícita, pois pode
+ * quebrar o cronograma contratado do PMOC.
+ */
+const EARLY_GENERATION_THRESHOLD_DAYS = 10;
+
 const REQUEST_INCLUDE = {
   requester: { select: { id: true, name: true, username: true, role: true } },
   operation: {
@@ -408,6 +415,23 @@ export class PmocExecutionRequestsService {
     this.assertRequestCanGenerate(request.status);
     this.assertOperatorCanClaim(request, actor);
     this.assertPlanCanSchedule(request.pmocPlan);
+    // Adiantamento: bloqueia gerar uma execução muito antes do previsto sem
+    // confirmação explícita; quando confirmado, é registrado no histórico do PMOC.
+    const daysEarly = this.earlyGenerationDays(request.scheduledFor);
+    const isEarly = daysEarly > EARLY_GENERATION_THRESHOLD_DAYS;
+    if (isEarly && !dto.allowEarly) {
+      throw new ApplicationException(
+        ERROR_CODES.PMOC_EXECUTION_TOO_EARLY,
+        `A execução ${String(request.executionNumber).padStart(3, '0')} está prevista para ${request.scheduledFor.toLocaleDateString('pt-BR')} (${daysEarly} dias no futuro). Adiantar pode quebrar o cronograma contratado do PMOC.`,
+        HttpStatus.CONFLICT,
+        {
+          daysEarly,
+          thresholdDays: EARLY_GENERATION_THRESHOLD_DAYS,
+          executionNumber: request.executionNumber,
+          scheduledFor: request.scheduledFor.toISOString(),
+        },
+      );
+    }
     const claimed = await this.prisma.$transaction(async (tx) => {
       const result = await tx.pmocExecutionRequest.updateMany({
         where: {
@@ -570,6 +594,38 @@ export class PmocExecutionRequestsService {
             origin,
           }),
         });
+        // Registro/controle de adiantamento: fica no histórico do PMOC (visível
+        // na plataforma) e na auditoria.
+        if (isEarly) {
+          await tx.pmocHistory.create({
+            data: {
+              pmocPlanId: request.pmocPlanId,
+              executionRequestId: id,
+              operationId,
+              actorId: actor.id,
+              action: PmocHistoryAction.REQUEST_EARLY_GENERATION,
+              previousStatus: PmocExecutionRequestStatus.GENERATING_OS,
+              newStatus: PmocExecutionRequestStatus.GENERATED,
+              notes: `Execução adiantada em ${daysEarly} dias em relação ao previsto (${request.scheduledFor.toLocaleDateString('pt-BR')}). Confirmada por ${actor.name}.`,
+              metadata: {
+                executionNumber: request.executionNumber,
+                daysEarly,
+                thresholdDays: EARLY_GENERATION_THRESHOLD_DAYS,
+                scheduledFor: request.scheduledFor.toISOString(),
+                origin,
+              },
+            },
+          });
+          await tx.auditLog.create({
+            data: this.audit(PMOC_AUDIT_ACTIONS.EXECUTION_REQUEST_EARLY, actor.id, context, {
+              pmocPlanId: request.pmocPlanId,
+              executionRequestId: id,
+              operationId,
+              executionNumber: request.executionNumber,
+              daysEarly,
+            }),
+          });
+        }
         await this.notifications.notifyPmocExecutionTx(
           tx,
           id,
@@ -1230,6 +1286,12 @@ export class PmocExecutionRequestsService {
     if (plan.endDate < today) {
       throw this.invalidState('Expired PMOC plans cannot generate Work Orders');
     }
+  }
+
+  /** Dias entre agora e a data prevista da execução (0 quando já vencida/hoje). */
+  private earlyGenerationDays(scheduledFor: Date): number {
+    const ms = scheduledFor.getTime() - Date.now();
+    return ms <= 0 ? 0 : Math.floor(ms / 86_400_000);
   }
 
   private assertRequestCanGenerate(status: PmocExecutionRequestStatus): void {

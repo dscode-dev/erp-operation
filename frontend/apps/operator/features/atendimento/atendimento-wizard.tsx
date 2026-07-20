@@ -439,16 +439,16 @@ function PmocStartStep({ onBack }: { onBack: () => void }) {
   );
   const eligible = (requests.data?.items ?? []).filter((request) => !request.plannedOperatorId || request.plannedOperatorId === session?.user.id);
 
-  async function claim(request: PmocExecutionRequest) {
+  async function claim(request: PmocExecutionRequest, allowEarly = false) {
     setBusy(request.id);
     setError(null);
     try {
       const prefill = await pmocApi.getExecutionRequestPrefill(request.id);
-      const generated = await pmocApi.generateWorkOrder(request.id, {
-        ...prefill,
-        documentType: 'PMOC',
-        operatorId: undefined,
-      });
+      const generated = await pmocApi.generateWorkOrder(
+        request.id,
+        { ...prefill, documentType: 'PMOC', operatorId: undefined },
+        { allowEarly },
+      );
       const operationId = generated.operationId ?? generated.generatedOperationId;
       if (!operationId) throw new Error('A execução foi reservada, mas o atendimento não foi localizado.');
       const assignments = await assignmentsApi.listMyAssignments({ operationId, limit: 1 });
@@ -456,6 +456,14 @@ function PmocStartStep({ onBack }: { onBack: () => void }) {
       if (!assignment) throw new Error('O atendimento PMOC foi criado, mas ainda não está disponível na sua fila.');
       router.push(`/operator/services/${assignment.id}`);
     } catch (cause) {
+      // Adiantamento: confirma e refaz com allowEarly (registra na plataforma).
+      if (cause instanceof ApiClientError && cause.code === 'PMOC_EXECUTION_TOO_EARLY') {
+        setBusy(null);
+        if (window.confirm(`${cause.message}\n\nDeseja registrar o adiantamento e continuar?`)) {
+          void claim(request, true);
+        }
+        return;
+      }
       setError(cause instanceof Error ? cause.message : 'Não foi possível iniciar esta execução PMOC.');
     } finally {
       setBusy(null);
