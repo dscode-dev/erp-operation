@@ -1190,3 +1190,13 @@ Status: concluído.
 - **Operator (wizard de atendimento)**: o passo Checklist é semeado com os itens reais do catálogo para o documento em curso (`listChecklistItems`), com loading/vazio honestos; removido `defaultChecklist` de `service-types.ts` (agora só rótulos de tipo).
 - **Platform (drawer de nova operação)**: o passo Checklist usa o `TechnicalCatalogSelector` (type CHECKLIST + workflow do documento) — o owner seleciona os checks cadastrados (e pode adicionar personalizados); removido o `DEFAULT_CHECKLIST` mock. Checklist passou a ser opcional.
 - API: `technicalCatalogsApi.documentWorkflow(documentType)` e `technicalCatalogsApi.listChecklistItems(workflow, { maintenanceType? })`.
+
+## ORBIT_DASHBOARD_V2_EXECUTIVE_OVERVIEW (2026-07-19)
+
+- Dashboard da Platform reescrito para visão executiva, com menor carga visual (1 linha de KPIs + 2 linhas de 2 colunas, no lugar de ~7 seções):
+  - **Resumo executivo**: 6 KPIs clicáveis — Operações em aberto (DRAFT+PENDING), Em andamento, Aguardando revisão, Finalizadas hoje (assignments COMPLETED com completedAt hoje), PMOCs pendentes (pmocStats.pendingExecutions), Recebimentos pendentes (contagem RECEIVABLE/PENDING; restrito por RBAC financeiro). Cada card linka para a página correspondente.
+  - **Timeline operacional**: filtro Hoje (padrão) / Próximos 7 dias, scroll interno; cada item mostra horário, cliente, tipo, responsável, status e prioridade (derivada de agendamento/estado — apenas visual). Fonte: `assignmentsApi.listAssignments` por `operation.scheduledFor`.
+  - **Saúde financeira**: um único gráfico de evolução (Receitas × Despesas × Saldo) a partir de `FinancialStats.monthlyFlow`; sem outras métricas financeiras. Gated (`canFinancial`).
+  - **Comparativo operacional**: mês atual × anterior para Operações concluídas, Ordens de Serviço, PMOCs e Visitas Técnicas — contagens exatas via `documentsApi.listHandoffs({type,from,to})` (WORK_ORDER/TECHNICAL_REPORT/PMOC) + assignments concluídos por mês.
+  - **Feed inteligente**: lista única (alertas + pendências + atividades recentes de `asset-lifecycle`), scroll interno, com marcador "preparado para IA" — estrutura `FeedItem` pronta para receber insights futuros.
+- Sem novas regras/entidades/IA e sem alterações em Financeiro/PMOC/OS/Document Engine. Build, lint e typecheck aprovados.

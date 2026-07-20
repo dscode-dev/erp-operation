@@ -1,504 +1,441 @@
 "use client";
 
+/**
+ * Dashboard V2 — visão executiva.
+ *
+ * Foco em decisão rápida: KPIs clicáveis, timeline operacional, um único gráfico
+ * financeiro (Receitas × Despesas × Saldo), comparativo mensal e um feed
+ * inteligente (alertas + pendências + atividades) preparado para insights de IA.
+ * Consome apenas domínios e componentes já existentes — sem novas regras.
+ */
 import Link from "next/link";
-import { useState, type ReactNode } from "react";
-import type { LucideIcon } from "lucide-react";
-import {
-  AlertTriangle,
-  CalendarClock,
-  CheckCircle2,
-  ClipboardList,
-  PackageCheck,
-  RefreshCw,
-  ShieldCheck,
-  Wallet,
-  Wrench,
-} from "lucide-react";
+import { useMemo, useState } from "react";
+import { AlertTriangle, Bell, CalendarClock, CheckCircle2, ChevronRight, Clock, FileText, RefreshCw, ShieldCheck, Sparkles } from "lucide-react";
 import { DashboardSection } from "@platform/components/dashboard-section";
 import { GreetingHeader } from "@platform/components/greeting-header";
 import { MetricCard } from "@erp/ui/metric-card";
-import { SkeletonCard } from "@erp/ui/skeletons";
+import { SkeletonCard, SkeletonList } from "@erp/ui/skeletons";
 import { EmptyState } from "@erp/ui/empty-state";
 import { ErrorState } from "@erp/ui/states";
+import { StatusChip, type ChipTone } from "@erp/ui/status-chip";
 import { Gate } from "@erp/ui/auth/gate";
 import { useAuth } from "@erp/ui/auth/auth-provider";
+import { OPERATION_STATUS, OPERATION_TYPE_LABEL, operationCode } from "@erp/ui/operations/operation-shared";
 import {
   assetLifecycleApi,
   assignmentsApi,
+  documentsApi,
   financialApi,
-  inventoryApi,
-  maintenanceApi,
   operationApi,
   pmocApi,
-  procurementApi,
   useQuery,
   type AssetLifecycleEvent,
   type Assignment,
-  type AssignmentStatus,
+  type DocumentKind,
   type FinancialStats,
-  type InventoryStats,
-  type MaintenancePlan,
-  type MaintenanceStats,
   type OperationStats,
   type Paginated,
-  type PmocPlan,
   type PmocStats,
-  type PurchaseOrder,
-  type PurchaseOrderStats,
-  type StockMovement,
 } from "@erp/api";
-import { firstName, formatCurrencyBRL, formatDate, formatDateTime, formatNumber } from "@erp/utils";
-import { PurchaseStatusBadge } from "@platform/components/financial-procurement-badges";
+import { firstName, formatCurrencyBRL, formatDate, formatNumber } from "@erp/utils";
 
-type RangeKey = "today" | "7d" | "30d" | "month";
-type AttentionSeverity = "critical" | "warning";
-type AttentionItem = {
-  id: string;
-  severity: AttentionSeverity;
-  domain: string;
-  title: string;
-  context: string;
-  date?: string | null;
-  href: string;
-};
-
-const assignmentStatuses: AssignmentStatus[] = ["ASSIGNED", "ACCEPTED", "STARTED", "COMPLETED", "REJECTED"];
+type TimelineRange = "today" | "7d";
 
 export default function PlatformHome() {
   const { session, can, hasRole } = useAuth();
-  const [range, setRange] = useStateRange();
   const canSeeFinancial = hasRole("OWNER", "MANAGER") && can("canFinancial");
-  const canSeeManagement = hasRole("OWNER", "MANAGER");
-  const rangeBounds = getRangeBounds(range);
 
-  const assignments = useQuery<Paginated<Assignment>>((signal) => assignmentsApi.listAssignments({ limit: 50, signal }), []);
-  const assigned = useQuery<Paginated<Assignment>>((signal) => assignmentsApi.listAssignments({ status: "ASSIGNED", limit: 1, signal }), []);
-  const accepted = useQuery<Paginated<Assignment>>((signal) => assignmentsApi.listAssignments({ status: "ACCEPTED", limit: 1, signal }), []);
-  const started = useQuery<Paginated<Assignment>>((signal) => assignmentsApi.listAssignments({ status: "STARTED", limit: 1, signal }), []);
-  const completed = useQuery<Paginated<Assignment>>((signal) => assignmentsApi.listAssignments({ status: "COMPLETED", limit: 1, signal }), []);
-  const rejected = useQuery<Paginated<Assignment>>((signal) => assignmentsApi.listAssignments({ status: "REJECTED", limit: 1, signal }), []);
-  const operationStats = useQuery<OperationStats>((signal) => operationApi.getOperationStats({ signal }), []);
-  const lifecycle = useQuery((signal) => assetLifecycleApi.listLifecycle({ limit: 8, from: rangeBounds.from, to: rangeBounds.to, signal }), [range]);
-  const inventory = useQuery<InventoryStats>((signal) => inventoryApi.getInventoryStats({ signal }), []);
-  const movements = useQuery<Paginated<StockMovement>>((signal) => inventoryApi.listStockMovements({ limit: 5, signal }), []);
-  const maintenanceStats = useQuery<MaintenanceStats>((signal) => maintenanceApi.getMaintenanceStats({ signal }), []);
-  const maintenancePlans = useQuery<Paginated<MaintenancePlan>>((signal) => maintenanceApi.listMaintenancePlans({ active: true, limit: 5, signal }), []);
-  const pmocStats = useQuery<PmocStats>((signal) => pmocApi.getPmocStats({ signal }), []);
-  const pmocPlans = useQuery<Paginated<PmocPlan>>((signal) => pmocApi.listPmoc({ active: true, limit: 5, signal }), []);
-  const financial = useQuery<FinancialStats | null>((signal) => (canSeeFinancial ? financialApi.getStats({ signal }) : Promise.resolve(null)), [canSeeFinancial]);
-  const procurement = useQuery<PurchaseOrderStats | null>((signal) => (canSeeManagement ? procurementApi.getPurchaseOrderStats({ signal }) : Promise.resolve(null)), [canSeeManagement]);
-  const awaitingPurchases = useQuery<Paginated<PurchaseOrder> | null>((signal) => (canSeeManagement ? procurementApi.listPurchaseOrders({ status: "SENT", limit: 5, signal }) : Promise.resolve(null)), [canSeeManagement]);
+  const cur = useMemo(() => monthBounds(0), []);
+  const prev = useMemo(() => monthBounds(-1), []);
 
-  const assignmentItems = assignments.data?.items ?? [];
-  const todayAssignments = assignmentItems.filter(isScheduledToday);
-  const overdueAssignments = assignmentItems.filter(isAssignmentOverdue);
-  const inProgress = started.data?.pagination.total ?? 0;
-  const awaitingAcceptance = assigned.data?.pagination.total ?? 0;
-  const attention = buildAttentionItems({
-    overdueAssignments,
-    awaitingToday: todayAssignments.filter((item) => item.status === "ASSIGNED"),
-    financial: financial.data,
-    inventory: inventory.data,
-    procurement: procurement.data,
-    maintenance: maintenanceStats.data,
-    pmoc: pmocStats.data,
-  });
+  const operationStats = useQuery<OperationStats>((s) => operationApi.getOperationStats({ signal: s }), []);
+  const timeline = useQuery<Paginated<Assignment>>((s) => assignmentsApi.listAssignments({ limit: 100, signal: s }), []);
+  const completed = useQuery<Paginated<Assignment>>((s) => assignmentsApi.listAssignments({ status: "COMPLETED", limit: 100, signal: s }), []);
+  const pmocStats = useQuery<PmocStats>((s) => pmocApi.getPmocStats({ signal: s }), []);
+  const lifecycle = useQuery((s) => assetLifecycleApi.listLifecycle({ limit: 12, signal: s }), []);
+  const financial = useQuery<FinancialStats | null>((s) => (canSeeFinancial ? financialApi.getStats({ signal: s }) : Promise.resolve(null)), [canSeeFinancial]);
+  const receivablesPending = useQuery<number | null>(
+    (s) => (canSeeFinancial ? financialApi.listEntries({ type: "RECEIVABLE", status: "PENDING", limit: 1, signal: s }).then((r) => r.pagination.total) : Promise.resolve(null)),
+    [canSeeFinancial],
+  );
+
+  // Comparativo mensal — contagens exatas por período via Document Engine.
+  const osCur = useHandoffCount("WORK_ORDER", cur);
+  const osPrev = useHandoffCount("WORK_ORDER", prev);
+  const visitCur = useHandoffCount("TECHNICAL_REPORT", cur);
+  const visitPrev = useHandoffCount("TECHNICAL_REPORT", prev);
+  const pmocCur = useHandoffCount("PMOC", cur);
+  const pmocPrev = useHandoffCount("PMOC", prev);
+
+  const byStatus = operationStats.data?.byStatus;
+  const open = (byStatus?.DRAFT ?? 0) + (byStatus?.PENDING ?? 0);
+  const inProgress = byStatus?.IN_PROGRESS ?? 0;
+  const review = byStatus?.REVIEW ?? 0;
+
+  const completedItems = completed.data?.items ?? [];
+  const finishedToday = completedItems.filter((a) => isToday(a.completedAt)).length;
+  const opsConcludedCur = completedItems.filter((a) => inMonth(a.completedAt, cur)).length;
+  const opsConcludedPrev = completedItems.filter((a) => inMonth(a.completedAt, prev)).length;
+
+  const feed = useMemo(
+    () => buildFeed({ operationStats: operationStats.data, pmoc: pmocStats.data, financial: financial.data, timeline: timeline.data?.items ?? [], events: lifecycle.data?.items ?? [] }),
+    [operationStats.data, pmocStats.data, financial.data, timeline.data, lifecycle.data],
+  );
+
+  function refreshAll() {
+    operationStats.refetch(); timeline.refetch(); completed.refetch(); pmocStats.refetch(); lifecycle.refetch(); financial.refetch(); receivablesPending.refetch();
+    osCur.refetch(); osPrev.refetch(); visitCur.refetch(); visitPrev.refetch(); pmocCur.refetch(); pmocPrev.refetch();
+  }
 
   return (
-    <div className="space-y-8 max-w-[1500px]">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <GreetingHeader name={firstName(session?.user.name ?? "Equipe")} pending={attention.length} />
-        <div className="flex flex-wrap items-center gap-2">
-          {(["today", "7d", "30d", "month"] as RangeKey[]).map((key) => (
-            <button key={key} type="button" onClick={() => setRange(key)} className={range === key ? "btn-primary" : "btn-secondary"}>
-              {rangeLabel(key)}
-            </button>
-          ))}
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={() => {
-              assignments.refetch(); assigned.refetch(); accepted.refetch(); started.refetch(); completed.refetch(); rejected.refetch();
-              operationStats.refetch(); lifecycle.refetch(); inventory.refetch(); movements.refetch(); maintenanceStats.refetch(); maintenancePlans.refetch();
-              pmocStats.refetch(); pmocPlans.refetch(); financial.refetch(); procurement.refetch(); awaitingPurchases.refetch();
-            }}
-          >
-            <RefreshCw className="h-4 w-4" /> Atualizar
-          </button>
-        </div>
+    <div className="space-y-6 max-w-[1500px]">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <GreetingHeader name={firstName(session?.user.name ?? "Equipe")} pending={feed.filter((f) => f.kind !== "activity").length} />
+        <button type="button" className="btn-secondary self-start" onClick={refreshAll}>
+          <RefreshCw className="h-4 w-4" /> Atualizar
+        </button>
       </div>
 
+      {/* 1. Resumo executivo */}
       <DashboardSection title="Resumo executivo">
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-          <MetricLink href="/agenda"><MetricCard label="Operações hoje" value={formatNumber(todayAssignments.length)} delta="agenda operacional" icon="CalendarClock" /></MetricLink>
-          <MetricLink href="/operacoes?status=IN_PROGRESS"><MetricCard label="Em execução" value={formatNumber(inProgress)} delta="atendimentos" trend={inProgress > 0 ? "up" : "flat"} icon="Activity" /></MetricLink>
-          <MetricLink href="/operacoes"><MetricCard label="Aguardando aceite" value={formatNumber(awaitingAcceptance)} delta="ação do operador" trend={awaitingAcceptance > 0 ? "down" : "flat"} icon="Clock" /></MetricLink>
-          {canSeeFinancial ? (
-            <MetricLink href="/financial"><MetricCard label="Saldo atual" value={formatCurrencyBRL(Number(financial.data?.currentBalance ?? 0))} delta="financial core" icon="Wallet" /></MetricLink>
-          ) : (
-            <MetricCard label="Saldo atual" value="restrito" delta="RBAC" icon="Lock" />
-          )}
-          <MetricLink href="/produtos?tab=inventory"><MetricCard label="Estoque crítico" value={formatNumber(inventory.data?.minimumStockAlerts ?? 0)} delta="abaixo do mínimo" trend={(inventory.data?.minimumStockAlerts ?? 0) > 0 ? "down" : "flat"} icon="PackageX" /></MetricLink>
-          <MetricLink href="/purchase-orders?status=SENT"><MetricCard label="Compras pendentes" value={formatNumber((procurement.data?.sent ?? 0) + (procurement.data?.partiallyReceived ?? 0))} delta="recebimento" icon="ShoppingCart" /></MetricLink>
-        </div>
+        {operationStats.loading && !operationStats.data ? (
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">{Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}</div>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+            <Kpi href="/operacoes?status=PENDING" label="Operações em aberto" value={open} icon="ClipboardList" trend={open > 0 ? "up" : "flat"} />
+            <Kpi href="/operacoes?status=IN_PROGRESS" label="Em andamento" value={inProgress} icon="Activity" trend={inProgress > 0 ? "up" : "flat"} />
+            <Kpi href="/operacoes?status=REVIEW" label="Aguardando revisão" value={review} icon="Clock" trend={review > 0 ? "down" : "flat"} />
+            <Kpi href="/operacoes?status=COMPLETED" label="Finalizadas hoje" value={finishedToday} icon="CheckCircle2" trend="up" />
+            <Kpi href="/pmoc" label="PMOCs pendentes" value={pmocStats.data?.pendingExecutions ?? 0} icon="ShieldCheck" trend={(pmocStats.data?.pendingExecutions ?? 0) > 0 ? "down" : "flat"} />
+            {canSeeFinancial ? (
+              <Kpi href="/financial?type=RECEIVABLE&status=PENDING" label="Recebimentos pendentes" value={receivablesPending.data ?? 0} icon="Wallet" trend={(receivablesPending.data ?? 0) > 0 ? "down" : "flat"} />
+            ) : (
+              <MetricCard label="Recebimentos pendentes" value="restrito" delta="acesso financeiro" icon="Lock" />
+            )}
+          </div>
+        )}
       </DashboardSection>
 
-      <DashboardSection title="Centro de atenção" action={<span className="text-caption">priorizado por criticidade e prazo</span>}>
-        <AttentionCenter loading={assignments.loading || inventory.loading || maintenanceStats.loading || pmocStats.loading} items={attention} />
-      </DashboardSection>
-
-      <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-        <DashboardSection title="Operação hoje" action={<Link href="/agenda" className="text-xs font-medium text-[var(--color-primary)] hover:underline">abrir agenda</Link>}>
-          <OperationsToday
-            loading={assignments.loading && !assignments.data}
-            error={assignments.error}
-            onRetry={assignments.refetch}
-            todayAssignments={todayAssignments}
-            statusTotals={{
-              ASSIGNED: assigned.data?.pagination.total ?? 0,
-              ACCEPTED: accepted.data?.pagination.total ?? 0,
-              STARTED: started.data?.pagination.total ?? 0,
-              COMPLETED: completed.data?.pagination.total ?? 0,
-              REJECTED: rejected.data?.pagination.total ?? 0,
-            }}
-          />
+      {/* 2 + 5. Timeline operacional | Feed inteligente */}
+      <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+        <DashboardSection title="Timeline operacional">
+          <OperationalTimeline loading={timeline.loading && !timeline.data} error={timeline.error} onRetry={timeline.refetch} assignments={timeline.data?.items ?? []} />
         </DashboardSection>
 
-        <DashboardSection title="Atividade relevante recente" action={<Link href="/equipamentos" className="text-xs font-medium text-[var(--color-primary)] hover:underline">ver ativos</Link>}>
-          <RecentActivity loading={lifecycle.loading && !lifecycle.data} error={lifecycle.error} onRetry={lifecycle.refetch} events={lifecycle.data?.items ?? []} />
+        <DashboardSection title="Feed inteligente" action={<span className="inline-flex items-center gap-1 text-caption"><Sparkles className="h-3.5 w-3.5" /> preparado para IA</span>}>
+          <IntelligentFeed loading={(operationStats.loading || pmocStats.loading || lifecycle.loading) && feed.length === 0} items={feed} />
         </DashboardSection>
       </div>
 
+      {/* 3 + 4. Saúde financeira | Comparativo operacional */}
       <div className="grid gap-6 xl:grid-cols-2">
-        <Gate roles={["OWNER", "MANAGER"]} permission="canFinancial">
-          <DashboardSection title="Snapshot financeiro" action={<Link href="/financial" className="text-xs font-medium text-[var(--color-primary)] hover:underline">abrir financeiro</Link>}>
-            <FinancialSnapshot loading={financial.loading && !financial.data} error={financial.error} onRetry={financial.refetch} stats={financial.data} />
+        <Gate roles={["OWNER", "MANAGER"]} permission="canFinancial" fallback={<DashboardSection title="Saúde financeira"><EmptyState icon={FileText} title="Financeiro restrito" description="Seu perfil não possui acesso aos indicadores financeiros." /></DashboardSection>}>
+          <DashboardSection title="Saúde financeira" action={<Link href="/financial" className="text-xs font-medium text-[var(--color-primary)] hover:underline">abrir financeiro</Link>}>
+            <FinancialHealth loading={financial.loading && !financial.data} error={financial.error} onRetry={financial.refetch} stats={financial.data} />
           </DashboardSection>
         </Gate>
 
-        <DashboardSection title="Ativos, manutenção e PMOC">
-          <MaintenanceCompliance
-            maintenance={maintenanceStats.data}
-            pmoc={pmocStats.data}
-            plans={maintenancePlans.data?.items ?? []}
-            pmocs={pmocPlans.data?.items ?? []}
-            loading={(maintenanceStats.loading && !maintenanceStats.data) || (pmocStats.loading && !pmocStats.data)}
-            error={maintenanceStats.error || pmocStats.error}
-            onRetry={() => { maintenanceStats.refetch(); maintenancePlans.refetch(); pmocStats.refetch(); pmocPlans.refetch(); }}
+        <DashboardSection title="Comparativo operacional" action={<span className="text-caption">mês atual × anterior</span>}>
+          <OperationalComparison
+            loading={osCur.loading || visitCur.loading || pmocCur.loading || (completed.loading && !completed.data)}
+            rows={[
+              { label: "Operações concluídas", current: opsConcludedCur, previous: opsConcludedPrev },
+              { label: "Ordens de Serviço", current: osCur.total, previous: osPrev.total },
+              { label: "PMOCs", current: pmocCur.total, previous: pmocPrev.total },
+              { label: "Visitas Técnicas", current: visitCur.total, previous: visitPrev.total },
+            ]}
           />
         </DashboardSection>
       </div>
-
-      <DashboardSection title="Estoque e compras" action={<Link href="/purchase-orders" className="text-xs font-medium text-[var(--color-primary)] hover:underline">abrir compras</Link>}>
-        <InventoryProcurement
-          inventory={inventory.data}
-          procurement={procurement.data}
-          purchases={awaitingPurchases.data?.items ?? []}
-          movements={movements.data?.items ?? []}
-          loading={(inventory.loading && !inventory.data) || (procurement.loading && !procurement.data)}
-          error={inventory.error || procurement.error}
-          onRetry={() => { inventory.refetch(); procurement.refetch(); awaitingPurchases.refetch(); movements.refetch(); }}
-        />
-      </DashboardSection>
     </div>
   );
 }
 
-function AttentionCenter({ loading, items }: { loading: boolean; items: AttentionItem[] }) {
-  if (loading && items.length === 0) return <div className="grid gap-3 md:grid-cols-3">{Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)}</div>;
-  if (items.length === 0) return <EmptyState icon={CheckCircle2} title="Nada crítico no momento" description="Sem alertas relevantes retornados pelos domínios oficiais." />;
+/* ---------- KPI ---------- */
+
+function Kpi({ href, label, value, icon, trend }: { href: string; label: string; value: number; icon: Parameters<typeof MetricCard>[0]["icon"]; trend?: "up" | "down" | "flat" }) {
   return (
-    <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-3">
-      {items.slice(0, 8).map((item) => (
-        <Link key={item.id} href={item.href} className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 shadow-[var(--shadow-card)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow-hover)]">
-          <div className="flex items-start gap-3">
-            <span className={`mt-0.5 grid h-8 w-8 place-items-center rounded-full ${item.severity === "critical" ? "bg-red-500/10 text-red-700" : "bg-amber-500/10 text-amber-700"}`}>
-              <AlertTriangle className="h-4 w-4" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)]">{item.domain}</span>
-              <span className="mt-0.5 block font-semibold">{item.title}</span>
-              <span className="mt-1 block text-sm text-[var(--color-muted-foreground)]">{item.context}</span>
-              {item.date && <span className="mt-2 block text-caption">Prazo: {formatDate(item.date)}</span>}
-            </span>
-          </div>
-        </Link>
-      ))}
-    </div>
+    <Link href={href} className="block rounded-[var(--radius-lg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]/40 transition hover:-translate-y-0.5">
+      <MetricCard label={label} value={formatNumber(value)} delta="ver detalhes" trend={trend} icon={icon} />
+    </Link>
   );
 }
 
-function OperationsToday({
-  loading,
-  error,
-  onRetry,
-  todayAssignments,
-  statusTotals,
-}: {
-  loading: boolean;
-  error: unknown;
-  onRetry: () => void;
-  todayAssignments: Assignment[];
-  statusTotals: Partial<Record<AssignmentStatus, number>>;
-}) {
-  if (loading) return <div className="space-y-2">{Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)}</div>;
-  if (error) return <ErrorState error={error} onRetry={onRetry} title="Operação indisponível" />;
-  const workload = groupByOperator(todayAssignments);
+/* ---------- 2. Timeline operacional ---------- */
+
+function OperationalTimeline({ loading, error, onRetry, assignments }: { loading: boolean; error: unknown; onRetry: () => void; assignments: Assignment[] }) {
+  const [range, setRange] = useState<TimelineRange>("today");
+  const items = useMemo(() => {
+    const withSchedule = assignments.filter((a) => Boolean(a.operation.scheduledFor));
+    const filtered = withSchedule.filter((a) => (range === "today" ? isToday(a.operation.scheduledFor) : inNextDays(a.operation.scheduledFor, 7)));
+    return filtered.sort((a, b) => (a.operation.scheduledFor ?? "").localeCompare(b.operation.scheduledFor ?? ""));
+  }, [assignments, range]);
+
   return (
-    <div className="space-y-4">
-      <div className="grid gap-2 sm:grid-cols-5">
-        {assignmentStatuses.map((status) => (
-          <div key={status} className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] p-3">
-            <div className="text-caption">{assignmentStatusLabel(status)}</div>
-            <div className="mt-1 text-xl font-semibold">{formatNumber(statusTotals[status] ?? 0)}</div>
-          </div>
+    <div className="space-y-3">
+      <div className="flex gap-2">
+        {(["today", "7d"] as TimelineRange[]).map((key) => (
+          <button key={key} type="button" onClick={() => setRange(key)} className={`h-8 rounded-[var(--radius-md)] px-3 text-xs font-medium ${range === key ? "bg-[var(--color-primary)] text-[var(--color-primary-foreground)]" : "border border-[var(--color-border)] hover:bg-[var(--color-muted)]"}`}>
+            {key === "today" ? "Hoje" : "Próximos 7 dias"}
+          </button>
         ))}
       </div>
-      {todayAssignments.length === 0 ? (
-        <EmptyState icon={CalendarClock} title="Sem agenda operacional hoje" description="Nenhum atendimento foi agendado para hoje." />
+
+      {loading ? (
+        <SkeletonList rows={5} />
+      ) : error ? (
+        <ErrorState error={error} onRetry={onRetry} title="Timeline indisponível" />
+      ) : items.length === 0 ? (
+        <EmptyState icon={CalendarClock} title={range === "today" ? "Sem operações hoje" : "Sem operações nos próximos 7 dias"} description="Nenhum atendimento agendado para o período." />
       ) : (
-        <ul className="divide-y divide-[var(--color-border)] rounded-[var(--radius-lg)] border border-[var(--color-border)]">
-          {todayAssignments.slice(0, 7).map((assignment) => (
-            <li key={assignment.id} className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0">
-                <div className="font-medium truncate">OS #{assignment.operation.number} · {assignment.operation.customer?.name ?? "Cliente não informado"}</div>
-                <div className="text-caption truncate">{assignment.operation.equipment?.name ?? "Sem equipamento"} · {assignment.assignee.name}</div>
-              </div>
-              <Link href="/operacoes" className="text-xs font-medium text-[var(--color-primary)] hover:underline">abrir operação</Link>
-            </li>
-          ))}
+        <ul className="max-h-[420px] overflow-y-auto divide-y divide-[var(--color-border)] rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)]">
+          {items.map((a) => {
+            const op = a.operation;
+            const priority = priorityOf(op.scheduledFor, op.status);
+            return (
+              <li key={a.id}>
+                <Link href={`/operacoes?operationId=${op.id}`} className="flex items-center gap-3 p-3 hover:bg-[var(--color-muted)] transition-colors">
+                  <span className="flex w-14 shrink-0 flex-col items-center text-[var(--color-muted-foreground)]">
+                    <Clock className="h-3.5 w-3.5" />
+                    <span className="mt-0.5 font-mono text-xs tabular-nums">{timeOf(op.scheduledFor)}</span>
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-medium truncate">{op.customer?.name ?? operationCode(op.number)}</span>
+                    <span className="block text-caption truncate">{OPERATION_TYPE_LABEL[op.type]} · {a.assignee.name}</span>
+                  </span>
+                  <span className="flex shrink-0 flex-col items-end gap-1">
+                    <StatusChip tone={OPERATION_STATUS[op.status].tone} dot>{OPERATION_STATUS[op.status].label}</StatusChip>
+                    <span className={`text-[10px] font-semibold uppercase tracking-wider ${priority.className}`}>{priority.label}</span>
+                  </span>
+                </Link>
+              </li>
+            );
+          })}
         </ul>
       )}
-      {workload.length > 0 && (
-        <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] p-3">
-          <div className="mb-2 text-sm font-semibold">Carga por operador hoje</div>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {workload.map((item) => <div key={item.operator} className="flex justify-between text-sm"><span>{item.operator}</span><span className="font-mono">{item.count}</span></div>)}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
 
-function FinancialSnapshot({ loading, error, onRetry, stats }: { loading: boolean; error: unknown; onRetry: () => void; stats: FinancialStats | null }) {
-  if (loading) return <div className="grid gap-3 sm:grid-cols-2">{Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)}</div>;
-  if (error) return <ErrorState error={error} onRetry={onRetry} title="Financeiro indisponível" />;
-  if (!stats) return <EmptyState icon={Wallet} title="Financeiro restrito" description="Seu perfil não possui acesso aos indicadores financeiros." />;
-  const overdue = Number(stats.overdue.receivable) + Number(stats.overdue.payable);
-  return (
-    <div className="grid gap-3 sm:grid-cols-2">
-      <MetricLink href="/financial"><MetricCard label="Saldo atual" value={formatCurrencyBRL(Number(stats.currentBalance))} icon="Wallet" /></MetricLink>
-      <MetricLink href="/financial"><MetricCard label="Saldo previsto" value={formatCurrencyBRL(Number(stats.projectedBalance))} icon="LineChart" /></MetricLink>
-      <MetricLink href="/financial?type=RECEIVABLE&status=PENDING"><MetricCard label="Receber hoje" value={formatCurrencyBRL(Number(stats.receivableToday))} trend="up" icon="ArrowUpCircle" /></MetricLink>
-      <MetricLink href="/financial?status=OVERDUE"><MetricCard label="Atrasados" value={formatCurrencyBRL(overdue)} trend={overdue > 0 ? "down" : "flat"} icon="AlertTriangle" /></MetricLink>
-    </div>
-  );
-}
+/* ---------- 5. Feed inteligente ---------- */
 
-function MaintenanceCompliance({
-  maintenance,
-  pmoc,
-  plans,
-  pmocs,
-  loading,
-  error,
-  onRetry,
-}: {
-  maintenance: MaintenanceStats | null;
-  pmoc: PmocStats | null;
-  plans: MaintenancePlan[];
-  pmocs: PmocPlan[];
-  loading: boolean;
-  error: unknown;
-  onRetry: () => void;
-}) {
-  if (loading) return <div className="grid gap-3 sm:grid-cols-2">{Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)}</div>;
-  if (error) return <ErrorState error={error} onRetry={onRetry} title="Manutenção/PMOC indisponível" />;
-  return (
-    <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-4">
-        <MetricCard label="Planos ativos" value={formatNumber(maintenance?.activePlans ?? 0)} icon="Wrench" />
-        <MetricCard label="Manut. vencidas" value={formatNumber(maintenance?.overduePlans ?? 0)} trend={(maintenance?.overduePlans ?? 0) > 0 ? "down" : "flat"} icon="AlertTriangle" />
-        <MetricCard label="PMOCs ativos" value={formatNumber(pmoc?.activePmocs ?? 0)} icon="ShieldCheck" />
-        <MetricCard label="PMOC em risco" value={formatNumber((pmoc?.expiredPmocs ?? 0) + (pmoc?.pendingPmocs ?? 0))} trend={(pmoc?.expiredPmocs ?? 0) > 0 ? "down" : "flat"} icon="BadgeAlert" />
-      </div>
-      <div className="grid gap-3 lg:grid-cols-2">
-        <CompactList title="Próximas manutenções" empty="Sem planos ativos próximos." items={plans.map((plan) => ({ id: plan.id, title: plan.name, meta: `${plan.equipment?.name ?? "Equipamento"} · ${formatDate(plan.nextExecution)}`, href: "/equipamentos" }))} icon={Wrench} />
-        <CompactList title="PMOCs monitorados" empty="Sem PMOCs ativos." items={pmocs.map((plan) => ({ id: plan.id, title: plan.customer?.tradeName ?? plan.customer?.name ?? "PMOC", meta: `${plan.compliance.status} · vence ${formatDate(plan.endDate)}`, href: "/equipamentos" }))} icon={ShieldCheck} />
-      </div>
-    </div>
-  );
-}
+type FeedKind = "alert" | "pending" | "activity";
+type FeedItem = { id: string; kind: FeedKind; tone: ChipTone; label: string; title: string; context: string; date?: string | null; href: string };
 
-function InventoryProcurement({
-  inventory,
-  procurement,
-  purchases,
-  movements,
-  loading,
-  error,
-  onRetry,
-}: {
-  inventory: InventoryStats | null;
-  procurement: PurchaseOrderStats | null;
-  purchases: PurchaseOrder[];
-  movements: StockMovement[];
-  loading: boolean;
-  error: unknown;
-  onRetry: () => void;
-}) {
-  if (loading) return <div className="grid gap-3 sm:grid-cols-4">{Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)}</div>;
-  if (error) return <ErrorState error={error} onRetry={onRetry} title="Estoque/compras indisponíveis" />;
+function IntelligentFeed({ loading, items }: { loading: boolean; items: FeedItem[] }) {
+  if (loading) return <SkeletonList rows={5} />;
+  if (items.length === 0) return <EmptyState icon={CheckCircle2} title="Tudo em dia" description="Sem alertas, pendências ou atividades relevantes no momento." />;
   return (
-    <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-4">
-        <MetricLink href="/produtos?tab=inventory"><MetricCard label="Abaixo do mínimo" value={formatNumber(inventory?.minimumStockAlerts ?? 0)} trend={(inventory?.minimumStockAlerts ?? 0) > 0 ? "down" : "flat"} icon="PackageX" /></MetricLink>
-        <MetricLink href="/produtos?tab=inventory"><MetricCard label="Sem estoque" value={formatNumber(inventory?.productsWithoutStock ?? 0)} trend={(inventory?.productsWithoutStock ?? 0) > 0 ? "down" : "flat"} icon="PackageMinus" /></MetricLink>
-        <MetricLink href="/purchase-orders?status=SENT"><MetricCard label="Aguardando entrega" value={formatNumber((procurement?.sent ?? 0) + (procurement?.partiallyReceived ?? 0))} icon="Truck" /></MetricLink>
-        <MetricLink href="/purchase-orders"><MetricCard label="Recebidos" value={formatNumber(procurement?.received ?? 0)} trend="up" icon="PackageCheck" /></MetricLink>
-      </div>
-      <div className="grid gap-3 lg:grid-cols-2">
-        <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
-          <h3 className="mb-3 text-sm font-semibold">Pedidos aguardando recebimento</h3>
-          {purchases.length === 0 ? <p className="text-caption">Nenhum pedido enviado aguardando recebimento.</p> : (
-            <ul className="space-y-2">
-              {purchases.map((order) => (
-                <li key={order.id} className="flex items-center justify-between gap-3 text-sm">
-                  <span className="truncate">#{order.number} · {order.supplier?.tradeName ?? order.supplier?.legalName ?? "Fornecedor"}</span>
-                  <PurchaseStatusBadge status={order.status} />
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-        <CompactList title="Movimentos recentes" empty="Sem movimentações recentes." items={movements.map((movement) => ({ id: movement.id, title: movement.inventoryItem?.product?.name ?? movement.reason, meta: `${movement.type} · ${formatNumber(Number(movement.quantity))}`, href: "/produtos" }))} icon={PackageCheck} />
-      </div>
-    </div>
-  );
-}
-
-function RecentActivity({ loading, error, onRetry, events }: { loading: boolean; error: unknown; onRetry: () => void; events: AssetLifecycleEvent[] }) {
-  if (loading) return <div className="space-y-2">{Array.from({ length: 5 }).map((_, i) => <SkeletonCard key={i} />)}</div>;
-  if (error) return <ErrorState error={error} onRetry={onRetry} title="Atividade indisponível" />;
-  if (events.length === 0) return <EmptyState icon={ShieldCheck} title="Sem atividade recente" description="Nenhum evento relevante no período selecionado." />;
-  return (
-    <ul className="divide-y divide-[var(--color-border)] rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)]">
-      {events.slice(0, 8).map((event) => (
-        <li key={event.id} className="p-3">
-          <div className="flex items-start gap-3">
-            <span className="mt-0.5 grid h-8 w-8 place-items-center rounded-full" style={{ backgroundColor: `${event.timeline.color}18`, color: event.timeline.color }}>
-              {event.type === "DOCUMENT" ? <ClipboardList className="h-4 w-4" /> : event.timeline.category === "maintenance" ? <Wrench className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
+    <ul className="max-h-[420px] overflow-y-auto space-y-2 pr-1">
+      {items.map((item) => (
+        <li key={item.id}>
+          <Link href={item.href} className="flex items-start gap-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-3 transition hover:-translate-y-0.5 hover:shadow-[var(--shadow-hover)]">
+            <span className={`mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full ${feedIconClass(item.kind)}`}>{feedIcon(item.kind)}</span>
+            <span className="min-w-0 flex-1">
+              <span className="flex items-center gap-2">
+                <StatusChip tone={item.tone}>{item.label}</StatusChip>
+                {item.date && <span className="text-caption">{formatDate(item.date)}</span>}
+              </span>
+              <span className="mt-1 block text-sm font-medium truncate">{item.title}</span>
+              <span className="block text-caption truncate">{item.context}</span>
             </span>
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-medium truncate">{event.timeline.title}</div>
-              <div className="text-caption truncate">{event.timeline.subtitle ?? event.timeline.description}</div>
-              <div className="mt-1 text-caption">{formatDateTime(event.timeline.date)}</div>
-            </div>
-          </div>
+            <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-[var(--color-muted-foreground)]" />
+          </Link>
         </li>
       ))}
     </ul>
   );
 }
 
-function CompactList({ title, empty, items, icon: Icon }: { title: string; empty: string; items: Array<{ id: string; title: string; meta: string; href: string }>; icon: LucideIcon }) {
+function feedIcon(kind: FeedKind) {
+  if (kind === "alert") return <AlertTriangle className="h-4 w-4" />;
+  if (kind === "pending") return <Bell className="h-4 w-4" />;
+  return <ShieldCheck className="h-4 w-4" />;
+}
+function feedIconClass(kind: FeedKind) {
+  if (kind === "alert") return "bg-red-500/10 text-red-700";
+  if (kind === "pending") return "bg-amber-500/10 text-amber-700";
+  return "bg-[var(--color-primary)]/10 text-[var(--color-primary)]";
+}
+
+/* ---------- 3. Saúde financeira (único gráfico) ---------- */
+
+function FinancialHealth({ loading, error, onRetry, stats }: { loading: boolean; error: unknown; onRetry: () => void; stats: FinancialStats | null }) {
+  if (loading) return <SkeletonCard />;
+  if (error) return <ErrorState error={error} onRetry={onRetry} title="Financeiro indisponível" />;
+  const flow = (stats?.monthlyFlow ?? []).map((m) => ({ month: shortMonth(m.month), income: Number(m.income), expenses: Number(m.expenses), balance: Number(m.balance) }));
+  if (flow.length === 0) return <EmptyState icon={FileText} title="Sem histórico financeiro" description="Ainda não há lançamentos suficientes para a evolução." />;
   return (
-    <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
-      <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Icon className="h-4 w-4" /> {title}</h3>
-      {items.length === 0 ? <p className="text-caption">{empty}</p> : (
-        <ul className="space-y-2">
-          {items.slice(0, 5).map((item) => (
-            <li key={item.id}>
-              <Link href={item.href} className="block rounded-[var(--radius-md)] p-2 hover:bg-[var(--color-muted)]">
-                <span className="block text-sm font-medium truncate">{item.title}</span>
-                <span className="text-caption">{item.meta}</span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
+    <div className="space-y-3">
+      <div className="flex flex-wrap gap-4 text-caption">
+        <Legend color="var(--color-primary)" label="Receitas" />
+        <Legend color="var(--color-danger)" label="Despesas" />
+        <Legend color="var(--color-foreground)" label="Saldo" />
+      </div>
+      <EvolutionChart data={flow} />
     </div>
   );
 }
 
-function MetricLink({ href, children }: { href: string; children: ReactNode }) {
-  return <Link href={href} className="block focus-visible:outline-none">{children}</Link>;
+function Legend({ color, label }: { color: string; label: string }) {
+  return <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />{label}</span>;
 }
 
-function buildAttentionItems(input: {
-  overdueAssignments: Assignment[];
-  awaitingToday: Assignment[];
-  financial: FinancialStats | null;
-  inventory: InventoryStats | null;
-  procurement: PurchaseOrderStats | null;
-  maintenance: MaintenanceStats | null;
-  pmoc: PmocStats | null;
-}): AttentionItem[] {
-  const items: AttentionItem[] = [];
-  if (input.overdueAssignments.length > 0) items.push({ id: "assignments-overdue", severity: "critical", domain: "Operação", title: `${input.overdueAssignments.length} atendimentos atrasados`, context: "Há atividades com horário anterior ao atual sem conclusão.", href: "/operacoes" });
-  if (input.awaitingToday.length > 0) items.push({ id: "assignments-awaiting", severity: "warning", domain: "Operação", title: `${input.awaitingToday.length} atividades sem aceite hoje`, context: "Operadores ainda precisam aceitar atividades agendadas.", href: "/agenda" });
-  const overdueFinancial = input.financial ? Number(input.financial.overdue.receivable) + Number(input.financial.overdue.payable) : 0;
-  if (overdueFinancial > 0) items.push({ id: "financial-overdue", severity: "critical", domain: "Financeiro", title: "Lançamentos vencidos", context: formatCurrencyBRL(overdueFinancial), href: "/financial" });
-  if ((input.inventory?.minimumStockAlerts ?? 0) > 0) items.push({ id: "inventory-low", severity: "warning", domain: "Estoque", title: `${input.inventory?.minimumStockAlerts} itens abaixo do mínimo`, context: "Reposição ou compra pode ser necessária.", href: "/produtos" });
-  const awaitingPurchase = (input.procurement?.sent ?? 0) + (input.procurement?.partiallyReceived ?? 0);
-  if (awaitingPurchase > 0) items.push({ id: "purchase-awaiting", severity: "warning", domain: "Compras", title: `${awaitingPurchase} pedidos aguardando recebimento`, context: "Acompanhe entrega e entrada no estoque.", href: "/purchase-orders" });
-  if ((input.maintenance?.overduePlans ?? 0) > 0) items.push({ id: "maintenance-overdue", severity: "critical", domain: "Manutenção", title: `${input.maintenance?.overduePlans} planos vencidos`, context: "Execuções planejadas precisam de atenção.", href: "/equipamentos" });
-  if ((input.pmoc?.expiredPmocs ?? 0) > 0) items.push({ id: "pmoc-expired", severity: "critical", domain: "PMOC", title: `${input.pmoc?.expiredPmocs} PMOCs vencidos`, context: "Risco de não conformidade operacional.", href: "/equipamentos" });
-  if ((input.pmoc?.pendingPmocs ?? 0) > 0) items.push({ id: "pmoc-warning", severity: "warning", domain: "PMOC", title: `${input.pmoc?.pendingPmocs} PMOCs em atenção`, context: "Planos em warning/in progress.", href: "/equipamentos" });
-  return items.sort((a, b) => (a.severity === b.severity ? 0 : a.severity === "critical" ? -1 : 1));
+function EvolutionChart({ data }: { data: Array<{ month: string; income: number; expenses: number; balance: number }> }) {
+  const W = 620;
+  const H = 220;
+  const padX = 36;
+  const padY = 24;
+  const values = data.flatMap((d) => [d.income, d.expenses, d.balance]);
+  const max = Math.max(...values, 1);
+  const min = Math.min(...values, 0);
+  const spanRange = max - min || 1;
+  const x = (i: number) => padX + (i * (W - padX * 2)) / Math.max(1, data.length - 1);
+  const y = (v: number) => H - padY - ((v - min) / spanRange) * (H - padY * 2);
+  const line = (key: "income" | "expenses" | "balance") => data.map((d, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(d[key]).toFixed(1)}`).join(" ");
+  const zeroY = y(0);
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" role="img" aria-label="Evolução de receitas, despesas e saldo">
+      {[0, 0.5, 1].map((p) => <line key={p} x1={padX} x2={W - padX} y1={padY + p * (H - padY * 2)} y2={padY + p * (H - padY * 2)} stroke="var(--color-border)" strokeDasharray="3 3" />)}
+      {min < 0 && <line x1={padX} x2={W - padX} y1={zeroY} y2={zeroY} stroke="var(--color-muted-foreground)" strokeWidth="1" />}
+      <path d={line("income")} fill="none" stroke="var(--color-primary)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d={line("expenses")} fill="none" stroke="var(--color-danger)" strokeOpacity="0.8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d={line("balance")} fill="none" stroke="var(--color-foreground)" strokeOpacity="0.65" strokeWidth="2" strokeDasharray="5 3" strokeLinecap="round" strokeLinejoin="round" />
+      {data.map((d, i) => <circle key={i} cx={x(i)} cy={y(d.income)} r={2.5} fill="var(--color-primary)" />)}
+      {data.map((d, i) => <text key={d.month + i} x={x(i)} y={H - 6} textAnchor="middle" fontSize="10" fill="var(--color-muted-foreground)">{d.month}</text>)}
+    </svg>
+  );
 }
 
-function groupByOperator(assignments: Assignment[]): Array<{ operator: string; count: number }> {
-  const map = new Map<string, number>();
-  for (const assignment of assignments) map.set(assignment.assignee.name, (map.get(assignment.assignee.name) ?? 0) + 1);
-  return [...map.entries()].map(([operator, count]) => ({ operator, count })).sort((a, b) => b.count - a.count).slice(0, 6);
+/* ---------- 4. Comparativo operacional ---------- */
+
+function OperationalComparison({ loading, rows }: { loading: boolean; rows: Array<{ label: string; current: number; previous: number }> }) {
+  if (loading) return <SkeletonCard />;
+  return (
+    <div className="space-y-4 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
+      <div className="flex justify-end gap-4 text-caption">
+        <Legend color="var(--color-primary)" label="Mês atual" />
+        <Legend color="var(--color-muted-foreground)" label="Mês anterior" />
+      </div>
+      {rows.map((row) => {
+        const max = Math.max(row.current, row.previous, 1);
+        const delta = row.current - row.previous;
+        return (
+          <div key={row.label} className="space-y-1.5">
+            <div className="flex items-center justify-between text-sm">
+              <span className="font-medium">{row.label}</span>
+              <span className="inline-flex items-center gap-2 tabular-nums">
+                <span className="font-semibold">{formatNumber(row.current)}</span>
+                <DeltaBadge delta={delta} />
+              </span>
+            </div>
+            <div className="space-y-1">
+              <div className="h-2.5 rounded-full bg-[var(--color-muted)]"><div className="h-full rounded-full bg-[var(--color-primary)]" style={{ width: `${(row.current / max) * 100}%` }} /></div>
+              <div className="h-2.5 rounded-full bg-[var(--color-muted)]"><div className="h-full rounded-full bg-[var(--color-muted-foreground)]/60" style={{ width: `${(row.previous / max) * 100}%` }} /></div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
-function isScheduledToday(assignment: Assignment): boolean {
-  const scheduled = assignment.operation.scheduledFor;
-  if (!scheduled) return false;
-  const d = new Date(scheduled);
+function DeltaBadge({ delta }: { delta: number }) {
+  if (delta === 0) return <span className="text-caption">—</span>;
+  const up = delta > 0;
+  return <span className={`text-xs font-semibold ${up ? "text-[var(--color-success)]" : "text-[var(--color-danger)]"}`}>{up ? "+" : ""}{formatNumber(delta)}</span>;
+}
+
+/* ---------- data helpers ---------- */
+
+function useHandoffCount(type: DocumentKind, bounds: { from: string; to: string }) {
+  const q = useQuery<number>((s) => documentsApi.listHandoffs({ type, from: bounds.from, to: bounds.to, limit: 1, signal: s }).then((r) => r.pagination.total), []);
+  return { total: q.data ?? 0, loading: q.loading, refetch: q.refetch };
+}
+
+function buildFeed(input: { operationStats: OperationStats | null | undefined; pmoc: PmocStats | null | undefined; financial: FinancialStats | null | undefined; timeline: Assignment[]; events: AssetLifecycleEvent[] }): FeedItem[] {
+  const items: FeedItem[] = [];
+  const review = input.operationStats?.byStatus.REVIEW ?? 0;
+  if (review > 0) items.push({ id: "ops-review", kind: "pending", tone: "info", label: "Revisão", title: `${review} operação(ões) aguardando revisão`, context: "Documentos prontos para aprovação do responsável.", href: "/operacoes?status=REVIEW" });
+
+  const overdue = input.timeline.filter((a) => isOverdue(a.operation.scheduledFor, a.operation.status));
+  if (overdue.length > 0) items.push({ id: "ops-overdue", kind: "alert", tone: "danger", label: "Atrasadas", title: `${overdue.length} operação(ões) atrasadas`, context: "Agendamento vencido sem conclusão em campo.", href: "/operacoes" });
+
+  const pmocExpired = input.pmoc?.expiredPmocs ?? 0;
+  if (pmocExpired > 0) items.push({ id: "pmoc-expired", kind: "alert", tone: "danger", label: "PMOC", title: `${pmocExpired} PMOC(s) vencido(s)`, context: "Risco de não conformidade — priorize a regularização.", href: "/pmoc" });
+  const pmocPending = input.pmoc?.pendingExecutions ?? 0;
+  if (pmocPending > 0) items.push({ id: "pmoc-pending", kind: "pending", tone: "warning", label: "PMOC", title: `${pmocPending} execução(ões) PMOC pendente(s)`, context: "Execuções programadas aguardando atendimento.", href: "/pmoc" });
+
+  if (input.financial) {
+    const overdueFin = Number(input.financial.overdue.receivable) + Number(input.financial.overdue.payable);
+    if (overdueFin > 0) items.push({ id: "fin-overdue", kind: "alert", tone: "danger", label: "Financeiro", title: "Lançamentos vencidos", context: formatCurrencyBRL(overdueFin), href: "/financial?status=OVERDUE" });
+  }
+
+  for (const event of input.events.slice(0, 8)) {
+    items.push({
+      id: `ev-${event.id}`,
+      kind: "activity",
+      tone: "neutral",
+      label: "Atividade",
+      title: event.timeline.title,
+      context: event.timeline.subtitle ?? event.timeline.description ?? "",
+      date: event.timeline.date,
+      href: "/equipamentos",
+    });
+  }
+
+  const order: Record<FeedKind, number> = { alert: 0, pending: 1, activity: 2 };
+  return items.sort((a, b) => order[a.kind] - order[b.kind]);
+}
+
+function priorityOf(scheduled: string | null, status: string): { label: string; className: string } {
+  if (isOverdue(scheduled, status)) return { label: "Alta", className: "text-[var(--color-danger)]" };
+  if (isToday(scheduled)) return { label: "Média", className: "text-[var(--color-warning)]" };
+  return { label: "Normal", className: "text-[var(--color-muted-foreground)]" };
+}
+
+function isOverdue(scheduled: string | null, status: string): boolean {
+  if (!scheduled || ["COMPLETED", "CANCELED"].includes(status)) return false;
+  return new Date(scheduled).getTime() < Date.now();
+}
+
+function monthBounds(offset: number): { from: string; to: string } {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth() + offset, 1, 0, 0, 0, 0);
+  const end = new Date(now.getFullYear(), now.getMonth() + offset + 1, 1, 0, 0, 0, 0);
+  return { from: start.toISOString(), to: new Date(end.getTime() - 1).toISOString() };
+}
+
+function inMonth(iso: string | null, bounds: { from: string; to: string }): boolean {
+  if (!iso) return false;
+  return iso >= bounds.from && iso <= bounds.to;
+}
+
+function isToday(iso: string | null | undefined): boolean {
+  if (!iso) return false;
+  const d = new Date(iso);
   const now = new Date();
   return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
 }
 
-function isAssignmentOverdue(assignment: Assignment): boolean {
-  const scheduled = assignment.operation.scheduledFor;
-  if (!scheduled || ["COMPLETED", "CANCELED", "REJECTED"].includes(assignment.status)) return false;
-  return new Date(scheduled).getTime() < Date.now();
+function inNextDays(iso: string | null, days: number): boolean {
+  if (!iso) return false;
+  const d = new Date(iso).getTime();
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const end = start.getTime() + days * 24 * 60 * 60 * 1000;
+  return d >= start.getTime() && d <= end;
 }
 
-function assignmentStatusLabel(status: AssignmentStatus): string {
-  const labels: Record<AssignmentStatus, string> = {
-    ASSIGNED: "Aguardando",
-    ACCEPTED: "Aceitas",
-    STARTED: "Em execução",
-    PAUSED: "Pausadas",
-    COMPLETED: "Concluídas",
-    CANCELED: "Canceladas",
-    REJECTED: "Rejeitadas",
-  };
-  return labels[status];
+function timeOf(iso: string | null): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 }
 
-function rangeLabel(range: RangeKey): string {
-  return { today: "Hoje", "7d": "7 dias", "30d": "30 dias", month: "Mês atual" }[range];
-}
-
-function getRangeBounds(range: RangeKey): { from: string; to: string } {
-  const now = new Date();
-  const start = new Date(now);
-  if (range === "today") start.setHours(0, 0, 0, 0);
-  if (range === "7d") start.setDate(now.getDate() - 7);
-  if (range === "30d") start.setDate(now.getDate() - 30);
-  if (range === "month") {
-    start.setDate(1);
-    start.setHours(0, 0, 0, 0);
-  }
-  return { from: start.toISOString(), to: now.toISOString() };
-}
-
-function useStateRange(): [RangeKey, (range: RangeKey) => void] {
-  return useState<RangeKey>("today");
+function shortMonth(month: string): string {
+  // Aceita "2026-07" ou ISO; retorna rótulo curto.
+  const parsed = /^\d{4}-\d{2}$/.test(month) ? new Date(`${month}-01T00:00:00`) : new Date(month);
+  if (Number.isNaN(parsed.getTime())) return month;
+  return parsed.toLocaleDateString("pt-BR", { month: "short" }).replace(".", "");
 }
