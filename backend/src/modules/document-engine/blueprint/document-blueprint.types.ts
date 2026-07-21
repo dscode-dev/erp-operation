@@ -10,6 +10,7 @@ export type DocumentComponentKind =
   | 'imageGallery'
   | 'qrCode'
   | 'checklist'
+  | 'checklistColumns'
   | 'signature'
   | 'signaturePlaceholder'
   | 'observation';
@@ -148,6 +149,19 @@ export interface ChecklistComponent extends BlueprintBaseComponent {
   items: Array<{ label: string; done: boolean; note: string | null }>;
 }
 
+/**
+ * Blocos de checklist lado a lado (ex.: Tipo de manutenção — Semanal × Semestral).
+ * `selected` marca a coluna cujo tipo foi efetivamente executado ( x ).
+ */
+export interface ChecklistColumnsComponent extends BlueprintBaseComponent {
+  kind: 'checklistColumns';
+  columns: Array<{
+    title: string;
+    selected: boolean;
+    items: Array<{ label: string; done: boolean }>;
+  }>;
+}
+
 export interface SignaturePlaceholderComponent extends BlueprintBaseComponent {
   kind: 'signaturePlaceholder';
   label: string;
@@ -188,6 +202,7 @@ export type DocumentBlueprintComponent =
   | ImageGalleryComponent
   | QrCodeComponent
   | ChecklistComponent
+  | ChecklistColumnsComponent
   | SignatureComponent
   | SignaturePlaceholderComponent
   | ObservationComponent;

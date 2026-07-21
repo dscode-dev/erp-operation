@@ -17,7 +17,9 @@
       "Bash(perl -0pi -e \"s{\\(import \\\\{ ERROR_CODES \\\\} from '\\\\.\\\\./\\\\.\\\\./shared/constants/error-codes\\\\.constants';\\\\n\\)}{\\\\$1import { dateRangeFilter } from '../../shared/utils/date-range.util';\\\\n}\" src/modules/document-engine/document-handoff.service.ts src/modules/document-engine/document-engine.service.ts)",
       "Bash(node -e ' *)",
       "Skill(dataviz)",
-      "Skill(dataviz:*)"
+      "Skill(dataviz:*)",
+      "Bash(grep -viE \"node_modules|dashboard|page.tsx$\")",
+      "Bash(npx jest *)"
     ]
   }
 }

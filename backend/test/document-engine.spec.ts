@@ -640,7 +640,7 @@ describe('DocumentEngine foundation', () => {
       'technical-report-location',
       'technical-report-inspected-equipments',
       'technical-report-reference-period',
-      'maintenance-checklist-semiannual',
+      'maintenance-type',
       'visit-objective',
       'visit-diagnosis',
       'visit-activities',
@@ -651,6 +651,22 @@ describe('DocumentEngine foundation', () => {
     expect(sectionIds).not.toContain('technical-report-equipment-qr');
     expect(sectionIds).not.toContain('related-documents');
     expect(sectionIds).not.toContain('maintenance-checklist-weekly');
+    const maintenanceColumns = built.sections
+      .find((section) => section.id === 'maintenance-type')
+      ?.components.find((component) => component.kind === 'checklistColumns');
+    expect(maintenanceColumns?.kind).toBe('checklistColumns');
+    if (maintenanceColumns?.kind === 'checklistColumns') {
+      // Coluna do tipo executado (Semestral) vem primeiro e marcada; Semanal presente e não marcada.
+      expect(maintenanceColumns.columns.map((column) => column.title)).toEqual([
+        'Semestral',
+        'Semanal',
+      ]);
+      expect(maintenanceColumns.columns.map((column) => column.selected)).toEqual([true, false]);
+      expect(maintenanceColumns.columns[0].items[0]).toMatchObject({
+        label: 'Limpeza total dos trocadores de calor',
+        done: true,
+      });
+    }
     expect(built.header.corporate).toMatchObject({
       legalName: 'ERP Operation LTDA',
       tradeName: 'Orbit',

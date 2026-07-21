@@ -74,6 +74,16 @@ export type DocumentComponent =
     }
   | {
       id: string;
+      kind: 'checklistColumns';
+      columns: Array<{
+        title: string;
+        selected: boolean;
+        items: Array<{ label: string; done: boolean }>;
+      }>;
+      keepTogether?: boolean;
+    }
+  | {
+      id: string;
       kind: 'signaturePlaceholder';
       label: string;
       strategy: 'none' | 'fixed' | 'collected' | 'hybrid';

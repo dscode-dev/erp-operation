@@ -137,7 +137,7 @@ const expectedSections = [
   'technical-report-location',
   'technical-report-inspected-equipments',
   'technical-report-reference-period',
-  'maintenance-checklist-semiannual',
+  'maintenance-type',
   'visit-objective',
   'visit-diagnosis',
   'visit-activities',

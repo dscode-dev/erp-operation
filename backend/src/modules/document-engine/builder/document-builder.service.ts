@@ -533,18 +533,12 @@ export class DocumentBuilderService {
                     'Mês e ano de referência',
                     this.referencePeriod(operation.referenceMonth, operation.referenceYear),
                   ],
-                  [
-                    'Tipo de manutenção',
-                    operation.maintenanceType
-                      ? this.maintenanceTypeLabel(operation.maintenanceType)
-                      : '—',
-                  ],
                 ]),
               ],
             },
           ]
         : []),
-      ...this.maintenanceChecklistSections(operation),
+      ...this.maintenanceTypeSection(operation),
       {
         id: 'visit-objective',
         title: 'Objetivo da visita',
@@ -1172,33 +1166,54 @@ export class DocumentBuilderService {
     };
   }
 
-  private maintenanceChecklistSections(operation: DocumentContextOperation): DocumentSection[] {
-    const groups = new Map<string, typeof operation.maintenanceChecklistItems>();
+  /**
+   * Seção "Tipo de manutenção" no formato do modelo do cliente: colunas lado a
+   * lado (Semanal / Semestral / …), cada uma com seu checklist e um marcador
+   * ( x ) na coluna do tipo efetivamente executado. As colunas vêm dos itens
+   * registrados na operação, agrupados por `maintenanceType`.
+   */
+  private maintenanceTypeSection(operation: DocumentContextOperation): DocumentSection[] {
+    const order: string[] = [];
+    const groups = new Map<string, Array<{ label: string; done: boolean }>>();
     for (const item of operation.maintenanceChecklistItems ?? []) {
-      const current = groups.get(item.maintenanceType) ?? [];
-      current.push(item);
-      groups.set(item.maintenanceType, current);
+      if (!groups.has(item.maintenanceType)) {
+        groups.set(item.maintenanceType, []);
+        order.push(item.maintenanceType);
+      }
+      groups.get(item.maintenanceType)!.push({
+        label: this.clean(item.description),
+        done: item.executed,
+      });
     }
-    if (operation.maintenanceType) {
-      const selectedItems = groups.get(operation.maintenanceType) ?? [];
-      groups.clear();
-      groups.set(operation.maintenanceType, selectedItems);
+
+    const selected = operation.maintenanceType ?? null;
+    if (selected && !groups.has(selected)) {
+      groups.set(selected, []);
+      order.unshift(selected);
     }
-    return [...groups.entries()].map(([type, items]) => ({
-      id: `maintenance-checklist-${type.toLowerCase()}`,
-      title: `Checklist de manutenção — ${this.maintenanceTypeLabel(type)}`,
-      components: [
-        {
-          id: `maintenance-checklist-${type.toLowerCase()}-items`,
-          kind: 'checklist',
-          items: items.map((item) => ({
-            label: this.clean(item.description),
-            done: item.executed,
-            note: item.observations ? this.clean(item.observations) : null,
-          })),
-        },
-      ],
-    }));
+    if (order.length === 0) return [];
+
+    // Coluna do tipo executado primeiro, mantendo a ordem original das demais.
+    order.sort((a, b) => (a === selected ? -1 : b === selected ? 1 : 0));
+
+    return [
+      {
+        id: 'maintenance-type',
+        title: 'Tipo de manutenção',
+        critical: true,
+        components: [
+          {
+            id: 'maintenance-type-columns',
+            kind: 'checklistColumns',
+            columns: order.map((type) => ({
+              title: this.maintenanceTypeLabel(type),
+              selected: type === selected,
+              items: groups.get(type) ?? [],
+            })),
+          },
+        ],
+      },
+    ];
   }
 
   private inspectedEquipmentSection(

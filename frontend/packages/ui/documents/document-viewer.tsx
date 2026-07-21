@@ -584,6 +584,51 @@ function ComponentPreview({
       </ul>
     );
   }
+  if (component.kind === 'checklistColumns') {
+    return (
+      <div
+        className="grid gap-0 overflow-hidden rounded-md border"
+        style={{
+          gridTemplateColumns: `repeat(${Math.max(1, component.columns.length)}, minmax(0, 1fr))`,
+          borderColor: visual?.colors.border,
+        }}
+      >
+        {component.columns.map((col, colIndex) => (
+          <div
+            key={`${component.id}-${colIndex}`}
+            className="min-w-0"
+            style={{ borderLeftWidth: colIndex > 0 ? 1 : 0, borderColor: visual?.colors.border }}
+          >
+            <div
+              className="flex items-center justify-between gap-2 border-b px-3 py-2 text-xs font-semibold uppercase tracking-wide"
+              style={{
+                borderColor: visual?.colors.border,
+                backgroundColor: col.selected ? 'rgba(15,118,110,0.1)' : visual?.colors.surface,
+                color: col.selected ? '#0f766e' : undefined,
+              }}
+            >
+              <span className="truncate">{col.title}</span>
+              <span className="font-mono">( {col.selected ? 'x' : ' '} )</span>
+            </div>
+            <ul className="space-y-1.5 px-3 py-2.5 text-sm">
+              {col.items.length > 0 ? (
+                col.items.map((item, i) => (
+                  <li key={i} className="flex gap-2">
+                    <span className="font-mono leading-5" style={{ color: item.done ? '#0f766e' : undefined }}>
+                      {item.done ? '☑' : '☐'}
+                    </span>
+                    <span className="min-w-0">{item.label}</span>
+                  </li>
+                ))
+              ) : (
+                <li className="text-xs text-slate-400">Nenhum item registrado.</li>
+              )}
+            </ul>
+          </div>
+        ))}
+      </div>
+    );
+  }
   if (component.kind === 'list') {
     return (
       <ul className="list-disc space-y-1 pl-5 text-sm">
@@ -776,6 +821,8 @@ function paginate(blueprint: DocumentBlueprint | null): DocumentBlueprint['secti
 function componentWeight(component: DocumentComponent): number {
   if (component.kind === 'table') return Math.max(2, Math.ceil(component.rows.length / 10));
   if (component.kind === 'checklist') return Math.max(1, Math.ceil(component.items.length / 8));
+  if (component.kind === 'checklistColumns')
+    return Math.max(1, Math.ceil(Math.max(0, ...component.columns.map((c) => c.items.length)) / 8));
   if (component.kind === 'metadata') return Math.max(1, Math.ceil(component.items.length / 8));
   if (component.kind === 'image') return 4;
   if (component.kind === 'imageGallery')

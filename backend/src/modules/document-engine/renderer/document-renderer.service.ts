@@ -7,6 +7,7 @@ import { ERROR_CODES } from '../../../shared/constants/error-codes.constants';
 import { ApplicationException } from '../../../shared/exceptions/application.exception';
 import type {
   ChecklistComponent,
+  ChecklistColumnsComponent,
   DocumentBlueprint,
   DocumentBlueprintComponent,
   ImageGalleryComponent,
@@ -118,6 +119,8 @@ export class DocumentRendererService {
         return [this.listBlock(component, width)];
       case 'checklist':
         return this.checklistBlocks(component);
+      case 'checklistColumns':
+        return this.checklistColumnsBlocks(component, width);
       case 'table':
         return this.tableBlocks(component, width);
       case 'image':
@@ -332,6 +335,105 @@ export class DocumentRendererService {
           : []),
       ],
     }));
+  }
+
+  private checklistColumnsBlocks(
+    component: ChecklistColumnsComponent,
+    width: number,
+  ): LayoutBlock[] {
+    const columns =
+      component.columns.length > 0
+        ? component.columns
+        : [{ title: '—', selected: false, items: [] as Array<{ label: string; done: boolean }> }];
+    const gap = 14;
+    const headerHeight = 22;
+    const rowGap = 6;
+    const columnWidth = (width - gap * (columns.length - 1)) / columns.length;
+    const labelWidth = Math.max(30, columnWidth - 26);
+
+    const measured = columns.map((column) => {
+      const items =
+        column.items.length > 0 ? column.items : [{ label: 'Nenhum item registrado.', done: false }];
+      let height = 0;
+      const rows = items.map((item) => {
+        const lines = this.wrap(item.label, labelWidth, 9);
+        const rowHeight = Math.max(16, lines.length * 12) + rowGap;
+        height += rowHeight;
+        return { item, lines, rowHeight };
+      });
+      return { column, rows, height };
+    });
+
+    const bodyHeight = Math.max(...measured.map((c) => c.height), 24);
+    const blockHeight = headerHeight + bodyHeight + 12;
+
+    return [
+      {
+        component,
+        height: blockHeight,
+        draw: (x, y, blockWidth) => {
+          const elements: RenderedElement[] = [];
+          const colWidth = (blockWidth - gap * (columns.length - 1)) / columns.length;
+          elements.push({
+            type: 'rect',
+            x,
+            y: y - blockHeight + 8,
+            width: blockWidth,
+            height: blockHeight,
+            strokeColor: '#cbd5e1',
+          });
+          measured.forEach(({ column, rows }, index) => {
+            const colX = x + index * (colWidth + gap);
+            elements.push({
+              type: 'rect',
+              x: colX,
+              y: y - headerHeight + 4,
+              width: colWidth,
+              height: headerHeight,
+              fillColor: column.selected ? '#e0f2f1' : '#f1f5f9',
+              strokeColor: '#cbd5e1',
+            });
+            elements.push({
+              type: 'text',
+              x: colX + 8,
+              y: y - 11,
+              text: `${column.title.toUpperCase()}  ( ${column.selected ? 'X' : '  '} )`,
+              size: 10,
+              bold: true,
+              color: column.selected ? '#0f766e' : '#334155',
+            });
+            let rowTop = y - headerHeight - 4;
+            rows.forEach(({ item, lines }) => {
+              elements.push({
+                type: 'rect',
+                x: colX + 6,
+                y: rowTop - 12,
+                width: 9,
+                height: 9,
+                strokeColor: item.done ? '#0f766e' : '#94a3b8',
+              });
+              if (item.done) {
+                elements.push(
+                  { type: 'line', x1: colX + 7.5, y1: rowTop - 7, x2: colX + 10, y2: rowTop - 10, color: '#0f766e' },
+                  { type: 'line', x1: colX + 10, y1: rowTop - 10, x2: colX + 14.5, y2: rowTop - 3, color: '#0f766e' },
+                );
+              }
+              lines.forEach((line, lineIndex) =>
+                elements.push({
+                  type: 'text',
+                  x: colX + 22,
+                  y: rowTop - 9 - lineIndex * 12,
+                  text: line,
+                  size: 9,
+                }),
+              );
+              rowTop -= Math.max(16, lines.length * 12) + rowGap;
+            });
+          });
+          return elements;
+        },
+      },
+    ];
   }
 
   private tableBlocks(component: TableComponent, width: number): LayoutBlock[] {
