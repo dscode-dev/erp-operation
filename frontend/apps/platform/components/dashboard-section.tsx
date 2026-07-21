@@ -13,14 +13,14 @@ export function DashboardSection({
   className?: string;
 }) {
   return (
-    <section className={cn("space-y-3", className)}>
-      <div className="flex items-center justify-between">
+    <section className={cn("flex flex-col gap-3", className)}>
+      <div className="flex min-h-[28px] items-center justify-between gap-2">
         <h2 className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--color-muted-foreground)]">
           {title}
         </h2>
         {action}
       </div>
-      {children}
+      <div className="min-h-0 flex-1">{children}</div>
     </section>
   );
 }

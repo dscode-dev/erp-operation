@@ -45,6 +45,7 @@ type TimelineRange = "today" | "7d";
 export default function PlatformHome() {
   const { session, can, hasRole } = useAuth();
   const canSeeFinancial = hasRole("OWNER", "MANAGER") && can("canFinancial");
+  const [timelineRange, setTimelineRange] = useState<TimelineRange>("today");
 
   const cur = useMemo(() => monthBounds(0), []);
   const prev = useMemo(() => monthBounds(-1), []);
@@ -60,33 +61,30 @@ export default function PlatformHome() {
     [canSeeFinancial],
   );
 
-  // Contagens exatas por período (Document Engine) para comparativo e radar.
-  const osCur = useHandoffCount("WORK_ORDER", cur);
-  const osPrev = useHandoffCount("WORK_ORDER", prev);
-  const visitCur = useHandoffCount("TECHNICAL_REPORT", cur);
-  const visitPrev = useHandoffCount("TECHNICAL_REPORT", prev);
-  const pmocCur = useHandoffCount("PMOC", cur);
-  const pmocPrev = useHandoffCount("PMOC", prev);
-  const laudoCur = useHandoffCount("TECHNICAL_OPINION", cur);
-  const laudoPrev = useHandoffCount("TECHNICAL_OPINION", prev);
-  const budgetCur = useHandoffCount("BUDGET", cur);
-  const budgetPrev = useHandoffCount("BUDGET", prev);
-  const receiptCur = useHandoffCount("RECEIPT", cur);
-  const receiptPrev = useHandoffCount("RECEIPT", prev);
+  // Contagens por período — TODOS os documentos do tipo (independente de status),
+  // via /documents. Assim OS, PMOCs, Visitas etc. contam mesmo sem conclusão.
+  const osCur = useDocumentCount("WORK_ORDER", cur);
+  const osPrev = useDocumentCount("WORK_ORDER", prev);
+  const visitCur = useDocumentCount("TECHNICAL_REPORT", cur);
+  const visitPrev = useDocumentCount("TECHNICAL_REPORT", prev);
+  const pmocCur = useDocumentCount("PMOC", cur);
+  const pmocPrev = useDocumentCount("PMOC", prev);
+  const laudoCur = useDocumentCount("TECHNICAL_OPINION", cur);
+  const laudoPrev = useDocumentCount("TECHNICAL_OPINION", prev);
+  const budgetCur = useDocumentCount("BUDGET", cur);
+  const budgetPrev = useDocumentCount("BUDGET", prev);
+  const receiptCur = useDocumentCount("RECEIPT", cur);
+  const receiptPrev = useDocumentCount("RECEIPT", prev);
 
   const byStatus = operationStats.data?.byStatus;
   const open = (byStatus?.DRAFT ?? 0) + (byStatus?.PENDING ?? 0);
   const inProgress = byStatus?.IN_PROGRESS ?? 0;
   const review = byStatus?.REVIEW ?? 0;
-
-  const completedItems = completed.data?.items ?? [];
-  const finishedToday = completedItems.filter((a) => isToday(a.completedAt)).length;
-  const opsConcludedCur = completedItems.filter((a) => inMonth(a.completedAt, cur)).length;
-  const opsConcludedPrev = completedItems.filter((a) => inMonth(a.completedAt, prev)).length;
+  const finishedToday = (completed.data?.items ?? []).filter((a) => isToday(a.completedAt)).length;
 
   const workload = useMemo(() => buildWorkload(timeline.data?.items ?? []), [timeline.data]);
-  const comparisonLoading = osCur.loading || visitCur.loading || pmocCur.loading || (completed.loading && !completed.data);
-  const radarLoading = comparisonLoading || laudoCur.loading || budgetCur.loading || receiptCur.loading;
+  const comparisonLoading = osCur.loading || visitCur.loading || pmocCur.loading || budgetCur.loading;
+  const radarLoading = comparisonLoading || laudoCur.loading || receiptCur.loading;
 
   function refreshAll() {
     operationStats.refetch(); timeline.refetch(); completed.refetch(); pmocStats.refetch(); lifecycle.refetch(); financial.refetch(); receivablesPending.refetch();
@@ -124,29 +122,29 @@ export default function PlatformHome() {
       </DashboardSection>
 
       {/* Linha 2 — Comparativo operacional | Saúde financeira */}
-      <div className="grid gap-6 xl:grid-cols-2">
-        <DashboardSection title="Comparativo operacional" action={<span className="text-caption">mês atual × anterior</span>}>
+      <div className="grid items-stretch gap-6 xl:grid-cols-2">
+        <DashboardSection className="h-full" title="Comparativo operacional" action={<span className="text-caption">mês atual × anterior</span>}>
           <OperationalComparison
             loading={comparisonLoading}
             rows={[
-              { label: "Operações concluídas", current: opsConcludedCur, previous: opsConcludedPrev },
               { label: "Ordens de Serviço", current: osCur.total, previous: osPrev.total },
               { label: "PMOCs", current: pmocCur.total, previous: pmocPrev.total },
               { label: "Visitas Técnicas", current: visitCur.total, previous: visitPrev.total },
+              { label: "Orçamentos", current: budgetCur.total, previous: budgetPrev.total },
             ]}
           />
         </DashboardSection>
 
-        <Gate roles={["OWNER", "MANAGER"]} permission="canFinancial" fallback={<DashboardSection title="Saúde financeira"><EmptyState icon={FileText} title="Financeiro restrito" description="Seu perfil não possui acesso aos indicadores financeiros." /></DashboardSection>}>
-          <DashboardSection title="Saúde financeira" action={<Link href="/financial" className="text-xs font-medium text-[var(--color-primary)] hover:underline">abrir financeiro</Link>}>
+        <Gate roles={["OWNER", "MANAGER"]} permission="canFinancial" fallback={<DashboardSection className="h-full" title="Saúde financeira"><Panel><EmptyFill icon={FileText} title="Financeiro restrito" description="Seu perfil não possui acesso aos indicadores financeiros." /></Panel></DashboardSection>}>
+          <DashboardSection className="h-full" title="Saúde financeira" action={<Link href="/financial" className="text-xs font-medium text-[var(--color-primary)] hover:underline">abrir financeiro</Link>}>
             <FinancialHealth loading={financial.loading && !financial.data} error={financial.error} onRetry={financial.refetch} stats={financial.data} />
           </DashboardSection>
         </Gate>
       </div>
 
-      {/* Linha 3 — Radar de cobertura | Atividades relevantes e recentes */}
-      <div className="grid gap-6 xl:grid-cols-[minmax(280px,0.72fr)_1.28fr]">
-        <DashboardSection title="Cobertura de atividades" action={<span className="text-caption">mês atual × anterior</span>}>
+      {/* Linha 3 — Cobertura de atividades (radar) | Atividades relevantes e recentes */}
+      <div className="grid items-stretch gap-6 xl:grid-cols-[minmax(300px,0.7fr)_1.3fr]">
+        <DashboardSection className="h-full" title="Cobertura de atividades" action={<span className="text-caption">atual × anterior</span>}>
           <ActivityCoverage
             loading={radarLoading}
             axes={[
@@ -160,23 +158,50 @@ export default function PlatformHome() {
           />
         </DashboardSection>
 
-        <DashboardSection title="Atividades relevantes e recentes" action={<Link href="/equipamentos" className="text-xs font-medium text-[var(--color-primary)] hover:underline">ver ativos</Link>}>
+        <DashboardSection className="h-full" title="Atividades relevantes e recentes" action={<Link href="/equipamentos" className="text-xs font-medium text-[var(--color-primary)] hover:underline">ver ativos</Link>}>
           <RecentActivity loading={lifecycle.loading && !lifecycle.data} error={lifecycle.error} onRetry={lifecycle.refetch} events={lifecycle.data?.items ?? []} />
         </DashboardSection>
       </div>
 
       {/* Linha 4 — Timeline operacional | Carga por operador */}
-      <div className="grid gap-6 xl:grid-cols-[1.4fr_0.6fr]">
-        <DashboardSection title="Timeline operacional">
-          <OperationalTimeline loading={timeline.loading && !timeline.data} error={timeline.error} onRetry={timeline.refetch} assignments={timeline.data?.items ?? []} />
+      <div className="grid items-stretch gap-6 xl:grid-cols-[1.4fr_0.6fr]">
+        <DashboardSection
+          className="h-full"
+          title="Timeline operacional"
+          action={
+            <div className="flex gap-1.5">
+              {(["today", "7d"] as TimelineRange[]).map((key) => (
+                <button key={key} type="button" onClick={() => setTimelineRange(key)} className={`h-7 rounded-[var(--radius-md)] px-2.5 text-[11px] font-medium ${timelineRange === key ? "bg-[var(--color-primary)] text-[var(--color-primary-foreground)]" : "border border-[var(--color-border)] hover:bg-[var(--color-muted)]"}`}>
+                  {key === "today" ? "Hoje" : "Próximos 7 dias"}
+                </button>
+              ))}
+            </div>
+          }
+        >
+          <OperationalTimeline loading={timeline.loading && !timeline.data} error={timeline.error} onRetry={timeline.refetch} assignments={timeline.data?.items ?? []} range={timelineRange} />
         </DashboardSection>
 
-        <DashboardSection title="Carga por operador" action={<span className="text-caption">agenda ativa</span>}>
+        <DashboardSection className="h-full" title="Carga por operador" action={<span className="text-caption">agenda ativa</span>}>
           <OperatorWorkload loading={timeline.loading && !timeline.data} items={workload} />
         </DashboardSection>
       </div>
     </div>
   );
+}
+
+/* ---------- primitivos de layout ---------- */
+
+/** Card com altura total (para igualar alturas entre colunas). */
+function Panel({ children, className }: { children: React.ReactNode; className?: string }) {
+  return <div className={`flex h-full flex-col rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 ${className ?? ""}`}>{children}</div>;
+}
+
+function EmptyFill({ icon, title, description }: { icon: typeof FileText; title: string; description: string }) {
+  return <div className="grid flex-1 place-items-center"><EmptyState icon={icon} title={title} description={description} /></div>;
+}
+
+function Legend({ color, label }: { color: string; label: string }) {
+  return <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />{label}</span>;
 }
 
 /* ---------- KPI ---------- */
@@ -189,36 +214,37 @@ function Kpi({ href, label, value, icon, trend }: { href: string; label: string;
   );
 }
 
-/* ---------- Linha 2: Comparativo operacional ---------- */
+/* ---------- Comparativo operacional ---------- */
 
 function OperationalComparison({ loading, rows }: { loading: boolean; rows: Array<{ label: string; current: number; previous: number }> }) {
-  if (loading) return <SkeletonCard />;
+  if (loading) return <Panel><SkeletonList rows={4} /></Panel>;
   return (
-    <div className="space-y-4 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
+    <Panel>
       <div className="flex justify-end gap-4 text-caption">
         <Legend color="var(--color-primary)" label="Mês atual" />
         <Legend color="var(--color-muted-foreground)" label="Mês anterior" />
       </div>
-      {rows.map((row) => {
-        const max = Math.max(row.current, row.previous, 1);
-        const delta = row.current - row.previous;
-        return (
-          <div key={row.label} className="space-y-1.5">
-            <div className="flex items-center justify-between text-sm">
-              <span className="font-medium">{row.label}</span>
-              <span className="inline-flex items-center gap-2 tabular-nums">
-                <span className="font-semibold">{formatNumber(row.current)}</span>
-                <DeltaBadge delta={delta} />
-              </span>
+      <div className="flex flex-1 flex-col justify-center gap-4 pt-3">
+        {rows.map((row) => {
+          const max = Math.max(row.current, row.previous, 1);
+          return (
+            <div key={row.label} className="space-y-1.5">
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-medium">{row.label}</span>
+                <span className="inline-flex items-center gap-2 tabular-nums">
+                  <span className="font-semibold">{formatNumber(row.current)}</span>
+                  <DeltaBadge delta={row.current - row.previous} />
+                </span>
+              </div>
+              <div className="space-y-1">
+                <div className="h-2.5 rounded-full bg-[var(--color-muted)]"><div className="h-full rounded-full bg-[var(--color-primary)]" style={{ width: `${(row.current / max) * 100}%` }} /></div>
+                <div className="h-2.5 rounded-full bg-[var(--color-muted)]"><div className="h-full rounded-full bg-[var(--color-muted-foreground)]/60" style={{ width: `${(row.previous / max) * 100}%` }} /></div>
+              </div>
             </div>
-            <div className="space-y-1">
-              <div className="h-2.5 rounded-full bg-[var(--color-muted)]"><div className="h-full rounded-full bg-[var(--color-primary)]" style={{ width: `${(row.current / max) * 100}%` }} /></div>
-              <div className="h-2.5 rounded-full bg-[var(--color-muted)]"><div className="h-full rounded-full bg-[var(--color-muted-foreground)]/60" style={{ width: `${(row.previous / max) * 100}%` }} /></div>
-            </div>
-          </div>
-        );
-      })}
-    </div>
+          );
+        })}
+      </div>
+    </Panel>
   );
 }
 
@@ -228,31 +254,39 @@ function DeltaBadge({ delta }: { delta: number }) {
   return <span className={`text-xs font-semibold ${up ? "text-[var(--color-success)]" : "text-[var(--color-danger)]"}`}>{up ? "+" : ""}{formatNumber(delta)}</span>;
 }
 
-/* ---------- Linha 2: Saúde financeira (gráfico único) ---------- */
+/* ---------- Saúde financeira (gráfico único, sempre exibido) ---------- */
 
 function FinancialHealth({ loading, error, onRetry, stats }: { loading: boolean; error: unknown; onRetry: () => void; stats: FinancialStats | null }) {
-  if (loading) return <SkeletonCard />;
-  if (error) return <ErrorState error={error} onRetry={onRetry} title="Financeiro indisponível" />;
-  const flow = (stats?.monthlyFlow ?? []).map((m) => ({ month: shortMonth(m.month), income: Number(m.income), expenses: Number(m.expenses), balance: Number(m.balance) }));
-  if (flow.length === 0) return <EmptyState icon={FileText} title="Sem histórico financeiro" description="Ainda não há lançamentos suficientes para a evolução." />;
+  if (loading) return <Panel><SkeletonCard /></Panel>;
+  if (error) return <Panel><EmptyFill icon={FileText} title="Financeiro indisponível" description="Não foi possível carregar a evolução." /><button type="button" onClick={onRetry} className="mt-2 self-center text-xs text-[var(--color-primary)] hover:underline">Tentar novamente</button></Panel>;
+  const raw = (stats?.monthlyFlow ?? []).map((m) => {
+    const income = Number(m.income) || 0;
+    const expenses = Number(m.expenses) || 0;
+    return { month: shortMonth(m.month), income, expenses, balance: income - expenses };
+  });
+  // Sempre exibe o gráfico — quando não há histórico, mostra a série zerada.
+  const flow = raw.length > 0 ? raw : zeroedFlow();
   return (
-    <div className="space-y-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
+    <Panel>
       <div className="flex flex-wrap gap-4 text-caption">
         <Legend color="var(--color-primary)" label="Receitas" />
         <Legend color="var(--color-danger)" label="Despesas" />
         <Legend color="var(--color-foreground)" label="Saldo" />
       </div>
-      <EvolutionChart data={flow} />
-    </div>
+      <div className="grid flex-1 place-items-center pt-2">
+        <EvolutionChart data={flow} />
+      </div>
+      {raw.length === 0 && <p className="text-center text-[11px] text-[var(--color-muted-foreground)]">Sem lançamentos no período — evolução zerada.</p>}
+    </Panel>
   );
 }
 
 function EvolutionChart({ data }: { data: Array<{ month: string; income: number; expenses: number; balance: number }> }) {
   const W = 620;
-  const H = 220;
+  const H = 200;
   const padX = 36;
   const padY = 24;
-  const values = data.flatMap((d) => [d.income, d.expenses, d.balance]);
+  const values = data.flatMap((d) => [d.income, d.expenses, d.balance]).filter((v) => Number.isFinite(v));
   const max = Math.max(...values, 1);
   const min = Math.min(...values, 0);
   const spanRange = max - min || 1;
@@ -274,30 +308,27 @@ function EvolutionChart({ data }: { data: Array<{ month: string; income: number;
   );
 }
 
-/* ---------- Linha 3: Cobertura de atividades (radar/teia de aranha) ---------- */
+/* ---------- Cobertura de atividades (radar/teia de aranha, sempre exibido) ---------- */
 
 function ActivityCoverage({ loading, axes }: { loading: boolean; axes: Array<{ label: string; current: number; previous: number }> }) {
-  if (loading) return <SkeletonCard />;
-  const empty = axes.every((a) => a.current === 0 && a.previous === 0);
+  if (loading) return <Panel><SkeletonCard /></Panel>;
   return (
-    <div className="space-y-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
+    <Panel>
       <div className="flex justify-center gap-4 text-caption">
         <Legend color="var(--color-primary)" label="Mês atual" />
         <Legend color="var(--color-muted-foreground)" label="Mês anterior" />
       </div>
-      {empty ? (
-        <EmptyState icon={FileText} title="Sem atividades no período" description="Nenhum documento emitido no mês atual ou anterior." />
-      ) : (
+      <div className="grid flex-1 place-items-center">
         <RadarChart axes={axes} />
-      )}
-    </div>
+      </div>
+    </Panel>
   );
 }
 
 function RadarChart({ axes }: { axes: Array<{ label: string; current: number; previous: number }> }) {
   const size = 260;
   const c = size / 2;
-  const radius = c - 44;
+  const radius = c - 46;
   const n = axes.length;
   const max = Math.max(...axes.flatMap((a) => [a.current, a.previous]), 1);
   const angle = (i: number) => (-90 + (i * 360) / n) * (Math.PI / 180);
@@ -308,22 +339,16 @@ function RadarChart({ axes }: { axes: Array<{ label: string; current: number; pr
   const polygon = (key: "current" | "previous") => axes.map((a, i) => point(a[key], i).map((v) => v.toFixed(1)).join(",")).join(" ");
 
   return (
-    <svg viewBox={`0 0 ${size} ${size}`} className="mx-auto h-auto w-full max-w-[300px]" role="img" aria-label="Radar de cobertura de atividades">
+    <svg viewBox={`0 0 ${size} ${size}`} className="mx-auto h-auto w-full max-w-[280px]" role="img" aria-label="Radar de cobertura de atividades">
       {[0.25, 0.5, 0.75, 1].map((ring) => (
-        <polygon
-          key={ring}
-          points={axes.map((_, i) => { const [px, py] = [c + ring * radius * Math.cos(angle(i)), c + ring * radius * Math.sin(angle(i))]; return `${px.toFixed(1)},${py.toFixed(1)}`; }).join(" ")}
-          fill="none"
-          stroke="var(--color-border)"
-          strokeDasharray="2 3"
-        />
+        <polygon key={ring} points={axes.map((_, i) => { const [px, py] = [c + ring * radius * Math.cos(angle(i)), c + ring * radius * Math.sin(angle(i))]; return `${px.toFixed(1)},${py.toFixed(1)}`; }).join(" ")} fill="none" stroke="var(--color-border)" strokeDasharray="2 3" />
       ))}
       {axes.map((_, i) => { const [px, py] = point(max, i); return <line key={i} x1={c} y1={c} x2={px} y2={py} stroke="var(--color-border)" />; })}
       <polygon points={polygon("previous")} fill="var(--color-muted-foreground)" fillOpacity="0.1" stroke="var(--color-muted-foreground)" strokeOpacity="0.6" strokeWidth="1.5" />
       <polygon points={polygon("current")} fill="var(--color-primary)" fillOpacity="0.16" stroke="var(--color-primary)" strokeWidth="2" />
       {axes.map((a, i) => point(a.current, i)).map(([px, py], i) => <circle key={i} cx={px} cy={py} r={2.5} fill="var(--color-primary)" />)}
       {axes.map((a, i) => {
-        const [lx, ly] = [c + (radius + 20) * Math.cos(angle(i)), c + (radius + 20) * Math.sin(angle(i))];
+        const [lx, ly] = [c + (radius + 22) * Math.cos(angle(i)), c + (radius + 22) * Math.sin(angle(i))];
         const anchor = Math.abs(lx - c) < 8 ? "middle" : lx > c ? "start" : "end";
         return (
           <text key={a.label} x={lx} y={ly} textAnchor={anchor} dominantBaseline="middle" fontSize="10" fill="var(--color-muted-foreground)">
@@ -335,106 +360,96 @@ function RadarChart({ axes }: { axes: Array<{ label: string; current: number; pr
   );
 }
 
-/* ---------- Linha 3: Atividades relevantes e recentes ---------- */
+/* ---------- Atividades relevantes e recentes ---------- */
 
 function RecentActivity({ loading, error, onRetry, events }: { loading: boolean; error: unknown; onRetry: () => void; events: AssetLifecycleEvent[] }) {
-  if (loading) return <SkeletonList rows={6} />;
-  if (error) return <ErrorState error={error} onRetry={onRetry} title="Atividade indisponível" />;
-  if (events.length === 0) return <EmptyState icon={ShieldCheck} title="Sem atividade recente" description="Nenhum evento relevante registrado até o momento." />;
+  if (loading) return <Panel><SkeletonList rows={6} /></Panel>;
+  if (error) return <Panel><EmptyFill icon={ShieldCheck} title="Atividade indisponível" description="Não foi possível carregar os eventos." /><button type="button" onClick={onRetry} className="mt-2 self-center text-xs text-[var(--color-primary)] hover:underline">Tentar novamente</button></Panel>;
+  if (events.length === 0) return <Panel><EmptyFill icon={ShieldCheck} title="Sem atividade recente" description="Nenhum evento relevante registrado até o momento." /></Panel>;
   return (
-    <ul className="max-h-[360px] overflow-y-auto divide-y divide-[var(--color-border)] rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)]">
-      {events.map((event) => (
-        <li key={event.id} className="p-3">
-          <div className="flex items-start gap-3">
-            <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full" style={{ backgroundColor: `${event.timeline.color}18`, color: event.timeline.color }}>
-              {event.type === "DOCUMENT" ? <FileText className="h-4 w-4" /> : event.timeline.category === "maintenance" ? <Wrench className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-medium truncate">{event.timeline.title}</div>
-              <div className="text-caption truncate">{event.timeline.subtitle ?? event.timeline.description}</div>
-              <div className="mt-1 text-caption">{formatDateTime(event.timeline.date)}</div>
+    <div className="flex h-full flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)]">
+      <ul className="min-h-0 flex-1 divide-y divide-[var(--color-border)] overflow-y-auto">
+        {events.map((event) => (
+          <li key={event.id} className="p-3">
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full" style={{ backgroundColor: `${event.timeline.color}18`, color: event.timeline.color }}>
+                {event.type === "DOCUMENT" ? <FileText className="h-4 w-4" /> : event.timeline.category === "maintenance" ? <Wrench className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-medium truncate">{event.timeline.title}</div>
+                <div className="text-caption truncate">{event.timeline.subtitle ?? event.timeline.description}</div>
+                <div className="mt-1 text-caption">{formatDateTime(event.timeline.date)}</div>
+              </div>
             </div>
-          </div>
-        </li>
-      ))}
-    </ul>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
-/* ---------- Linha 4: Timeline operacional ---------- */
+/* ---------- Timeline operacional ---------- */
 
-function OperationalTimeline({ loading, error, onRetry, assignments }: { loading: boolean; error: unknown; onRetry: () => void; assignments: Assignment[] }) {
-  const [range, setRange] = useState<TimelineRange>("today");
+function OperationalTimeline({ loading, error, onRetry, assignments, range }: { loading: boolean; error: unknown; onRetry: () => void; assignments: Assignment[]; range: TimelineRange }) {
   const items = useMemo(() => {
     const withSchedule = assignments.filter((a) => Boolean(a.operation.scheduledFor));
     const filtered = withSchedule.filter((a) => (range === "today" ? isToday(a.operation.scheduledFor) : inNextDays(a.operation.scheduledFor, 7)));
     return filtered.sort((a, b) => (a.operation.scheduledFor ?? "").localeCompare(b.operation.scheduledFor ?? ""));
   }, [assignments, range]);
 
+  if (loading) return <Panel><SkeletonList rows={6} /></Panel>;
+  if (error) return <Panel><EmptyFill icon={CalendarClock} title="Timeline indisponível" description="Não foi possível carregar a agenda." /><button type="button" onClick={onRetry} className="mt-2 self-center text-xs text-[var(--color-primary)] hover:underline">Tentar novamente</button></Panel>;
+  if (items.length === 0) return <Panel><EmptyFill icon={CalendarClock} title={range === "today" ? "Sem operações hoje" : "Sem operações nos próximos 7 dias"} description="Nenhum atendimento agendado para o período." /></Panel>;
   return (
-    <div className="space-y-3">
-      <div className="flex gap-2">
-        {(["today", "7d"] as TimelineRange[]).map((key) => (
-          <button key={key} type="button" onClick={() => setRange(key)} className={`h-8 rounded-[var(--radius-md)] px-3 text-xs font-medium ${range === key ? "bg-[var(--color-primary)] text-[var(--color-primary-foreground)]" : "border border-[var(--color-border)] hover:bg-[var(--color-muted)]"}`}>
-            {key === "today" ? "Hoje" : "Próximos 7 dias"}
-          </button>
-        ))}
-      </div>
-
-      {loading ? (
-        <SkeletonList rows={5} />
-      ) : error ? (
-        <ErrorState error={error} onRetry={onRetry} title="Timeline indisponível" />
-      ) : items.length === 0 ? (
-        <EmptyState icon={CalendarClock} title={range === "today" ? "Sem operações hoje" : "Sem operações nos próximos 7 dias"} description="Nenhum atendimento agendado para o período." />
-      ) : (
-        <ul className="max-h-[420px] overflow-y-auto divide-y divide-[var(--color-border)] rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)]">
-          {items.map((a) => {
-            const op = a.operation;
-            const priority = priorityOf(op.scheduledFor, op.status);
-            return (
-              <li key={a.id}>
-                <Link href={`/operacoes?operationId=${op.id}`} className="flex items-center gap-3 p-3 hover:bg-[var(--color-muted)] transition-colors">
-                  <span className="flex w-14 shrink-0 flex-col items-center text-[var(--color-muted-foreground)]">
-                    <Clock className="h-3.5 w-3.5" />
-                    <span className="mt-0.5 font-mono text-xs tabular-nums">{timeOf(op.scheduledFor)}</span>
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-medium truncate">{op.customer?.name ?? operationCode(op.number)}</span>
-                    <span className="block text-caption truncate">{OPERATION_TYPE_LABEL[op.type]} · {a.assignee.name}</span>
-                  </span>
-                  <span className="flex shrink-0 flex-col items-end gap-1">
-                    <StatusChip tone={OPERATION_STATUS[op.status].tone} dot>{OPERATION_STATUS[op.status].label}</StatusChip>
-                    <span className={`text-[10px] font-semibold uppercase tracking-wider ${priority.className}`}>{priority.label}</span>
-                  </span>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+    <div className="flex h-full flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)]">
+      <ul className="min-h-0 flex-1 divide-y divide-[var(--color-border)] overflow-y-auto">
+        {items.map((a) => {
+          const op = a.operation;
+          const priority = priorityOf(op.scheduledFor, op.status);
+          return (
+            <li key={a.id}>
+              <Link href={`/operacoes?operationId=${op.id}`} className="flex items-center gap-3 p-3 hover:bg-[var(--color-muted)] transition-colors">
+                <span className="flex w-14 shrink-0 flex-col items-center text-[var(--color-muted-foreground)]">
+                  <Clock className="h-3.5 w-3.5" />
+                  <span className="mt-0.5 font-mono text-xs tabular-nums">{timeOf(op.scheduledFor)}</span>
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-medium truncate">{op.customer?.name ?? operationCode(op.number)}</span>
+                  <span className="block text-caption truncate">{OPERATION_TYPE_LABEL[op.type]} · {a.assignee.name}</span>
+                </span>
+                <span className="flex shrink-0 flex-col items-end gap-1">
+                  <StatusChip tone={OPERATION_STATUS[op.status].tone} dot>{OPERATION_STATUS[op.status].label}</StatusChip>
+                  <span className={`text-[10px] font-semibold uppercase tracking-wider ${priority.className}`}>{priority.label}</span>
+                </span>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }
 
-/* ---------- Linha 4: Carga por operador ---------- */
+/* ---------- Carga por operador ---------- */
 
 function OperatorWorkload({ loading, items }: { loading: boolean; items: Array<{ operator: string; count: number }> }) {
-  if (loading) return <SkeletonList rows={4} />;
-  if (items.length === 0) return <EmptyState icon={Users} title="Sem carga agendada" description="Nenhuma operação ativa atribuída a operadores." />;
+  if (loading) return <Panel><SkeletonList rows={4} /></Panel>;
+  if (items.length === 0) return <Panel><EmptyFill icon={Users} title="Sem carga agendada" description="Nenhuma operação ativa atribuída a operadores." /></Panel>;
   const max = Math.max(...items.map((i) => i.count), 1);
   return (
-    <div className="space-y-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
-      {items.map((item) => (
-        <div key={item.operator} className="space-y-1">
-          <div className="flex items-center justify-between text-sm">
-            <span className="min-w-0 truncate font-medium">{item.operator}</span>
-            <span className="tabular-nums font-semibold">{formatNumber(item.count)}</span>
+    <Panel>
+      <div className="flex flex-1 flex-col justify-center gap-3">
+        {items.map((item) => (
+          <div key={item.operator} className="space-y-1">
+            <div className="flex items-center justify-between text-sm">
+              <span className="min-w-0 truncate font-medium">{item.operator}</span>
+              <span className="tabular-nums font-semibold">{formatNumber(item.count)}</span>
+            </div>
+            <div className="h-2 rounded-full bg-[var(--color-muted)]"><div className="h-full rounded-full bg-[var(--color-primary)]" style={{ width: `${(item.count / max) * 100}%` }} /></div>
           </div>
-          <div className="h-2 rounded-full bg-[var(--color-muted)]"><div className="h-full rounded-full bg-[var(--color-primary)]" style={{ width: `${(item.count / max) * 100}%` }} /></div>
-        </div>
-      ))}
-    </div>
+        ))}
+      </div>
+    </Panel>
   );
 }
 
@@ -445,16 +460,10 @@ function buildWorkload(assignments: Assignment[]): Array<{ operator: string; cou
   return [...map.entries()].map(([operator, count]) => ({ operator, count })).sort((a, b) => b.count - a.count).slice(0, 6);
 }
 
-/* ---------- shared bits ---------- */
-
-function Legend({ color, label }: { color: string; label: string }) {
-  return <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />{label}</span>;
-}
-
 /* ---------- data helpers ---------- */
 
-function useHandoffCount(type: DocumentKind, bounds: { from: string; to: string }) {
-  const q = useQuery<number>((s) => documentsApi.listHandoffs({ type, from: bounds.from, to: bounds.to, limit: 1, signal: s }).then((r) => r.pagination.total), []);
+function useDocumentCount(type: DocumentKind, bounds: { from: string; to: string }) {
+  const q = useQuery<number>((s) => documentsApi.listDocuments({ type, from: bounds.from, to: bounds.to, limit: 1, signal: s }).then((r) => r.pagination.total), []);
   return { total: q.data ?? 0, loading: q.loading, refetch: q.refetch };
 }
 
@@ -474,11 +483,6 @@ function monthBounds(offset: number): { from: string; to: string } {
   const start = new Date(now.getFullYear(), now.getMonth() + offset, 1, 0, 0, 0, 0);
   const end = new Date(now.getFullYear(), now.getMonth() + offset + 1, 1, 0, 0, 0, 0);
   return { from: start.toISOString(), to: new Date(end.getTime() - 1).toISOString() };
-}
-
-function inMonth(iso: string | null, bounds: { from: string; to: string }): boolean {
-  if (!iso) return false;
-  return iso >= bounds.from && iso <= bounds.to;
 }
 
 function isToday(iso: string | null | undefined): boolean {
@@ -506,4 +510,13 @@ function shortMonth(month: string): string {
   const parsed = /^\d{4}-\d{2}$/.test(month) ? new Date(`${month}-01T00:00:00`) : new Date(month);
   if (Number.isNaN(parsed.getTime())) return month;
   return parsed.toLocaleDateString("pt-BR", { month: "short" }).replace(".", "");
+}
+
+/** Série de 3 meses zerada, para exibir o gráfico financeiro mesmo sem histórico. */
+function zeroedFlow(): Array<{ month: string; income: number; expenses: number; balance: number }> {
+  const now = new Date();
+  return [2, 1, 0].map((off) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - off, 1);
+    return { month: shortMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`), income: 0, expenses: 0, balance: 0 };
+  });
 }
