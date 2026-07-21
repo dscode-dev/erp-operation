@@ -1,23 +1,26 @@
 "use client";
 
 /**
- * Dashboard V2 — visão executiva.
+ * Dashboard V3 — visão executiva.
  *
- * Linha 1: Resumo executivo (KPIs clicáveis).
- * Linha 2: Comparativo operacional (mês atual × anterior) | Saúde financeira (gráfico único).
- * Linha 3: Cobertura de atividades (radar mês anterior × atual) | Atividades relevantes e recentes.
- * Linha 4: Timeline operacional (Hoje / 7 dias) | Carga por operador.
+ * Resumo executivo (KPIs clicáveis).
+ * Linha 1: Cobertura operacional — Comparativo (agendado × atendido) | Radar de cobertura.
+ * Linha 2: Saúde financeira (evolução) | Atividades relevantes e recentes.
+ * Linha 3: Timeline operacional (Hoje / 7 dias) | Carga por operador.
+ *
+ * Métrica de cobertura por relatório (mês atual):
+ *   agendado = documentos em preparação (DRAFT + READY);
+ *   atendido = documentos concluídos (VALIDATED + SENT).
  * Consome apenas domínios e componentes já existentes — sem novas regras.
  */
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { CalendarClock, Clock, FileText, RefreshCw, ShieldCheck, Users, Wrench } from "lucide-react";
+import { CalendarClock, Clock, FileText, RefreshCw, ShieldCheck, TrendingUp, Users, Wrench } from "lucide-react";
 import { DashboardSection } from "@platform/components/dashboard-section";
 import { GreetingHeader } from "@platform/components/greeting-header";
 import { MetricCard } from "@erp/ui/metric-card";
 import { SkeletonCard, SkeletonList } from "@erp/ui/skeletons";
 import { EmptyState } from "@erp/ui/empty-state";
-import { ErrorState } from "@erp/ui/states";
 import { StatusChip } from "@erp/ui/status-chip";
 import { Gate } from "@erp/ui/auth/gate";
 import { useAuth } from "@erp/ui/auth/auth-provider";
@@ -41,6 +44,11 @@ import {
 import { firstName, formatDateTime, formatNumber } from "@erp/utils";
 
 type TimelineRange = "today" | "7d";
+type Coverage = { scheduled: number; attended: number };
+type CoverageRow = Coverage & { label: string; short: string };
+
+const SCHEDULED_COLOR = "var(--color-primary)";
+const ATTENDED_COLOR = "var(--color-success)";
 
 export default function PlatformHome() {
   const { session, can, hasRole } = useAuth();
@@ -48,33 +56,33 @@ export default function PlatformHome() {
   const [timelineRange, setTimelineRange] = useState<TimelineRange>("today");
 
   const cur = useMemo(() => monthBounds(0), []);
-  const prev = useMemo(() => monthBounds(-1), []);
 
   const operationStats = useQuery<OperationStats>((s) => operationApi.getOperationStats({ signal: s }), []);
   const timeline = useQuery<Paginated<Assignment>>((s) => assignmentsApi.listAssignments({ limit: 100, signal: s }), []);
   const completed = useQuery<Paginated<Assignment>>((s) => assignmentsApi.listAssignments({ status: "COMPLETED", limit: 100, signal: s }), []);
   const pmocStats = useQuery<PmocStats>((s) => pmocApi.getPmocStats({ signal: s }), []);
-  const lifecycle = useQuery((s) => assetLifecycleApi.listLifecycle({ limit: 10, signal: s }), []);
+  const lifecycle = useQuery((s) => assetLifecycleApi.listLifecycle({ limit: 12, signal: s }), []);
   const financial = useQuery<FinancialStats | null>((s) => (canSeeFinancial ? financialApi.getStats({ signal: s }) : Promise.resolve(null)), [canSeeFinancial]);
   const receivablesPending = useQuery<number | null>(
     (s) => (canSeeFinancial ? financialApi.listEntries({ type: "RECEIVABLE", status: "PENDING", limit: 1, signal: s }).then((r) => r.pagination.total) : Promise.resolve(null)),
     [canSeeFinancial],
   );
 
-  // Contagens por período — TODOS os documentos do tipo (independente de status),
-  // via /documents. Assim OS, PMOCs, Visitas etc. contam mesmo sem conclusão.
-  const osCur = useDocumentCount("WORK_ORDER", cur);
-  const osPrev = useDocumentCount("WORK_ORDER", prev);
-  const visitCur = useDocumentCount("TECHNICAL_REPORT", cur);
-  const visitPrev = useDocumentCount("TECHNICAL_REPORT", prev);
-  const pmocCur = useDocumentCount("PMOC", cur);
-  const pmocPrev = useDocumentCount("PMOC", prev);
-  const laudoCur = useDocumentCount("TECHNICAL_OPINION", cur);
-  const laudoPrev = useDocumentCount("TECHNICAL_OPINION", prev);
-  const budgetCur = useDocumentCount("BUDGET", cur);
-  const budgetPrev = useDocumentCount("BUDGET", prev);
-  const receiptCur = useDocumentCount("RECEIPT", cur);
-  const receiptPrev = useDocumentCount("RECEIPT", prev);
+  // Cobertura por relatório (mês atual): agendado (DRAFT+READY) × atendido (VALIDATED+SENT).
+  const osCov = useCoverage("WORK_ORDER", cur);
+  const pmocCov = useCoverage("PMOC", cur);
+  const visitCov = useCoverage("TECHNICAL_REPORT", cur);
+  const laudoCov = useCoverage("TECHNICAL_OPINION", cur);
+  const budgetCov = useCoverage("BUDGET", cur);
+
+  const coverage: CoverageRow[] = [
+    { label: "Ordens de Serviço", short: "OS", ...osCov.data },
+    { label: "PMOCs", short: "PMOC", ...pmocCov.data },
+    { label: "Visitas Técnicas", short: "Visitas", ...visitCov.data },
+    { label: "Laudos Técnicos", short: "Laudos", ...laudoCov.data },
+    { label: "Orçamentos", short: "Orçam.", ...budgetCov.data },
+  ];
+  const coverageLoading = osCov.loading || pmocCov.loading || visitCov.loading || laudoCov.loading || budgetCov.loading;
 
   const byStatus = operationStats.data?.byStatus;
   const open = (byStatus?.DRAFT ?? 0) + (byStatus?.PENDING ?? 0);
@@ -83,13 +91,10 @@ export default function PlatformHome() {
   const finishedToday = (completed.data?.items ?? []).filter((a) => isToday(a.completedAt)).length;
 
   const workload = useMemo(() => buildWorkload(timeline.data?.items ?? []), [timeline.data]);
-  const comparisonLoading = osCur.loading || visitCur.loading || pmocCur.loading || budgetCur.loading;
-  const radarLoading = comparisonLoading || laudoCur.loading || receiptCur.loading;
 
   function refreshAll() {
     operationStats.refetch(); timeline.refetch(); completed.refetch(); pmocStats.refetch(); lifecycle.refetch(); financial.refetch(); receivablesPending.refetch();
-    osCur.refetch(); osPrev.refetch(); visitCur.refetch(); visitPrev.refetch(); pmocCur.refetch(); pmocPrev.refetch();
-    laudoCur.refetch(); laudoPrev.refetch(); budgetCur.refetch(); budgetPrev.refetch(); receiptCur.refetch(); receiptPrev.refetch();
+    osCov.refetch(); pmocCov.refetch(); visitCov.refetch(); laudoCov.refetch(); budgetCov.refetch();
   }
 
   return (
@@ -101,7 +106,7 @@ export default function PlatformHome() {
         </button>
       </div>
 
-      {/* Linha 1 — Resumo executivo */}
+      {/* Resumo executivo — KPIs */}
       <DashboardSection title="Resumo executivo">
         {operationStats.loading && !operationStats.data ? (
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">{Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}</div>
@@ -121,49 +126,31 @@ export default function PlatformHome() {
         )}
       </DashboardSection>
 
-      {/* Linha 2 — Comparativo operacional | Saúde financeira */}
-      <div className="grid items-stretch gap-6 xl:grid-cols-2">
-        <DashboardSection className="h-full" title="Comparativo operacional" action={<span className="text-caption">mês atual × anterior</span>}>
-          <OperationalComparison
-            loading={comparisonLoading}
-            rows={[
-              { label: "Ordens de Serviço", current: osCur.total, previous: osPrev.total },
-              { label: "PMOCs", current: pmocCur.total, previous: pmocPrev.total },
-              { label: "Visitas Técnicas", current: visitCur.total, previous: visitPrev.total },
-              { label: "Orçamentos", current: budgetCur.total, previous: budgetPrev.total },
-            ]}
-          />
+      {/* Linha 1 — Cobertura operacional: comparativo | radar */}
+      <div className="grid items-stretch gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+        <DashboardSection className="h-full" title="Comparativo operacional" action={<CoverageLegend />}>
+          <CoverageComparison loading={coverageLoading} rows={coverage} />
         </DashboardSection>
 
+        <DashboardSection className="h-full" title="Cobertura de atividades" action={<span className="text-caption">agendado × atendido</span>}>
+          <CoverageRadar loading={coverageLoading} rows={coverage} />
+        </DashboardSection>
+      </div>
+
+      {/* Linha 2 — Saúde financeira | Atividades relevantes */}
+      <div className="grid items-stretch gap-6 xl:grid-cols-2">
         <Gate roles={["OWNER", "MANAGER"]} permission="canFinancial" fallback={<DashboardSection className="h-full" title="Saúde financeira"><Panel><EmptyFill icon={FileText} title="Financeiro restrito" description="Seu perfil não possui acesso aos indicadores financeiros." /></Panel></DashboardSection>}>
           <DashboardSection className="h-full" title="Saúde financeira" action={<Link href="/financial" className="text-xs font-medium text-[var(--color-primary)] hover:underline">abrir financeiro</Link>}>
             <FinancialHealth loading={financial.loading && !financial.data} error={financial.error} onRetry={financial.refetch} stats={financial.data} />
           </DashboardSection>
         </Gate>
-      </div>
-
-      {/* Linha 3 — Cobertura de atividades (radar) | Atividades relevantes e recentes */}
-      <div className="grid items-stretch gap-6 xl:grid-cols-[minmax(300px,0.7fr)_1.3fr]">
-        <DashboardSection className="h-full" title="Cobertura de atividades" action={<span className="text-caption">atual × anterior</span>}>
-          <ActivityCoverage
-            loading={radarLoading}
-            axes={[
-              { label: "OS", current: osCur.total, previous: osPrev.total },
-              { label: "Visitas", current: visitCur.total, previous: visitPrev.total },
-              { label: "Laudos", current: laudoCur.total, previous: laudoPrev.total },
-              { label: "PMOC", current: pmocCur.total, previous: pmocPrev.total },
-              { label: "Orçamentos", current: budgetCur.total, previous: budgetPrev.total },
-              { label: "Recibos", current: receiptCur.total, previous: receiptPrev.total },
-            ]}
-          />
-        </DashboardSection>
 
         <DashboardSection className="h-full" title="Atividades relevantes e recentes" action={<Link href="/equipamentos" className="text-xs font-medium text-[var(--color-primary)] hover:underline">ver ativos</Link>}>
           <RecentActivity loading={lifecycle.loading && !lifecycle.data} error={lifecycle.error} onRetry={lifecycle.refetch} events={lifecycle.data?.items ?? []} />
         </DashboardSection>
       </div>
 
-      {/* Linha 4 — Timeline operacional | Carga por operador */}
+      {/* Linha 3 — Timeline operacional | Carga por operador */}
       <div className="grid items-stretch gap-6 xl:grid-cols-[1.4fr_0.6fr]">
         <DashboardSection
           className="h-full"
@@ -171,7 +158,7 @@ export default function PlatformHome() {
           action={
             <div className="flex gap-1.5">
               {(["today", "7d"] as TimelineRange[]).map((key) => (
-                <button key={key} type="button" onClick={() => setTimelineRange(key)} className={`h-7 rounded-[var(--radius-md)] px-2.5 text-[11px] font-medium ${timelineRange === key ? "bg-[var(--color-primary)] text-[var(--color-primary-foreground)]" : "border border-[var(--color-border)] hover:bg-[var(--color-muted)]"}`}>
+                <button key={key} type="button" onClick={() => setTimelineRange(key)} className={`h-7 rounded-[var(--radius-md)] px-2.5 text-[11px] font-medium transition ${timelineRange === key ? "bg-[var(--color-primary)] text-[var(--color-primary-foreground)]" : "border border-[var(--color-border)] hover:bg-[var(--color-muted)]"}`}>
                   {key === "today" ? "Hoje" : "Próximos 7 dias"}
                 </button>
               ))}
@@ -204,6 +191,15 @@ function Legend({ color, label }: { color: string; label: string }) {
   return <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />{label}</span>;
 }
 
+function CoverageLegend() {
+  return (
+    <div className="flex gap-3 text-caption">
+      <Legend color={SCHEDULED_COLOR} label="Agendado" />
+      <Legend color={ATTENDED_COLOR} label="Atendido" />
+    </div>
+  );
+}
+
 /* ---------- KPI ---------- */
 
 function Kpi({ href, label, value, icon, trend }: { href: string; label: string; value: number; icon: Parameters<typeof MetricCard>[0]["icon"]; trend?: "up" | "down" | "flat" }) {
@@ -214,31 +210,28 @@ function Kpi({ href, label, value, icon, trend }: { href: string; label: string;
   );
 }
 
-/* ---------- Comparativo operacional ---------- */
+/* ---------- Comparativo operacional (agendado × atendido) ---------- */
 
-function OperationalComparison({ loading, rows }: { loading: boolean; rows: Array<{ label: string; current: number; previous: number }> }) {
-  if (loading) return <Panel><SkeletonList rows={4} /></Panel>;
+function CoverageComparison({ loading, rows }: { loading: boolean; rows: CoverageRow[] }) {
+  if (loading) return <Panel><SkeletonList rows={5} /></Panel>;
   return (
     <Panel>
-      <div className="flex justify-end gap-4 text-caption">
-        <Legend color="var(--color-primary)" label="Mês atual" />
-        <Legend color="var(--color-muted-foreground)" label="Mês anterior" />
-      </div>
-      <div className="flex flex-1 flex-col justify-center gap-4 pt-3">
+      <div className="flex flex-1 flex-col justify-center gap-4">
         {rows.map((row) => {
-          const max = Math.max(row.current, row.previous, 1);
+          const total = row.scheduled + row.attended;
+          const pct = total > 0 ? Math.round((row.attended / total) * 100) : 0;
           return (
             <div key={row.label} className="space-y-1.5">
-              <div className="flex items-center justify-between text-sm">
-                <span className="font-medium">{row.label}</span>
-                <span className="inline-flex items-center gap-2 tabular-nums">
-                  <span className="font-semibold">{formatNumber(row.current)}</span>
-                  <DeltaBadge delta={row.current - row.previous} />
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-sm font-medium">{row.label}</span>
+                <span className="flex items-center gap-2 text-caption tabular-nums">
+                  <span><span className="font-semibold text-[var(--color-foreground)]">{formatNumber(row.attended)}</span> de {formatNumber(total)}</span>
+                  <CoveragePill pct={pct} />
                 </span>
               </div>
-              <div className="space-y-1">
-                <div className="h-2.5 rounded-full bg-[var(--color-muted)]"><div className="h-full rounded-full bg-[var(--color-primary)]" style={{ width: `${(row.current / max) * 100}%` }} /></div>
-                <div className="h-2.5 rounded-full bg-[var(--color-muted)]"><div className="h-full rounded-full bg-[var(--color-muted-foreground)]/60" style={{ width: `${(row.previous / max) * 100}%` }} /></div>
+              <div className="flex h-2.5 overflow-hidden rounded-full bg-[var(--color-muted)]">
+                <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: ATTENDED_COLOR }} />
+                <div className="h-full flex-1" style={{ background: total > 0 ? "color-mix(in srgb, var(--color-primary) 28%, transparent)" : "transparent" }} />
               </div>
             </div>
           );
@@ -248,13 +241,74 @@ function OperationalComparison({ loading, rows }: { loading: boolean; rows: Arra
   );
 }
 
-function DeltaBadge({ delta }: { delta: number }) {
-  if (delta === 0) return <span className="text-caption">—</span>;
-  const up = delta > 0;
-  return <span className={`text-xs font-semibold ${up ? "text-[var(--color-success)]" : "text-[var(--color-danger)]"}`}>{up ? "+" : ""}{formatNumber(delta)}</span>;
+function CoveragePill({ pct }: { pct: number }) {
+  const tone = pct >= 75 ? "var(--color-success)" : pct >= 40 ? "var(--color-warning)" : "var(--color-danger)";
+  return (
+    <span className="inline-flex min-w-[3rem] justify-center rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums" style={{ background: `color-mix(in srgb, ${tone} 14%, transparent)`, color: tone }}>
+      {pct}%
+    </span>
+  );
 }
 
-/* ---------- Saúde financeira (gráfico único, sempre exibido) ---------- */
+/* ---------- Radar de cobertura (demanda × atendido) ---------- */
+
+function CoverageRadar({ loading, rows }: { loading: boolean; rows: CoverageRow[] }) {
+  if (loading) return <Panel><SkeletonCard /></Panel>;
+  const totalScheduled = rows.reduce((s, r) => s + r.scheduled + r.attended, 0);
+  const totalAttended = rows.reduce((s, r) => s + r.attended, 0);
+  const overall = totalScheduled > 0 ? Math.round((totalAttended / totalScheduled) * 100) : 0;
+  return (
+    <Panel>
+      <div className="grid flex-1 place-items-center py-1">
+        <RadarChart rows={rows} />
+      </div>
+      <div className="mt-2 flex items-center justify-center gap-2 border-t border-[var(--color-border)] pt-3 text-caption">
+        <TrendingUp className="h-3.5 w-3.5 text-[var(--color-success)]" />
+        <span>Cobertura geral do mês</span>
+        <span className="font-semibold text-[var(--color-foreground)] tabular-nums">{overall}%</span>
+      </div>
+    </Panel>
+  );
+}
+
+function RadarChart({ rows }: { rows: CoverageRow[] }) {
+  const size = 300;
+  const c = size / 2;
+  const radius = c - 60;
+  const n = rows.length;
+  const max = Math.max(...rows.map((r) => r.scheduled + r.attended), 1);
+  const angle = (i: number) => (-90 + (i * 360) / n) * (Math.PI / 180);
+  const point = (value: number, i: number) => {
+    const r = (value / max) * radius;
+    return [c + r * Math.cos(angle(i)), c + r * Math.sin(angle(i))] as const;
+  };
+  const polygon = (fn: (r: CoverageRow) => number) => rows.map((r, i) => point(fn(r), i).map((v) => v.toFixed(1)).join(",")).join(" ");
+  const demand = (r: CoverageRow) => r.scheduled + r.attended;
+
+  return (
+    <svg viewBox={`0 0 ${size} ${size}`} className="mx-auto h-auto w-full max-w-[320px]" role="img" aria-label="Radar de cobertura de atividades">
+      {[0.25, 0.5, 0.75, 1].map((ring) => (
+        <polygon key={ring} points={rows.map((_, i) => { const [px, py] = [c + ring * radius * Math.cos(angle(i)), c + ring * radius * Math.sin(angle(i))]; return `${px.toFixed(1)},${py.toFixed(1)}`; }).join(" ")} fill="none" stroke="var(--color-border)" strokeDasharray="2 3" />
+      ))}
+      {rows.map((_, i) => { const [px, py] = point(max, i); return <line key={i} x1={c} y1={c} x2={px} y2={py} stroke="var(--color-border)" />; })}
+      <polygon points={polygon(demand)} fill={SCHEDULED_COLOR} fillOpacity="0.1" stroke={SCHEDULED_COLOR} strokeOpacity="0.55" strokeWidth="1.5" />
+      <polygon points={polygon((r) => r.attended)} fill={ATTENDED_COLOR} fillOpacity="0.2" stroke={ATTENDED_COLOR} strokeWidth="2" />
+      {rows.map((r, i) => point(r.attended, i)).map(([px, py], i) => <circle key={i} cx={px} cy={py} r={3} fill={ATTENDED_COLOR} stroke="var(--color-card)" strokeWidth="1.5" />)}
+      {rows.map((r, i) => {
+        const [lx, ly] = [c + (radius + 26) * Math.cos(angle(i)), c + (radius + 26) * Math.sin(angle(i))];
+        const anchor = Math.abs(lx - c) < 10 ? "middle" : lx > c ? "start" : "end";
+        return (
+          <text key={r.label} x={lx} y={ly} textAnchor={anchor} dominantBaseline="middle" fontSize="11" fill="var(--color-muted-foreground)">
+            <tspan fontWeight="600" fill="var(--color-foreground)">{r.short}</tspan>
+            <tspan dx="4">{r.attended}/{demand(r)}</tspan>
+          </text>
+        );
+      })}
+    </svg>
+  );
+}
+
+/* ---------- Saúde financeira (evolução, sempre exibida) ---------- */
 
 function FinancialHealth({ loading, error, onRetry, stats }: { loading: boolean; error: unknown; onRetry: () => void; stats: FinancialStats | null }) {
   if (loading) return <Panel><SkeletonCard /></Panel>;
@@ -266,12 +320,18 @@ function FinancialHealth({ loading, error, onRetry, stats }: { loading: boolean;
   });
   // Sempre exibe o gráfico — quando não há histórico, mostra a série zerada.
   const flow = raw.length > 0 ? raw : zeroedFlow();
+  const last = flow[flow.length - 1];
   return (
     <Panel>
-      <div className="flex flex-wrap gap-4 text-caption">
-        <Legend color="var(--color-primary)" label="Receitas" />
-        <Legend color="var(--color-danger)" label="Despesas" />
-        <Legend color="var(--color-foreground)" label="Saldo" />
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap gap-3 text-caption">
+          <Legend color="var(--color-success)" label="Receitas" />
+          <Legend color="var(--color-danger)" label="Despesas" />
+          <Legend color="var(--color-foreground)" label="Saldo" />
+        </div>
+        <span className={`text-sm font-semibold tabular-nums ${last.balance >= 0 ? "text-[var(--color-success)]" : "text-[var(--color-danger)]"}`}>
+          {last.balance >= 0 ? "+" : ""}{formatCurrency(last.balance)}
+        </span>
       </div>
       <div className="grid flex-1 place-items-center pt-2">
         <EvolutionChart data={flow} />
@@ -283,7 +343,7 @@ function FinancialHealth({ loading, error, onRetry, stats }: { loading: boolean;
 
 function EvolutionChart({ data }: { data: Array<{ month: string; income: number; expenses: number; balance: number }> }) {
   const W = 620;
-  const H = 200;
+  const H = 220;
   const padX = 36;
   const padY = 24;
   const values = data.flatMap((d) => [d.income, d.expenses, d.balance]).filter((v) => Number.isFinite(v));
@@ -293,69 +353,25 @@ function EvolutionChart({ data }: { data: Array<{ month: string; income: number;
   const x = (i: number) => padX + (i * (W - padX * 2)) / Math.max(1, data.length - 1);
   const y = (v: number) => H - padY - ((v - min) / spanRange) * (H - padY * 2);
   const line = (key: "income" | "expenses" | "balance") => data.map((d, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(d[key]).toFixed(1)}`).join(" ");
+  const area = `${line("income")} L${x(data.length - 1).toFixed(1)},${(H - padY).toFixed(1)} L${x(0).toFixed(1)},${(H - padY).toFixed(1)} Z`;
   const zeroY = y(0);
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" role="img" aria-label="Evolução de receitas, despesas e saldo">
+      <defs>
+        <linearGradient id="fin-income" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stopColor="var(--color-success)" stopOpacity="0.22" />
+          <stop offset="100%" stopColor="var(--color-success)" stopOpacity="0" />
+        </linearGradient>
+      </defs>
       {[0, 0.5, 1].map((p) => <line key={p} x1={padX} x2={W - padX} y1={padY + p * (H - padY * 2)} y2={padY + p * (H - padY * 2)} stroke="var(--color-border)" strokeDasharray="3 3" />)}
       {min < 0 && <line x1={padX} x2={W - padX} y1={zeroY} y2={zeroY} stroke="var(--color-muted-foreground)" strokeWidth="1" />}
-      <path d={line("income")} fill="none" stroke="var(--color-primary)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-      <path d={line("expenses")} fill="none" stroke="var(--color-danger)" strokeOpacity="0.8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      <path d={line("balance")} fill="none" stroke="var(--color-foreground)" strokeOpacity="0.65" strokeWidth="2" strokeDasharray="5 3" strokeLinecap="round" strokeLinejoin="round" />
-      {data.map((d, i) => <circle key={i} cx={x(i)} cy={y(d.income)} r={2.5} fill="var(--color-primary)" />)}
+      <path d={area} fill="url(#fin-income)" stroke="none" />
+      <path d={line("income")} fill="none" stroke="var(--color-success)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d={line("expenses")} fill="none" stroke="var(--color-danger)" strokeOpacity="0.85" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d={line("balance")} fill="none" stroke="var(--color-foreground)" strokeOpacity="0.6" strokeWidth="2" strokeDasharray="5 3" strokeLinecap="round" strokeLinejoin="round" />
+      {data.map((d, i) => <circle key={i} cx={x(i)} cy={y(d.income)} r={3} fill="var(--color-success)" stroke="var(--color-card)" strokeWidth="1.5" />)}
       {data.map((d, i) => <text key={d.month + i} x={x(i)} y={H - 6} textAnchor="middle" fontSize="10" fill="var(--color-muted-foreground)">{d.month}</text>)}
-    </svg>
-  );
-}
-
-/* ---------- Cobertura de atividades (radar/teia de aranha, sempre exibido) ---------- */
-
-function ActivityCoverage({ loading, axes }: { loading: boolean; axes: Array<{ label: string; current: number; previous: number }> }) {
-  if (loading) return <Panel><SkeletonCard /></Panel>;
-  return (
-    <Panel>
-      <div className="flex justify-center gap-4 text-caption">
-        <Legend color="var(--color-primary)" label="Mês atual" />
-        <Legend color="var(--color-muted-foreground)" label="Mês anterior" />
-      </div>
-      <div className="grid flex-1 place-items-center">
-        <RadarChart axes={axes} />
-      </div>
-    </Panel>
-  );
-}
-
-function RadarChart({ axes }: { axes: Array<{ label: string; current: number; previous: number }> }) {
-  const size = 260;
-  const c = size / 2;
-  const radius = c - 46;
-  const n = axes.length;
-  const max = Math.max(...axes.flatMap((a) => [a.current, a.previous]), 1);
-  const angle = (i: number) => (-90 + (i * 360) / n) * (Math.PI / 180);
-  const point = (value: number, i: number) => {
-    const r = (value / max) * radius;
-    return [c + r * Math.cos(angle(i)), c + r * Math.sin(angle(i))] as const;
-  };
-  const polygon = (key: "current" | "previous") => axes.map((a, i) => point(a[key], i).map((v) => v.toFixed(1)).join(",")).join(" ");
-
-  return (
-    <svg viewBox={`0 0 ${size} ${size}`} className="mx-auto h-auto w-full max-w-[280px]" role="img" aria-label="Radar de cobertura de atividades">
-      {[0.25, 0.5, 0.75, 1].map((ring) => (
-        <polygon key={ring} points={axes.map((_, i) => { const [px, py] = [c + ring * radius * Math.cos(angle(i)), c + ring * radius * Math.sin(angle(i))]; return `${px.toFixed(1)},${py.toFixed(1)}`; }).join(" ")} fill="none" stroke="var(--color-border)" strokeDasharray="2 3" />
-      ))}
-      {axes.map((_, i) => { const [px, py] = point(max, i); return <line key={i} x1={c} y1={c} x2={px} y2={py} stroke="var(--color-border)" />; })}
-      <polygon points={polygon("previous")} fill="var(--color-muted-foreground)" fillOpacity="0.1" stroke="var(--color-muted-foreground)" strokeOpacity="0.6" strokeWidth="1.5" />
-      <polygon points={polygon("current")} fill="var(--color-primary)" fillOpacity="0.16" stroke="var(--color-primary)" strokeWidth="2" />
-      {axes.map((a, i) => point(a.current, i)).map(([px, py], i) => <circle key={i} cx={px} cy={py} r={2.5} fill="var(--color-primary)" />)}
-      {axes.map((a, i) => {
-        const [lx, ly] = [c + (radius + 22) * Math.cos(angle(i)), c + (radius + 22) * Math.sin(angle(i))];
-        const anchor = Math.abs(lx - c) < 8 ? "middle" : lx > c ? "start" : "end";
-        return (
-          <text key={a.label} x={lx} y={ly} textAnchor={anchor} dominantBaseline="middle" fontSize="10" fill="var(--color-muted-foreground)">
-            {a.label} <tspan fill="var(--color-foreground)" fontWeight="600">{a.current}</tspan>
-          </text>
-        );
-      })}
     </svg>
   );
 }
@@ -367,24 +383,26 @@ function RecentActivity({ loading, error, onRetry, events }: { loading: boolean;
   if (error) return <Panel><EmptyFill icon={ShieldCheck} title="Atividade indisponível" description="Não foi possível carregar os eventos." /><button type="button" onClick={onRetry} className="mt-2 self-center text-xs text-[var(--color-primary)] hover:underline">Tentar novamente</button></Panel>;
   if (events.length === 0) return <Panel><EmptyFill icon={ShieldCheck} title="Sem atividade recente" description="Nenhum evento relevante registrado até o momento." /></Panel>;
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)]">
-      <ul className="min-h-0 flex-1 divide-y divide-[var(--color-border)] overflow-y-auto">
+    <Panel className="!p-0">
+      <ul className="min-h-0 flex-1 overflow-y-auto px-2 py-1.5">
         {events.map((event) => (
-          <li key={event.id} className="p-3">
-            <div className="flex items-start gap-3">
-              <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full" style={{ backgroundColor: `${event.timeline.color}18`, color: event.timeline.color }}>
-                {event.type === "DOCUMENT" ? <FileText className="h-4 w-4" /> : event.timeline.category === "maintenance" ? <Wrench className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
+          <li key={event.id} className="group flex items-start gap-3 rounded-[var(--radius-md)] px-2.5 py-2 transition-colors hover:bg-[var(--color-muted)]">
+            <span className="relative mt-0.5 flex flex-col items-center">
+              <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full" style={{ backgroundColor: `${event.timeline.color}1a`, color: event.timeline.color }}>
+                {event.type === "DOCUMENT" ? <FileText className="h-3.5 w-3.5" /> : event.timeline.category === "maintenance" ? <Wrench className="h-3.5 w-3.5" /> : <ShieldCheck className="h-3.5 w-3.5" />}
               </span>
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-medium truncate">{event.timeline.title}</div>
-                <div className="text-caption truncate">{event.timeline.subtitle ?? event.timeline.description}</div>
-                <div className="mt-1 text-caption">{formatDateTime(event.timeline.date)}</div>
+            </span>
+            <div className="min-w-0 flex-1 pt-0.5">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="truncate text-sm font-medium">{event.timeline.title}</span>
+                <span className="shrink-0 text-[11px] text-[var(--color-muted-foreground)] tabular-nums">{formatDateTime(event.timeline.date)}</span>
               </div>
+              <p className="truncate text-caption">{event.timeline.subtitle ?? event.timeline.description}</p>
             </div>
           </li>
         ))}
       </ul>
-    </div>
+    </Panel>
   );
 }
 
@@ -401,21 +419,21 @@ function OperationalTimeline({ loading, error, onRetry, assignments, range }: { 
   if (error) return <Panel><EmptyFill icon={CalendarClock} title="Timeline indisponível" description="Não foi possível carregar a agenda." /><button type="button" onClick={onRetry} className="mt-2 self-center text-xs text-[var(--color-primary)] hover:underline">Tentar novamente</button></Panel>;
   if (items.length === 0) return <Panel><EmptyFill icon={CalendarClock} title={range === "today" ? "Sem operações hoje" : "Sem operações nos próximos 7 dias"} description="Nenhum atendimento agendado para o período." /></Panel>;
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)]">
+    <Panel className="!p-0">
       <ul className="min-h-0 flex-1 divide-y divide-[var(--color-border)] overflow-y-auto">
         {items.map((a) => {
           const op = a.operation;
           const priority = priorityOf(op.scheduledFor, op.status);
           return (
             <li key={a.id}>
-              <Link href={`/operacoes?operationId=${op.id}`} className="flex items-center gap-3 p-3 hover:bg-[var(--color-muted)] transition-colors">
+              <Link href={`/operacoes?operationId=${op.id}`} className="flex items-center gap-3 p-3 transition-colors hover:bg-[var(--color-muted)]">
                 <span className="flex w-14 shrink-0 flex-col items-center text-[var(--color-muted-foreground)]">
                   <Clock className="h-3.5 w-3.5" />
                   <span className="mt-0.5 font-mono text-xs tabular-nums">{timeOf(op.scheduledFor)}</span>
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-medium truncate">{op.customer?.name ?? operationCode(op.number)}</span>
-                  <span className="block text-caption truncate">{OPERATION_TYPE_LABEL[op.type]} · {a.assignee.name}</span>
+                  <span className="block truncate text-sm font-medium">{op.customer?.name ?? operationCode(op.number)}</span>
+                  <span className="block truncate text-caption">{OPERATION_TYPE_LABEL[op.type]} · {a.assignee.name}</span>
                 </span>
                 <span className="flex shrink-0 flex-col items-end gap-1">
                   <StatusChip tone={OPERATION_STATUS[op.status].tone} dot>{OPERATION_STATUS[op.status].label}</StatusChip>
@@ -426,7 +444,7 @@ function OperationalTimeline({ loading, error, onRetry, assignments, range }: { 
           );
         })}
       </ul>
-    </div>
+    </Panel>
   );
 }
 
@@ -436,18 +454,29 @@ function OperatorWorkload({ loading, items }: { loading: boolean; items: Array<{
   if (loading) return <Panel><SkeletonList rows={4} /></Panel>;
   if (items.length === 0) return <Panel><EmptyFill icon={Users} title="Sem carga agendada" description="Nenhuma operação ativa atribuída a operadores." /></Panel>;
   const max = Math.max(...items.map((i) => i.count), 1);
+  const total = items.reduce((s, i) => s + i.count, 0);
   return (
     <Panel>
-      <div className="flex flex-1 flex-col justify-center gap-3">
-        {items.map((item) => (
-          <div key={item.operator} className="space-y-1">
-            <div className="flex items-center justify-between text-sm">
-              <span className="min-w-0 truncate font-medium">{item.operator}</span>
-              <span className="tabular-nums font-semibold">{formatNumber(item.count)}</span>
+      <div className="flex flex-1 flex-col justify-center gap-3.5">
+        {items.map((item, i) => {
+          const share = total > 0 ? Math.round((item.count / total) * 100) : 0;
+          return (
+            <div key={item.operator} className="flex items-center gap-3">
+              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[var(--color-primary-soft)] text-xs font-semibold text-[var(--color-primary)]">
+                {initials(item.operator)}
+              </span>
+              <div className="min-w-0 flex-1 space-y-1">
+                <div className="flex items-center justify-between gap-2 text-sm">
+                  <span className="min-w-0 truncate font-medium">{item.operator}</span>
+                  <span className="shrink-0 text-caption tabular-nums"><span className="font-semibold text-[var(--color-foreground)]">{formatNumber(item.count)}</span> · {share}%</span>
+                </div>
+                <div className="h-2 rounded-full bg-[var(--color-muted)]">
+                  <div className="h-full rounded-full transition-all" style={{ width: `${(item.count / max) * 100}%`, background: i === 0 ? "var(--color-primary)" : "color-mix(in srgb, var(--color-primary) 55%, var(--color-muted))" }} />
+                </div>
+              </div>
             </div>
-            <div className="h-2 rounded-full bg-[var(--color-muted)]"><div className="h-full rounded-full bg-[var(--color-primary)]" style={{ width: `${(item.count / max) * 100}%` }} /></div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </Panel>
   );
@@ -462,9 +491,33 @@ function buildWorkload(assignments: Assignment[]): Array<{ operator: string; cou
 
 /* ---------- data helpers ---------- */
 
-function useDocumentCount(type: DocumentKind, bounds: { from: string; to: string }) {
-  const q = useQuery<number>((s) => documentsApi.listDocuments({ type, from: bounds.from, to: bounds.to, limit: 1, signal: s }).then((r) => r.pagination.total), []);
-  return { total: q.data ?? 0, loading: q.loading, refetch: q.refetch };
+const EMPTY_COVERAGE: Coverage = { scheduled: 0, attended: 0 };
+
+/**
+ * Cobertura por relatório: conta documentos do tipo no período e separa
+ * atendido (VALIDATED + SENT) de agendado (o restante — DRAFT + READY).
+ */
+function useCoverage(type: DocumentKind, bounds: { from: string; to: string }) {
+  const q = useQuery<Coverage>(
+    (s) =>
+      Promise.all([
+        documentsApi.listDocuments({ type, from: bounds.from, to: bounds.to, limit: 1, signal: s }).then((r) => r.pagination.total),
+        documentsApi.listDocuments({ type, status: "VALIDATED", from: bounds.from, to: bounds.to, limit: 1, signal: s }).then((r) => r.pagination.total),
+        documentsApi.listDocuments({ type, status: "SENT", from: bounds.from, to: bounds.to, limit: 1, signal: s }).then((r) => r.pagination.total),
+      ]).then(([total, validated, sent]) => {
+        const attended = validated + sent;
+        return { attended, scheduled: Math.max(0, total - attended) };
+      }),
+    [],
+  );
+  return { data: q.data ?? EMPTY_COVERAGE, loading: q.loading, refetch: q.refetch };
+}
+
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
 function priorityOf(scheduled: string | null, status: string): { label: string; className: string } {
@@ -510,6 +563,10 @@ function shortMonth(month: string): string {
   const parsed = /^\d{4}-\d{2}$/.test(month) ? new Date(`${month}-01T00:00:00`) : new Date(month);
   if (Number.isNaN(parsed.getTime())) return month;
   return parsed.toLocaleDateString("pt-BR", { month: "short" }).replace(".", "");
+}
+
+function formatCurrency(value: number): string {
+  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 }
 
 /** Série de 3 meses zerada, para exibir o gráfico financeiro mesmo sem histórico. */

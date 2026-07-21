@@ -15,7 +15,9 @@
       "Bash(echo \"LINT=$?\")",
       "Bash(grep -n \"^const primaryBtn\\\\|^const secondaryBtn\\\\|^const inputCls\\\\|^}$\\\\|^function \\\\|export function\" apps/platform/components/operation-creation-drawer.tsx)",
       "Bash(perl -0pi -e \"s{\\(import \\\\{ ERROR_CODES \\\\} from '\\\\.\\\\./\\\\.\\\\./shared/constants/error-codes\\\\.constants';\\\\n\\)}{\\\\$1import { dateRangeFilter } from '../../shared/utils/date-range.util';\\\\n}\" src/modules/document-engine/document-handoff.service.ts src/modules/document-engine/document-engine.service.ts)",
-      "Bash(node -e ' *)"
+      "Bash(node -e ' *)",
+      "Skill(dataviz)",
+      "Skill(dataviz:*)"
     ]
   }
 }
