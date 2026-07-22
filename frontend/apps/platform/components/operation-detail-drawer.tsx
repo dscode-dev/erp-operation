@@ -674,7 +674,7 @@ function fileDataUrl(file: File): Promise<string> {
 
 function OperationMaterialsSection({ operationId }: { operationId: string }) {
   const materials = useQuery((signal) => inventoryApi.listOperationMaterials(operationId, { signal }), [operationId]);
-  const products = useQuery((signal) => inventoryApi.listProducts({ limit: 100, active: true, signal }), []);
+  const products = useQuery((signal) => inventoryApi.listProducts({ limit: 100, active: true, purchasable: true, signal }), []);
   const inventory = useQuery((signal) => inventoryApi.listInventory({ limit: 100, signal }), []);
   const [open, setOpen] = useState(false);
 

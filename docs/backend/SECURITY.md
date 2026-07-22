@@ -2111,3 +2111,9 @@ The catalog is scoped to the installation Organization in every query. Reads req
 - Senha, assinatura, revogação de refresh tokens e auditorias são consolidadas transacionalmente no banco; falhas removem o arquivo previamente preparado.
 - `Signature.userId` é único, impedindo duas assinaturas institucionais de onboarding para o mesmo usuário.
 - A assinatura não é marcada automaticamente como padrão global e não altera templates existentes.
+# Product commercial boundary — 2026-07-22
+
+- A finalidade comercial é validada no DTO, serviço e banco; nenhum produto pode ter `isPurchasable=false` e `isSellable=false`.
+- A filtragem do frontend não é controle de autorização: `SalesService` rejeita produtos não vendáveis e `ProcurementService` rejeita produtos não compráveis.
+- A resolução de preço não ocorre quando o produto é incompatível com venda, reduzindo processamento e evitando uso comercial indevido.
+- A migration é aditiva e mantém os registros preexistentes habilitados nas duas finalidades.

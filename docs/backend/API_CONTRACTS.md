@@ -5628,3 +5628,31 @@ Resposta `201`:
 ```
 
 O backend revoga sessões, desativa `mustChangePassword` e persiste a assinatura na entidade oficial `Signature`. Erros possíveis: `PASSWORD_CURRENT_INVALID`, `PASSWORD_REUSE_NOT_ALLOWED`, `SIGNATURE_IMAGE_REQUIRED`, `UPLOAD_INVALID_MIME_TYPE`, `UPLOAD_FILE_TOO_LARGE`, `VALIDATION_ERROR` e `BAD_REQUEST` quando o primeiro acesso já foi concluído.
+# Product commercial classification — 2026-07-22
+
+## Product fields
+
+Todos os payloads de produto incluem:
+
+```json
+{
+  "isPurchasable": true,
+  "isSellable": true
+}
+```
+
+Pelo menos um campo deve ser `true`. `POST /api/v1/products` e `PATCH /api/v1/products/:id` retornam `400 PRODUCT_COMMERCIAL_CLASSIFICATION_REQUIRED` quando a classificação resultante desabilita as duas finalidades.
+
+## GET /api/v1/products
+
+Filtros opcionais adicionais:
+
+- `purchasable=true|false`
+- `sellable=true|false`
+
+Os filtros são cumulativos com busca, status e paginação. `GET /api/v1/products?sellable=true` é o contrato oficial dos seletores de vendas; `purchasable=true`, dos fluxos de compras e materiais.
+
+## Validações entre domínios
+
+- criar venda com produto não vendável: `409 PRODUCT_NOT_SELLABLE`;
+- adicionar produto não comprável a pedido de compra: `409 PRODUCT_NOT_PURCHASABLE`.

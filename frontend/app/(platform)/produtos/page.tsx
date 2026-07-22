@@ -31,7 +31,7 @@ import {
 } from "@erp/api";
 import { formatCurrencyBRL, formatDateTime, formatNumber } from "@erp/utils";
 
-type Tab = "products" | "inventory" | "suppliers" | "pricing" | "movements";
+type Tab = "purchased" | "sold" | "inventory" | "suppliers" | "pricing" | "movements";
 type Feedback = { tone: "success" | "danger"; message: string } | null;
 
 const MOVEMENT_LABEL: Record<StockMovementType, string> = {
@@ -59,6 +59,7 @@ export default function ProdutosPage() {
 
   const [formProduct, setFormProduct] = useState<Product | null>(null);
   const [productFormOpen, setProductFormOpen] = useState(false);
+  const [newProductUsage, setNewProductUsage] = useState<'PURCHASE' | 'SALE'>('PURCHASE');
   const [detailProduct, setDetailProduct] = useState<Product | null>(null);
   const [stockItem, setStockItem] = useState<InventoryItem | null>(null);
   const [supplier, setSupplier] = useState<Supplier | null>(null);
@@ -70,8 +71,8 @@ export default function ProdutosPage() {
   const [pricingOpen, setPricingOpen] = useState(false);
 
   const productList = useQuery(
-    (signal) => inventoryApi.listProducts({ page, limit, search, active: active === "all" ? undefined : active === "true", signal }),
-    [page, limit, search, active],
+    (signal) => inventoryApi.listProducts({ page, limit, search, active: active === "all" ? undefined : active === "true", purchasable: tab === 'purchased' ? true : undefined, sellable: tab === 'sold' ? true : undefined, signal }),
+    [page, limit, search, active, tab],
   );
   const inventory = useQuery(
     (signal) => inventoryApi.listInventory({ page, limit, search, signal }),
@@ -112,6 +113,7 @@ export default function ProdutosPage() {
     { key: "codes", header: "Códigos", className: "w-[180px]", cell: (p) => <div className="text-xs"><div>{p.internalCode ?? "—"}</div><div className="text-caption">{p.manufacturerCode ?? "sem fabricante"}</div></div> },
     { key: "model", header: "Modelo", className: "w-[150px]", cell: (p) => <span className="text-sm">{p.model ?? "—"}</span> },
     { key: "unit", header: "Un.", className: "w-[70px]", cell: (p) => <span className="font-mono text-xs">{p.unit}</span> },
+    { key: "usage", header: "Finalidade", className: "w-[170px]", cell: (p) => <div className="flex flex-wrap gap-1">{p.isPurchasable && <StatusChip tone="neutral">Compra</StatusChip>}{p.isSellable && <StatusChip tone="success">Venda</StatusChip>}</div> },
     { key: "stock", header: "Estoque", className: "w-[160px]", cell: (p) => <StockSummary product={p} /> },
     { key: "status", header: "Status", className: "w-[110px]", cell: (p) => <StatusChip tone={p.isActive ? "success" : "neutral"} dot>{p.isActive ? "Ativo" : "Inativo"}</StatusChip> },
   ];
@@ -173,10 +175,11 @@ export default function ProdutosPage() {
     }
   }
 
-  const pageData = tab === "products" ? productList.data : tab === "inventory" ? inventory.data : tab === "suppliers" ? suppliers.data : tab === "pricing" ? pricing.data : movements.data;
-  const pageLoading = tab === "products" ? productList.loading : tab === "inventory" ? inventory.loading : tab === "suppliers" ? suppliers.loading : tab === "pricing" ? pricing.loading : movements.loading;
-  const pageError = tab === "products" ? productList.error : tab === "inventory" ? inventory.error : tab === "suppliers" ? suppliers.error : tab === "pricing" ? pricing.error : movements.error;
-  const retry = tab === "products" ? productList.refetch : tab === "inventory" ? inventory.refetch : tab === "suppliers" ? suppliers.refetch : tab === "pricing" ? pricing.refetch : movements.refetch;
+  const productTab = tab === 'purchased' || tab === 'sold';
+  const pageData = productTab ? productList.data : tab === "inventory" ? inventory.data : tab === "suppliers" ? suppliers.data : tab === "pricing" ? pricing.data : movements.data;
+  const pageLoading = productTab ? productList.loading : tab === "inventory" ? inventory.loading : tab === "suppliers" ? suppliers.loading : tab === "pricing" ? pricing.loading : movements.loading;
+  const pageError = productTab ? productList.error : tab === "inventory" ? inventory.error : tab === "suppliers" ? suppliers.error : tab === "pricing" ? pricing.error : movements.error;
+  const retry = productTab ? productList.refetch : tab === "inventory" ? inventory.refetch : tab === "suppliers" ? suppliers.refetch : tab === "pricing" ? pricing.refetch : movements.refetch;
 
   return (
     <div className="space-y-6 max-w-[1440px]">
@@ -187,7 +190,7 @@ export default function ProdutosPage() {
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Gate roles={["OWNER", "MANAGER"]}>
-              <button onClick={() => { setFormProduct(null); setProductFormOpen(true); }} className={primaryBtn}>
+              <button onClick={() => { setFormProduct(null); setNewProductUsage(tab === 'sold' ? 'SALE' : 'PURCHASE'); setProductFormOpen(true); }} className={primaryBtn}>
                 <Plus className="h-4 w-4" /> Novo produto
               </button>
             </Gate>
@@ -210,7 +213,8 @@ export default function ProdutosPage() {
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <TabButton active={tab === "products"} onClick={() => switchTab("products", setTab, setPage)}>Produtos</TabButton>
+        <TabButton active={tab === "purchased"} onClick={() => switchTab("purchased", setTab, setPage)}>Produtos comprados</TabButton>
+        <TabButton active={tab === "sold"} onClick={() => switchTab("sold", setTab, setPage)}>Produtos vendidos</TabButton>
         <TabButton active={tab === "inventory"} onClick={() => switchTab("inventory", setTab, setPage)}>Estoque</TabButton>
         <TabButton active={tab === "suppliers"} onClick={() => switchTab("suppliers", setTab, setPage)}>Fornecedores</TabButton>
         {canSeePricing && <TabButton active={tab === "pricing"} onClick={() => switchTab("pricing", setTab, setPage)}>Preços</TabButton>}
@@ -227,8 +231,8 @@ export default function ProdutosPage() {
         <SkeletonList rows={7} />
       ) : pageError && !pageData ? (
         <ErrorState error={pageError} onRetry={retry} />
-      ) : tab === "products" ? (
-        products.length === 0 ? <EmptyState icon={Package} title="Nenhum produto" description="Cadastre o primeiro produto técnico." /> : (
+      ) : productTab ? (
+        products.length === 0 ? <EmptyState icon={Package} title={tab === 'sold' ? 'Nenhum produto para venda' : 'Nenhum produto para compra'} description={tab === 'sold' ? 'Cadastre ou classifique produtos que poderão ser vendidos aos clientes.' : 'Cadastre ou classifique produtos utilizados em compras e estoque.'} /> : (
           <div className="space-y-3">
             <DataTable columns={productColumns} rows={products} onRowClick={setDetailProduct} />
             {productList.data && <Pagination pagination={productList.data.pagination} onPageChange={setPage} onPageSizeChange={(next) => { setLimit(next); setPage(1); }} />}
@@ -282,6 +286,7 @@ export default function ProdutosPage() {
       <ProductFormDrawer
         open={productFormOpen}
         product={formProduct}
+        initialUsage={newProductUsage}
         skuOptions={skuOptions}
         internalCodeOptions={internalCodeOptions}
         suppliers={productFormSuppliers}
@@ -621,7 +626,7 @@ function switchTab(tab: Tab, setTab: (tab: Tab) => void, setPage: (page: number)
 }
 
 function parseTab(value: string | null): Tab {
-  return value === "inventory" || value === "suppliers" || value === "pricing" || value === "movements" ? value : "products";
+  return value === "sold" || value === "inventory" || value === "suppliers" || value === "pricing" || value === "movements" ? value : "purchased";
 }
 
 function n(value: string | number | null | undefined): number {

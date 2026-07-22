@@ -1506,6 +1506,8 @@ model Product {
   technicalDescription String?             @map("technical_description") @db.Text
   weight               Decimal?            @db.Decimal(12, 3)
   dimensions           String?             @db.VarChar(120)
+  isPurchasable        Boolean             @default(true) @map("is_purchasable")
+  isSellable           Boolean             @default(true) @map("is_sellable")
   isActive             Boolean             @default(true) @map("is_active")
   disabledAt           DateTime?           @map("disabled_at") @db.Timestamptz(3)
   createdAt            DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -1520,6 +1522,8 @@ model Product {
 
   @@index([name])
   @@index([category, isActive])
+  @@index([isPurchasable, isActive], map: "products_purchasable_active_idx")
+  @@index([isSellable, isActive], map: "products_sellable_active_idx")
   @@index([brand])
   @@map("products")
 }

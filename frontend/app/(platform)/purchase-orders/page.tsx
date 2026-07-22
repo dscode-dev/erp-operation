@@ -54,7 +54,7 @@ export default function PurchaseOrdersPage() {
     [page, limit, search, status, supplierId, from, to],
   );
   const suppliers = useQuery<Paginated<Supplier>>((signal) => inventoryApi.listSuppliers({ limit: 100, active: true, signal }), []);
-  const products = useQuery<Paginated<Product>>((signal) => inventoryApi.listProducts({ limit: 100, active: true, signal }), []);
+  const products = useQuery<Paginated<Product>>((signal) => inventoryApi.listProducts({ limit: 100, active: true, purchasable: true, signal }), []);
 
   const supplierItems = suppliers.data?.items ?? [];
   const productItems = products.data?.items ?? [];

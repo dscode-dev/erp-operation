@@ -23,6 +23,8 @@ export function listProducts(params?: {
   category?: string;
   brand?: string;
   active?: boolean;
+  purchasable?: boolean;
+  sellable?: boolean;
   signal?: AbortSignal;
 }): Promise<Paginated<Product>> {
   const { signal, ...query } = params ?? {};

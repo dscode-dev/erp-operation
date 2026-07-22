@@ -31,6 +31,8 @@ export class ListProductsQueryDto extends PageQueryDto {
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(120) category?: string;
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(120) brand?: string;
   @IsOptional() @IsBoolean() @Transform(({ value }) => value === 'true' || value === true) active?: boolean;
+  @IsOptional() @IsBoolean() @Transform(({ value }) => value === 'true' || value === true) purchasable?: boolean;
+  @IsOptional() @IsBoolean() @Transform(({ value }) => value === 'true' || value === true) sellable?: boolean;
 }
 
 export class CreateProductDto {
@@ -54,6 +56,8 @@ export class CreateProductDto {
   @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 3 }) @Min(0) weight?: number;
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(120) dimensions?: string;
   @IsOptional() @IsUUID('4') primarySupplierId?: string | null;
+  @IsOptional() @IsBoolean() isPurchasable?: boolean;
+  @IsOptional() @IsBoolean() isSellable?: boolean;
   @IsOptional() @IsBoolean() isActive?: boolean;
 }
 
@@ -78,6 +82,8 @@ export class UpdateProductDto {
   @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 3 }) @Min(0) weight?: number;
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(120) dimensions?: string;
   @IsOptional() @IsUUID('4') primarySupplierId?: string | null;
+  @IsOptional() @IsBoolean() isPurchasable?: boolean;
+  @IsOptional() @IsBoolean() isSellable?: boolean;
   @IsOptional() @IsBoolean() isActive?: boolean;
 }
 

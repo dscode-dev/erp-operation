@@ -616,3 +616,8 @@ modo novo cria uma Operation DRAFT oficial e segue Preview → Render → Downlo
 # `/operator/trocar-senha`
 
 Rota obrigatória no primeiro login. Etapas: senha definitiva → dados profissionais e assinatura → encerramento da sessão → novo login.
+# Produtos por finalidade comercial
+
+- `/produtos?tab=purchased`: produtos habilitados para compra.
+- `/produtos?tab=sold`: produtos habilitados para venda.
+- `/clientes/:id`, aba Vendas: cria vendas usando exclusivamente produtos da classificação de venda.

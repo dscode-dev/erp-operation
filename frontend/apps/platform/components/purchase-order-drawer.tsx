@@ -300,7 +300,7 @@ export function PurchaseOrderDrawer({
 
 export function usePurchaseOrderLookups() {
   const suppliers = inventoryApi.listSuppliers({ limit: 100, active: true });
-  const products = inventoryApi.listProducts({ limit: 100, active: true });
+  const products = inventoryApi.listProducts({ limit: 100, active: true, purchasable: true });
   return Promise.all([suppliers, products]).then(([supplierPage, productPage]) => ({
     suppliers: supplierPage.items,
     products: productPage.items,

@@ -17,7 +17,9 @@ import { CommandPaletteProvider } from "@platform/components/command-palette";
 
 export function AppProviders({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const isOperator = pathname?.startsWith("/operator") ?? false;
+  // Match the Operator route segment, not Platform routes that merely share
+  // the prefix (for example `/operator-executions`).
+  const isOperator = pathname === "/operator" || pathname?.startsWith("/operator/") === true;
 
   if (isOperator) {
     return <AuthProvider scope="operator">{children}</AuthProvider>;

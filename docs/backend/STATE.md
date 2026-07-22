@@ -3085,3 +3085,12 @@ Status: implementado e validado em PostgreSQL/Docker.
 - A assinatura do operador é ativa, usa o mesmo `DocumentAssetResolver` e aparece automaticamente em `GET /signatures` e nos seletores técnicos dos relatórios.
 - Endpoint multipart criado: `POST /api/v1/users/complete-first-access`.
 - Migration aditiva: `20260722190000_user_institutional_signature`.
+# Classificação comercial de produtos — 2026-07-22
+
+- `Product` permanece como catálogo técnico único e recebeu as classificações independentes `isPurchasable` e `isSellable`.
+- Produtos legados permanecem compatíveis: a migration aditiva classifica os registros existentes como compráveis e vendáveis.
+- Um produto pode participar dos dois fluxos, mas não pode ficar sem finalidade comercial.
+- `GET /api/v1/products` aceita os filtros `purchasable` e `sellable`.
+- `SalesService` aceita somente produtos vendáveis; `ProcurementService` e os seletores de materiais aceitam somente produtos compráveis.
+- A Platform separa o catálogo nas abas Produtos comprados e Produtos vendidos. Cliente > Vendas consome exclusivamente `sellable=true`.
+- Migration: `20260722230000_product_commercial_classification`.

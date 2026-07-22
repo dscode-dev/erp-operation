@@ -4,6 +4,8 @@
 
 `Platform → operatorExecutionsApi → OperatorExecutionsService → Assignment + Operation`. O frontend apenas formata indicadores calculados pelo backend. Não há store persistente, dataset local, regra de comissão ou interpretação de ownership; `Assignment.assignedTo` permanece autoritativo.
 
+A fronteira dos aplicativos é segment-aware: somente o segmento exato `/operator` e seus descendentes usam o escopo mobile. Rotas Platform como `/operator-executions` não podem herdar providers ou sessão do Operator por coincidência de prefixo.
+
 ## Operator — conclusão documental
 
 O frontend não gera PDF nem altera estados por conta própria. Ele encadeia os contratos oficiais `Operation → Assignment → Handoff → Document Engine`. A política visual separa OS/RVT de documentos especiais, mas o backend revalida tipo, ownership e estado em cada transição. A recuperação de emissão reutiliza o mesmo `OperationDocument` e o mesmo `DocumentViewer`.
@@ -1131,3 +1133,6 @@ O cliente é o ponto de navegação para ativos, atendimentos e vendas, mas cada
 # Operator signature onboarding
 
 A assinatura de primeiro acesso utiliza a mesma entidade `Signature`, API, validação, Storage e seletores da Platform. O frontend converte o PNG confirmado pelo `SignaturePad` em `File` apenas para o multipart e não mantém base64 após a requisição. A associação `Signature.userId` preserva ownership sem criar um domínio paralelo.
+# Catálogo único e finalidades comerciais
+
+Compra e venda não possuem catálogos paralelos. `Product` é a fonte única e expõe `isPurchasable`/`isSellable`; as abas apenas aplicam filtros server-side. `SaleFormDrawer` solicita `sellable=true`, enquanto Procurement e materiais solicitam `purchasable=true`. O backend revalida a classificação no comando transacional, portanto alterações concorrentes não podem ser contornadas por uma lista previamente carregada.

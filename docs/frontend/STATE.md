@@ -5,6 +5,7 @@
 - Nova rota `/operator-executions` para OWNER/MANAGER com KPIs mensais e tabela comparativa baseada na API real.
 - O detalhe `/operator-executions/[id]` possui histórico e agenda registrada, filtros mensais/status, paginação e abertura do `OperationDetailDrawer` existente.
 - O menu Gestão recebeu “Execuções dos Operadores”. Nenhuma comissão ou métrica é calculada localmente.
+- A resolução de escopo em `AppProviders` agora reconhece somente `/operator` e `/operator/*` como app mobile; `/operator-executions` permanece corretamente sob Auth e Command Palette da Platform.
 
 ## Operator — OS/RVT com emissão direta (2026-07-22)
 
@@ -1238,3 +1239,10 @@ Status: concluído.
 - `/operator/trocar-senha` agora possui dois passos: senha definitiva e cadastro da assinatura técnica.
 - O fluxo usa `SignaturePad`, dados profissionais e endpoint multipart real.
 - Ao concluir, a sessão é encerrada e a assinatura fica disponível no catálogo institucional utilizado pelos relatórios.
+# Produtos comprados e vendidos — 2026-07-22
+
+- `/produtos` foi dividido em Produtos comprados e Produtos vendidos sobre o mesmo catálogo oficial.
+- O cadastro e a edição permitem marcar o produto para compra, venda ou ambos.
+- A aba Vendas de `/clientes/:id` lista somente produtos classificados para venda.
+- Pedidos de compra e materiais operacionais listam somente produtos classificados para compra.
+- Não há catálogo local, duplicação de produto ou inferência por estoque/preço.

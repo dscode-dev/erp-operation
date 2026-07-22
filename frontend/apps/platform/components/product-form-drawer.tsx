@@ -18,6 +18,8 @@ type FormState = {
   weight: string;
   dimensions: string;
   primarySupplierId: string;
+  isPurchasable: boolean;
+  isSellable: boolean;
   isActive: boolean;
 };
 
@@ -53,6 +55,8 @@ const blank: FormState = {
   weight: "",
   dimensions: "",
   primarySupplierId: "",
+  isPurchasable: true,
+  isSellable: true,
   isActive: true,
 };
 
@@ -65,6 +69,7 @@ export function ProductFormDrawer({
   suppliersLoading = false,
   suppliersError = null,
   preferredSupplierId = null,
+  initialUsage = 'PURCHASE',
   canCreateSupplier = false,
   onRetrySuppliers,
   onCreateSupplier,
@@ -79,6 +84,7 @@ export function ProductFormDrawer({
   suppliersLoading?: boolean;
   suppliersError?: Error | null;
   preferredSupplierId?: string | null;
+  initialUsage?: 'PURCHASE' | 'SALE';
   canCreateSupplier?: boolean;
   onRetrySuppliers?: () => void;
   onCreateSupplier?: () => void;
@@ -92,8 +98,12 @@ export function ProductFormDrawer({
   useEffect(() => {
     if (!open) return;
     setError(null);
-    setForm(product ? fromProduct(product) : blank);
-  }, [open, product]);
+    setForm(
+      product
+        ? fromProduct(product)
+        : { ...blank, isPurchasable: initialUsage === 'PURCHASE', isSellable: initialUsage === 'SALE' },
+    );
+  }, [open, product, initialUsage]);
 
   useEffect(() => {
     if (!open || product || !preferredSupplierId) return;
@@ -105,6 +115,10 @@ export function ProductFormDrawer({
   }
 
   async function submit() {
+    if (!form.isPurchasable && !form.isSellable) {
+      setError("Selecione se o produto é destinado à compra, à venda ou a ambos.");
+      return;
+    }
     if (form.categoryOption === "Outros" && !form.customCategory.trim()) {
       setError("Informe a categoria personalizada.");
       return;
@@ -149,6 +163,20 @@ export function ProductFormDrawer({
     >
       <div className="space-y-5">
         {error && <div className="rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 px-3 py-2 text-sm text-[var(--color-danger)]">{error}</div>}
+
+        <section className={sectionCls}>
+          <SectionTitle title="Finalidade comercial" description="Essa classificação controla onde o produto pode ser utilizado no Orbit." />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className={`rounded-[var(--radius-md)] border p-3 text-sm ${form.isPurchasable ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5' : 'border-[var(--color-border)]'}`}>
+              <span className="flex items-center gap-2 font-medium"><input type="checkbox" checked={form.isPurchasable} onChange={(event) => set('isPurchasable', event.target.checked)} />Produto comprado</span>
+              <span className="mt-1 block text-caption">Disponível em fornecedores, compras, estoque e consumo operacional.</span>
+            </label>
+            <label className={`rounded-[var(--radius-md)] border p-3 text-sm ${form.isSellable ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5' : 'border-[var(--color-border)]'}`}>
+              <span className="flex items-center gap-2 font-medium"><input type="checkbox" checked={form.isSellable} onChange={(event) => set('isSellable', event.target.checked)} />Produto vendido</span>
+              <span className="mt-1 block text-caption">Disponível nas vendas dos clientes e nos respectivos recibos/garantias.</span>
+            </label>
+          </div>
+        </section>
 
         <section className={sectionCls}>
           <SectionTitle title="Identificação comercial" description="SKU e código interno são identificadores únicos do catálogo técnico." />
@@ -290,6 +318,8 @@ function fromProduct(product: Product): FormState {
     weight: product.weight != null ? String(product.weight) : "",
     dimensions: product.dimensions ?? "",
     primarySupplierId: primarySupplier?.supplierId ?? "",
+    isPurchasable: product.isPurchasable,
+    isSellable: product.isSellable,
     isActive: product.isActive,
   };
 }
@@ -309,6 +339,8 @@ function toPayload(form: FormState): ProductPayload {
     weight: form.weight ? Number(form.weight) : null,
     dimensions: nullable(form.dimensions),
     primarySupplierId: form.primarySupplierId || null,
+    isPurchasable: form.isPurchasable,
+    isSellable: form.isSellable,
     isActive: form.isActive,
   };
 }

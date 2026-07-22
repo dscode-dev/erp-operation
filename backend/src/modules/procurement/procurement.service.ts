@@ -320,8 +320,9 @@ export class ProcurementService {
   }
 
   private async productOrThrow(id: string): Promise<{ id: string; name: string; unit: string }> {
-    const product = await this.prisma.product.findFirst({ where: { id, isActive: true }, select: { id: true, name: true, unit: true } });
+    const product = await this.prisma.product.findFirst({ where: { id, isActive: true }, select: { id: true, name: true, unit: true, isPurchasable: true } });
     if (!product) throw new ApplicationException(ERROR_CODES.PRODUCT_NOT_FOUND, 'Product was not found', HttpStatus.NOT_FOUND);
+    if (!product.isPurchasable) throw new ApplicationException(ERROR_CODES.PRODUCT_NOT_PURCHASABLE, 'Product is not enabled for purchases', HttpStatus.CONFLICT);
     return product;
   }
 

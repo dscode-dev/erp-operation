@@ -35,7 +35,7 @@ export function SaleFormDrawer({
   useEffect(() => {
     if (!open) return;
     inventoryApi
-      .listProducts({ page: 1, limit: 100, active: true })
+      .listProducts({ page: 1, limit: 100, active: true, sellable: true })
       .then((result) => setProducts(result.items))
       .catch(() => setProducts([]));
     setSoldAt((sale?.soldAt ?? new Date().toISOString()).slice(0, 10));

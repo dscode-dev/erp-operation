@@ -2500,3 +2500,12 @@ Drawer. OWNER/MANAGER podem renderizar; o backend permanece a autoridade.
 4. Limpar tokens e redirecionar ao login; todas as sessões foram revogadas.
 
 A assinatura retornada pertence ao mesmo catálogo de `GET /signatures`. Nenhum frontend deve copiá-la para estado persistente, base64 pública ou cadastro paralelo.
+# Integração da classificação comercial de produtos
+
+- Produtos comprados: `GET /products?purchasable=true`.
+- Produtos vendidos: `GET /products?sellable=true`.
+- Um mesmo produto pode aparecer nas duas abas quando ambas as classificações estiverem ativas.
+- O formulário envia `isPurchasable` e `isSellable` e deve manter ao menos uma opção selecionada.
+- Cliente > Vendas deve carregar seu seletor com `sellable=true`; não reutilizar catálogo sem filtro.
+- Compras e materiais operacionais devem carregar produtos com `purchasable=true`.
+- O backend continua sendo a autoridade e retorna `PRODUCT_NOT_SELLABLE` ou `PRODUCT_NOT_PURCHASABLE` para classificações incompatíveis.

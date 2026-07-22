@@ -89,6 +89,8 @@ export class InventoryService {
   async listProducts(query: ListProductsQueryDto): Promise<unknown> {
     const where: Prisma.ProductWhereInput = {
       ...(query.active !== undefined ? { isActive: query.active } : {}),
+      ...(query.purchasable !== undefined ? { isPurchasable: query.purchasable } : {}),
+      ...(query.sellable !== undefined ? { isSellable: query.sellable } : {}),
       ...(query.category ? { category: { contains: query.category, mode: 'insensitive' } } : {}),
       ...(query.brand ? { brand: { contains: query.brand, mode: 'insensitive' } } : {}),
       ...(query.search
@@ -127,6 +129,7 @@ export class InventoryService {
     actor: AuthenticatedUser,
     context: InventoryAuditContext,
   ): Promise<unknown> {
+    this.assertCommercialClassification(dto.isPurchasable, dto.isSellable);
     try {
       return await this.prisma.$transaction(async (tx) => {
         const product = await tx.product.create({
@@ -169,7 +172,11 @@ export class InventoryService {
     actor: AuthenticatedUser,
     context: InventoryAuditContext,
   ): Promise<unknown> {
-    await this.productOrThrow(id);
+    const current = await this.productOrThrow(id);
+    this.assertCommercialClassification(
+      dto.isPurchasable ?? current.isPurchasable,
+      dto.isSellable ?? current.isSellable,
+    );
     try {
       return await this.prisma.$transaction(async (tx) => {
         const product = await tx.product.update({
@@ -790,8 +797,23 @@ export class InventoryService {
         : {}),
       ...(dto.weight !== undefined ? { weight: dto.weight } : {}),
       ...(dto.dimensions !== undefined ? { dimensions: dto.dimensions || null } : {}),
+      ...(dto.isPurchasable !== undefined ? { isPurchasable: dto.isPurchasable } : {}),
+      ...(dto.isSellable !== undefined ? { isSellable: dto.isSellable } : {}),
       ...(dto.isActive !== undefined ? { isActive: dto.isActive, disabledAt: dto.isActive ? null : new Date() } : {}),
     } as Prisma.ProductUncheckedCreateInput;
+  }
+
+  private assertCommercialClassification(
+    isPurchasable: boolean | undefined,
+    isSellable: boolean | undefined,
+  ): void {
+    if (isPurchasable === false && isSellable === false) {
+      throw new ApplicationException(
+        ERROR_CODES.PRODUCT_COMMERCIAL_CLASSIFICATION_REQUIRED,
+        'Product must be available for purchase, sale, or both',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
   }
 
   private supplierData(dto: Partial<CreateSupplierDto>): Prisma.SupplierUncheckedCreateInput {

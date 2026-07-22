@@ -108,6 +108,7 @@ export class SalesService {
     return Promise.all(inputs.map(async (input, index) => {
       const product = await this.prisma.product.findFirst({ where: { id: input.productId, isActive: true } });
       if (!product) throw new ApplicationException(ERROR_CODES.PRODUCT_NOT_FOUND, 'Product was not found or is inactive', HttpStatus.NOT_FOUND);
+      if (!product.isSellable) throw new ApplicationException(ERROR_CODES.PRODUCT_NOT_SELLABLE, 'Product is not enabled for sales', HttpStatus.CONFLICT);
       const price = await this.pricing.resolveForConsumer(product.id, 'SALE', at);
       const unitPrice = Number(price.salePrice); const quantity = input.quantity;
       return { productId: product.id, description: product.name, quantity: quantity.toFixed(3), unit: product.unit, snapshotUnitPrice: unitPrice.toFixed(2), snapshotCost: Number(price.costPrice).toFixed(2), total: (unitPrice * quantity).toFixed(2), sortOrder: index };

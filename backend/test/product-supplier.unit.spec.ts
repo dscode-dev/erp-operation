@@ -81,6 +81,29 @@ const supplierId = '33333333-3333-4333-8333-333333333333';
 const relationId = '44444444-4444-4444-8444-444444444444';
 
 describe('InventoryService ProductSupplier relationship', () => {
+  it('requires at least one commercial classification', async () => {
+    const tx = createTx();
+    const service = serviceWithTx(tx);
+
+    await expect(
+      service.createProduct(
+        {
+          sku: 'HVAC-INVALID-001',
+          name: 'Produto sem finalidade',
+          unit: 'UN',
+          isPurchasable: false,
+          isSellable: false,
+        },
+        actor,
+        context,
+      ),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.PRODUCT_COMMERCIAL_CLASSIFICATION_REQUIRED,
+      status: HttpStatus.BAD_REQUEST,
+    });
+    expect(tx.product.create).not.toHaveBeenCalled();
+  });
+
   it('persists primary supplier when creating a product', async () => {
     const tx = createTx();
     const service = serviceWithTx(tx);

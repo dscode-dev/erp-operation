@@ -805,3 +805,9 @@ Tipos:
 
 - `ChangePasswordScreen`: mantém o fluxo simples na Platform e apresenta o onboarding em dois passos no Operator.
 - `SignaturePad`: reutilizado para captura e confirmação da assinatura do técnico; nenhuma captura paralela foi criada.
+# Product commercial classification
+
+- `ProductFormDrawer`: configura as finalidades Produto comprado e Produto vendido, exige ao menos uma e inicializa a finalidade conforme a aba de origem.
+- `SaleFormDrawer`: consulta exclusivamente produtos vendáveis para a aba Cliente > Vendas.
+- `PurchaseOrderDrawer` e a seleção de materiais da operação: consultam exclusivamente produtos compráveis.
+- A tabela de produtos reutiliza `StatusChip` para indicar Compra e Venda sem duplicar cards ou formulários.

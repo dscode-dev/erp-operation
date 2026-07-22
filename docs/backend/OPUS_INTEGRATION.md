@@ -1940,3 +1940,6 @@ Implementação visual oficial: `/clientes` → `/clientes/:id` → abas Equipam
 # Operator onboarding signature
 
 O componente compartilhado `ChangePasswordScreen` possui dois passos no variant `operator`: senha definitiva e assinatura técnica. A chamada final é `usersApi.completeFirstAccess(payload, file)`. A assinatura passa a aparecer automaticamente nos seletores oficiais já alimentados por `signaturesApi.listSignatures({ active: true })`.
+# Product purchase/sale handoff — 2026-07-22
+
+O catálogo continua único. Use `isPurchasable` e `isSellable` para apresentar as abas Produtos comprados e Produtos vendidos, respectivamente. O formulário permite marcar uma ou ambas as finalidades. Cliente > Vendas consulta apenas `GET /products?sellable=true`; Purchase Orders e materiais usam `purchasable=true`. Não derive essas classificações de estoque, preço ou fornecedor.

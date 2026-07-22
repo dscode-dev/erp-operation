@@ -27,3 +27,7 @@ Atendimentos da competência, concluídos, pendentes, em execução, atrasados, 
 - Backend lint/build: aprovado; 19 suites e 83 testes aprovados.
 - Frontend lint/build: aprovado; rotas principal e detalhe incluídas no build Next.js.
 - `git diff --check`: aprovado.
+
+## Correção de runtime
+
+O prefixo `/operator-executions` revelou uma colisão na seleção de providers: `startsWith('/operator')` classificava a página gerencial como app mobile. A seleção passou a exigir o segmento exato `/operator` ou `/operator/*`, garantindo `AuthProvider` Platform e `CommandPaletteProvider` na página gerencial.

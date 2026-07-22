@@ -1521,6 +1521,8 @@ export type Product = {
   technicalDescription: string | null;
   weight: string | number | null;
   dimensions: string | null;
+  isPurchasable: boolean;
+  isSellable: boolean;
   isActive: boolean;
   disabledAt?: string | null;
   createdAt: string;
@@ -1542,6 +1544,8 @@ export type ProductPayload = Partial<{
   weight: number | null;
   dimensions: string | null;
   primarySupplierId: string | null;
+  isPurchasable: boolean;
+  isSellable: boolean;
   isActive: boolean;
 }>;
 
