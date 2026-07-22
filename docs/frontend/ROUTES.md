@@ -621,3 +621,21 @@ Rota obrigatória no primeiro login. Etapas: senha definitiva → dados profissi
 - `/produtos?tab=purchased`: produtos habilitados para compra.
 - `/produtos?tab=sold`: produtos habilitados para venda.
 - `/clientes/:id`, aba Vendas: cria vendas usando exclusivamente produtos da classificação de venda.
+# Cadastro de produto
+
+Em `/produtos?tab=purchased` e `/produtos?tab=sold`, “Novo produto” abre o mesmo formulário simplificado. A aba de origem define a finalidade inicial; códigos são sugeridos e valores são persistidos por Pricing.
+# Estoque e vendas do cliente
+
+- `/produtos?tab=inventory`: o detalhe do item concentra configurações e movimentações simplificadas.
+- `/clientes/:id`, aba Vendas: produtos são resolvidos pelo preço vigente na data escolhida; itens sem preço não aparecem como selecionáveis.
+
+# Operator — criação e execução de OS/RVT — 2026-07-22
+
+- `/operator/atendimento`: criação autônoma de OS/RVT com fluxo completo e assinatura obrigatória antes da confirmação.
+- `/operator/execucao/:id`: execução atribuída com conteúdo equivalente à Platform, evidências, materiais e etapa obrigatória de assinatura quando ainda não coletada.
+- Ambas permanecem sobre Operation → Assignment → Handoff; nenhuma rota ou fluxo documental paralelo foi criado.
+
+Em ambas as rotas, `WORK_ORDER` e `TECHNICAL_REPORT` concluem, finalizam o handoff e renderizam o PDF oficial no próprio fluxo do Operator. Não há redirecionamento para aprovação da gestão.
+
+- `/operator/profile#assinatura-tecnica`: configura a assinatura institucional vinculada ao Operator.
+- `/operator/atendimento` e `/operator/execucao/:id`: pré-selecionam essa assinatura para OS/RVT e exigem confirmação antes da assinatura do cliente/conclusão.

@@ -1,5 +1,5 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { DocumentTemplateType, Prisma, SignatureMode } from '@prisma/client';
+import { DocumentTemplateType, OperationStatus, Prisma, SignatureMode } from '@prisma/client';
 import {
   DOCUMENT_MAX_COMPONENTS,
   DOCUMENT_MAX_SECTIONS,
@@ -29,6 +29,15 @@ import {
 type ChecklistItem = { label: string; done: boolean; note: string | null };
 type BuilderOrganization = DocumentContext['configuration']['organization'];
 type BuilderLogo = DocumentContext['assets']['logo'];
+
+const OPERATION_STATUS_LABEL: Record<OperationStatus, string> = {
+  DRAFT: 'Rascunho',
+  PENDING: 'Pendente',
+  IN_PROGRESS: 'Em andamento',
+  REVIEW: 'Em revisão',
+  COMPLETED: 'Concluída',
+  CANCELED: 'Cancelada',
+};
 
 @Injectable()
 export class DocumentBuilderService {
@@ -333,7 +342,7 @@ export class DocumentBuilderService {
             ['Documento', this.titleFor(context.configuration.type)],
             ['Operação', String(operation.number).padStart(6, '0')],
             ['Tipo da operação', operation.type],
-            ['Status operacional', operation.status],
+            ['Status operacional', OPERATION_STATUS_LABEL[operation.status]],
             ['Agendado para', this.date(operation.scheduledFor)],
             ['Conclusão', this.date(operation.completedAt)],
           ]),
@@ -413,7 +422,7 @@ export class DocumentBuilderService {
             ['Data de emissão', this.date(generatedAt)],
             ['Data de criação', this.date(operation.createdAt)],
             ['Data do agendamento', this.date(operation.scheduledFor)],
-            ['Status', operation.status],
+            ['Status', OPERATION_STATUS_LABEL[operation.status]],
             // Responsável técnico = assinatura selecionada na revisão da Platform.
             ['Responsável técnico', this.technicalResponsibleName(context) ?? 'A definir na revisão'],
             ['Operador em campo', operation.operator.name],
@@ -482,7 +491,7 @@ export class DocumentBuilderService {
             // que coletou os dados aparece em "Local da visita".
             ['Responsável técnico', this.technicalResponsibleName(context) ?? 'A definir na revisão'],
             ['Registro profissional', this.technicalResponsibleTitle(context) ?? '—'],
-            ['Situação', operation.status],
+            ['Situação', OPERATION_STATUS_LABEL[operation.status]],
             ['Referência operacional', `OP-${String(operation.number).padStart(6, '0')}`],
           ]),
         ],
@@ -666,7 +675,7 @@ export class DocumentBuilderService {
             ['Tipo de documento', 'Laudo Técnico'],
             ['Data de emissão', this.dateOnly(generatedAt)],
             ['Data da vistoria', this.dateOnly(inspectionDate)],
-            ['Situação', operation.status],
+            ['Situação', OPERATION_STATUS_LABEL[operation.status]],
             ['Responsável Técnico', responsibleName],
             ['CREA / Registro profissional', professionalCouncil],
           ]),

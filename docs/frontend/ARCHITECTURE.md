@@ -1136,3 +1136,21 @@ A assinatura de primeiro acesso utiliza a mesma entidade `Signature`, API, valid
 # Catálogo único e finalidades comerciais
 
 Compra e venda não possuem catálogos paralelos. `Product` é a fonte única e expõe `isPurchasable`/`isSellable`; as abas apenas aplicam filtros server-side. `SaleFormDrawer` solicita `sellable=true`, enquanto Procurement e materiais solicitam `purchasable=true`. O backend revalida a classificação no comando transacional, portanto alterações concorrentes não podem ser contornadas por uma lista previamente carregada.
+# Orquestração visual Product + Pricing
+
+`ProductFormDrawer` coordena duas APIs sem misturar ownership: primeiro persiste o catálogo por `inventoryApi`, depois cria a vigência inicial por `pricingApi` quando houver valores. A segunda etapa não adiciona preço ao payload de Product. Em falha parcial, o produto criado é preservado e a UI orienta correção pela área de preços, evitando repetição e conflito de SKU.
+# Disponibilidade comercial no SaleFormDrawer
+
+O seletor de venda deixou de derivar disponibilidade apenas de `Product.isSellable`. Ele consulta Pricing vigente em `soldAt`, reutiliza a relação Product retornada e apresenta o valor ao usuário. SalesService repete todas as validações e cria snapshots, evitando confiança no frontend. No estoque, o frontend nunca envia saldo final: apenas movimentos ou parâmetros, preservando Inventory como autoridade física.
+
+# Paridade Platform/Operator para Ordem de Serviço
+
+Os dois ambientes persistem o mesmo contrato de conteúdo da Operation (`reportedIssue`, `serviceDescription`, `observations`, checklist, equipamentos e evidências). O Operator adiciona a etapa obrigatória de identidade e assinatura do cliente/responsável. A captura gera um único timestamp compartilhado entre Operation e snapshot do handoff; Preview e PDF recebem esses dados pelo mesmo DocumentContext.
+
+A interface bloqueia avanço sem assinatura, mas o backend permanece como autoridade e repete a validação na criação e na conclusão do Assignment.
+
+O resumo apresentado na etapa de assinatura é somente uma projeção dos estados já coletados no Wizard. A conclusão de OS/RVT continua executando Assignment complete → handoff finalize → render oficial; não existe estado de revisão intermediário nesses documentos de campo.
+
+# Assinatura técnica própria no mobile
+
+O mobile não possui catálogo paralelo. `Signature.userId` identifica a assinatura própria; o Wizard persiste somente seu ID em `OperationDocument.technicalSignatureId`. Na finalização, o backend copia a imagem pelo `DocumentAssetResolver` para `technicalSignatureSnapshot`. Assim, alterações futuras no perfil não modificam PDFs históricos e o DocumentContext continua sendo a única origem do Builder.

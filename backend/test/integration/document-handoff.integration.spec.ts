@@ -64,6 +64,7 @@ describe('Field Report Handoff', () => {
     const signature = await prisma.signature.create({
       data: {
         organizationId: organization.id,
+        userId: operator.id,
         name: 'Engenheira Responsável',
         title: 'Responsável Técnica',
         profession: 'Engenheira Mecânica',
@@ -155,6 +156,7 @@ describe('Field Report Handoff', () => {
     await prisma.signature.create({
       data: {
         organizationId: organization.id,
+        userId: operator.id,
         name: 'Responsável técnica padrão',
         title: 'Responsável técnica',
         imageStorageKey: signatureKey,
@@ -196,6 +198,55 @@ describe('Field Report Handoff', () => {
     });
     await expect(prisma.operationDocument.findUniqueOrThrow({ where: { id: draft.id } }))
       .resolves.toMatchObject({ editorialStatus: 'READY', finalizedById: operator.id });
+  });
+
+  it('allows an operator to select only their own technical signature for OS/RVT', async () => {
+    const organization = await createOrganization();
+    const operator = await createActor(Role.OPERATOR, 'own-signature-operator');
+    const other = await createActor(Role.OPERATOR, 'other-signature-operator');
+    const operation = await createOperation(operator);
+    await prisma.assignment.create({
+      data: { operationId: operation.id, assignedBy: other.id, assignedTo: operator.id },
+    });
+    const ownKey = 'documents/signatures/own-operator.png';
+    const otherKey = 'documents/signatures/other-operator.png';
+    storage.files.set(ownKey, PNG);
+    storage.files.set(otherKey, PNG);
+    const own = await prisma.signature.create({
+      data: {
+        organizationId: organization.id,
+        userId: operator.id,
+        name: operator.name,
+        title: 'Técnico de campo',
+        imageStorageKey: ownKey,
+        mimeType: 'image/png',
+        originalFileName: 'own.png',
+        fileSize: PNG.length,
+      },
+    });
+    const foreign = await prisma.signature.create({
+      data: {
+        organizationId: organization.id,
+        userId: other.id,
+        name: other.name,
+        title: 'Outro técnico',
+        imageStorageKey: otherKey,
+        mimeType: 'image/png',
+        originalFileName: 'other.png',
+        fileSize: PNG.length,
+      },
+    });
+
+    const draft = await service.saveDraft(
+      { operationId: operation.id, type: DocumentTemplateType.TECHNICAL_REPORT },
+      operator,
+      audit,
+    ) as { id: string; technicalSignature: { id: string } };
+    expect(draft.technicalSignature.id).toBe(own.id);
+    await expect(service.selectTechnicalSignature(draft.id, foreign.id, operator, audit))
+      .rejects.toMatchObject({ status: 403 });
+    await expect(service.selectTechnicalSignature(draft.id, own.id, operator, audit))
+      .resolves.toMatchObject({ technicalSignature: { id: own.id }, editorialStatus: 'DRAFT' });
   });
 
   it('prioritizes the PMOC technical signature override when preparing the official handoff', async () => {

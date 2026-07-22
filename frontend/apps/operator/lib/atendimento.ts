@@ -19,7 +19,9 @@ export type AtendimentoDraft = {
   /** ServiceTypeKey maps 1:1 to the backend OperationType. */
   serviceType: ServiceTypeKey | null;
   checklist: { label: string; done: boolean }[];
-  notes: string;
+  reportedIssue: string;
+  serviceDescription: string;
+  observations: string;
   objective: string[];
   conditions: string[];
   recommendations: string[];
@@ -29,6 +31,8 @@ export type AtendimentoDraft = {
   /** Quem assinou pelo cliente — obrigatório quando há assinatura. */
   signerName: string;
   signerRole: string;
+  signedAt: string | null;
+  technicalSignatureId: string | null;
   startedAt: string | null;
 };
 
@@ -58,13 +62,14 @@ export async function createOperationFromDraft(draft: AtendimentoDraft): Promise
   if (draft.documentType !== 'WORK_ORDER' && draft.documentType !== 'TECHNICAL_REPORT') {
     throw new Error('O operador pode iniciar somente Ordem de Serviço ou Relatório de Visita Técnica.');
   }
-  if (draft.signature && !draft.signerName.trim()) throw new Error('Informe o nome de quem assinou.');
+  if (!draft.signature || !draft.signerName.trim()) throw new Error('A assinatura e o nome do cliente/responsável são obrigatórios.');
+  if (!draft.technicalSignatureId) throw new Error('Selecione sua assinatura técnica para esta atividade.');
 
   const photos = await Promise.all(
     draft.photos.map(async (p) => ({ dataUrl: await fileToDataUrl(p.file), caption: p.name })),
   );
 
-  const now = new Date().toISOString();
+  const now = draft.signedAt ?? new Date().toISOString();
   const payload: CreateOperationPayload = {
     customerId: draft.customerId,
     addressId: draft.addressId,
@@ -74,15 +79,17 @@ export async function createOperationFromDraft(draft: AtendimentoDraft): Promise
     documentType: draft.documentType,
     status: 'DRAFT',
     checklist: draft.checklist,
-    serviceDescription: draft.notes.trim() || null,
+    reportedIssue: draft.reportedIssue.trim() || null,
+    serviceDescription: draft.serviceDescription.trim() || null,
+    observations: draft.observations.trim() || null,
     technicalOpinionObjective: draft.objective.join('\n') || null,
     technicalOpinionConditions: draft.conditions.join('\n') || null,
     technicalOpinionRecommendations: draft.recommendations.join('\n') || null,
     technicalOpinionConclusion: draft.conclusion.join('\n') || null,
     signatureData: draft.signature,
-    customerSignerName: draft.signature ? draft.signerName.trim() : null,
-    customerSignerRole: draft.signature ? draft.signerRole.trim() || null : null,
-    signedAt: draft.signature ? now : null,
+    customerSignerName: draft.signerName.trim(),
+    customerSignerRole: draft.signerRole.trim() || null,
+    signedAt: now,
     photos,
   };
 
@@ -97,17 +104,19 @@ export async function createOperationFromDraft(draft: AtendimentoDraft): Promise
   await assignmentsApi.startAssignment(assignment.id);
 
   let draftDocument = await documentsApi.saveHandoffDraft(created.id, draft.documentType);
-  if (draft.signature) {
-    // Registro oficial da assinatura no documento (nome/função/quando/por quem),
-    // usado pelos relatórios e pela validação na Platform.
-    draftDocument = await documentsApi.collectCustomerSignature(draftDocument.id, {
-      signerName: draft.signerName.trim(),
-      signerRole: draft.signerRole.trim() || undefined,
-      signatureData: draft.signature,
-      collectedAt: now,
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Recife',
-    });
-  }
+  draftDocument = await documentsApi.selectHandoffTechnicalSignature(
+    draftDocument.id,
+    draft.technicalSignatureId,
+  );
+  // Registro oficial da assinatura no documento (nome/função/quando/por quem),
+  // usado pelo Preview e pelo PDF a partir do mesmo DocumentContext.
+  draftDocument = await documentsApi.collectCustomerSignature(draftDocument.id, {
+    signerName: draft.signerName.trim(),
+    signerRole: draft.signerRole.trim() || undefined,
+    signatureData: draft.signature,
+    collectedAt: now,
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Recife',
+  });
   await documentsApi.submitHandoff(draftDocument.id);
   await assignmentsApi.completeAssignment(assignment.id, 'Atendimento iniciado e executado pelo operador.');
   const handoff = await documentsApi.finalizeHandoffReview(draftDocument.id);

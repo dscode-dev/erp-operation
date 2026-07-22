@@ -259,6 +259,19 @@ export class OperationsService {
       );
     }
     const signatureData = this.normalizeSignatureData(dto.signatureData);
+    if (
+      actor.role === Role.OPERATOR &&
+      OPERATOR_DIRECT_COMPLETION_DOCUMENT_TYPES.includes(
+        requestedDocumentType as (typeof OPERATOR_DIRECT_COMPLETION_DOCUMENT_TYPES)[number],
+      ) &&
+      (!signatureData || !dto.customerSignerName?.trim())
+    ) {
+      throw new ApplicationException(
+        ERROR_CODES.DOCUMENT_CUSTOMER_SIGNATURE_REQUIRED,
+        'A assinatura e o nome do cliente/responsável são obrigatórios',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
 
     // Operation + auto Work Order draft are created atomically. The OS number is
     // derived from the operation sequential number.

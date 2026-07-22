@@ -1943,3 +1943,22 @@ O componente compartilhado `ChangePasswordScreen` possui dois passos no variant 
 # Product purchase/sale handoff — 2026-07-22
 
 O catálogo continua único. Use `isPurchasable` e `isSellable` para apresentar as abas Produtos comprados e Produtos vendidos, respectivamente. O formulário permite marcar uma ou ambas as finalidades. Cliente > Vendas consulta apenas `GET /products?sellable=true`; Purchase Orders e materiais usam `purchasable=true`. Não derive essas classificações de estoque, preço ou fornecedor.
+# Simplified product form handoff — 2026-07-22
+
+O cadastro sugere códigos editáveis e apresenta somente dados principais/valores inicialmente. Campos técnicos, fornecedor e descrição são progressivos. Valores são enviados ao Pricing após criar o Product; falha nessa segunda chamada deve ser apresentada como sucesso parcial, sem recriar o produto.
+# Inventory/Sales availability handoff — 2026-07-22
+
+Estoque usa linguagem de negócio: Saldo físico, Quantidade separada e Disponível para uso. Movimentos expostos na UI são Adicionar, Retirar e Devolução, todos sobre o endpoint oficial. Cliente > Vendas monta opções a partir de Pricing vigente na data, mostrando nome, SKU e valor; produtos sem preço não são selecionáveis.
+
+# Operator Work Order parity — 2026-07-22
+
+- OS/RVT no Operator usam campos separados `reportedIssue`, `serviceDescription` e `observations`, iguais aos consumidos pelo DocumentContext.
+- A assinatura do cliente/responsável é obrigatória no mobile: imagem, nome e instante de coleta; função/vínculo é opcional.
+- Reutilizar o mesmo `signedAt` em Operation e handoff. O PDF oficial renderiza a data/hora em linha própria no bloco de assinatura.
+- `POST /operations` pode retornar 400 e `PATCH /assignments/:id/complete`, 409, ambos com `DOCUMENT_CUSTOMER_SIGNATURE_REQUIRED`.
+
+OS e RVT autônomos ou atribuídos apresentam conferência completa junto à assinatura e terminam em `Concluir e gerar PDF`. O status textual dentro do documento é fornecido em pt-BR pelo Builder; não mapear novamente no DocumentViewer.
+
+# Operator own technical signature
+
+Use exclusivamente `signaturesApi.getMySignature/saveMySignature/downloadMySignatureImage`. A assinatura própria é pré-selecionada no passo Assinatura de OS/RVT e persistida pelo endpoint oficial de seleção do handoff. O backend rejeita IDs de terceiros; nunca carregue o catálogo global no mobile.

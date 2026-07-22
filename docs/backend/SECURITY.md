@@ -2117,3 +2117,31 @@ The catalog is scoped to the installation Organization in every query. Reads req
 - A filtragem do frontend não é controle de autorização: `SalesService` rejeita produtos não vendáveis e `ProcurementService` rejeita produtos não compráveis.
 - A resolução de preço não ocorre quando o produto é incompatível com venda, reduzindo processamento e evitando uso comercial indevido.
 - A migration é aditiva e mantém os registros preexistentes habilitados nas duas finalidades.
+# Product form pricing boundary — 2026-07-22
+
+- Sugestões de SKU/código interno são apenas UX; constraints e tratamento `PRODUCT_CONFLICT` permanecem como autoridade.
+- Valores informados no cadastro passam pela API de Pricing e suas validações de RBAC, vigência, moeda e margem.
+- Somente perfis autorizados a editar Pricing visualizam e enviam os campos monetários.
+# Inventory and sale availability controls — 2026-07-22
+
+- O frontend antecipa limites de retirada, mas o backend mantém transação serializável e impede estoque físico/disponível negativo.
+- Quantidade separada não pode exceder o saldo reconstruído pelas movimentações.
+- O seletor de venda filtra preço vigente para UX; Sales revalida atividade, finalidade e Pricing no instante da criação, impedindo bypass por payload manual ou estado obsoleto.
+- Dados de estoque e preço continuam submetidos ao RBAC dos endpoints oficiais.
+
+# Integridade da assinatura de campo em OS/RVT — 2026-07-22
+
+- A obrigatoriedade não depende do frontend: criação autônoma por Operator exige assinatura e identificação; conclusão do Assignment exige assinatura, nome e `signedAt` persistidos.
+- A imagem continua passando pela validação binária e normalização existentes; storage keys, paths e base64 não são retornados nos contratos documentais.
+- Operation e handoff recebem o mesmo instante de coleta, preservando rastreabilidade entre execução, snapshot documental, Preview e PDF.
+- OWNER/MANAGER continuam autorizados a preparar operações sem assinatura; a coleta é exigida quando o Operator conclui OS/RVT em campo.
+
+- A tela de conferência não altera a autoridade do backend: mesmo com resumo e botão local corretos, conclusão e emissão continuam protegidas por ownership, transição de Assignment, assinatura persistida e RBAC do Document Engine.
+
+# Ownership da assinatura técnica do Operator — 2026-07-22
+
+- Endpoints `/signatures/me` derivam o usuário exclusivamente do JWT; não aceitam `userId` por payload ou query.
+- Operator não recebeu acesso ao catálogo global. Leitura, alteração e download próprios filtram por `Signature.userId = actor.id`.
+- Seleção documental repete ownership da Operation e da Signature, restringe a OS/RVT e impede IDOR entre operadores.
+- Upload mantém limite de 2 MiB, MIME/extensão permitidos, magic bytes, UUID de storage e sanitização de nome.
+- O snapshot técnico é criado somente na finalização e preserva a versão usada naquele PDF; atualizações futuras no perfil não alteram documentos históricos.

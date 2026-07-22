@@ -294,6 +294,9 @@ export class AssignmentsService {
         operation: {
           select: {
             requestedDocumentType: true,
+            signatureData: true,
+            customerSignerName: true,
+            signedAt: true,
             _count: { select: { photos: true } },
             maintenanceExecution: {
               select: { plan: { select: { pmocPlan: { select: { id: true } } } } },
@@ -320,6 +323,18 @@ export class AssignmentsService {
       (assignment?.operation.requestedDocumentType ?? DocumentTemplateType.WORK_ORDER) as
         (typeof OPERATOR_DIRECT_COMPLETION_DOCUMENT_TYPES)[number],
     );
+    if (
+      directCompletion &&
+      (!assignment?.operation.signatureData ||
+        !assignment.operation.customerSignerName?.trim() ||
+        !assignment.operation.signedAt)
+    ) {
+      throw new ApplicationException(
+        ERROR_CODES.DOCUMENT_CUSTOMER_SIGNATURE_REQUIRED,
+        'Colete a assinatura e identifique o cliente/responsável antes de concluir',
+        HttpStatus.CONFLICT,
+      );
+    }
     return this.transition(id, actor, context, {
       event: AssignmentEventType.COMPLETED,
       action: ASSIGNMENT_AUDIT_ACTIONS.ASSIGNMENT_COMPLETED,

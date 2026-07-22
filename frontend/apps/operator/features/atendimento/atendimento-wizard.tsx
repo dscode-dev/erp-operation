@@ -2,11 +2,11 @@
 
 /**
  * AtendimentoWizard — the full field-service flow:
- * Cliente → Endereço → Equipamento → Tipo → Checklist → Observações → Fotos →
- * Assinatura → Resumo → Enviar.
+ * Cliente → Escopo → Execução → Checklist → Conteúdo → Evidências →
+ * Assinatura → Confirmação.
  *
- * Reads clients/equipments from the real backend; on submit, enqueues to the
- * offline outbox (no Service endpoint yet — Backend Sprint 6).
+ * Reads clients/equipments from the real backend and persists the complete
+ * Operation → Assignment → Handoff flow through the official APIs.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -63,29 +63,23 @@ import { EQUIPMENT_STATUS_LABEL, EQUIPMENT_STATUS_PILL } from '@platform/equipme
 import { useDebounce } from '@erp/utils';
 import { SERVICE_TYPES, serviceTypeLabel, type ServiceTypeKey } from '../../lib/service-types';
 import { createOperationFromDraft, workOrderNumber } from '../../lib/atendimento';
+import { OperatorSignatureChoice } from '../../components/operator-signature';
 
 const STEPS = [
   'Cliente',
-  'Endereço',
-  'Equipamento',
-  'Tipo',
+  'Escopo',
+  'Execução',
   'Checklist',
-  'Observações',
-  'Fotos',
+  'Conteúdo',
+  'Evidências',
   'Assinatura',
-  'Resumo',
+  'Confirmar',
 ] as const;
 
 const FIELD_DOCUMENT_TYPES: DocumentKind[] = [
   'WORK_ORDER',
   'TECHNICAL_REPORT',
 ];
-const CUSTOMER_SIGNATURE_TYPES = new Set<DocumentKind>([
-  'WORK_ORDER',
-  'TECHNICAL_REPORT',
-  'BUDGET',
-]);
-
 type ChecklistItem = { label: string; done: boolean };
 
 export function AtendimentoWizard({
@@ -104,7 +98,9 @@ export function AtendimentoWizard({
   const [equipments, setEquipments] = useState<EquipmentSummary[]>([]);
   const [serviceType, setServiceType] = useState<ServiceTypeKey | null>(null);
   const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
-  const [notes, setNotes] = useState('');
+  const [reportedIssue, setReportedIssue] = useState('');
+  const [serviceDescription, setServiceDescription] = useState('');
+  const [observations, setObservations] = useState('');
   const [objectives, setObjectives] = useState<string[]>([]);
   const [conditions, setConditions] = useState<string[]>([]);
   const [recommendations, setRecommendations] = useState<string[]>([]);
@@ -113,6 +109,8 @@ export function AtendimentoWizard({
   const [signature, setSignature] = useState<string | null>(null);
   const [signerName, setSignerName] = useState('');
   const [signerRole, setSignerRole] = useState('');
+  const [signedAt, setSignedAt] = useState<string | null>(null);
+  const [technicalSignatureId, setTechnicalSignatureId] = useState<string | null>(null);
 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -138,14 +136,14 @@ export function AtendimentoWizard({
           const c = await customersApi.getCustomer(eq.customer.id).catch(() => null);
           if (active && c) {
             setCustomer(c);
-            setStep(3); // pula para Tipo de serviço
+            setStep(2); // pula para Execução
           }
         }
       } else if (initialCustomerId) {
         const c = await customersApi.getCustomer(initialCustomerId).catch(() => null);
         if (active && c) {
           setCustomer(c);
-          setStep(1); // pula para Endereço
+          setStep(0); // mantém Cliente para escolher o endereço
         }
       }
     })();
@@ -188,27 +186,23 @@ export function AtendimentoWizard({
       case 0:
         return !!customer;
       case 1:
-        return !!address;
-      case 2:
         return true; // equipamento opcional
-      case 3:
+      case 2:
         return !!serviceType;
+      case 3:
+        return true;
       case 4:
         return true;
       case 5:
         return true;
       case 6:
-        return true;
+        return !!technicalSignatureId && !!signature && signerName.trim().length > 0;
       case 7:
-        return documentType
-          ? !CUSTOMER_SIGNATURE_TYPES.has(documentType) || (!!signature && signerName.trim().length > 0)
-          : false;
-      case 8:
         return true;
       default:
         return false;
     }
-  }, [step, customer, address, serviceType, signature, signerName, documentType]);
+  }, [step, customer, serviceType, signature, signerName, technicalSignatureId]);
 
   function back() {
     if (step === 0) router.push('/operator');
@@ -236,7 +230,9 @@ export function AtendimentoWizard({
         })),
         serviceType,
         checklist,
-        notes,
+        reportedIssue,
+        serviceDescription,
+        observations,
         objective: objectives,
         conditions,
         recommendations,
@@ -245,6 +241,8 @@ export function AtendimentoWizard({
         signature,
         signerName,
         signerRole,
+        signedAt,
+        technicalSignatureId,
         startedAt,
       });
       setResult({
@@ -299,19 +297,24 @@ export function AtendimentoWizard({
 
       <div className="flex-1 overflow-y-auto p-4">
         {step === 0 && (
-          <ClienteStep
-            selected={customer}
-            onSelect={(c) => {
-              setCustomer(c);
-              setAddress(null);
-              setEquipments([]);
-            }}
-          />
+          <div className="space-y-5">
+            <ClienteStep
+              selected={customer}
+              onSelect={(c) => {
+                setCustomer(c);
+                setAddress(null);
+                setEquipments([]);
+              }}
+            />
+            {customer && (
+              <section className="space-y-2 border-t border-[var(--color-border)] pt-4">
+                <h2 className="text-sm font-semibold">Local do atendimento</h2>
+                <EnderecoStep customerId={customer.id} selected={address} onSelect={setAddress} />
+              </section>
+            )}
+          </div>
         )}
         {step === 1 && customer && (
-          <EnderecoStep customerId={customer.id} selected={address} onSelect={setAddress} />
-        )}
-        {step === 2 && customer && (
           <EquipamentoStep
             customerId={customer.id}
             selected={equipments}
@@ -320,12 +323,21 @@ export function AtendimentoWizard({
               setEquipments((current) =>
                 current.some((item) => item.id === eq.id) ? current : [...current, eq],
               );
-              setStep(3);
+              setStep(2);
             }}
           />
         )}
-        {step === 3 && <TipoStep selected={serviceType} onSelect={pickServiceType} />}
-        {step === 4 && (
+        {step === 2 && (
+          <div className="space-y-4">
+            <div className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] p-3 text-sm">
+              <span className="block text-caption">Documento</span>
+              <strong>{DOCUMENT_KIND_LABEL[documentType]}</strong>
+              <span className="mt-1 block text-caption">O atendimento será executado por você e iniciado agora.</span>
+            </div>
+            <TipoStep selected={serviceType} onSelect={pickServiceType} />
+          </div>
+        )}
+        {step === 3 && (
           <ChecklistStep
             items={checklist}
             loading={checklistCatalog.loading && checklist.length === 0}
@@ -336,10 +348,15 @@ export function AtendimentoWizard({
             }
           />
         )}
-        {step === 5 && (
+        {step === 4 && (
           <NotesStep
-            value={notes}
-            onChange={setNotes}
+            documentType={documentType}
+            reportedIssue={reportedIssue}
+            onReportedIssue={setReportedIssue}
+            serviceDescription={serviceDescription}
+            onServiceDescription={setServiceDescription}
+            observations={observations}
+            onObservations={setObservations}
             objectives={objectives}
             onObjectivesChange={setObjectives}
             conditions={conditions}
@@ -351,21 +368,46 @@ export function AtendimentoWizard({
             areas={technicalCatalogAreas(equipments)}
           />
         )}
-        {step === 6 && <FotosStep photos={photos} onChange={setPhotos} />}
-        {step === 7 && (CUSTOMER_SIGNATURE_TYPES.has(documentType) ? <AssinaturaStep signerName={signerName} signerRole={signerRole} onSignerName={setSignerName} onSignerRole={setSignerRole} onChange={setSignature} /> : <EmptyState icon={PenLine} title="Assinatura não exigida" description="Este tipo de documento não exige assinatura do cliente nesta coleta." />)}
-        {step === 8 && (
+        {step === 5 && <FotosStep photos={photos} onChange={setPhotos} />}
+        {step === 6 && (
+          <div className="space-y-5">
+            <OperatorSignatureChoice selectedId={technicalSignatureId} onSelect={setTechnicalSignatureId} />
+            <ResumoStep
+              customer={customer}
+              address={address}
+              equipments={equipments}
+              serviceType={serviceType}
+              checklist={checklist}
+              reportedIssue={reportedIssue}
+              serviceDescription={serviceDescription}
+              observations={observations}
+              photoCount={photos.length}
+              signed={false}
+              documentType={documentType}
+              variant="signature"
+              showSignature={false}
+            />
+            <AssinaturaStep signerName={signerName} signerRole={signerRole} signedAt={signedAt} onSignerName={setSignerName} onSignerRole={setSignerRole} onChange={(value) => { setSignature(value); setSignedAt(value ? new Date().toISOString() : null); }} />
+          </div>
+        )}
+        {step === 7 && (
           <ResumoStep
             customer={customer}
             address={address}
             equipments={equipments}
             serviceType={serviceType}
             checklist={checklist}
-            notes={notes}
+            reportedIssue={reportedIssue}
+            serviceDescription={serviceDescription}
+            observations={observations}
             photoCount={photos.length}
             signed={!!signature}
             signerName={signerName}
             signerRole={signerRole}
+            signedAt={signedAt}
+            technicalSignatureSelected={Boolean(technicalSignatureId)}
             documentType={documentType}
+            variant="confirmation"
           />
         )}
         {submitError && (
@@ -378,7 +420,7 @@ export function AtendimentoWizard({
       <WizardFooter
         onBack={back}
         onNext={next}
-        nextLabel={isLast ? 'Enviar para aprovação' : 'Continuar'}
+        nextLabel={isLast ? 'Concluir e gerar PDF' : 'Continuar'}
         nextDisabled={!canNext}
         loading={submitting}
         isLast={isLast}
@@ -865,8 +907,13 @@ function ChecklistStep({
 }
 
 function NotesStep({
-  value,
-  onChange,
+  documentType,
+  reportedIssue,
+  onReportedIssue,
+  serviceDescription,
+  onServiceDescription,
+  observations,
+  onObservations,
   objectives,
   onObjectivesChange,
   conditions,
@@ -877,8 +924,13 @@ function NotesStep({
   onConclusionsChange,
   areas,
 }: {
-  value: string;
-  onChange: (v: string) => void;
+  documentType: DocumentKind;
+  reportedIssue: string;
+  onReportedIssue: (value: string) => void;
+  serviceDescription: string;
+  onServiceDescription: (value: string) => void;
+  observations: string;
+  onObservations: (value: string) => void;
   objectives: string[];
   onObjectivesChange: (values: string[]) => void;
   conditions: string[];
@@ -891,7 +943,29 @@ function NotesStep({
 }) {
   return (
     <div className="space-y-5">
-      <section className="space-y-2">
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold">Relato do atendimento</h2>
+        <MobileTextArea
+          label={documentType === 'WORK_ORDER' ? 'Defeito ou solicitação' : 'Objetivo ou motivo da visita'}
+          value={reportedIssue}
+          onChange={onReportedIssue}
+          placeholder="Descreva o que foi informado pelo cliente."
+        />
+        <MobileTextArea
+          label={documentType === 'WORK_ORDER' ? 'Serviços previstos ou executados' : 'Atividades executadas'}
+          value={serviceDescription}
+          onChange={onServiceDescription}
+          placeholder="Descreva os serviços e verificações realizados."
+        />
+        <MobileTextArea
+          label={documentType === 'WORK_ORDER' ? 'Observações' : 'Observações e resultado operacional'}
+          value={observations}
+          onChange={onObservations}
+          placeholder="Registre o resultado, pendências e orientações ao cliente."
+        />
+      </section>
+      {documentType === 'TECHNICAL_REPORT' && <>
+      <section className="space-y-2 border-t border-[var(--color-border)] pt-4">
         <h2 className="text-sm font-semibold">Objetivos</h2>
         <TechnicalCatalogSelector
           type="OBJECTIVE"
@@ -939,19 +1013,17 @@ function NotesStep({
           compact
         />
       </section>
-      <div className="space-y-2">
-        <p className="text-sm text-[var(--color-muted-foreground)]">
-          Descreva o serviço, achados e recomendações.
-        </p>
-        <textarea
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          rows={8}
-          placeholder="Observações técnicas…"
-          className="w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-3 py-3 text-sm outline-none focus:border-[var(--color-primary)] resize-none"
-        />
-      </div>
+      </>}
     </div>
+  );
+}
+
+function MobileTextArea({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (value: string) => void; placeholder: string }) {
+  return (
+    <label className="block space-y-1.5">
+      <span className="text-sm font-medium">{label}</span>
+      <textarea value={value} onChange={(event) => onChange(event.target.value)} rows={4} placeholder={placeholder} className="w-full resize-y rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-3 py-3 text-sm outline-none focus:border-[var(--color-primary)]" />
+    </label>
   );
 }
 
@@ -988,12 +1060,14 @@ function FotosStep({
 function AssinaturaStep({
   signerName,
   signerRole,
+  signedAt,
   onSignerName,
   onSignerRole,
   onChange,
 }: {
   signerName: string;
   signerRole: string;
+  signedAt: string | null;
   onSignerName: (v: string) => void;
   onSignerRole: (v: string) => void;
   onChange: (s: string | null) => void;
@@ -1017,6 +1091,7 @@ function AssinaturaStep({
       />
       <SignaturePad onChange={onChange} onConfirm={onChange} />
       {!signerName.trim() && <p className="text-[11px] text-[var(--color-warning)]">Informe o nome de quem assina para continuar.</p>}
+      {signedAt && <p className="rounded-[var(--radius-md)] bg-[var(--color-success)]/10 px-3 py-2 text-xs text-[var(--color-success)]">Assinatura coletada em {new Date(signedAt).toLocaleString('pt-BR')}.</p>}
     </div>
   );
 }
@@ -1027,31 +1102,45 @@ function ResumoStep({
   equipments,
   serviceType,
   checklist,
-  notes,
+  reportedIssue,
+  serviceDescription,
+  observations,
   photoCount,
   signed,
   signerName,
   signerRole,
+  signedAt,
+  technicalSignatureSelected = false,
   documentType,
+  variant = 'confirmation',
+  showSignature = true,
 }: {
   customer: Customer | null;
   address: { id: string; label: string } | null;
   equipments: EquipmentSummary[];
   serviceType: ServiceTypeKey | null;
   checklist: ChecklistItem[];
-  notes: string;
+  reportedIssue: string;
+  serviceDescription: string;
+  observations: string;
   photoCount: number;
   signed: boolean;
   signerName?: string;
   signerRole?: string;
+  signedAt?: string | null;
+  technicalSignatureSelected?: boolean;
   documentType: DocumentKind;
+  variant?: 'signature' | 'confirmation';
+  showSignature?: boolean;
 }) {
   const done = checklist.filter((c) => c.done).length;
   return (
     <div className="space-y-3">
       <div className="rounded-[var(--radius-md)] border border-[var(--color-info)]/30 bg-[var(--color-info)]/10 px-3 py-2 text-sm text-[var(--color-info)] flex items-start gap-2">
         <FileText className="h-4 w-4 mt-0.5 shrink-0" />
-        Revise os dados antes de enviar. O documento é gerado pelo backend após o envio.
+        {variant === 'signature'
+          ? 'Confira com o cliente os dados abaixo antes de coletar a assinatura.'
+          : 'Confira os dados finais. Ao concluir, o PDF oficial será gerado e ficará disponível para baixar ou compartilhar.'}
       </div>
       <SummaryRow icon={<Building2 className="h-4 w-4" />} label="Cliente" value={customer?.name} />
       <SummaryRow icon={<FileText className="h-4 w-4" />} label="Documento" value={DOCUMENT_KIND_LABEL[documentType]} />
@@ -1074,16 +1163,28 @@ function ResumoStep({
         value={`${done}/${checklist.length} concluídos`}
       />
       <SummaryRow icon={<Camera className="h-4 w-4" />} label="Fotos" value={`${photoCount}`} />
-      <SummaryRow
-        icon={<PenLine className="h-4 w-4" />}
-        label="Assinatura"
-        value={signed ? `Coletada${signerName?.trim() ? ` · ${signerName.trim()}${signerRole?.trim() ? ` (${signerRole.trim()})` : ''}` : ''}` : 'Pendente'}
-        tone={signed ? 'success' : 'warning'}
-      />
-      {notes && (
+      {showSignature && (
+        <SummaryRow
+          icon={<PenLine className="h-4 w-4" />}
+          label="Assinatura técnica"
+          value={technicalSignatureSelected ? 'Minha assinatura selecionada' : 'Pendente'}
+          tone={technicalSignatureSelected ? 'success' : 'warning'}
+        />
+      )}
+      {showSignature && (
+        <SummaryRow
+          icon={<PenLine className="h-4 w-4" />}
+          label="Assinatura"
+          value={signed ? `Coletada · ${signerName?.trim() ?? ''}${signerRole?.trim() ? ` (${signerRole.trim()})` : ''}${signedAt ? ` · ${new Date(signedAt).toLocaleString('pt-BR')}` : ''}` : 'Pendente'}
+          tone={signed ? 'success' : 'warning'}
+        />
+      )}
+      {(reportedIssue || serviceDescription || observations) && (
         <div className="rounded-[var(--radius-md)] border border-[var(--color-border)] p-3">
-          <div className="text-caption uppercase tracking-wider mb-1">Observações</div>
-          <p className="text-sm whitespace-pre-wrap">{notes}</p>
+          <div className="text-caption uppercase tracking-wider mb-2">{documentType === 'WORK_ORDER' ? 'Conteúdo da Ordem de Serviço' : 'Conteúdo do Relatório de Visita Técnica'}</div>
+          {reportedIssue && <p className="text-sm whitespace-pre-wrap"><strong>Solicitação:</strong> {reportedIssue}</p>}
+          {serviceDescription && <p className="mt-2 text-sm whitespace-pre-wrap"><strong>Serviços:</strong> {serviceDescription}</p>}
+          {observations && <p className="mt-2 text-sm whitespace-pre-wrap"><strong>Resultado:</strong> {observations}</p>}
         </div>
       )}
     </div>

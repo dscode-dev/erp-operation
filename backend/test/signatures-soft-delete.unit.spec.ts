@@ -13,6 +13,59 @@ const actor = {
 const context = { requestId: 'unit-test', ip: '127.0.0.1', userAgent: 'jest' };
 
 describe('SignaturesService soft-delete semantics', () => {
+  it('creates the authenticated user signature with the official userId link', async () => {
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=',
+      'base64',
+    );
+    const saved = {
+      id: 'signature-id',
+      userId: actor.id,
+      name: actor.name,
+      title: 'Técnico de campo',
+      profession: null,
+      professionalCouncil: null,
+      registrationNumber: null,
+      department: null,
+      imageStorageKey: 'documents/signatures/own.png',
+      mimeType: 'image/png',
+      originalFileName: 'assinatura.png',
+      fileSize: png.length,
+      active: true,
+      isDefault: false,
+      position: 0,
+      deletedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      user: { id: actor.id, name: actor.name, role: 'OPERATOR', jobTitle: null },
+    };
+    const upsert = jest.fn().mockResolvedValue(saved);
+    const prisma = {
+      user: { findUnique: jest.fn().mockResolvedValue({ id: actor.id, name: actor.name, jobTitle: null, institutionalSignature: null }) },
+      $transaction: jest.fn(async (callback: (tx: unknown) => Promise<unknown>) => callback({
+        organization: { findFirst: jest.fn().mockResolvedValue({ id: 'organization-id' }) },
+        signature: { upsert },
+        auditLog: { create: jest.fn().mockResolvedValue({ id: 'audit-id' }) },
+      })),
+    };
+    const assets = {
+      saveSignatureImage: jest.fn().mockResolvedValue({ storageKey: saved.imageStorageKey }),
+      delete: jest.fn(),
+    };
+    const service = new SignaturesService(prisma as never, assets as never);
+
+    await expect(service.upsertOwn(
+      { title: 'Técnico de campo' },
+      { buffer: png, mimetype: 'image/png', originalname: 'assinatura.png', size: png.length } as never,
+      { ...actor, role: 'OPERATOR' } as never,
+      context,
+    )).resolves.toMatchObject({ id: saved.id, userId: actor.id, hasImage: true });
+    expect(upsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: { userId: actor.id },
+      create: expect.objectContaining({ userId: actor.id, name: actor.name, title: 'Técnico de campo' }),
+    }));
+  });
+
   it('normal list excludes soft-deleted signatures while allowing inactive signatures', async () => {
     const prisma = {
       $transaction: jest.fn().mockResolvedValue([

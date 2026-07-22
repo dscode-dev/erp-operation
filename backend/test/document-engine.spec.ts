@@ -267,9 +267,9 @@ describe('DocumentEngine foundation', () => {
               id: 'collected',
               role: 'collected',
               label: 'Assinatura do cliente',
-              name: null,
-              title: null,
-              signedAt: null,
+              name: 'Maria Cliente',
+              title: 'Responsável pelo local',
+              signedAt: '2026-07-17T15:42:00.000Z',
               caption: 'Assinatura coletada em campo',
               image: null,
             },
@@ -285,6 +285,10 @@ describe('DocumentEngine foundation', () => {
     const result = await new PdfEngineService().create(rendered);
 
     expect(signaturePages).toHaveLength(1);
+    const signatureTexts = signaturePages.flatMap((page) => page.elements)
+      .filter((element) => element.type === 'text')
+      .map((element) => element.text);
+    expect(signatureTexts).toContain('Assinado em: 17/07/2026, 12:42');
     expect(result.buffer.toString('latin1')).toContain('/Subtype /Image');
     expect(result.buffer.toString('latin1')).toContain('/XObject');
   });
@@ -726,6 +730,36 @@ describe('DocumentEngine foundation', () => {
     });
     expect(rendered.blueprint).toBe(built);
     expect(pdf.buffer.subarray(0, 5).toString('latin1')).toBe('%PDF-');
+  });
+
+  it('renders the work-order operational status in pt-BR', () => {
+    const built = (
+      new DocumentBuilderService({} as never) as unknown as {
+        buildFromContext: (ctx: unknown) => DocumentBlueprint;
+      }
+    ).buildFromContext(operationContext(DocumentTemplateType.WORK_ORDER));
+    const identification = built.sections.find(
+      (section) => section.id === 'work-order-identification',
+    );
+    const metadata = identification?.components.find((component) => component.kind === 'metadata');
+
+    expect(metadata?.kind === 'metadata' ? metadata.items : []).toContainEqual({
+      label: 'Status',
+      value: 'Concluída',
+    });
+
+    const technicalReport = (
+      new DocumentBuilderService({} as never) as unknown as {
+        buildFromContext: (ctx: unknown) => DocumentBlueprint;
+      }
+    ).buildFromContext(operationContext(DocumentTemplateType.TECHNICAL_REPORT));
+    const reportMetadata = technicalReport.sections
+      .find((section) => section.id === 'technical-report-identification')
+      ?.components.find((component) => component.kind === 'metadata');
+    expect(reportMetadata?.kind === 'metadata' ? reportMetadata.items : []).toContainEqual({
+      label: 'Situação',
+      value: 'Concluída',
+    });
   });
 
   it('certifies the DC-05 receipt snapshots, technical-only signature and PDF parity', async () => {

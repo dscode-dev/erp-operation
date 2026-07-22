@@ -3,8 +3,8 @@
 /**
  * ExecucaoWizard — execução guiada de uma Operation atribuída ao operador.
  *
- * Fluxo: Checklist → Coleta → Fotos → Materiais → Revisão do cliente (visão
- * geral organizada + assinatura). Ao finalizar: salva os dados na Operation,
+ * Fluxo: Checklist → Conteúdo → Evidências → Materiais → Assinatura →
+ * Confirmação. Ao finalizar: salva os dados na Operation,
  * registra o handoff do documento, coleta a assinatura do cliente e conclui a
  * execução. OS e Visita Técnica são concluídas e emitidas no próprio fluxo;
  * documentos especiais atribuídos preservam a revisão da gestão.
@@ -30,8 +30,9 @@ import {
 } from "@erp/api";
 import { DOCUMENT_KIND_LABEL } from "@erp/types";
 import { serviceTypeLabel } from "@operator/lib/service-types";
+import { OperatorSignatureChoice } from "@operator/components/operator-signature";
 
-const STEPS = ["Checklist", "Coleta", "Fotos", "Materiais", "Revisão do cliente"] as const;
+const STEPS = ["Checklist", "Conteúdo", "Evidências", "Materiais", "Assinatura", "Confirmar"] as const;
 const CUSTOMER_SIGNATURE = new Set<DocumentKind>(["WORK_ORDER", "TECHNICAL_REPORT", "BUDGET", "PMOC"]);
 const DIRECT_COMPLETION = new Set<DocumentKind>(["WORK_ORDER", "TECHNICAL_REPORT"]);
 const inputCls = "w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--color-primary)]";
@@ -86,6 +87,7 @@ function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; oper
   const [signature, setSignature] = useState<string | null>(null);
   const [signerName, setSignerName] = useState(operation.customerSignerName ?? "");
   const [signerRole, setSignerRole] = useState(operation.customerSignerRole ?? "");
+  const [technicalSignatureId, setTechnicalSignatureId] = useState<string | null>(null);
 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -102,8 +104,10 @@ function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; oper
   );
 
   const signatureRequired = CUSTOMER_SIGNATURE.has(type) && !operation.signatureCaptured;
-  const canFinish = !signatureRequired || (Boolean(signature) && signerName.trim().length > 0);
+  const technicalSignatureRequired = directCompletion;
+  const canFinish = (!technicalSignatureRequired || Boolean(technicalSignatureId)) && (!signatureRequired || (Boolean(signature) && signerName.trim().length > 0));
   const isLast = step === STEPS.length - 1;
+  const canAdvance = step !== 4 || ((!technicalSignatureRequired || Boolean(technicalSignatureId)) && (!signatureRequired || (Boolean(signature) && signerName.trim().length > 0)));
 
   function back() {
     if (step === 0) router.push(`/operator/services/${assignmentId}`);
@@ -115,6 +119,7 @@ function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; oper
     setSubmitting(true);
     setSubmitError(null);
     try {
+      const customerSignedAt = signature ? new Date().toISOString() : null;
       const equipmentMap = new Map((equipments.data?.items ?? []).map((item) => [item.id, item] as [string, EquipmentSummary]));
       await operationApi.updateOperation(operation.id, {
         checklist,
@@ -136,18 +141,22 @@ function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; oper
               signatureData: signature,
               customerSignerName: signerName.trim(),
               customerSignerRole: signerRole.trim() || null,
-              signedAt: new Date().toISOString(),
+              signedAt: customerSignedAt,
             }
           : {}),
       });
       let handoff = await documentsApi.saveHandoffDraft(operation.id, type);
+      if (technicalSignatureRequired) {
+        if (!technicalSignatureId) throw new Error("Selecione sua assinatura técnica para esta atividade.");
+        handoff = await documentsApi.selectHandoffTechnicalSignature(handoff.id, technicalSignatureId);
+      }
       if (signature) {
         if (!signerName.trim()) throw new Error("Informe o nome de quem assinou.");
         handoff = await documentsApi.collectCustomerSignature(handoff.id, {
           signerName: signerName.trim(),
           signerRole: signerRole.trim() || undefined,
           signatureData: signature,
-          collectedAt: new Date().toISOString(),
+          collectedAt: customerSignedAt ?? new Date().toISOString(),
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Recife",
         });
       }
@@ -215,11 +224,11 @@ function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; oper
               {managementAssigned && <span className="block text-[11px] text-[var(--color-muted-foreground)]">Definido pela gestão para este atendimento.</span>}
             </div>
             <MultiSelect label="Equipamentos envolvidos" value={equipmentIds} onChange={setEquipmentIds} options={equipmentOptions} placeholder="Selecionar equipamentos" />
-            <TextArea label={type === "TECHNICAL_REPORT" ? "Motivo da visita" : type === "BUDGET" ? "Necessidade identificada" : "Problema relatado"} value={issue} onChange={setIssue} />
-            <TextArea label="Condições encontradas / diagnóstico" value={diagnosis} onChange={setDiagnosis} />
-            <TextArea label={type === "BUDGET" ? "Serviços e peças sugeridos" : "Atividades e verificações realizadas"} value={service} onChange={setService} />
-            <TextArea label="Recomendações" value={recommendations} onChange={setRecommendations} />
-            <TextArea label="Observações de campo" value={observations} onChange={setObservations} />
+            <TextArea label={type === "WORK_ORDER" ? "Defeito ou solicitação" : type === "TECHNICAL_REPORT" ? "Motivo da visita" : "Necessidade identificada"} value={issue} onChange={setIssue} />
+            {type !== "WORK_ORDER" && <TextArea label="Condições encontradas / diagnóstico" value={diagnosis} onChange={setDiagnosis} />}
+            <TextArea label={type === "WORK_ORDER" ? "Serviços previstos ou executados" : type === "BUDGET" ? "Serviços e peças sugeridos" : "Atividades executadas"} value={service} onChange={setService} />
+            {type !== "WORK_ORDER" && <TextArea label="Recomendações" value={recommendations} onChange={setRecommendations} />}
+            <TextArea label={type === "WORK_ORDER" ? "Observações" : "Observações de campo"} value={observations} onChange={setObservations} />
           </div>
         )}
         {step === 2 && (
@@ -232,28 +241,47 @@ function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; oper
           <MateriaisStep operationId={operation.id} materials={materials.data ?? []} loading={materials.loading} error={materials.error} onRefresh={materials.refetch} />
         )}
         {step === 4 && (
-          <RevisaoStep
-            operation={operation}
-            type={type}
-            checklist={checklist}
-            equipmentLabels={equipmentIds.map((id) => equipmentOptions.find((o) => o.value === id)?.label ?? "").filter(Boolean)}
-            texts={[
-              ["Problema relatado", issue],
-              ["Diagnóstico", diagnosis],
-              ["Atividades realizadas", service],
-              ["Recomendações", recommendations],
-              ["Observações", observations],
-            ]}
-            photos={photos}
-            materials={materials.data ?? []}
-            signatureRequired={signatureRequired}
-            signatureCaptured={Boolean(operation.signatureCaptured)}
-            signerName={signerName}
-            signerRole={signerRole}
-            onSignerName={setSignerName}
-            onSignerRole={setSignerRole}
-            onSignature={setSignature}
-          />
+          <div className="space-y-5">
+            {technicalSignatureRequired && <OperatorSignatureChoice selectedId={technicalSignatureId} onSelect={setTechnicalSignatureId} />}
+            <RevisaoStep
+              operation={operation}
+              type={type}
+              checklist={checklist}
+              equipmentLabels={equipmentIds.map((id) => equipmentOptions.find((o) => o.value === id)?.label ?? "").filter(Boolean)}
+              texts={[
+                ["Problema relatado", issue],
+                ["Diagnóstico", diagnosis],
+                ["Atividades realizadas", service],
+                ["Recomendações", recommendations],
+                ["Observações", observations],
+              ]}
+              photos={photos}
+              materials={materials.data ?? []}
+              signatureRequired={signatureRequired}
+              signatureCaptured={Boolean(operation.signatureCaptured || signature)}
+              signerName={signerName}
+              signerRole={signerRole}
+              onSignerName={setSignerName}
+              onSignerRole={setSignerRole}
+              onSignature={setSignature}
+            />
+          </div>
+        )}
+        {step === 5 && (
+          <div className="space-y-4">
+            <div className="rounded-[var(--radius-md)] border border-[var(--color-success)]/30 bg-[var(--color-success)]/10 p-4 text-sm text-[var(--color-success)]">
+              <CheckCircle2 className="mb-2 h-6 w-6" />
+              <strong className="block">Coleta conferida</strong>
+              <span className="mt-1 block">
+                {directCompletion
+                  ? `${DOCUMENT_KIND_LABEL[type]} será concluído e o PDF oficial será gerado agora.`
+                  : `${DOCUMENT_KIND_LABEL[type]} será concluído e encaminhado para revisão da gestão.`}
+              </span>
+            </div>
+            <p className="text-sm text-[var(--color-muted-foreground)]">
+              Cliente, equipamentos, checklist, conteúdo, evidências, materiais e assinatura foram apresentados para conferência no passo anterior.
+            </p>
+          </div>
         )}
         {submitError && (
           <p className="mt-3 rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 px-3 py-2 text-sm text-[var(--color-danger)]">{submitError}</p>
@@ -264,7 +292,7 @@ function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; oper
         onBack={back}
         onNext={next}
         nextLabel={isLast ? (directCompletion ? "Concluir e gerar PDF" : "Concluir e enviar para revisão") : "Continuar"}
-        nextDisabled={isLast && !canFinish}
+        nextDisabled={!canAdvance || (isLast && !canFinish)}
         loading={submitting}
         isLast={isLast}
         nextIcon={isLast ? <Send className="h-4 w-4" /> : undefined}

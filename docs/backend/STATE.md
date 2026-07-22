@@ -3094,3 +3094,38 @@ Status: implementado e validado em PostgreSQL/Docker.
 - `SalesService` aceita somente produtos vendáveis; `ProcurementService` e os seletores de materiais aceitam somente produtos compráveis.
 - A Platform separa o catálogo nas abas Produtos comprados e Produtos vendidos. Cliente > Vendas consome exclusivamente `sellable=true`.
 - Migration: `20260722230000_product_commercial_classification`.
+# Refinamento do cadastro de produtos — 2026-07-22
+
+- Conflitos de SKU/código interno agora retornam mensagem oficial em pt-BR.
+- O cadastro visual pode criar o preço inicial após o produto, mas os valores continuam pertencendo exclusivamente ao Pricing Domain.
+- Nenhum campo monetário foi adicionado a `Product` e nenhuma migration foi necessária neste refinamento.
+# Estoque simplificado e disponibilidade para venda — 2026-07-22
+
+- O formulário de estoque foi reorganizado sem alterar o domínio: saldo físico continua derivado exclusivamente de movimentos e disponível continua sendo saldo físico menos quantidade separada.
+- A listagem de Pricing passou a expor `product.isSellable` para consumidores autorizados filtrarem produtos comerciais sem consulta adicional.
+- Novos preços criados no formulário de produto iniciam vigência às 00:00 UTC do dia, evitando indisponibilidade artificial em vendas registradas no mesmo dia.
+- Mensagens de produto inativo/não vendável em Sales foram localizadas para pt-BR.
+- Nenhuma migration foi necessária.
+
+# Paridade do Wizard mobile de OS e assinatura no PDF — 2026-07-22
+
+- O Operator passou a persistir os mesmos campos editoriais da criação de OS na Platform: solicitação/defeito, serviços executados e resultado/observações, além de cliente, local, múltiplos equipamentos, tipo, checklist e evidências.
+- A coleta no mobile possui etapa própria e obrigatória com assinatura, nome e função/vínculo do cliente ou responsável. O mesmo instante ISO é persistido em `Operation.signedAt` e no snapshot oficial do handoff.
+- A criação autônoma de OS/RVT por `OPERATOR` rejeita payload sem assinatura ou identificação; a conclusão de Assignment desses documentos também verifica assinatura, nome e data antes da transição.
+- O Renderer oficial reserva uma linha exclusiva para `Assinado em`, preservando data e hora no PDF em vez de truncá-las junto ao cargo/legenda.
+- Sem migration ou entidade nova. Builds backend/frontend e 86 testes backend aprovados; a suíte focada do Document Engine possui 36 casos.
+
+## Correções complementares de OS/RVT
+
+- `OperationStatus` não é mais inserido cru no Blueprint: Rascunho, Pendente, Em andamento, Em revisão, Concluída e Cancelada são os rótulos oficiais em pt-BR.
+- A correção é feita no Builder e vale igualmente para Preview e PDF; teste focado garante `COMPLETED` → `Concluída` na identificação da OS.
+- Os fluxos autônomo e atribuído de OS/RVT apresentam o resumo operacional junto da coleta da assinatura. A confirmação informa conclusão e geração do PDF, sem revisão da gestão para esses dois tipos.
+
+# Assinatura técnica própria do Operator em OS/RVT — 2026-07-22
+
+- Reutilizado o vínculo oficial `Signature.userId`: cada Operator mantém uma única assinatura institucional própria, sem entidade ou storage paralelo.
+- Endpoints próprios: `GET /signatures/me`, `POST /signatures/me` (multipart) e `GET /signatures/me/download`.
+- Ao preparar OS/RVT, o handoff usa a assinatura ativa vinculada ao operador como padrão e não utiliza mais a assinatura institucional principal da organização.
+- `PATCH /documents/:id/handoff/technical-signature` aceita Operator somente em OS/RVT sob sua responsabilidade e somente quando `signature.userId === actor.id`.
+- A finalização cria o snapshot imutável da assinatura selecionada com origem `OPERATOR`; documentos antigos e demais tipos documentais permanecem inalterados.
+- Nenhuma migration: `Signature.userId` e `OperationDocument.technicalSignatureId` já existiam.

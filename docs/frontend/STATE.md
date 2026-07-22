@@ -1246,3 +1246,38 @@ Status: concluído.
 - A aba Vendas de `/clientes/:id` lista somente produtos classificados para venda.
 - Pedidos de compra e materiais operacionais listam somente produtos classificados para compra.
 - Não há catálogo local, duplicação de produto ou inferência por estoque/preço.
+# Cadastro simplificado de produtos — 2026-07-22
+
+- Novos produtos recebem sugestões editáveis de SKU e código interno.
+- OWNER pode informar custo unitário e valor de venda no cadastro; a persistência usa o Pricing Domain.
+- Informações técnicas, fornecedor e descrição foram movidos para seções opcionais recolhidas.
+- Conflitos de identificadores e erros comerciais conhecidos são apresentados em pt-BR.
+# UX de estoque e correção da venda — 2026-07-22
+
+- Drawer de estoque separa resumo de quantidades e configurações de reposição com nomenclatura orientada ao usuário.
+- “Reservado” foi substituído visualmente por “Quantidade separada para atendimentos”, com explicação do impacto no disponível.
+- Nova movimentação usa ações explícitas: adicionar, retirar ou devolver, com previsão do saldo resultante.
+- Cliente > Vendas lista somente produtos ativos, vendáveis e com preço vigente na data selecionada, exibindo o valor no seletor.
+- Estados de carregamento, indisponibilidade e erros conhecidos foram localizados em pt-BR.
+
+# Paridade do Wizard de OS no Operator — 2026-07-22
+
+- O atendimento autônomo agora segue Cliente/local → Escopo → Execução → Checklist → Conteúdo → Evidências → Assinatura → Confirmação.
+- O atendimento atribuído segue Checklist → Conteúdo → Evidências → Materiais → Assinatura → Confirmação.
+- Os campos da OS são idênticos aos da Platform: defeito/solicitação, serviços executados/checklist e observações/resultado operacional.
+- Assinatura e nome do cliente/responsável são obrigatórios no mobile, com data/hora visíveis no resumo e persistidas pelo backend.
+- O PDF oficial passou a renderizar data e hora da assinatura em linha dedicada, mantendo paridade com o Preview.
+
+## Conferência do cliente e conclusão direta
+
+- A etapa Assinatura do atendimento autônomo passou a exibir o resumo completo antes da captura, igual ao atendimento atribuído.
+- O atendimento atribuído também mantém resumo e assinatura no mesmo passo; a tela seguinte apenas confirma o destino correto.
+- OS e RVT mostram `Concluir e gerar PDF` e não usam linguagem de aprovação/revisão. Tipos especiais atribuídos preservam o fluxo editorial existente.
+- O status na identificação da OS aparece em pt-BR no Preview e no PDF.
+
+# Assinatura técnica própria no Operator — 2026-07-22
+
+- `/operator/profile` ganhou “Minha assinatura técnica”, com desenho, cargo, profissão, conselho, registro e departamento.
+- A assinatura oficial vinculada ao usuário é carregada e pré-selecionada no passo Assinatura da criação autônoma e da execução atribuída de OS/RVT.
+- Sem assinatura própria configurada, o Wizard bloqueia conclusão e direciona às configurações.
+- A seleção vale apenas para o documento atual; o PDF usa o snapshot oficial do handoff e não a assinatura principal da organização.

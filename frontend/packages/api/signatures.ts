@@ -22,6 +22,30 @@ export type SignaturePayload = {
   position?: number;
 };
 
+export type OwnSignaturePayload = Pick<
+  SignaturePayload,
+  'title' | 'profession' | 'professionalCouncil' | 'registrationNumber' | 'department'
+>;
+
+export function getMySignature(opts?: { signal?: AbortSignal }): Promise<Signature | null> {
+  return api.get<Signature | null>('/signatures/me', opts);
+}
+
+export function saveMySignature(payload: OwnSignaturePayload, file?: File): Promise<Signature> {
+  const form = new FormData();
+  form.append('title', payload.title);
+  if (payload.profession) form.append('profession', payload.profession);
+  if (payload.professionalCouncil) form.append('professionalCouncil', payload.professionalCouncil);
+  if (payload.registrationNumber) form.append('registrationNumber', payload.registrationNumber);
+  if (payload.department) form.append('department', payload.department);
+  if (file) form.append('file', file);
+  return api.upload<Signature>('/signatures/me', form);
+}
+
+export function downloadMySignatureImage(opts?: { signal?: AbortSignal }): Promise<SignatureImage> {
+  return api.get<SignatureImage>('/signatures/me/download', opts);
+}
+
 export function listSignatures(params?: ListSignaturesParams): Promise<Paginated<Signature>> {
   const { signal, ...query } = params ?? {};
   return api.get<Paginated<Signature>>("/signatures", { query, signal });

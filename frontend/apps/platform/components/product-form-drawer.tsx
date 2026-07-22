@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ApiClientError, inventoryApi, type Product, type ProductPayload, type Supplier } from "@erp/api";
+import { ApiClientError, inventoryApi, pricingApi, type Product, type ProductPayload, type Supplier } from "@erp/api";
 import { Drawer } from "@erp/ui/drawer";
 
 type FormState = {
@@ -21,6 +21,8 @@ type FormState = {
   isPurchasable: boolean;
   isSellable: boolean;
   isActive: boolean;
+  costPrice: string;
+  salePrice: string;
 };
 
 const CATEGORY_OPTIONS = [
@@ -37,9 +39,6 @@ const CATEGORY_OPTIONS = [
   "Limpeza e Higienização",
   "Outros",
 ];
-
-const SKU_PATTERNS = ["HVAC-", "REFR-", "CLIM-", "ELE-", "HID-", "EPI-", "MAT-", "FERR-"];
-const INTERNAL_CODE_PATTERNS = ["MAT-", "PEC-", "EQP-", "SRV-", "EST-"];
 
 const blank: FormState = {
   sku: "",
@@ -58,6 +57,8 @@ const blank: FormState = {
   isPurchasable: true,
   isSellable: true,
   isActive: true,
+  costPrice: "",
+  salePrice: "",
 };
 
 export function ProductFormDrawer({
@@ -71,6 +72,7 @@ export function ProductFormDrawer({
   preferredSupplierId = null,
   initialUsage = 'PURCHASE',
   canCreateSupplier = false,
+  canEditPricing = false,
   onRetrySuppliers,
   onCreateSupplier,
   onClose,
@@ -86,10 +88,11 @@ export function ProductFormDrawer({
   preferredSupplierId?: string | null;
   initialUsage?: 'PURCHASE' | 'SALE';
   canCreateSupplier?: boolean;
+  canEditPricing?: boolean;
   onRetrySuppliers?: () => void;
   onCreateSupplier?: () => void;
   onClose: () => void;
-  onSaved?: (product: Product) => void;
+  onSaved?: (product: Product, notice?: { tone: "success" | "danger"; message: string }) => void;
 }) {
   const [form, setForm] = useState<FormState>(blank);
   const [saving, setSaving] = useState(false);
@@ -98,11 +101,17 @@ export function ProductFormDrawer({
   useEffect(() => {
     if (!open) return;
     setError(null);
-    setForm(
-      product
-        ? fromProduct(product)
-        : { ...blank, isPurchasable: initialUsage === 'PURCHASE', isSellable: initialUsage === 'SALE' },
-    );
+    if (product) {
+      setForm(fromProduct(product));
+      return;
+    }
+    const codes = suggestProductCodes();
+    setForm({
+      ...blank,
+      ...codes,
+      isPurchasable: initialUsage === 'PURCHASE',
+      isSellable: initialUsage === 'SALE',
+    });
   }, [open, product, initialUsage]);
 
   useEffect(() => {
@@ -123,6 +132,16 @@ export function ProductFormDrawer({
       setError("Informe a categoria personalizada.");
       return;
     }
+    if (!product && canEditPricing && (form.costPrice || form.salePrice)) {
+      try {
+        const costPrice = parseMoney(form.costPrice);
+        const salePrice = form.salePrice ? parseMoney(form.salePrice) : costPrice;
+        if (salePrice < costPrice) throw new Error("O valor de venda não pode ser menor que o custo.");
+      } catch (pricingError) {
+        setError(friendlyError(pricingError, "Revise os valores informados."));
+        return;
+      }
+    }
     setSaving(true);
     setError(null);
     try {
@@ -130,10 +149,34 @@ export function ProductFormDrawer({
       const saved = product?.id
         ? await inventoryApi.updateProduct(product.id, payload)
         : await inventoryApi.createProduct(payload);
-      onSaved?.(saved);
+      let notice: { tone: "success" | "danger"; message: string } | undefined;
+      if (!product && canEditPricing && (form.costPrice || form.salePrice)) {
+        try {
+          const costPrice = parseMoney(form.costPrice);
+          const salePrice = form.salePrice ? parseMoney(form.salePrice) : costPrice;
+          if (salePrice < costPrice) {
+            throw new Error("O valor de venda não pode ser menor que o custo.");
+          }
+          await pricingApi.createProductPricing(saved.id, {
+            costPrice,
+            replacementCost: costPrice,
+            averageCost: costPrice,
+            salePrice,
+            minimumSalePrice: salePrice,
+            suggestedSalePrice: salePrice,
+            validFrom: startOfTodayUtc(),
+          });
+        } catch (pricingError) {
+          notice = {
+            tone: "danger",
+            message: `Produto cadastrado, mas o preço não foi salvo. ${friendlyError(pricingError, "Revise os valores na aba Preços.")}`,
+          };
+        }
+      }
+      onSaved?.(saved, notice);
       onClose();
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Não foi possível salvar o produto.");
+      setError(friendlyError(err, "Não foi possível salvar o produto."));
     } finally {
       setSaving(false);
     }
@@ -179,25 +222,13 @@ export function ProductFormDrawer({
         </section>
 
         <section className={sectionCls}>
-          <SectionTitle title="Identificação comercial" description="SKU e código interno são identificadores únicos do catálogo técnico." />
+          <SectionTitle title="Dados principais" description="Os códigos foram sugeridos automaticamente e podem ser alterados." />
           <div className="grid gap-3 sm:grid-cols-3">
             <Field label="SKU">
-              <AssistedCodeInput
-                value={form.sku}
-                onChange={(value) => set("sku", value)}
-                placeholder="HVAC-FILTRO-G4-001"
-                patterns={SKU_PATTERNS}
-                existingOptions={skuOptions}
-              />
+              <SimpleCodeInput value={form.sku} onChange={(value) => set("sku", value)} placeholder="PRD-260722-A1B2" existingOptions={skuOptions} />
             </Field>
             <Field label="Código interno">
-              <AssistedCodeInput
-                value={form.internalCode}
-                onChange={(value) => set("internalCode", value)}
-                placeholder="MAT-0001"
-                patterns={INTERNAL_CODE_PATTERNS}
-                existingOptions={internalCodeOptions}
-              />
+              <SimpleCodeInput value={form.internalCode} onChange={(value) => set("internalCode", value)} placeholder="INT-260722-A1B2" existingOptions={internalCodeOptions} />
             </Field>
             <Field label="Unidade">
               <input value={form.unit} onChange={(e) => set("unit", e.target.value.toUpperCase())} className={inputCls} placeholder="UN, KG, M" list="product-unit-options" />
@@ -212,8 +243,23 @@ export function ProductFormDrawer({
           </Field>
         </section>
 
-        <section className={sectionCls}>
-          <SectionTitle title="Classificação técnica" description="Categoria é selecionada por opções oficiais e continua persistida como texto no catálogo." />
+        {!product && canEditPricing && (
+          <section className={sectionCls}>
+            <SectionTitle title="Valores" description="Opcional. Os valores serão registrados no histórico oficial de preços." />
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Custo unitário">
+                <input type="number" min="0" step="0.01" inputMode="decimal" value={form.costPrice} onChange={(e) => set("costPrice", e.target.value)} className={inputCls} placeholder="0,00" />
+              </Field>
+              <Field label="Valor de venda">
+                <input type="number" min="0" step="0.01" inputMode="decimal" value={form.salePrice} onChange={(e) => set("salePrice", e.target.value)} className={inputCls} placeholder="0,00" />
+              </Field>
+            </div>
+          </section>
+        )}
+
+        <details className={sectionCls}>
+          <summary className="cursor-pointer list-none text-sm font-semibold">Informações técnicas opcionais</summary>
+          <p className="text-xs text-[var(--color-muted-foreground)]">Marca, modelo, fabricante, peso e dimensões.</p>
           <div className="grid gap-3 sm:grid-cols-3">
             <Field label="Categoria">
               <select value={form.categoryOption} onChange={(e) => set("categoryOption", e.target.value)} className={inputCls}>
@@ -241,9 +287,11 @@ export function ProductFormDrawer({
               <input value={form.dimensions} onChange={(e) => set("dimensions", e.target.value)} className={inputCls} placeholder="600x600x50" />
             </Field>
           </div>
-        </section>
+        </details>
 
-        <section className={sectionCls}>
+        <details className={sectionCls}>
+          <summary className="cursor-pointer list-none text-sm font-semibold">Fornecedor principal (opcional)</summary>
+          <div className="mt-3 space-y-3">
           <SectionTitle title="Fornecedor principal" description="Selecione um fornecedor real do Orbit para orientar compras e cadastro comercial do produto." />
           {suppliersError ? (
             <div className="rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 px-3 py-2 text-sm text-[var(--color-danger)]">
@@ -282,14 +330,17 @@ export function ProductFormDrawer({
               )}
             </div>
           )}
-        </section>
+          </div>
+        </details>
 
-        <section className={sectionCls}>
-          <SectionTitle title="Descrição" description="Informações usadas por operações, compras, estoque e documentos futuros." />
+        <details className={sectionCls}>
+          <summary className="cursor-pointer list-none text-sm font-semibold">Descrição técnica (opcional)</summary>
+          <div className="mt-3">
           <Field label="Descrição técnica">
             <textarea value={form.technicalDescription} onChange={(e) => set("technicalDescription", e.target.value)} className={`${inputCls} min-h-24 py-2`} />
           </Field>
-        </section>
+          </div>
+        </details>
 
         <label className="inline-flex items-center gap-2 text-sm">
           <input type="checkbox" checked={form.isActive} onChange={(e) => set("isActive", e.target.checked)} className="accent-[var(--color-primary)]" />
@@ -321,6 +372,8 @@ function fromProduct(product: Product): FormState {
     isPurchasable: product.isPurchasable,
     isSellable: product.isSellable,
     isActive: product.isActive,
+    costPrice: "",
+    salePrice: "",
   };
 }
 
@@ -372,34 +425,52 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-function AssistedCodeInput({
+function SimpleCodeInput({
   value,
   onChange,
   placeholder,
-  patterns,
   existingOptions,
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder: string;
-  patterns: string[];
   existingOptions: string[];
 }) {
+  const duplicated = existingOptions.some((option) => option.toUpperCase() === value.trim().toUpperCase());
   return (
-    <div className="space-y-1.5">
-      <div className="grid grid-cols-[1fr_120px] gap-2">
-        <input value={value} onChange={(e) => onChange(e.target.value.toUpperCase())} className={inputCls} placeholder={placeholder} />
-        <select value="" onChange={(e) => e.target.value && onChange(e.target.value)} className={inputCls} aria-label="Aplicar prefixo">
-          <option value="">Prefixo</option>
-          {patterns.map((pattern) => <option key={pattern} value={pattern}>{pattern}</option>)}
-        </select>
-      </div>
-      {existingOptions.length > 0 && (
-        <select value="" onChange={(e) => e.target.value && onChange(e.target.value)} className={`${inputCls} text-xs`} aria-label="Referências existentes">
-          <option value="">Referências existentes — valide unicidade antes de reutilizar</option>
-          {existingOptions.slice(0, 25).map((option) => <option key={option} value={option}>{option}</option>)}
-        </select>
-      )}
+    <div className="space-y-1">
+      <input value={value} onChange={(e) => onChange(e.target.value.toUpperCase())} className={inputCls} placeholder={placeholder} />
+      <p className={`text-xs ${duplicated ? "text-[var(--color-danger)]" : "text-[var(--color-muted-foreground)]"}`}>
+        {duplicated ? "Este código já está em uso." : "Sugestão automática; edite se necessário."}
+      </p>
     </div>
   );
+}
+
+function suggestProductCodes(): Pick<FormState, "sku" | "internalCode"> {
+  const date = new Date().toISOString().slice(2, 10).replaceAll("-", "");
+  const suffix = globalThis.crypto?.randomUUID().replaceAll("-", "").slice(0, 4).toUpperCase()
+    ?? Math.random().toString(36).slice(2, 6).toUpperCase();
+  return { sku: `PRD-${date}-${suffix}`, internalCode: `INT-${date}-${suffix}` };
+}
+
+function parseMoney(value: string): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) throw new Error("Informe valores válidos e maiores ou iguais a zero.");
+  return parsed;
+}
+
+function startOfTodayUtc(): string {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+}
+
+function friendlyError(error: unknown, fallback: string): string {
+  if (error instanceof ApiClientError) {
+    if (error.code === "PRODUCT_CONFLICT") return "Já existe um produto com este SKU ou código interno.";
+    if (error.code === "PRICING_INVALID_MARGIN") return "O valor de venda não pode ser menor que o custo.";
+    if (error.code === "PRICING_OVERLAP") return "Já existe um preço vigente para este produto.";
+    return error.message || fallback;
+  }
+  return error instanceof Error ? error.message : fallback;
 }

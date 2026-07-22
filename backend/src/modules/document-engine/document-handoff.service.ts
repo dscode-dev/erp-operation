@@ -198,6 +198,9 @@ export class DocumentHandoffService {
     const origin = actor.role === Role.OPERATOR ? DocumentHandoffOrigin.OPERATOR : DocumentHandoffOrigin.PLATFORM;
     const defaultTechnicalSignatureId = await this.defaultTechnicalSignatureId(
       operation.maintenanceExecution?.plan.pmocPlan?.signatureOverrideId ?? null,
+      actor.role === Role.OPERATOR && OPERATOR_DIRECT_COMPLETION_TYPES.has(dto.type)
+        ? actor.id
+        : null,
     );
     const documentNumber =
       dto.type === DocumentTemplateType.RECEIPT && operation.receiptNumber
@@ -365,19 +368,53 @@ export class DocumentHandoffService {
   }
 
   async selectTechnicalSignature(documentId: string, signatureId: string, actor: AuthenticatedUser, context: DocumentAuditContext): Promise<unknown> {
-    this.assertReviewer(actor);
     const [document, signature] = await Promise.all([
       this.documentOrThrow(documentId),
-      this.prisma.signature.findFirst({ where: { id: signatureId, active: true, deletedAt: null }, select: { id: true, imageStorageKey: true } }),
+      this.prisma.signature.findFirst({
+        where: { id: signatureId, active: true, deletedAt: null },
+        select: { id: true, userId: true, imageStorageKey: true },
+      }),
     ]);
     if (!signature || !signature.imageStorageKey) throw new ApplicationException(ERROR_CODES.SIGNATURE_IMAGE_REQUIRED, 'A assinatura técnica selecionada está inativa ou sem imagem', HttpStatus.CONFLICT);
+    const operatorSelection = actor.role === Role.OPERATOR;
+    if (operatorSelection) {
+      await this.assertAccess(document, actor, context);
+      if (!OPERATOR_DIRECT_COMPLETION_TYPES.has(document.type)) {
+        throw new ApplicationException(
+          ERROR_CODES.DOCUMENT_HANDOFF_NOT_ALLOWED,
+          'O operador pode selecionar sua assinatura somente em Ordem de Serviço ou Relatório de Visita Técnica',
+          HttpStatus.FORBIDDEN,
+        );
+      }
+      if (signature.userId !== actor.id || document.operation?.operatorId !== actor.id) {
+        throw new ApplicationException(
+          ERROR_CODES.FORBIDDEN,
+          'Selecione somente a sua própria assinatura técnica',
+          HttpStatus.FORBIDDEN,
+        );
+      }
+    } else {
+      this.assertReviewer(actor);
+    }
+    const origin = operatorSelection
+      ? DocumentHandoffOrigin.OPERATOR
+      : DocumentHandoffOrigin.PLATFORM;
     const updated = await this.prisma.$transaction(async (tx) => {
       const saved = await tx.operationDocument.update({
         where: { id: documentId },
-        data: { technicalSignatureId: signatureId, reviewedById: actor.id, editorialStatus: document.renderedAt ? DocumentEditorialStatus.STALE : DocumentEditorialStatus.PENDING },
+        data: {
+          technicalSignatureId: signatureId,
+          technicalSignatureSnapshot: Prisma.DbNull,
+          ...(operatorSelection ? {} : { reviewedById: actor.id }),
+          editorialStatus: document.renderedAt
+            ? DocumentEditorialStatus.STALE
+            : operatorSelection
+              ? document.editorialStatus
+              : DocumentEditorialStatus.PENDING,
+        },
       });
-      await this.appendRevisionTx(tx, saved.id, DocumentRevisionAction.TECHNICAL_SIGNATURE_SELECTED, DocumentHandoffOrigin.PLATFORM, actor.id, ['technicalSignatureId']);
-      await tx.auditLog.create({ data: this.audit(DOCUMENT_ENGINE_AUDIT_ACTIONS.DOCUMENT_TECHNICAL_SIGNATURE_SELECTED, actor, context, saved.id, document.operationId, { signatureId }) });
+      await this.appendRevisionTx(tx, saved.id, DocumentRevisionAction.TECHNICAL_SIGNATURE_SELECTED, origin, actor.id, ['technicalSignatureId']);
+      await tx.auditLog.create({ data: this.audit(DOCUMENT_ENGINE_AUDIT_ACTIONS.DOCUMENT_TECHNICAL_SIGNATURE_SELECTED, actor, context, saved.id, document.operationId, { signatureId, ownSignature: operatorSelection }) });
       return tx.operationDocument.findUniqueOrThrow({ where: { id: saved.id }, include: DOCUMENT_HANDOFF_INCLUDE });
     });
     return this.response(updated, true);
@@ -414,6 +451,9 @@ export class DocumentHandoffService {
     const signature = document.technicalSignature!;
     const source = await this.assets.getSignatureImage(signature.imageStorageKey!);
     const copied = await this.assets.saveSignatureImage({ content: source.content, extension: this.extension(signature.mimeType!) });
+    const origin = actor.role === Role.OPERATOR
+      ? DocumentHandoffOrigin.OPERATOR
+      : DocumentHandoffOrigin.PLATFORM;
     const snapshot: SignatureSnapshot = {
       storageKey: copied.storageKey,
       mimeType: signature.mimeType!,
@@ -426,7 +466,7 @@ export class DocumentHandoffService {
       registrationNumber: signature.registrationNumber,
       department: signature.department,
       collectedBy: actor.id,
-      origin: DocumentHandoffOrigin.PLATFORM,
+      origin,
     };
     try {
       const updated = await this.prisma.$transaction(async (tx) => {
@@ -436,14 +476,11 @@ export class DocumentHandoffService {
             editorialStatus: DocumentEditorialStatus.READY,
             finalizedById: actor.id,
             finalizedAt: new Date(),
-            reviewedById: actor.id,
+            ...(actor.role === Role.OPERATOR ? {} : { reviewedById: actor.id }),
             technicalSignatureSnapshot: snapshot,
             validationIssues: [],
           },
         });
-        const origin = actor.role === Role.OPERATOR
-          ? DocumentHandoffOrigin.OPERATOR
-          : DocumentHandoffOrigin.PLATFORM;
         await this.appendRevisionTx(tx, saved.id, DocumentRevisionAction.FINALIZED, origin, actor.id, ['editorialStatus', 'technicalSignatureSnapshot']);
         if (actor.role !== Role.OPERATOR) {
           await this.notifyOperatorReadyTx(tx, saved.id, document.operation?.operatorId ?? null);
@@ -515,7 +552,22 @@ export class DocumentHandoffService {
     return operation;
   }
 
-  private async defaultTechnicalSignatureId(pmocOverrideId: string | null): Promise<string | null> {
+  private async defaultTechnicalSignatureId(
+    pmocOverrideId: string | null,
+    operatorUserId: string | null = null,
+  ): Promise<string | null> {
+    if (operatorUserId) {
+      const own = await this.prisma.signature.findFirst({
+        where: {
+          userId: operatorUserId,
+          active: true,
+          deletedAt: null,
+          imageStorageKey: { not: null },
+        },
+        select: { id: true },
+      });
+      return own?.id ?? null;
+    }
     if (pmocOverrideId) return pmocOverrideId;
     const signatures = await this.prisma.signature.findMany({
       where: { active: true, deletedAt: null, imageStorageKey: { not: null } },

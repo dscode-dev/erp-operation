@@ -1,5 +1,5 @@
 import { Transform, Type } from 'class-transformer';
-import { IsBoolean, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { IsBoolean, IsInt, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 
 const trim = (value: unknown): unknown => (typeof value === 'string' ? value.trim() : value);
 
@@ -97,4 +97,24 @@ export class UpdateSignatureDto {
 
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(1000)
   position?: number;
+}
+
+export class UpsertOwnSignatureDto {
+  @Transform(({ value }) => trim(value))
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(120)
+  title!: string;
+
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(120)
+  profession?: string;
+
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(120)
+  professionalCouncil?: string;
+
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(80)
+  registrationNumber?: string;
+
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(120)
+  department?: string;
 }

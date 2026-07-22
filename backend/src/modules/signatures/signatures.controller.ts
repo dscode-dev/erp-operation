@@ -25,6 +25,7 @@ import type { RequestWithId } from '../../shared/types/request-with-id.type';
 import {
   CreateSignatureDto,
   ListSignaturesQueryDto,
+  UpsertOwnSignatureDto,
   UpdateSignatureDto,
 } from './dto/signature.dto';
 import {
@@ -38,6 +39,38 @@ import type { UploadedSignatureFile } from './types/uploaded-signature-file.type
 @Controller('signatures')
 export class SignaturesController {
   constructor(private readonly signatures: SignaturesService) {}
+
+  @Roles(Role.OPERATOR)
+  @Get('me')
+  own(@CurrentUser() actor: AuthenticatedUser): Promise<SignatureResponse | null> {
+    return this.signatures.getOwn(actor.id);
+  }
+
+  @Roles(Role.OPERATOR)
+  @Post('me')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: MAX_SIGNATURE_IMAGE_SIZE_BYTES, files: 1 },
+    }),
+  )
+  saveOwn(
+    @Body() body: UpsertOwnSignatureDto,
+    @UploadedFile() file: UploadedSignatureFile | undefined,
+    @CurrentUser() actor: AuthenticatedUser,
+    @Req() request: RequestWithId,
+  ): Promise<SignatureResponse> {
+    return this.signatures.upsertOwn(body, file, actor, signatureContextFromRequest(request));
+  }
+
+  @Roles(Role.OPERATOR)
+  @Get('me/download')
+  downloadOwn(
+    @CurrentUser() actor: AuthenticatedUser,
+    @Req() request: RequestWithId,
+  ): Promise<SignatureImageResponse> {
+    return this.signatures.downloadOwnImage(actor, signatureContextFromRequest(request));
+  }
 
   @Roles(Role.OWNER, Role.MANAGER, Role.VIEWER)
   @Get()

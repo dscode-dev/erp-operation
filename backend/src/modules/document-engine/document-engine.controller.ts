@@ -148,7 +148,7 @@ export class DocumentEngineController {
     return this.handoffs.startReview(documentId, actor, contextFromRequest(request));
   }
 
-  @Roles(Role.OWNER, Role.MANAGER)
+  @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR)
   @Patch(':documentId/handoff/technical-signature')
   selectTechnicalSignature(@Param('documentId', new ParseUUIDPipe({ version: '4' })) documentId: string, @Body() body: SelectTechnicalSignatureDto, @CurrentUser() actor: AuthenticatedUser, @Req() request: RequestWithId): Promise<unknown> {
     return this.handoffs.selectTechnicalSignature(documentId, body.signatureId, actor, contextFromRequest(request));

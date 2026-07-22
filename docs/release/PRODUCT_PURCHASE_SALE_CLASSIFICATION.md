@@ -21,3 +21,10 @@ A migration define ambos os campos como `true` para produtos existentes. Nenhum 
 
 O frontend filtra para orientar a experiência, mas Sales e Procurement aplicam novamente a regra no backend. A constraint `products_commercial_usage_check` impede persistência sem finalidade comercial.
 
+## Refinamento do formulário
+
+O cadastro sugere SKU/código interno editáveis, permite informar custo e valor de venda pelo Pricing oficial e recolhe campos técnicos opcionais. Mensagens de colisão são apresentadas em pt-BR. Não houve inclusão de preço em Product nem nova migration.
+
+## Estoque e disponibilidade em vendas
+
+O estoque passou a distinguir visualmente saldo físico, quantidade separada e disponível. Movimentos foram reduzidos a ações de negócio com saldo projetado. A aba Vendas do cliente agora carrega apenas produtos ativos, vendáveis e com preço vigente na data, eliminando seleções que seriam recusadas posteriormente por ausência de Pricing.

@@ -162,7 +162,7 @@ export class InventoryService {
         return tx.product.findUniqueOrThrow({ where: { id: product.id }, include: PRODUCT_INCLUDE });
       });
     } catch (error) {
-      this.throwConflict(error, ERROR_CODES.PRODUCT_CONFLICT, 'Product SKU or code already exists');
+      this.throwConflict(error, ERROR_CODES.PRODUCT_CONFLICT, 'Já existe um produto com este SKU ou código interno');
     }
   }
 
@@ -192,7 +192,7 @@ export class InventoryService {
         return tx.product.findUniqueOrThrow({ where: { id: product.id }, include: PRODUCT_INCLUDE });
       });
     } catch (error) {
-      this.throwConflict(error, ERROR_CODES.PRODUCT_CONFLICT, 'Product SKU or code already exists');
+      this.throwConflict(error, ERROR_CODES.PRODUCT_CONFLICT, 'Já existe um produto com este SKU ou código interno');
     }
   }
 

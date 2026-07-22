@@ -2509,3 +2509,43 @@ A assinatura retornada pertence ao mesmo catálogo de `GET /signatures`. Nenhum 
 - Cliente > Vendas deve carregar seu seletor com `sellable=true`; não reutilizar catálogo sem filtro.
 - Compras e materiais operacionais devem carregar produtos com `purchasable=true`.
 - O backend continua sendo a autoridade e retorna `PRODUCT_NOT_SELLABLE` ou `PRODUCT_NOT_PURCHASABLE` para classificações incompatíveis.
+# Cadastro simplificado de produto
+
+- SKU e código interno podem ser sugeridos pelo cliente, permanecendo editáveis; a API continua validando unicidade.
+- O formulário pode encadear criação do produto e `POST /products/:id/pricing` para o preço inicial.
+- Se o preço falhar após o produto ser criado, não repetir o POST do produto: informar sucesso parcial e orientar revisão na aba Preços.
+- Exibir `PRODUCT_CONFLICT` como `Já existe um produto com este SKU ou código interno.`.
+# Estoque e disponibilidade de produtos em vendas
+
+- Mostrar `currentQuantity` como Saldo físico, `reservedQuantity` como Quantidade separada e `availableQuantity` como Disponível para uso.
+- Não oferecer edição direta do saldo. Entrada, saída e devolução usam `POST /inventory/movements`.
+- Para Vendas, não basta consultar `sellable=true`: carregar preços vigentes por `GET /pricing?active=true&at=:soldAt` e usar somente produtos ativos/vendáveis retornados.
+- Exibir `salePrice` no seletor. Se a lista estiver vazia, orientar cadastro/revisão na aba Preços.
+- O backend recalcula snapshots na criação e permanece como autoridade final.
+
+# Operator — Wizard de OS/RVT e assinatura
+
+O fluxo mobile oficial deve enviar os mesmos campos semânticos usados pela Platform: `reportedIssue`, `serviceDescription` e `observations`; não concatenar todo o conteúdo em um campo genérico.
+
+Para OS e Relatório de Visita Técnica iniciados ou executados pelo Operator, coletar obrigatoriamente `signatureData`, `customerSignerName`, `customerSignerRole` (opcional) e um único `signedAt`. Usar esse mesmo instante em `POST /documents/handoffs/:id/customer-signature` como `collectedAt`, evitando divergência entre Operation, Preview e PDF.
+
+Ordem mobile: Cliente/local → Escopo/equipamentos → Execução → Checklist → Conteúdo → Evidências → Assinatura → Confirmação. Em atendimento atribuído, a assinatura deve preceder a confirmação e bloquear avanço quando obrigatória.
+
+Ao receber `DOCUMENT_CUSTOMER_SIGNATURE_REQUIRED`, manter o usuário na etapa Assinatura e apresentar a mensagem pública em pt-BR.
+
+Na etapa Assinatura, mostrar ao cliente o resumo de identificação, equipamentos, checklist, conteúdo e evidências antes da captura. Para `WORK_ORDER` e `TECHNICAL_REPORT`, a ação final deve ser `Concluir e gerar PDF`; somente tipos especiais atribuídos continuam com revisão da gestão.
+
+Não traduzir o status dentro do visualizador: o texto interno do documento já chega localizado pelo Blueprint.
+
+# Assinatura técnica do Operator em OS/RVT
+
+Em `/operator/profile`, carregar `GET /signatures/me`. A primeira gravação usa `POST /signatures/me` com imagem; alterações de dados podem omitir `file`. Nunca consumir `GET /signatures` no Operator.
+
+Nos wizards autônomo e atribuído de OS/RVT:
+
+1. carregar e pré-selecionar a assinatura própria ativa;
+2. bloquear avanço quando não configurada ou desmarcada;
+3. após `saveHandoffDraft`, chamar `selectHandoffTechnicalSignature` com o ID próprio;
+4. coletar assinatura do cliente, submeter, concluir, finalizar e renderizar normalmente.
+
+O PDF recebe a assinatura pelo `technicalSignatureSnapshot` do handoff. Não enviar imagem/base64 da assinatura técnica no payload da Operation.

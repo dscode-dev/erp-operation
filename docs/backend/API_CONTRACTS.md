@@ -5656,3 +5656,80 @@ Os filtros são cumulativos com busca, status e paginação. `GET /api/v1/produc
 
 - criar venda com produto não vendável: `409 PRODUCT_NOT_SELLABLE`;
 - adicionar produto não comprável a pedido de compra: `409 PRODUCT_NOT_PURCHASABLE`.
+# Product conflict localization — 2026-07-22
+
+`POST /api/v1/products` e `PATCH /api/v1/products/:id` mantêm o código `409 PRODUCT_CONFLICT`. A mensagem pública para colisão de SKU ou código interno é `Já existe um produto com este SKU ou código interno`.
+
+O preço inicial continua sendo persistido separadamente por `POST /api/v1/products/:id/pricing`; `Product` não recebe campos monetários.
+# Sales product availability — 2026-07-22
+
+O seletor oficial de produtos de uma venda usa `GET /api/v1/pricing?active=true&at=:soldAt`. Cada registro inclui os dados técnicos de `product`, inclusive `isActive` e `isSellable`, e o `salePrice` vigente.
+
+A criação de venda continua revalidando no backend:
+
+- produto inexistente/inativo: `404 PRODUCT_NOT_FOUND`;
+- produto não habilitado para venda: `409 PRODUCT_NOT_SELLABLE`;
+- preço não vigente na data: `404 PRICING_NOT_FOUND`.
+
+Saldo físico não é alterado por `PATCH /inventory/:id`; somente `POST /inventory/movements` altera quantidade.
+
+# Operator — assinatura obrigatória em OS/RVT — 2026-07-22
+
+## POST /api/v1/operations
+
+Quando o ator é `OPERATOR` e `documentType` é `WORK_ORDER` ou `TECHNICAL_REPORT`, o payload deve incluir os campos editoriais separados e a coleta:
+
+```json
+{
+  "reportedIssue": "Defeito ou solicitação",
+  "serviceDescription": "Serviços previstos ou executados",
+  "observations": "Observações",
+  "signatureData": "data:image/png;base64,...",
+  "customerSignerName": "Maria da Silva",
+  "customerSignerRole": "Responsável pelo local",
+  "signedAt": "2026-07-22T15:42:00.000Z"
+}
+```
+
+`signatureData` e `customerSignerName` são obrigatórios nesse contexto. `signedAt` é aceito do instante de coleta e, quando omitido, definido pelo backend. Falha: `400 DOCUMENT_CUSTOMER_SIGNATURE_REQUIRED`.
+
+## PATCH /api/v1/assignments/:id/complete
+
+Para OS/RVT, a conclusão exige que a Operation possua `signatureData`, `customerSignerName` e `signedAt`. Falha: `409 DOCUMENT_CUSTOMER_SIGNATURE_REQUIRED`. A regra vale independentemente da interface.
+
+Preview e PDF resolvem a mesma assinatura pelo `DocumentContext`; o PDF apresenta `Assinado em: DD/MM/AAAA, HH:mm`.
+
+## Semântica documental do status
+
+Os enums permanecem inalterados na API (`DRAFT`, `PENDING`, `IN_PROGRESS`, `REVIEW`, `COMPLETED`, `CANCELED`). No conteúdo do Blueprint/Preview/PDF, o Builder os apresenta respectivamente como `Rascunho`, `Pendente`, `Em andamento`, `Em revisão`, `Concluída` e `Cancelada`.
+
+# Assinatura própria do Operator
+
+## GET /api/v1/signatures/me
+
+Role: `OPERATOR`. Retorna a `Signature` vinculada ao usuário autenticado ou `null` quando ainda não configurada. Nunca lista assinaturas de terceiros.
+
+## POST /api/v1/signatures/me
+
+Role: `OPERATOR`. Multipart `form-data`:
+
+- `title` — obrigatório;
+- `profession`, `professionalCouncil`, `registrationNumber`, `department` — opcionais;
+- `file` — PNG/JPEG até 2 MiB; obrigatório na primeira configuração e opcional em atualizações sem troca da imagem.
+
+Cria ou atualiza a assinatura oficial com `userId = actor.id`, reativa registro próprio removido e registra auditoria. Retorna `Signature` sem `imageStorageKey`.
+
+## GET /api/v1/signatures/me/download
+
+Role: `OPERATOR`. Retorna somente a imagem da assinatura vinculada ao próprio ator. Erros: `404 SIGNATURE_NOT_FOUND` e `409 SIGNATURE_IMAGE_REQUIRED`.
+
+## PATCH /api/v1/documents/:documentId/handoff/technical-signature
+
+OWNER/MANAGER mantêm o comportamento existente. OPERATOR pode chamar somente quando:
+
+- documento é `WORK_ORDER` ou `TECHNICAL_REPORT`;
+- possui acesso à Operation;
+- é o operador responsável;
+- `signatureId` pertence ao próprio usuário, está ativo e possui imagem.
+
+Tentativa de selecionar assinatura de outro usuário retorna `403 FORBIDDEN`. A seleção deixa documento renderizado como `STALE` e a finalização preserva snapshot imutável.

@@ -711,7 +711,7 @@ export class DocumentRendererService {
   private signatureComponentBlock(component: SignatureComponent): LayoutBlock {
     // Assinaturas em pares lado a lado: a coletada do cliente ocupa a coluna
     // esquerda e a do responsável técnico a direita (ordem vinda do builder).
-    const itemHeight = 96;
+    const itemHeight = 122;
     const columns = Math.min(2, Math.max(1, component.signatures.length));
     const rows = Math.max(1, Math.ceil(component.signatures.length / 2));
     const height = 18 + rows * itemHeight;
@@ -776,18 +776,28 @@ export class DocumentRendererService {
             type: 'text',
             x: left + 16,
             y: top - 81,
-            text: this.truncate(
-              [
-                signature.title,
-                signature.caption,
-                signature.signedAt ? `Data: ${this.formatDate(signature.signedAt)}` : null,
-              ]
-                .filter(Boolean)
-                .join(' · '),
-              detailMaxChars,
-            ),
+            text: this.truncate(signature.title ?? signature.label, detailMaxChars),
             size: 8,
           });
+          if (signature.caption) {
+            elements.push({
+              type: 'text',
+              x: left + 16,
+              y: top - 94,
+              text: this.truncate(signature.caption, detailMaxChars),
+              size: 8,
+            });
+          }
+          if (signature.signedAt) {
+            elements.push({
+              type: 'text',
+              x: left + 16,
+              y: top - 107,
+              text: `Assinado em: ${this.formatDate(signature.signedAt)}`,
+              size: 8,
+              bold: true,
+            });
+          }
         });
         return elements;
       },

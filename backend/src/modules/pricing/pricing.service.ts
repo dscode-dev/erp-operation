@@ -33,6 +33,7 @@ const PRICING_INCLUDE = {
       model: true,
       category: true,
       isActive: true,
+      isSellable: true,
     },
   },
 } satisfies Prisma.ProductPricingInclude;

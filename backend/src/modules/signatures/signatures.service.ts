@@ -18,6 +18,7 @@ import type { RequestWithId } from '../../shared/types/request-with-id.type';
 import type {
   CreateSignatureDto,
   ListSignaturesQueryDto,
+  UpsertOwnSignatureDto,
   UpdateSignatureDto,
 } from './dto/signature.dto';
 import type { UploadedSignatureFile } from './types/uploaded-signature-file.type';
@@ -103,6 +104,135 @@ export class SignaturesService {
 
   async get(id: string): Promise<SignatureResponse> {
     return this.signatureOrThrow(id, { includeDeleted: false });
+  }
+
+  async getOwn(userId: string): Promise<SignatureResponse | null> {
+    const signature = await this.prisma.signature.findUnique({
+      where: { userId },
+      select: SIGNATURE_INTERNAL_SELECT,
+    });
+    return signature && !signature.deletedAt ? this.toResponse(signature) : null;
+  }
+
+  async upsertOwn(
+    dto: UpsertOwnSignatureDto,
+    file: UploadedSignatureFile | undefined,
+    actor: AuthenticatedUser,
+    context: SignatureAuditContext,
+  ): Promise<SignatureResponse> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: actor.id },
+      select: {
+        id: true,
+        name: true,
+        jobTitle: true,
+        institutionalSignature: { select: SIGNATURE_INTERNAL_SELECT },
+      },
+    });
+    if (!user) {
+      throw new ApplicationException(ERROR_CODES.USER_NOT_FOUND, 'Usuário não encontrado', HttpStatus.NOT_FOUND);
+    }
+    if (!file && !user.institutionalSignature?.imageStorageKey) {
+      throw new ApplicationException(
+        ERROR_CODES.SIGNATURE_IMAGE_REQUIRED,
+        'Desenhe e confirme sua assinatura antes de salvar',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const staged = file ? await this.stageUserSignatureImage(file) : null;
+    try {
+      const saved = await this.prisma.$transaction(async (tx) => {
+        const organization = await tx.organization.findFirst({
+          orderBy: { createdAt: 'asc' },
+          select: { id: true },
+        });
+        if (!organization) {
+          throw new ApplicationException(
+            ERROR_CODES.ORGANIZATION_NOT_FOUND,
+            'Organização não encontrada',
+            HttpStatus.NOT_FOUND,
+          );
+        }
+        const signature = await tx.signature.upsert({
+          where: { userId: actor.id },
+          create: {
+            organizationId: organization.id,
+            userId: actor.id,
+            name: user.name,
+            title: this.clean(dto.title || user.jobTitle || 'Técnico'),
+            profession: dto.profession ? this.clean(dto.profession) : null,
+            professionalCouncil: dto.professionalCouncil ? this.clean(dto.professionalCouncil) : null,
+            registrationNumber: dto.registrationNumber ? this.clean(dto.registrationNumber) : null,
+            department: dto.department ? this.clean(dto.department) : null,
+            imageStorageKey: staged!.storageKey,
+            mimeType: staged!.mimeType,
+            originalFileName: staged!.originalFileName,
+            fileSize: staged!.fileSize,
+            active: true,
+          },
+          update: {
+            name: user.name,
+            title: this.clean(dto.title || user.jobTitle || 'Técnico'),
+            profession: dto.profession ? this.clean(dto.profession) : null,
+            professionalCouncil: dto.professionalCouncil ? this.clean(dto.professionalCouncil) : null,
+            registrationNumber: dto.registrationNumber ? this.clean(dto.registrationNumber) : null,
+            department: dto.department ? this.clean(dto.department) : null,
+            active: true,
+            deletedAt: null,
+            ...(staged
+              ? {
+                  imageStorageKey: staged.storageKey,
+                  mimeType: staged.mimeType,
+                  originalFileName: staged.originalFileName,
+                  fileSize: staged.fileSize,
+                }
+              : {}),
+          },
+          select: SIGNATURE_INTERNAL_SELECT,
+        });
+        await tx.auditLog.create({
+          data: this.auditInput(
+            user.institutionalSignature
+              ? SIGNATURE_AUDIT_ACTIONS.SIGNATURE_UPDATED
+              : SIGNATURE_AUDIT_ACTIONS.SIGNATURE_CREATED,
+            actor,
+            context,
+            {
+              signatureId: signature.id,
+              userId: actor.id,
+              selfManaged: true,
+              imageUploaded: Boolean(staged),
+            },
+          ),
+        });
+        return signature;
+      });
+      if (staged && user.institutionalSignature?.imageStorageKey) {
+        await this.assets.delete(user.institutionalSignature.imageStorageKey).catch(() => undefined);
+      }
+      return this.toResponse(saved);
+    } catch (error) {
+      if (staged) await this.discardStagedImage(staged.storageKey);
+      throw error;
+    }
+  }
+
+  async downloadOwnImage(
+    actor: AuthenticatedUser,
+    context: SignatureAuditContext,
+  ): Promise<SignatureImageResponse> {
+    const signature = await this.prisma.signature.findUnique({
+      where: { userId: actor.id },
+      select: { id: true, active: true, deletedAt: true },
+    });
+    if (!signature || !signature.active || signature.deletedAt) {
+      throw new ApplicationException(
+        ERROR_CODES.SIGNATURE_NOT_FOUND,
+        'Sua assinatura técnica ainda não foi configurada',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    return this.downloadImage(signature.id, actor, context);
   }
 
   async create(

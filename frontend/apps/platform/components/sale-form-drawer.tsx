@@ -3,9 +3,10 @@
 import { useEffect, useState } from 'react';
 import { Loader2, Plus, Trash2 } from 'lucide-react';
 import { Drawer } from '@erp/ui/drawer';
-import { inventoryApi, salesApi, type CustomerAddress, type Product, type Sale } from '@erp/api';
+import { ApiClientError, pricingApi, salesApi, type CustomerAddress, type Product, type Sale } from '@erp/api';
 
 type Line = { productId: string; quantity: string };
+type SaleProductOption = { product: Product; salePrice: number };
 
 export function SaleFormDrawer({
   open,
@@ -22,8 +23,10 @@ export function SaleFormDrawer({
   addresses: CustomerAddress[];
   sale?: Sale | null;
 }) {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [soldAt, setSoldAt] = useState(new Date().toISOString().slice(0, 10));
+  const [products, setProducts] = useState<SaleProductOption[]>([]);
+  const [productsLoading, setProductsLoading] = useState(false);
+  const [productsError, setProductsError] = useState<string | null>(null);
+  const [soldAt, setSoldAt] = useState(todayInput);
   const [addressId, setAddressId] = useState('');
   const [warrantyDays, setWarrantyDays] = useState('90');
   const [discount, setDiscount] = useState('0');
@@ -34,11 +37,7 @@ export function SaleFormDrawer({
 
   useEffect(() => {
     if (!open) return;
-    inventoryApi
-      .listProducts({ page: 1, limit: 100, active: true, sellable: true })
-      .then((result) => setProducts(result.items))
-      .catch(() => setProducts([]));
-    setSoldAt((sale?.soldAt ?? new Date().toISOString()).slice(0, 10));
+    setSoldAt(sale?.soldAt ? sale.soldAt.slice(0, 10) : todayInput());
     setAddressId(sale?.customerAddressId ?? addresses.find((item) => item.isPrimary)?.id ?? '');
     setWarrantyDays(sale?.warrantyDays == null ? '90' : String(sale.warrantyDays));
     setDiscount(String(sale?.discount ?? 0));
@@ -53,6 +52,36 @@ export function SaleFormDrawer({
     );
     setError(null);
   }, [open, sale, addresses]);
+
+  useEffect(() => {
+    if (!open || !soldAt) return;
+    const controller = new AbortController();
+    setProductsLoading(true);
+    setProductsError(null);
+    pricingApi
+      .listPricing({
+        page: 1,
+        limit: 100,
+        active: true,
+        at: new Date(`${soldAt}T12:00:00`).toISOString(),
+        signal: controller.signal,
+      })
+      .then((result) => {
+        const options = result.items
+          .filter((pricing) => pricing.product?.isActive && pricing.product.isSellable !== false)
+          .map((pricing) => ({ product: pricing.product as Product, salePrice: Number(pricing.salePrice) }));
+        setProducts(options);
+      })
+      .catch((cause) => {
+        if (controller.signal.aborted) return;
+        setProducts([]);
+        setProductsError(friendlySaleError(cause, 'Não foi possível carregar os produtos disponíveis para venda.'));
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setProductsLoading(false);
+      });
+    return () => controller.abort();
+  }, [open, soldAt]);
 
   async function save() {
     const items = lines
@@ -80,7 +109,7 @@ export function SaleFormDrawer({
       onSaved();
       onClose();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Não foi possível salvar a venda.');
+      setError(friendlySaleError(cause, 'Não foi possível salvar a venda.'));
     } finally {
       setSaving(false);
     }
@@ -170,6 +199,17 @@ export function SaleFormDrawer({
               Produto
             </button>
           </div>
+          {productsLoading && <p className="text-caption">Carregando produtos com preço vigente…</p>}
+          {productsError && (
+            <div className="rounded-lg border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 p-3 text-sm text-[var(--color-danger)]">
+              {productsError}
+            </div>
+          )}
+          {!productsLoading && !productsError && products.length === 0 && (
+            <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-muted)]/35 p-3 text-sm text-[var(--color-muted-foreground)]">
+              Nenhum produto habilitado para venda possui preço vigente nesta data. Cadastre ou revise o preço na página Produtos.
+            </div>
+          )}
           {lines.map((line, index) => (
             <div key={index} className="grid grid-cols-[1fr_110px_38px] gap-2">
               <select
@@ -184,9 +224,9 @@ export function SaleFormDrawer({
                 }
               >
                 <option value="">Selecione um produto…</option>
-                {products.map((product) => (
+                {products.map(({ product, salePrice }) => (
                   <option key={product.id} value={product.id}>
-                    {product.name} · {product.sku}
+                    {product.name} · {product.sku} · {formatMoney(salePrice)}
                   </option>
                 ))}
               </select>
@@ -227,6 +267,26 @@ export function SaleFormDrawer({
       </div>
     </Drawer>
   );
+}
+
+function friendlySaleError(cause: unknown, fallback: string): string {
+  if (cause instanceof ApiClientError) {
+    if (cause.code === 'PRICING_NOT_FOUND') return 'O produto selecionado não possui preço vigente na data da venda.';
+    if (cause.code === 'PRODUCT_NOT_SELLABLE') return 'O produto selecionado não está habilitado para venda.';
+    if (cause.code === 'PRODUCT_NOT_FOUND') return 'O produto selecionado está inativo ou não foi encontrado.';
+    return cause.message || fallback;
+  }
+  return cause instanceof Error ? cause.message : fallback;
+}
+
+function formatMoney(value: number): string {
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+}
+
+function todayInput(): string {
+  const now = new Date();
+  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 10);
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {

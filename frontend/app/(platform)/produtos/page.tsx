@@ -43,6 +43,21 @@ const MOVEMENT_LABEL: Record<StockMovementType, string> = {
   RETURN: "Retorno",
 };
 
+const MOVEMENT_REASON: Record<StockMovementType, string> = {
+  IN: "Entrada de mercadoria",
+  OUT: "Saída manual de estoque",
+  ADJUSTMENT: "Correção de inventário",
+  TRANSFER: "Transferência de estoque",
+  CONSUMPTION: "Consumo em atendimento",
+  RETURN: "Devolução ao estoque",
+};
+
+const MOVEMENT_ACTIONS: Array<{ type: StockMovementType; title: string; description: string }> = [
+  { type: "IN", title: "Adicionar ao estoque", description: "Compra, recebimento ou outra entrada de mercadoria." },
+  { type: "OUT", title: "Retirar do estoque", description: "Perda, descarte ou saída manual não vinculada a atendimento." },
+  { type: "RETURN", title: "Registrar devolução", description: "Material que retornou e voltou a ficar disponível." },
+];
+
 export default function ProdutosPage() {
   const params = useSearchParams();
   const { hasRole } = useAuth();
@@ -153,7 +168,7 @@ export default function ProdutosPage() {
     { key: "reason", header: "Motivo", cell: (m) => <span className="text-sm">{m.reason}</span> },
   ];
 
-  function refreshAll(message?: string) {
+  function refreshAll(message?: string, tone: "success" | "danger" = "success") {
     productList.refetch();
     inventory.refetch();
     movements.refetch();
@@ -162,7 +177,7 @@ export default function ProdutosPage() {
     pricing.refetch();
     inventoryStats.refetch();
     pricingStats.refetch();
-    if (message) setFeedback({ tone: "success", message });
+    if (message) setFeedback({ tone, message });
   }
 
   async function disableProduct(product: Product) {
@@ -294,10 +309,15 @@ export default function ProdutosPage() {
         suppliersError={supplierOptions.error}
         preferredSupplierId={preferredSupplierId}
         canCreateSupplier={canManageProducts}
+        canEditPricing={canEditPricing}
         onRetrySuppliers={supplierOptions.refetch}
         onCreateSupplier={() => { setSupplier(null); setSupplierOpen(true); }}
         onClose={() => { setProductFormOpen(false); setPreferredSupplierId(null); setPreferredSupplier(null); }}
-        onSaved={() => { setPreferredSupplierId(null); setPreferredSupplier(null); refreshAll("Produto salvo."); }}
+        onSaved={(_saved, notice) => {
+          setPreferredSupplierId(null);
+          setPreferredSupplier(null);
+          refreshAll(notice?.message ?? "Produto e valores salvos.", notice?.tone ?? "success");
+        }}
       />
       <ProductDetailDrawer product={detailProduct} canManage={canManageProducts} canSeePricing={canSeePricing} onClose={() => setDetailProduct(null)} onEdit={(product) => { setFormProduct(product); setProductFormOpen(true); }} onDisable={disableProduct} />
       <InventoryDrawer item={stockItem} onClose={() => setStockItem(null)} onSaved={() => refreshAll("Estoque atualizado.")} />
@@ -377,43 +397,71 @@ function ProductDetailDrawer({ product, canManage, canSeePricing, onClose, onEdi
 function InventoryDrawer({ item, onClose, onSaved }: { item: InventoryItem | null; onClose: () => void; onSaved: () => void }) {
   const [movementOpen, setMovementOpen] = useState(false);
   const [form, setForm] = useState({ minimumQuantity: "", idealQuantity: "", reservedQuantity: "", location: "" });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const history = useQuery((signal) => (item ? inventoryApi.listStockMovements({ inventoryItemId: item.id, limit: 8, signal }) : Promise.resolve(null)), [item?.id]);
 
-  useMemo(() => {
-    if (item) setForm({ minimumQuantity: String(item.minimumQuantity), idealQuantity: String(item.idealQuantity), reservedQuantity: String(item.reservedQuantity), location: item.location ?? "" });
+  useEffect(() => {
+    if (!item) return;
+    setForm({ minimumQuantity: String(item.minimumQuantity), idealQuantity: String(item.idealQuantity), reservedQuantity: String(item.reservedQuantity), location: item.location ?? "" });
+    setError(null);
   }, [item]);
 
   async function saveParams() {
     if (!item) return;
-    await inventoryApi.updateInventoryItem(item.id, {
-      minimumQuantity: Number(form.minimumQuantity || 0),
-      idealQuantity: Number(form.idealQuantity || 0),
-      reservedQuantity: Number(form.reservedQuantity || 0),
-      location: form.location || null,
-    });
-    onSaved();
+    setSaving(true);
+    setError(null);
+    try {
+      await inventoryApi.updateInventoryItem(item.id, {
+        minimumQuantity: Number(form.minimumQuantity || 0),
+        idealQuantity: Number(form.idealQuantity || 0),
+        reservedQuantity: Number(form.reservedQuantity || 0),
+        location: form.location || null,
+      });
+      onSaved();
+    } catch (cause) {
+      setError(inventoryError(cause, "Não foi possível salvar as configurações do estoque."));
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
     <Drawer open={item !== null} onClose={onClose} eyebrow="Estoque" title={item?.product?.name ?? "Item"} width="max-w-2xl">
       {item && (
         <div className="space-y-5">
-          <div className="grid gap-3 grid-cols-2 sm:grid-cols-5">
-            <MetricMini label="Atual" value={qty(item.currentQuantity, item.product?.unit)} />
-            <MetricMini label="Mínimo" value={qty(item.minimumQuantity, item.product?.unit)} />
-            <MetricMini label="Ideal" value={qty(item.idealQuantity, item.product?.unit)} />
-            <MetricMini label="Reservado" value={qty(item.reservedQuantity, item.product?.unit)} />
-            <MetricMini label="Disponível" value={qty(item.availableQuantity, item.product?.unit)} />
-          </div>
-          <div className="grid gap-3 sm:grid-cols-4">
-            <Field label="Mínimo"><input value={form.minimumQuantity} onChange={(e) => setForm((f) => ({ ...f, minimumQuantity: e.target.value }))} className={inputCls} type="number" /></Field>
-            <Field label="Ideal"><input value={form.idealQuantity} onChange={(e) => setForm((f) => ({ ...f, idealQuantity: e.target.value }))} className={inputCls} type="number" /></Field>
-            <Field label="Reservado"><input value={form.reservedQuantity} onChange={(e) => setForm((f) => ({ ...f, reservedQuantity: e.target.value }))} className={inputCls} type="number" /></Field>
-            <Field label="Localização"><input value={form.location} onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))} className={inputCls} /></Field>
-          </div>
+          {error && <div className="rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 px-3 py-2 text-sm text-[var(--color-danger)]">{error}</div>}
+          <section className={cardCls}>
+            <h3 className="text-sm font-semibold">Quantidade em estoque</h3>
+            <p className="mt-1 text-caption">O saldo físico muda somente por entradas e saídas registradas.</p>
+            <div className="mt-3 grid gap-3 grid-cols-1 sm:grid-cols-3">
+              <MetricMini label="Saldo físico" value={qty(item.currentQuantity, item.product?.unit)} />
+              <MetricMini label="Quantidade separada" value={qty(item.reservedQuantity, item.product?.unit)} />
+              <MetricMini label="Disponível para uso" value={qty(item.availableQuantity, item.product?.unit)} />
+            </div>
+          </section>
+          <section className={cardCls}>
+            <h3 className="text-sm font-semibold">Configurações do estoque</h3>
+            <p className="mt-1 text-caption">Defina alertas, meta de reposição e onde o item está armazenado.</p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <Field label="Alertar quando chegar em">
+                <input value={form.minimumQuantity} onChange={(e) => setForm((f) => ({ ...f, minimumQuantity: e.target.value }))} className={inputCls} min="0" type="number" />
+              </Field>
+              <Field label="Quantidade desejada após reposição">
+                <input value={form.idealQuantity} onChange={(e) => setForm((f) => ({ ...f, idealQuantity: e.target.value }))} className={inputCls} min="0" type="number" />
+              </Field>
+              <Field label="Quantidade separada para atendimentos">
+                <input value={form.reservedQuantity} onChange={(e) => setForm((f) => ({ ...f, reservedQuantity: e.target.value }))} className={inputCls} min="0" max={Number(item.currentQuantity)} type="number" />
+                <span className="text-caption">Parte do saldo físico que ainda não pode ser utilizada.</span>
+              </Field>
+              <Field label="Local de armazenamento">
+                <input value={form.location} onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))} className={inputCls} placeholder="Ex.: Prateleira A-03" />
+              </Field>
+            </div>
+          </section>
           <div className="flex gap-2">
-            <Gate roles={["OWNER", "MANAGER"]}><button onClick={saveParams} className={secondaryBtn}>Salvar parâmetros</button></Gate>
-            <Gate roles={["OWNER", "MANAGER", "OPERATOR"]}><button onClick={() => setMovementOpen(true)} className={primaryBtn}>Nova movimentação</button></Gate>
+            <Gate roles={["OWNER", "MANAGER"]}><button onClick={saveParams} disabled={saving} className={secondaryBtn}>{saving ? "Salvando…" : "Salvar configurações"}</button></Gate>
+            <Gate roles={["OWNER", "MANAGER", "OPERATOR"]}><button onClick={() => setMovementOpen(true)} className={primaryBtn}>Registrar entrada ou saída</button></Gate>
           </div>
           <section className={cardCls}>
             <h3 className="text-sm font-semibold">Histórico recente</h3>
@@ -430,19 +478,60 @@ function InventoryDrawer({ item, onClose, onSaved }: { item: InventoryItem | nul
 
 function MovementDrawer({ item, open, onClose, onSaved }: { item: InventoryItem; open: boolean; onClose: () => void; onSaved: () => void }) {
   const [form, setForm] = useState<{ type: StockMovementType; quantity: string; reason: string }>({ type: "IN", quantity: "", reason: "" });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    setForm({ type: "IN", quantity: "", reason: "" });
+    setError(null);
+  }, [open]);
   async function submit() {
-    await inventoryApi.createStockMovement({ inventoryItemId: item.id, type: form.type, quantity: Number(form.quantity), reason: form.reason || MOVEMENT_LABEL[form.type] });
-    onSaved();
+    setSaving(true);
+    setError(null);
+    try {
+      await inventoryApi.createStockMovement({ inventoryItemId: item.id, type: form.type, quantity: Number(form.quantity), reason: form.reason || MOVEMENT_REASON[form.type] });
+      onSaved();
+    } catch (cause) {
+      setError(inventoryError(cause, "Não foi possível registrar a movimentação."));
+    } finally {
+      setSaving(false);
+    }
   }
+  const quantity = Number(form.quantity || 0);
+  const resultingQuantity = Number(item.currentQuantity) + (form.type === "OUT" ? -quantity : quantity);
+  const exceedsAvailable = form.type === "OUT" && quantity > Number(item.availableQuantity);
   return (
-    <Drawer open={open} onClose={onClose} eyebrow="Movimentação" title={item.product?.name ?? ""} width="max-w-md" footer={<><button onClick={onClose} className={secondaryBtn}>Cancelar</button><button onClick={submit} className={primaryBtn} disabled={!form.quantity}>Registrar</button></>}>
-      <div className="space-y-3">
-        <Field label="Tipo"><select value={form.type} onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as StockMovementType }))} className={inputCls}>{(["IN", "OUT", "ADJUSTMENT", "RETURN"] as StockMovementType[]).map((t) => <option key={t} value={t}>{MOVEMENT_LABEL[t]}</option>)}</select></Field>
-        <Field label="Quantidade"><input type="number" value={form.quantity} onChange={(e) => setForm((f) => ({ ...f, quantity: e.target.value }))} className={inputCls} /></Field>
-        <Field label="Motivo"><input value={form.reason} onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))} className={inputCls} /></Field>
+    <Drawer open={open} onClose={onClose} eyebrow="Estoque" title={`Movimentar ${item.product?.name ?? "produto"}`} width="max-w-md" footer={<><button onClick={onClose} className={secondaryBtn}>Cancelar</button><button onClick={submit} className={primaryBtn} disabled={saving || quantity <= 0 || resultingQuantity < 0 || exceedsAvailable}>{saving ? "Registrando…" : "Confirmar movimentação"}</button></>}>
+      <div className="space-y-4">
+        {error && <div className="rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 px-3 py-2 text-sm text-[var(--color-danger)]">{error}</div>}
+        <div>
+          <p className="text-sm font-medium">O que aconteceu?</p>
+          <div className="mt-2 grid gap-2">
+            {MOVEMENT_ACTIONS.map((action) => (
+              <button key={action.type} type="button" onClick={() => setForm((current) => ({ ...current, type: action.type }))} className={`rounded-[var(--radius-md)] border p-3 text-left ${form.type === action.type ? "border-[var(--color-primary)] bg-[var(--color-primary)]/5" : "border-[var(--color-border)] hover:bg-[var(--color-muted)]"}`}>
+                <span className="block text-sm font-medium">{action.title}</span>
+                <span className="text-caption">{action.description}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+        <Field label="Quantidade movimentada"><input type="number" min="0.001" step="0.001" value={form.quantity} onChange={(e) => setForm((f) => ({ ...f, quantity: e.target.value }))} className={inputCls} /></Field>
+        <div className="rounded-[var(--radius-md)] bg-[var(--color-muted)]/45 p-3 text-sm">
+          Saldo físico: <strong>{qty(item.currentQuantity, item.product?.unit)}</strong> → <strong>{qty(Math.max(0, resultingQuantity), item.product?.unit)}</strong>
+          {exceedsAvailable && <p className="mt-1 text-[var(--color-danger)]">A retirada excede a quantidade disponível para uso ({qty(item.availableQuantity, item.product?.unit)}).</p>}
+        </div>
+        <Field label="Observação (opcional)"><input value={form.reason} onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))} className={inputCls} placeholder={MOVEMENT_REASON[form.type]} /></Field>
       </div>
     </Drawer>
   );
+}
+
+function inventoryError(cause: unknown, fallback: string): string {
+  if (cause instanceof ApiClientError) {
+    if (cause.code === "INVENTORY_NEGATIVE_STOCK") return "A quantidade informada excede o estoque disponível ou separado.";
+    return cause.message || fallback;
+  }
+  return cause instanceof Error ? cause.message : fallback;
 }
 
 function SuppliersSection({ rows, columns, pagination, onPage, onLimit, onSelect, onCreate }: { rows: Supplier[]; columns: Column<Supplier>[]; pagination?: { page: number; limit: number; total: number; totalPages: number }; onPage: (p: number) => void; onLimit: (n: number) => void; onSelect: (s: Supplier) => void; onCreate: () => void }) {

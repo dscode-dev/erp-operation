@@ -811,3 +811,30 @@ Tipos:
 - `SaleFormDrawer`: consulta exclusivamente produtos vendáveis para a aba Cliente > Vendas.
 - `PurchaseOrderDrawer` e a seleção de materiais da operação: consultam exclusivamente produtos compráveis.
 - A tabela de produtos reutiliza `StatusChip` para indicar Compra e Venda sem duplicar cards ou formulários.
+# ProductFormDrawer simplificado
+
+- Gera sugestões únicas de sessão para SKU e código interno, sem bloquear edição manual.
+- Mantém visíveis somente finalidade, dados principais e valores; detalhes técnicos são progressivos com `details`.
+- Cria preço inicial pelo `pricingApi` apenas para usuários autorizados.
+- Distingue falha total de falha parcial: o produto pode estar salvo mesmo quando o preço exigir revisão.
+# InventoryDrawer e SaleFormDrawer — refinamento
+
+- `InventoryDrawer`: apresenta Saldo físico, Quantidade separada e Disponível para uso; parâmetros de reposição ficam em seção própria.
+- `MovementDrawer`: substitui enum técnico por três ações de negócio e mostra o saldo projetado antes da confirmação.
+- `SaleFormDrawer`: consulta Pricing pela data da venda, exibe preço vigente e não oferece produtos comercialmente indisponíveis.
+
+# Operator — Wizard de OS/RVT
+
+- `AtendimentoWizard`: oito etapas alinhadas semanticamente ao drawer da Platform, com cliente/local agrupados, múltiplos equipamentos e campos editoriais separados.
+- `ExecucaoWizard`: seis etapas para atendimento atribuído; `CustomerSignatureStep` reutiliza `SignaturePad` antes da confirmação.
+- `MobileTextArea`: apresentação compacta dos campos oficiais de solicitação, execução e resultado; não cria estado documental paralelo.
+- `ResumoStep`: apresenta conteúdo coletado, pessoa responsável e data/hora da assinatura antes da conclusão.
+
+- `ResumoStep(variant="signature")`: apresenta identificação, equipamentos, checklist, conteúdo e evidências imediatamente antes do `SignaturePad` no fluxo autônomo.
+- `RevisaoStep`: no fluxo atribuído, reúne a mesma conferência e a assinatura no mesmo passo; a confirmação final não repete a coleta.
+
+# Assinatura técnica do Operator
+
+- `OperatorSignatureSettings`: cadastro/atualização da assinatura própria no perfil mobile usando `SignaturePad` e API oficial.
+- `OperatorSignatureChoice`: card reutilizado nos wizards autônomo e atribuído; pré-seleciona exclusivamente a assinatura vinculada ao ator e orienta configuração quando ausente.
+- `SignatureIdentity`: preview seguro da própria assinatura e metadados profissionais; não recebe storage path.
