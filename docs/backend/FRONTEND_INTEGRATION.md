@@ -1,5 +1,11 @@
 # Frontend Integration
 
+## Execuções dos Operadores
+
+Use `GET /operator-executions?month=YYYY-MM` na visão de gestão e preserve `month`, busca e paginação. Ao selecionar um operador, carregue o resumo por `/:operatorId` e alterne o mesmo endpoint `/:operatorId/operations` entre `HISTORY` e `AGENDA`. Os números já chegam calculados pelo backend; não recompute taxa, atraso ou duração no navegador e não apresente valores de comissão.
+
+Somente OWNER/MANAGER devem visualizar rota e menu. Um `403` continua sendo autoridade do backend. A linha de operação pode abrir o `OperationDetailDrawer` oficial pelo `id` retornado.
+
 ## Operator — fluxo OS/RVT concluído em campo
 
 Criação autônoma deve oferecer somente Ordem de Serviço e Relatório de Visita Técnica. O fluxo oficial é: criar Operation `DRAFT` → aceitar/iniciar Assignment → salvar coleta e assinatura → salvar/enviar Handoff → concluir Assignment → finalizar Handoff → renderizar documento → baixar/compartilhar pelo endpoint autenticado.

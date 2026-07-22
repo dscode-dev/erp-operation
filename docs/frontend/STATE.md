@@ -1,5 +1,11 @@
 # STATE — Frontend
 
+## Gestão — Execuções dos Operadores (2026-07-22)
+
+- Nova rota `/operator-executions` para OWNER/MANAGER com KPIs mensais e tabela comparativa baseada na API real.
+- O detalhe `/operator-executions/[id]` possui histórico e agenda registrada, filtros mensais/status, paginação e abertura do `OperationDetailDrawer` existente.
+- O menu Gestão recebeu “Execuções dos Operadores”. Nenhuma comissão ou métrica é calculada localmente.
+
 ## Operator — OS/RVT com emissão direta (2026-07-22)
 
 - A tela Novo Atendimento oferece somente Ordem de Serviço e Relatório de Visita Técnica.

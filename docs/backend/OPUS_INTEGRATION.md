@@ -1,5 +1,9 @@
 # OPUS Frontend Integration
 
+## Gestão de execuções por operador
+
+A rota `/operator-executions` é uma projeção gerencial real de Assignment + Operation. Consumir `operatorExecutionsApi.list/get/operations`; não derivar métricas da página atual de Operations. Filtro de competência usa `YYYY-MM`, histórico e agenda são paginados e a navegação de uma linha reutiliza `OperationDetailDrawer`. O Orbit não calcula comissões.
+
 ## Operator — matriz de atendimento em campo
 
 - Início autônomo: somente `WORK_ORDER` e `TECHNICAL_REPORT`.

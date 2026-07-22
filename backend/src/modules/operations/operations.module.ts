@@ -6,11 +6,13 @@ import { MaintenancePlanningModule } from '../maintenance-planning/maintenance-p
 import { OperationAccessModule } from '../operation-access/operation-access.module';
 import { OperationsController } from './operations.controller';
 import { OperationsService } from './operations.service';
+import { OperatorExecutionsController } from './operator-executions.controller';
+import { OperatorExecutionsService } from './operator-executions.service';
 
 @Module({
   imports: [StorageModule, AssetLifecycleModule, MaintenancePlanningModule, AssignmentsModule, OperationAccessModule],
-  controllers: [OperationsController],
-  providers: [OperationsService],
+  controllers: [OperationsController, OperatorExecutionsController],
+  providers: [OperationsService, OperatorExecutionsService],
   exports: [OperationsService],
 })
 export class OperationsModule {}

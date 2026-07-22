@@ -1,5 +1,11 @@
 # COMPONENTS — Frontend
 
+## Operator Executions
+
+- `OperatorExecutionsPage`: KPIs, competência, busca, comparação e paginação.
+- `OperatorExecutionDetailPage`: resumo individual, histórico/agenda e filtro de status.
+- Reutiliza `PageHeader`, `DataTable`, `Pagination`, `FilterBar`, `StatusChip`, `EmptyState`, `ErrorState`, `SkeletonList` e `OperationDetailDrawer`.
+
 ## Operator — atendimento e documentos
 
 - `AtendimentoWizard`: seletor autônomo reduzido a OS/RVT e sucesso com acesso ao PDF.

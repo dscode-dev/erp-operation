@@ -1,5 +1,25 @@
 # API Contracts
 
+## Gestão — Execuções dos Operadores
+
+Autorização em todos os endpoints: `OWNER | MANAGER`. A fonte do executor é sempre `Assignment.assignedTo`.
+
+### `GET /api/v1/operator-executions`
+
+Query: `month=YYYY-MM`, `page` (1+), `limit` (1–50) e `search` (nome, username ou cargo).
+
+Resposta `200`: `period`, `kpis`, `items` e `pagination`. Cada item contém dados públicos do operador e `metrics`: `total`, `completed`, `pending`, `inProgress`, `overdue`, `canceled`, `completionRate`, `averageDurationMinutes` e `lastCompletedAt`.
+
+### `GET /api/v1/operator-executions/:operatorId`
+
+Query: `month=YYYY-MM`. Retorna `operator`, `period` e `metrics`. UUID inválido retorna `400`; usuário inexistente ou que não seja OPERATOR retorna `404 USER_NOT_FOUND`.
+
+### `GET /api/v1/operator-executions/:operatorId/operations`
+
+Query: `month=YYYY-MM`, `view=HISTORY|AGENDA`, `status`, `page` e `limit` (máx. 100). `HISTORY` considera atribuição, agenda ou conclusão na competência; `AGENDA` considera `Operation.scheduledFor`. Retorna cliente, equipamento, tipo documental, datas e estado oficial de Operation/Assignment, sem dados financeiros.
+
+Definições: pendentes = `ASSIGNED|ACCEPTED`; em execução = `STARTED|PAUSED`; concluídos usam `Assignment.completedAt` na competência; atrasados são atribuições abertas com agenda anterior ao instante atual. A taxa é `concluídos / (concluídos + pendentes + em execução)`.
+
 ## Operator — criação e conclusão de atendimentos
 
 ### `POST /api/v1/operations`

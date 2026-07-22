@@ -1,5 +1,9 @@
 # ARCHITECTURE — Frontend
 
+## Projeção gerencial de operadores
+
+`Platform → operatorExecutionsApi → OperatorExecutionsService → Assignment + Operation`. O frontend apenas formata indicadores calculados pelo backend. Não há store persistente, dataset local, regra de comissão ou interpretação de ownership; `Assignment.assignedTo` permanece autoritativo.
+
 ## Operator — conclusão documental
 
 O frontend não gera PDF nem altera estados por conta própria. Ele encadeia os contratos oficiais `Operation → Assignment → Handoff → Document Engine`. A política visual separa OS/RVT de documentos especiais, mas o backend revalida tipo, ownership e estado em cada transição. A recuperação de emissão reutiliza o mesmo `OperationDocument` e o mesmo `DocumentViewer`.

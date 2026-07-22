@@ -1,5 +1,13 @@
 # Security
 
+## Métricas de execução dos operadores
+
+- Endpoints restritos a OWNER/MANAGER; OPERATOR e VIEWER não consultam comparativos ou histórico de terceiros.
+- `Assignment.assignedTo` é a autoridade do executor, impedindo métricas forjadas por `operation.operatorId` legado ou parâmetros do frontend.
+- UUID, competência, paginação, status e limites passam por DTO global com whitelist.
+- Respostas não incluem senha, permissões internas, notas do usuário, assinatura, Storage, conteúdo documental ou valores financeiros/comissão.
+- Consultas são somente leitura, paginadas e usam índices por executor/conclusão e agenda/status. O período é calculado no timezone organizacional.
+
 ## Operator — emissão restrita de documentos de campo
 
 - A lista permitida é validada no backend: somente OS/RVT podem ser autoiniciadas por Operator.

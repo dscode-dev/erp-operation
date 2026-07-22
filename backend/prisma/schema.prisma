@@ -1010,6 +1010,7 @@ model Operation {
   @@index([operatorId, createdAt])
   @@index([requestedDocumentType, status, createdAt], map: "operations_requested_document_status_idx")
   @@index([status, createdAt])
+  @@index([scheduledFor, status], map: "operations_schedule_status_idx")
   @@index([sourceSaleId])
   @@map("operations")
 }
@@ -1106,6 +1107,7 @@ model Assignment {
   history         AssignmentHistory[]
 
   @@index([assignedTo, status, assignedAt])
+  @@index([assignedTo, completedAt], map: "assignments_assignee_completed_idx")
   @@index([assignedBy, assignedAt])
   @@index([status, assignedAt])
   @@map("assignments")

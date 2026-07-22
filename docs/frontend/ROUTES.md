@@ -1,5 +1,13 @@
 # ROUTES — Frontend
 
+## `/operator-executions`
+
+Gestão mensal das execuções dos operadores. Visível somente para OWNER/MANAGER.
+
+## `/operator-executions/[id]`
+
+Histórico e agenda mensal do operador selecionado, com acesso ao drawer oficial da Operation.
+
 ## `/operator/atendimento`, `/operator/execucao/[id]` e `/operator/documents`
 
 - `/operator/atendimento`: criação autônoma somente de OS/RVT.

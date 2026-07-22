@@ -21,6 +21,7 @@ import {
   ChevronDown,
   FileText,
   ShoppingCart,
+  Activity,
 } from 'lucide-react';
 import { cn } from '@erp/utils';
 import { BrandLogo } from '@erp/ui/brand';
@@ -97,6 +98,12 @@ const groups: NavGroup[] = [
       },
       { label: 'Financeiro', href: '/financial', icon: Wallet, permission: 'canFinancial' },
       { label: 'Orçamentos', href: '/budgets', icon: ReceiptText, roles: ['OWNER', 'MANAGER'] },
+      {
+        label: 'Execuções dos Operadores',
+        href: '/operator-executions',
+        icon: Activity,
+        roles: ['OWNER', 'MANAGER'],
+      },
       { label: 'Usuários', href: '/usuarios', icon: Shield, roles: ['OWNER', 'MANAGER', 'VIEWER'] },
     ],
   },

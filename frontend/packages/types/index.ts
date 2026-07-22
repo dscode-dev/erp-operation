@@ -991,6 +991,89 @@ export type OperationStats = {
   byStatus: Record<OperationStatus, number>;
 };
 
+export type OperatorExecutionPeriod = {
+  month: string;
+  timezone: string;
+  from: string;
+  to: string;
+};
+
+export type OperatorExecutionMetrics = {
+  operatorId: string;
+  total: number;
+  completed: number;
+  pending: number;
+  inProgress: number;
+  overdue: number;
+  canceled: number;
+  completionRate: number;
+  averageDurationMinutes: number | null;
+  lastCompletedAt: string | null;
+};
+
+export type OperatorExecutionKpis = {
+  operators: number;
+  activeOperators: number;
+  total: number;
+  completed: number;
+  pending: number;
+  inProgress: number;
+  overdue: number;
+  completionRate: number;
+  averageDurationMinutes: number | null;
+};
+
+export type OperatorExecutionUser = {
+  id: string;
+  name: string;
+  username: string;
+  email: string;
+  jobTitle: string | null;
+  isActive: boolean;
+  disabledAt: string | null;
+  avatarAssetId: string | null;
+};
+
+export type OperatorExecutionRow = OperatorExecutionUser & { metrics: OperatorExecutionMetrics };
+
+export type OperatorExecutionsOverview = Paginated<OperatorExecutionRow> & {
+  period: OperatorExecutionPeriod;
+  kpis: OperatorExecutionKpis;
+};
+
+export type OperatorExecutionDetail = {
+  operator: OperatorExecutionUser;
+  period: OperatorExecutionPeriod;
+  metrics: OperatorExecutionMetrics;
+};
+
+export type OperatorExecutionOperation = {
+  id: string;
+  number: number;
+  type: OperationType;
+  requestedDocumentType: DocumentTemplateType;
+  status: OperationStatus;
+  scheduledFor: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  customer: { id: string; name: string; tradeName: string | null };
+  equipment: { id: string; name: string; tag: string | null } | null;
+  assignment: {
+    id: string;
+    status: AssignmentStatus;
+    assignedAt: string;
+    acceptedAt: string | null;
+    startedAt: string | null;
+    completedAt: string | null;
+  } | null;
+};
+
+export type OperatorExecutionOperations = Paginated<OperatorExecutionOperation> & {
+  period: OperatorExecutionPeriod;
+  view: 'HISTORY' | 'AGENDA';
+};
+
 export type CreateOperationPayload = {
   customerId: string;
   sourceSaleId?: string | null;

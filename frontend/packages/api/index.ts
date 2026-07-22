@@ -38,6 +38,7 @@ export * as technicalCatalogsApi from './technical-catalogs';
 export * as pmocApi from './pmoc';
 
 export * as operationApi from './operation';
+export * as operatorExecutionsApi from './operator-executions';
 export * as documentsApi from './documents';
 export * as signaturesApi from './signatures';
 export * as assetLifecycleApi from './asset-lifecycle';

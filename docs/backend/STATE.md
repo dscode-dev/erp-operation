@@ -1,5 +1,13 @@
 # Backend State
 
+## Gestão — Execuções dos Operadores (2026-07-22)
+
+- A projeção read-only `OperatorExecutionsService` calcula indicadores exclusivamente a partir de `Assignment.assignedTo` e `Operation`; nenhuma comissão, meta ou contador derivado é persistido.
+- Endpoints mensais: `GET /operator-executions`, `GET /operator-executions/:operatorId` e `GET /operator-executions/:operatorId/operations`.
+- A visão compara atendimentos, concluídos, pendentes, em execução, atrasados, cancelados, taxa de conclusão e tempo médio. O detalhe oferece histórico e agenda paginados.
+- Competências respeitam `OrganizationSettings.timezone`. OWNER/MANAGER possuem acesso; OPERATOR/VIEWER não recebem métricas de terceiros.
+- Migration `20260722213000_operator_execution_metrics_indexes` adiciona índices de conclusão por executor e agenda/status, sem alterar entidades ou dados.
+
 ## Operator — conclusão direta de OS e Visita Técnica (2026-07-22)
 
 - O Operator pode iniciar autonomamente apenas `WORK_ORDER` e `TECHNICAL_REPORT`; outros tipos exigem criação e atribuição pela gestão.
