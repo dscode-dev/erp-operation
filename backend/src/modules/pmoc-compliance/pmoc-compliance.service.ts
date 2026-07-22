@@ -16,6 +16,7 @@ import {
   Prisma,
   Role,
   TechnicalCatalogType,
+  TechnicalCatalogWorkflow,
 } from '@prisma/client';
 import {
   PMOC_AUDIT_ACTIONS,
@@ -161,6 +162,21 @@ const PMOC_INCLUDE = {
       },
     },
     orderBy: { createdAt: 'asc' as const },
+  },
+  checklists: {
+    include: {
+      technicalCatalog: {
+        select: {
+          id: true,
+          type: true,
+          title: true,
+          description: true,
+          maintenanceType: true,
+          active: true,
+        },
+      },
+    },
+    orderBy: { position: 'asc' as const },
   },
   environments: {
     include: {
@@ -378,6 +394,10 @@ export class PmocComplianceService implements ComplianceEvaluator<{
       dto.serviceTypes,
     );
     const scopes = await this.planScopesOrThrow(dto.scopeCatalogIds, organization.id);
+    const checklists = await this.planChecklistsOrThrow(
+      dto.checklistCatalogIds,
+      organization.id,
+    );
     await this.validateDefaults(
       dto.defaultOperatorId,
       dto.defaultTechnicianId,
@@ -429,6 +449,7 @@ export class PmocComplianceService implements ComplianceEvaluator<{
           defaultOperationObservations: dto.defaultOperationObservations
             ? this.clean(dto.defaultOperationObservations)
             : null,
+          includeChecklistInOperations: dto.includeChecklistInOperations ?? true,
           signatureOverrideId: dto.signatureOverrideId ?? null,
           operationalStatus:
             dto.generationMode === PmocGenerationMode.PAUSED || dto.active === false
@@ -451,6 +472,16 @@ export class PmocComplianceService implements ComplianceEvaluator<{
             ? {
                 scopes: {
                   create: scopes.map((scope) => ({ technicalCatalogId: scope.id })),
+                },
+              }
+            : {}),
+          ...(checklists.length
+            ? {
+                checklists: {
+                  create: checklists.map((item, position) => ({
+                    technicalCatalogId: item.id,
+                    position,
+                  })),
                 },
               }
             : {}),
@@ -621,6 +652,10 @@ export class PmocComplianceService implements ComplianceEvaluator<{
       dto.scopeCatalogIds !== undefined
         ? await this.planScopesOrThrow(dto.scopeCatalogIds, existing.organizationId)
         : null;
+    const checklists =
+      dto.checklistCatalogIds !== undefined
+        ? await this.planChecklistsOrThrow(dto.checklistCatalogIds, existing.organizationId)
+        : null;
 
     return this.prisma.$transaction(async (tx) => {
       await tx.maintenancePlan.update({
@@ -649,6 +684,19 @@ export class PmocComplianceService implements ComplianceEvaluator<{
           data: scopes.map((scope) => ({ pmocPlanId: id, technicalCatalogId: scope.id })),
           skipDuplicates: true,
         });
+      }
+      if (checklists) {
+        await tx.pmocPlanChecklist.deleteMany({ where: { pmocPlanId: id } });
+        if (checklists.length > 0) {
+          await tx.pmocPlanChecklist.createMany({
+            data: checklists.map((item, position) => ({
+              pmocPlanId: id,
+              technicalCatalogId: item.id,
+              position,
+            })),
+            skipDuplicates: true,
+          });
+        }
       }
       const pmoc = await tx.pmocPlan.update({
         where: { id },
@@ -681,6 +729,9 @@ export class PmocComplianceService implements ComplianceEvaluator<{
                   ? this.clean(dto.defaultOperationObservations)
                   : null,
               }
+            : {}),
+          ...(dto.includeChecklistInOperations !== undefined
+            ? { includeChecklistInOperations: dto.includeChecklistInOperations }
             : {}),
           ...(dto.signatureOverrideId !== undefined
             ? { signatureOverrideId: dto.signatureOverrideId }
@@ -745,7 +796,9 @@ export class PmocComplianceService implements ComplianceEvaluator<{
       if (
         dto.coverage !== undefined ||
         dto.equipmentIds !== undefined ||
-        dto.scopeCatalogIds !== undefined
+        dto.scopeCatalogIds !== undefined ||
+        dto.checklistCatalogIds !== undefined ||
+        dto.includeChecklistInOperations !== undefined
       ) {
         historyActions.push(PmocHistoryAction.COVERAGE_CHANGED);
       }
@@ -1533,6 +1586,37 @@ export class PmocComplianceService implements ComplianceEvaluator<{
       );
     }
     return scopes;
+  }
+
+  private async planChecklistsOrThrow(
+    ids: string[] | undefined,
+    organizationId: string,
+  ): Promise<Array<{ id: string; title: string }>> {
+    if (!ids?.length) return [];
+    const uniqueIds = this.unique(ids);
+    const checklists = await this.prisma.technicalCatalog.findMany({
+      where: {
+        id: { in: uniqueIds },
+        organizationId,
+        type: TechnicalCatalogType.CHECKLIST,
+        active: true,
+        deletedAt: null,
+        OR: [
+          { workflows: { has: TechnicalCatalogWorkflow.WORK_ORDER } },
+          { workflows: { has: TechnicalCatalogWorkflow.GENERAL } },
+        ],
+      },
+      select: { id: true, title: true },
+    });
+    if (checklists.length !== uniqueIds.length) {
+      throw new ApplicationException(
+        ERROR_CODES.TECHNICAL_CATALOG_NOT_FOUND,
+        'Every PMOC checklist must be an active Work Order checklist from this organization',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const byId = new Map(checklists.map((item) => [item.id, item]));
+    return uniqueIds.map((id) => byId.get(id)!);
   }
 
   private periodicityFromRule(rule?: RecurrenceRuleDto): PmocPeriodicity {

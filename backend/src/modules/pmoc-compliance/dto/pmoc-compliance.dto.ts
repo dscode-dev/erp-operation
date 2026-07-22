@@ -120,6 +120,17 @@ export class CreatePmocPlanDto {
   @IsUUID('4', { each: true })
   scopeCatalogIds?: string[];
 
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @ArrayMaxSize(100)
+  @IsUUID('4', { each: true })
+  checklistCatalogIds?: string[];
+
+  @IsOptional()
+  @IsBoolean()
+  includeChecklistInOperations?: boolean;
+
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(5000)
   coverage?: string;
 
@@ -221,6 +232,17 @@ export class UpdatePmocPlanDto {
   @ArrayMaxSize(50)
   @IsUUID('4', { each: true })
   scopeCatalogIds?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @ArrayMaxSize(100)
+  @IsUUID('4', { each: true })
+  checklistCatalogIds?: string[];
+
+  @IsOptional()
+  @IsBoolean()
+  includeChecklistInOperations?: boolean;
 
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(5000)
   coverage?: string | null;

@@ -156,6 +156,14 @@ export default function TechnicalCatalogsPage() {
             {notice}
           </div>
         )}
+        {selectedType === 'CHECKLIST' && (
+          <div className="rounded-[var(--radius-lg)] border border-blue-500/25 bg-blue-500/5 p-4 text-sm">
+            <strong>Checklists oficiais de manutenção</strong>
+            <p className="mt-1 text-[var(--color-muted-foreground)]">
+              Cadastre aqui os itens Semanais e Semestrais usados no RVT e os itens reutilizados por Ordens de Serviço e PMOC. A estrutura já permanece preparada para outras periodicidades.
+            </p>
+          </div>
+        )}
         <div className="grid gap-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 md:grid-cols-3 xl:grid-cols-[minmax(220px,1fr)_170px_190px_190px_160px_170px]">
           <label className="flex h-10 items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] px-3">
             <Search className="h-4 w-4 text-[var(--color-muted-foreground)]" />

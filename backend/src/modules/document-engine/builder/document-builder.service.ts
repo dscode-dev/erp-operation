@@ -1,5 +1,11 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { DocumentTemplateType, OperationStatus, Prisma, SignatureMode } from '@prisma/client';
+import {
+  DocumentTemplateType,
+  OperationMaintenanceType,
+  OperationStatus,
+  Prisma,
+  SignatureMode,
+} from '@prisma/client';
 import {
   DOCUMENT_MAX_COMPONENTS,
   DOCUMENT_MAX_SECTIONS,
@@ -487,10 +493,9 @@ export class DocumentBuilderService {
           this.metadata('technical-report-identification-metadata', [
             ['Número', documentNumber],
             ['Emissão', this.date(generatedAt)],
-            // Responsável técnico = assinatura selecionada na revisão; o operador
-            // que coletou os dados aparece em "Local da visita".
             ['Responsável técnico', this.technicalResponsibleName(context) ?? 'A definir na revisão'],
             ['Registro profissional', this.technicalResponsibleTitle(context) ?? '—'],
+            ['Técnico em campo', operation.operator.name],
             ['Situação', OPERATION_STATUS_LABEL[operation.status]],
             ['Referência operacional', `OP-${String(operation.number).padStart(6, '0')}`],
           ]),
@@ -511,83 +516,34 @@ export class DocumentBuilderService {
                 ? `${contact.name}${contact.phone ? ` · ${contact.phone}` : ''}`
                 : (operation.customer.phone ?? '—'),
             ],
-          ]),
-        ],
-      },
-      {
-        id: 'technical-report-location',
-        title: 'Local da visita',
-        critical: true,
-        components: [
-          this.metadata('technical-report-location-metadata', [
-            ['Local', address?.name ?? 'Local principal do cliente'],
             ['Endereço', address ? this.address(address) : '—'],
-            ['Agendamento', this.date(operation.scheduledFor)],
-            ['Início', this.date(operation.startedAt)],
-            ['Conclusão', this.date(operation.completedAt)],
-            ['Operador em campo', operation.operator.name],
           ]),
         ],
       },
       this.inspectedEquipmentSection(operation),
-      ...(operation.referenceMonth && operation.referenceYear
+      ...this.maintenanceTypeSection(operation),
+      {
+        id: 'visit-observations',
+        title: 'Observações',
+        components: this.technicalNarrative(
+          'visit-observations',
+          operation.observations,
+          'Nenhuma observação registrada.',
+        ),
+      },
+      ...(operation.technicalRecommendations?.trim()
         ? [
             {
-              id: 'technical-report-reference-period',
-              title: 'Período de referência',
-              critical: true,
-              components: [
-                this.metadata('technical-report-reference-period-metadata', [
-                  [
-                    'Mês e ano de referência',
-                    this.referencePeriod(operation.referenceMonth, operation.referenceYear),
-                  ],
-                ]),
-              ],
+              id: 'visit-recommendations',
+              title: 'Recomendações técnicas',
+              components: this.technicalNarrative(
+                'visit-recommendations',
+                operation.technicalRecommendations,
+                '',
+              ),
             },
           ]
         : []),
-      ...this.maintenanceTypeSection(operation),
-      {
-        id: 'visit-objective',
-        title: 'Objetivo da visita',
-        critical: true,
-        components: this.technicalNarrative(
-          'visit-objective',
-          operation.reportedIssue,
-          'Objetivo não informado.',
-        ),
-      },
-      {
-        id: 'visit-diagnosis',
-        title: 'Diagnóstico ou situação encontrada',
-        critical: true,
-        components: this.technicalNarrative(
-          'visit-diagnosis',
-          operation.technicalDiagnosis,
-          'Diagnóstico técnico não registrado.',
-        ),
-      },
-      {
-        id: 'visit-activities',
-        title: 'Atividades executadas',
-        components: this.technicalNarrative(
-          'visit-activities',
-          operation.serviceDescription,
-          'Atividades executadas não registradas.',
-        ),
-      },
-      this.checklistSection(operation, 'Checklist complementar'),
-      {
-        id: 'visit-recommendations',
-        title: 'Recomendações técnicas',
-        components: this.technicalNarrative(
-          'visit-recommendations',
-          operation.technicalRecommendations,
-          'Não foram registradas recomendações técnicas.',
-        ),
-      },
-      this.observationSection(operation, 'Observações finais'),
     ].filter((section): section is DocumentSection => Boolean(section));
     return sections;
   }
@@ -1182,8 +1138,13 @@ export class DocumentBuilderService {
    * registrados na operação, agrupados por `maintenanceType`.
    */
   private maintenanceTypeSection(operation: DocumentContextOperation): DocumentSection[] {
-    const order: string[] = [];
+    const reportTypes = [
+      OperationMaintenanceType.WEEKLY,
+      OperationMaintenanceType.SEMIANNUAL,
+    ];
+    const order: string[] = [...reportTypes];
     const groups = new Map<string, Array<{ label: string; done: boolean }>>();
+    reportTypes.forEach((type) => groups.set(type, []));
     for (const item of operation.maintenanceChecklistItems ?? []) {
       if (!groups.has(item.maintenanceType)) {
         groups.set(item.maintenanceType, []);
@@ -1200,10 +1161,9 @@ export class DocumentBuilderService {
       groups.set(selected, []);
       order.unshift(selected);
     }
-    if (order.length === 0) return [];
 
-    // Coluna do tipo executado primeiro, mantendo a ordem original das demais.
-    order.sort((a, b) => (a === selected ? -1 : b === selected ? 1 : 0));
+    // Semana e Semestral permanecem sempre visíveis conforme o contrato do RVT.
+    // Tipos futuros entram depois deles sem exigir alteração no Renderer.
 
     return [
       {

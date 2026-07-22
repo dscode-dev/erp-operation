@@ -1,5 +1,12 @@
 # Security
 
+## Integridade dos checklists RVT/PMOC
+
+- Itens PMOC são validados por organização, atividade, soft delete, tipo `CHECKLIST` e aplicabilidade à OS.
+- A relação plano–catálogo possui unicidade por item e posição.
+- A geração da OS materializa snapshot e não consulta novamente o catálogo durante execução/renderização.
+- Limites: até 100 referências no plano e 400 itens estruturados por Operation. O RBAC existente não foi ampliado.
+
 ## Métricas de execução dos operadores
 
 - Endpoints restritos a OWNER/MANAGER; OPERATOR e VIEWER não consultam comparativos ou histórico de terceiros.
@@ -2145,3 +2152,8 @@ The catalog is scoped to the installation Organization in every query. Reads req
 - Seleção documental repete ownership da Operation e da Signature, restringe a OS/RVT e impede IDOR entre operadores.
 - Upload mantém limite de 2 MiB, MIME/extensão permitidos, magic bytes, UUID de storage e sanitização de nome.
 - O snapshot técnico é criado somente na finalização e preserva a versão usada naquele PDF; atualizações futuras no perfil não alteram documentos históricos.
+## Checklist autônomo do Operator
+
+- A API continua aceitando exclusivamente os campos permitidos pelo DTO e rejeita propriedades adicionais via `forbidNonWhitelisted`.
+- A origem Operator não concede alteração de catálogo: o usuário apenas seleciona itens ativos já disponibilizados pela API e grava um snapshot na Operation.
+- A semântica `done: true` vale somente para atividades que o próprio operador declara como realizadas no atendimento autônomo; atribuições da Platform preservam o estado pendente.

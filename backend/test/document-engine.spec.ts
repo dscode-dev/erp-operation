@@ -370,10 +370,9 @@ describe('DocumentEngine foundation', () => {
     expect(report.metadata.documentType).toBe(DocumentTemplateType.TECHNICAL_REPORT);
     expect(opinion.metadata.documentType).toBe(DocumentTemplateType.TECHNICAL_OPINION);
     expect(reportSectionIds).toContain('technical-report-identification');
-    expect(reportSectionIds).toContain('technical-report-location');
-    expect(reportSectionIds).toContain('visit-diagnosis');
-    expect(reportSectionIds).toContain('visit-activities');
-    expect(reportSectionIds).toContain('visit-recommendations');
+    expect(reportSectionIds).toContain('technical-report-customer');
+    expect(reportSectionIds).toContain('maintenance-type');
+    expect(reportSectionIds).toContain('visit-observations');
     expect(opinionSectionIds).toContain('technical-opinion-identification');
     expect(opinionSectionIds).toContain('technical-opinion-site-conditions');
     expect(opinionSectionIds).toContain('technical-opinion-conclusion');
@@ -641,16 +640,9 @@ describe('DocumentEngine foundation', () => {
     expect(sectionIds).toEqual([
       'technical-report-identification',
       'technical-report-customer',
-      'technical-report-location',
       'technical-report-inspected-equipments',
-      'technical-report-reference-period',
       'maintenance-type',
-      'visit-objective',
-      'visit-diagnosis',
-      'visit-activities',
-      'checklist-checklist-complementar',
-      'visit-recommendations',
-      'observations-observacoes-finais',
+      'visit-observations',
     ]);
     expect(sectionIds).not.toContain('technical-report-equipment-qr');
     expect(sectionIds).not.toContain('related-documents');
@@ -660,13 +652,13 @@ describe('DocumentEngine foundation', () => {
       ?.components.find((component) => component.kind === 'checklistColumns');
     expect(maintenanceColumns?.kind).toBe('checklistColumns');
     if (maintenanceColumns?.kind === 'checklistColumns') {
-      // Coluna do tipo executado (Semestral) vem primeiro e marcada; Semanal presente e não marcada.
+      // Semana e Semestral permanecem em ordem estável; somente o tipo realizado é marcado.
       expect(maintenanceColumns.columns.map((column) => column.title)).toEqual([
-        'Semestral',
         'Semanal',
+        'Semestral',
       ]);
-      expect(maintenanceColumns.columns.map((column) => column.selected)).toEqual([true, false]);
-      expect(maintenanceColumns.columns[0].items[0]).toMatchObject({
+      expect(maintenanceColumns.columns.map((column) => column.selected)).toEqual([false, true]);
+      expect(maintenanceColumns.columns[1].items[0]).toMatchObject({
         label: 'Limpeza total dos trocadores de calor',
         done: true,
       });
@@ -705,7 +697,7 @@ describe('DocumentEngine foundation', () => {
 
   it.each([
     [DocumentTemplateType.WORK_ORDER, 'work-order-identification'],
-    [DocumentTemplateType.TECHNICAL_REPORT, 'visit-objective'],
+    [DocumentTemplateType.TECHNICAL_REPORT, 'visit-observations'],
     [DocumentTemplateType.TECHNICAL_OPINION, 'technical-opinion-site-conditions'],
     [DocumentTemplateType.PMOC, 'pmoc-identification'],
     [DocumentTemplateType.RECEIPT, 'receipt-declaration'],
@@ -972,19 +964,23 @@ describe('DocumentEngine foundation', () => {
     expect(ids).toEqual([
       'technical-report-identification',
       'technical-report-customer',
-      'technical-report-location',
       'technical-report-inspected-equipments',
-      'visit-objective',
-      'visit-diagnosis',
-      'visit-activities',
-      'checklist-checklist-complementar',
+      'maintenance-type',
+      'visit-observations',
       'visit-recommendations',
-      'observations-observacoes-finais',
       'photos-evidencias-fotograficas',
       'signature',
     ]);
-    const diagnosis = built.sections.find((section) => section.id === 'visit-diagnosis');
-    expect(diagnosis?.components.map((component) => component.kind)).toEqual(['paragraph', 'list']);
+    const identification = built.sections.find(
+      (section) => section.id === 'technical-report-identification',
+    );
+    expect(
+      identification?.components.some(
+        (component) =>
+          component.kind === 'metadata' &&
+          component.items.some((item) => item.label === 'Técnico em campo'),
+      ),
+    ).toBe(true);
     const signature = built.sections.at(-1)?.components[0];
     expect(signature?.kind === 'signature' ? signature.signatures : []).toHaveLength(2);
     const rendered = renderer().render(built);
@@ -993,7 +989,7 @@ describe('DocumentEngine foundation', () => {
     expect(
       rendered.pages
         .flatMap((page) => page.elements)
-        .some((element) => element.type === 'text' && element.text.includes('Avaliar a perda')),
+        .some((element) => element.type === 'text' && element.text.includes('Equipamento liberado')),
     ).toBe(true);
     expect(
       rendered.pages.flatMap((page) => page.elements).filter((element) => element.type === 'image'),

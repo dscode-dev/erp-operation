@@ -6,7 +6,14 @@
  * (clients, equipments) and writing the Operation both use the production API.
  */
 import { assignmentsApi, documentsApi, operationApi } from '@erp/api';
-import type { CreateOperationPayload, DocumentHandoff, DocumentKind, OperationDetail } from '@erp/api';
+import type {
+  CreateOperationPayload,
+  DocumentHandoff,
+  DocumentKind,
+  OperationDetail,
+  OperationMaintenanceChecklistItem,
+  OperationMaintenanceType,
+} from '@erp/api';
 import type { CapturedPhoto } from '@erp/ui/photo-input';
 import type { ServiceTypeKey } from './service-types';
 
@@ -18,7 +25,9 @@ export type AtendimentoDraft = {
   inspectedEquipments: Array<{ equipmentId: string; sector: string }>;
   /** ServiceTypeKey maps 1:1 to the backend OperationType. */
   serviceType: ServiceTypeKey | null;
-  checklist: { label: string; done: boolean }[];
+  checklist: { catalogId?: string; label: string; done: boolean; note?: string }[];
+  maintenanceType: OperationMaintenanceType;
+  maintenanceChecklist: OperationMaintenanceChecklistItem[];
   reportedIssue: string;
   serviceDescription: string;
   observations: string;
@@ -78,10 +87,19 @@ export async function createOperationFromDraft(draft: AtendimentoDraft): Promise
     type: draft.serviceType,
     documentType: draft.documentType,
     status: 'DRAFT',
-    checklist: draft.checklist,
+    // catalogId pertence somente ao seletor do frontend. O contrato oficial da
+    // Operation persiste o snapshot textual e o estado realizado do item.
+    checklist: draft.checklist.map(({ label, done, note }) => ({ label, done, note })),
+    maintenanceType: draft.documentType === 'TECHNICAL_REPORT' ? draft.maintenanceType : null,
+    maintenanceChecklist:
+      draft.documentType === 'TECHNICAL_REPORT' ? draft.maintenanceChecklist : [],
     reportedIssue: draft.reportedIssue.trim() || null,
     serviceDescription: draft.serviceDescription.trim() || null,
     observations: draft.observations.trim() || null,
+    technicalRecommendations:
+      draft.documentType === 'TECHNICAL_REPORT'
+        ? draft.recommendations.join('\n').trim() || null
+        : null,
     technicalOpinionObjective: draft.objective.join('\n') || null,
     technicalOpinionConditions: draft.conditions.join('\n') || null,
     technicalOpinionRecommendations: draft.recommendations.join('\n') || null,

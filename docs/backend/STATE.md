@@ -1,5 +1,14 @@
 # Backend State
 
+## RVT e PMOC — checklists oficiais do Catálogo Técnico (2026-07-22)
+
+- RVT persiste o tipo realizado em `Operation.maintenanceType` e os grupos Semanal/Semestral em `OperationMaintenanceChecklistItem`; ambos seguem no mesmo Blueprint, com apenas o realizado marcado.
+- O Blueprint do RVT foi consolidado em Identificação (incluindo Técnico em Campo), Cliente com endereço, Equipamentos, Tipo de Manutenção, Observações, Recomendações opcionais, Evidências e Assinaturas.
+- `PmocPlanChecklist` referencia itens `TechnicalCatalog(CHECKLIST)` selecionados para o plano. `includeChecklistInOperations` permite ao OWNER não enviar checklist.
+- A OS gerada recebe um snapshot dos itens selecionados; mudanças futuras no catálogo ou plano não reescrevem Operations existentes.
+- Migration aditiva: `20260722233000_pmoc_official_checklist`.
+- Validação: 89 unitários e 14 integrações PostgreSQL aprovados; lint/build backend e frontend aprovados.
+
 ## Gestão — Execuções dos Operadores (2026-07-22)
 
 - A projeção read-only `OperatorExecutionsService` calcula indicadores exclusivamente a partir de `Assignment.assignedTo` e `Operation`; nenhuma comissão, meta ou contador derivado é persistido.
@@ -3129,3 +3138,9 @@ Status: implementado e validado em PostgreSQL/Docker.
 - `PATCH /documents/:id/handoff/technical-signature` aceita Operator somente em OS/RVT sob sua responsabilidade e somente quando `signature.userId === actor.id`.
 - A finalização cria o snapshot imutável da assinatura selecionada com origem `OPERATOR`; documentos antigos e demais tipos documentais permanecem inalterados.
 - Nenhuma migration: `Signature.userId` e `OperationDocument.technicalSignatureId` já existiam.
+## Correção de integração — checklist da OS autônoma no Operator (2026-07-22)
+
+- Nenhuma entidade, migration ou endpoint foi alterado.
+- `POST /api/v1/operations` continua recebendo o snapshot oficial `{ label, done, note? }`.
+- O Operator voltou a permitir seleção opcional no catálogo; itens escolhidos no atendimento autônomo chegam como `done: true`.
+- O identificador interno do catálogo permanece no frontend e não atravessa a validação `forbidNonWhitelisted`.

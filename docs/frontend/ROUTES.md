@@ -1,5 +1,13 @@
 # ROUTES — Frontend
 
+## Checklists RVT/PMOC
+
+- `/maintenance-checklists?type=CHECKLIST`: administração dos itens.
+- `/reports`: RVT da Platform.
+- `/operator/atendimento`: RVT iniciado pelo operador.
+- `/operator/execucao/:id`: RVT atribuído.
+- `/pmoc`: checklist herdável pelas futuras OS.
+
 ## `/operator-executions`
 
 Gestão mensal das execuções dos operadores. Visível somente para OWNER/MANAGER.
@@ -639,3 +647,6 @@ Em ambas as rotas, `WORK_ORDER` e `TECHNICAL_REPORT` concluem, finalizam o hando
 
 - `/operator/profile#assinatura-tecnica`: configura a assinatura institucional vinculada ao Operator.
 - `/operator/atendimento` e `/operator/execucao/:id`: pré-selecionam essa assinatura para OS/RVT e exigem confirmação antes da assinatura do cliente/conclusão.
+## Ajuste funcional — Operator
+
+- O wizard acessível pelo início autônomo de uma Ordem de Serviço mantém a etapa opcional de checklist, com seleção dos itens oficiais e registro imediato como executados.

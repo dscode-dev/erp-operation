@@ -35,7 +35,7 @@ const CATALOG_SELECT = {
 } satisfies Prisma.TechnicalCatalogSelect;
 
 const TYPE_LABELS: Record<TechnicalCatalogType, string> = {
-  CHECKLIST: 'Checklist',
+  CHECKLIST: 'Checklists de manutenção',
   OBJECTIVE: 'Objetivos',
   SITE_CONDITION: 'Condições Observadas',
   CONCLUSION: 'Conclusões',

@@ -1,5 +1,12 @@
 # COMPONENTS — Frontend
 
+## Checklists de manutenção
+
+- `RvtMaintenanceChecklistStep`: RVT iniciado pelo Operator.
+- `AssignedRvtChecklistStep`: RVT atribuído.
+- `ContentStep`: RVT Platform agrupado em Semanal/Semestral.
+- `ExecutionStep` do PMOC: seleção e decisão de herança para OS.
+
 ## Operator Executions
 
 - `OperatorExecutionsPage`: KPIs, competência, busca, comparação e paginação.
@@ -831,6 +838,7 @@ Tipos:
 - `ResumoStep`: apresenta conteúdo coletado, pessoa responsável e data/hora da assinatura antes da conclusão.
 
 - `ResumoStep(variant="signature")`: apresenta identificação, equipamentos, checklist, conteúdo e evidências imediatamente antes do `SignaturePad` no fluxo autônomo.
+- `ChecklistStep`: na OS autônoma, reutiliza `MultiSelect` e o Catálogo Técnico oficial; a seleção é opcional e cada item escolhido é persistido como atividade já realizada, sem afetar o checklist pendente das atribuições criadas pela Platform.
 - `RevisaoStep`: no fluxo atribuído, reúne a mesma conferência e a assinatura no mesmo passo; a confirmação final não repete a coleta.
 
 # Assinatura técnica do Operator

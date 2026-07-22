@@ -72,6 +72,8 @@ type Form = {
   addressId: string;
   equipmentIds: string[];
   scopeCatalogIds: string[];
+  checklistCatalogIds: string[];
+  includeChecklistInOperations: boolean;
   name: string;
   periodicity: PmocPeriodicity;
   startDate: string;
@@ -94,6 +96,8 @@ const initialForm: Form = {
   addressId: "",
   equipmentIds: [],
   scopeCatalogIds: [],
+  checklistCatalogIds: [],
+  includeChecklistInOperations: true,
   name: "",
   periodicity: "MONTHLY",
   startDate: addMonths(today(), 1),
@@ -182,6 +186,10 @@ export function PmocPlanWizard({ open, onClose, onCreated, pmoc = null, onUpdate
     }),
     [catalogTick],
   );
+  const workOrderChecklists = useQuery(
+    (signal) => technicalCatalogsApi.listChecklistItems("WORK_ORDER", { signal }),
+    [catalogTick],
+  );
   const users = useQuery((signal) => usersApi.listUsers({ limit: 100, signal }), []);
   const signatures = useQuery((signal) => signaturesApi.listSignatures({ limit: 100, active: true, signal }), []);
   const documentConfig = useQuery<DocumentConfiguration>(
@@ -208,6 +216,10 @@ export function PmocPlanWizard({ open, onClose, onCreated, pmoc = null, onUpdate
       addressId: pmoc.defaultAddressId ?? "",
       equipmentIds: pmoc.equipments?.map((item) => item.equipmentId) ?? [pmoc.equipmentId],
       scopeCatalogIds: pmoc.scopes?.map((item) => item.technicalCatalogId) ?? [],
+      checklistCatalogIds: pmoc.checklists?.map((item) => item.technicalCatalogId) ?? [],
+      includeChecklistInOperations: Boolean(
+        pmoc.checklists?.length && pmoc.includeChecklistInOperations,
+      ),
       name: pmoc.maintenancePlan?.name ?? "",
       periodicity: pmoc.periodicity,
       startDate: pmoc.startDate.slice(0, 10),
@@ -234,6 +246,19 @@ export function PmocPlanWizard({ open, onClose, onCreated, pmoc = null, onUpdate
     setDraftPhotos([]);
     setCoverageConfirmation(null);
   }, [initialReviewSection, open, pmoc, reviewHandoff.data, reviewing]);
+
+  useEffect(() => {
+    const items = workOrderChecklists.data ?? [];
+    if (!open || pmoc || !items.length) return;
+    setForm((current) =>
+      current.checklistCatalogIds.length
+        ? current
+        : {
+            ...current,
+            checklistCatalogIds: items.map((item) => item.id),
+          },
+    );
+  }, [open, pmoc, workOrderChecklists.data]);
 
   useEffect(() => {
     if (reviewHandoff.data) setHandoff(reviewHandoff.data);
@@ -332,7 +357,11 @@ export function PmocPlanWizard({ open, onClose, onCreated, pmoc = null, onUpdate
     Boolean(form.customerId && form.name.trim()),
     Boolean(form.equipmentIds.length && form.scopeCatalogIds.length && form.serviceTypes.length),
     Boolean(form.startDate && form.endDate && new Date(form.startDate) <= new Date(form.endDate)),
-    Boolean(form.defaultTechnicianId && Number(form.duration) >= 15),
+    Boolean(
+      form.defaultTechnicianId &&
+        Number(form.duration) >= 15 &&
+        (!form.includeChecklistInOperations || form.checklistCatalogIds.length > 0),
+    ),
     true,
     configurationReady && (!(signatureMode === "FIXED" || signatureMode === "HYBRID") || Boolean(form.overrideSignature ? form.signatureOverrideId : configuredSignature)),
     true,
@@ -354,6 +383,8 @@ export function PmocPlanWizard({ open, onClose, onCreated, pmoc = null, onUpdate
         equipmentId: form.equipmentIds[0],
         equipmentIds: form.equipmentIds,
         scopeCatalogIds: form.scopeCatalogIds,
+        checklistCatalogIds: form.checklistCatalogIds,
+        includeChecklistInOperations: form.includeChecklistInOperations,
         defaultAddressId: form.addressId || undefined,
         periodicity: form.periodicity,
         generationMode: form.generationMode,
@@ -409,6 +440,8 @@ export function PmocPlanWizard({ open, onClose, onCreated, pmoc = null, onUpdate
         name: form.name.trim(),
         equipmentIds: form.equipmentIds,
         scopeCatalogIds: form.scopeCatalogIds,
+        checklistCatalogIds: form.checklistCatalogIds,
+        includeChecklistInOperations: form.includeChecklistInOperations,
         defaultAddressId: form.addressId || null,
         periodicity: form.periodicity,
         generationMode: form.generationMode,
@@ -520,7 +553,14 @@ export function PmocPlanWizard({ open, onClose, onCreated, pmoc = null, onUpdate
           refreshScopes={() => setCatalogTick((value) => value + 1)}
         />}
         {step === 2 && <PlanningStep form={form} set={set} projection={projection} />}
-        {step === 3 && <ExecutionStep form={form} set={set} users={users.data?.items ?? []} />}
+        {step === 3 && <ExecutionStep
+          form={form}
+          set={set}
+          users={users.data?.items ?? []}
+          checklistItems={workOrderChecklists.data ?? []}
+          loadingChecklist={workOrderChecklists.loading}
+          refreshChecklist={() => setCatalogTick((value) => value + 1)}
+        />}
         {step === 4 && <EvidenceStep
           operation={reviewOperation.data}
           operationId={reviewOperationId}
@@ -651,7 +691,14 @@ function PlanningStep({ form, set, projection }: { form: Form; set: FormSetter; 
   </Section>;
 }
 
-function ExecutionStep({ form, set, users }: { form: Form; set: FormSetter; users: TeamUser[] }) {
+function ExecutionStep({ form, set, users, checklistItems, loadingChecklist, refreshChecklist }: {
+  form: Form;
+  set: FormSetter;
+  users: TeamUser[];
+  checklistItems: Array<{ id: string; title: string; description: string | null }>;
+  loadingChecklist: boolean;
+  refreshChecklist: () => void;
+}) {
   const active = users.filter((item) => item.isActive && item.role !== "VIEWER");
   return <Section icon={Settings2} title="Execução" text="Defina os responsáveis e os padrões aplicados às futuras Ordens de Serviço.">
     <div className="grid gap-4 md:grid-cols-2">
@@ -661,6 +708,34 @@ function ExecutionStep({ form, set, users }: { form: Form; set: FormSetter; user
       <Field label="Duração prevista" required hint="Em minutos"><input type="number" min={15} max={10080} value={form.duration} onChange={(event) => set("duration", event.target.value)} /></Field>
     </div>
     <Field label="Orientações para as Ordens de Serviço" optional><textarea rows={5} value={form.operationObservations} onChange={(event) => set("operationObservations", event.target.value)} placeholder="Instruções que serão sugeridas em cada execução" /></Field>
+    <section className="space-y-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h4 className="font-semibold">Checklist das Ordens de Serviço</h4>
+          <p className="text-sm text-[var(--color-muted-foreground)]">Selecione itens do mesmo Catálogo Técnico utilizado pelas Ordens de Serviço.</p>
+        </div>
+        <label className="inline-flex items-center gap-2 text-sm font-medium">
+          <input type="checkbox" checked={form.includeChecklistInOperations} onChange={(event) => set("includeChecklistInOperations", event.target.checked)} />
+          Enviar checklist nas execuções
+        </label>
+      </div>
+      {form.includeChecklistInOperations && <>
+        <MultiSelect
+          label="Itens predefinidos *"
+          value={form.checklistCatalogIds}
+          onChange={(value) => set("checklistCatalogIds", value)}
+          options={checklistItems.map((item) => ({ value: item.id, label: item.title, description: item.description ?? undefined }))}
+          placeholder={loadingChecklist ? "Carregando checklist…" : "Selecionar itens"}
+          emptyMessage="Nenhum item ativo disponível para Ordem de Serviço."
+        />
+        <div className="flex flex-wrap gap-3 text-xs text-[var(--color-muted-foreground)]">
+          <span>A OS recebe um snapshot desses itens ao ser gerada.</span>
+          <a href="/maintenance-checklists?type=CHECKLIST" target="_blank" rel="noreferrer" className="font-medium text-[var(--color-primary)]">Abrir Catálogo Técnico</a>
+          <button type="button" onClick={refreshChecklist} className="inline-flex items-center gap-1 font-medium text-[var(--color-primary)]"><RefreshCw className="h-3 w-3" /> Atualizar lista</button>
+        </div>
+      </>}
+      {!form.includeChecklistInOperations && <Notice tone="neutral">As Ordens de Serviço deste PMOC serão geradas sem checklist predefinido. O histórico do plano permanece inalterado.</Notice>}
+    </section>
   </Section>;
 }
 
@@ -835,7 +910,7 @@ function SummaryStep({ form, customerName, equipments, scopes, users, projection
       <SummaryCard title="Identificação" onEdit={() => onEdit(0)} rows={[['Cliente', customerName], ['Plano', form.name], ['Endereço', form.addressId ? 'Endereço selecionado' : 'Endereço principal']]} />
       <SummaryCard title="Cobertura" onEdit={() => onEdit(1)} rows={[['Equipamentos', `${equipmentNames.length} selecionado(s)`], ['Escopo', scopes.map((item) => item.title).join(', ') || '—'], ['Serviços', form.serviceTypes.map(operationTypeLabel).join(', ')]]} />
       <SummaryCard title="Planejamento" onEdit={() => onEdit(2)} rows={[['Periodicidade', periodicityLabel(form.periodicity)], ['Próxima execução', formatDate(projection.next)], ['Execuções previstas', String(projection.count)], ['Programação', generationModeLabel(form.generationMode)]]} />
-      <SummaryCard title="Execução" onEdit={() => onEdit(3)} rows={[['Operador padrão', userName(users, form.defaultOperatorId, 'Definido ao gerar')], ['Técnico', userName(users, form.defaultTechnicianId)], ['Duração prevista', `${form.duration} minutos`], ['Prioridade', priorityLabel(form.priority)]]} />
+      <SummaryCard title="Execução" onEdit={() => onEdit(3)} rows={[['Operador padrão', userName(users, form.defaultOperatorId, 'Definido ao gerar')], ['Técnico', userName(users, form.defaultTechnicianId)], ['Duração prevista', `${form.duration} minutos`], ['Prioridade', priorityLabel(form.priority)], ['Checklist na OS', form.includeChecklistInOperations ? `${form.checklistCatalogIds.length} item(ns)` : 'Não enviar']]} />
       <div className="md:col-span-2"><SummaryCard title="Política documental" onEdit={() => onEdit(5)} rows={[['Modo', signatureModeLabel(signatureMode)], ['Assinatura institucional', signature?.name ?? (signatureMode === 'NONE' || signatureMode === 'COLLECTED' ? 'Não aplicável' : 'Não configurada')], ['Origem', form.overrideSignature ? 'Definida somente para este PMOC' : 'Modelo oficial do documento']]} /></div>
     </div>
   </Section>;

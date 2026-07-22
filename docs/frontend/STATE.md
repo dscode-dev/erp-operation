@@ -1,5 +1,12 @@
 # STATE — Frontend
 
+## RVT/PMOC — checklist oficial (2026-07-22)
+
+- RVT Platform e Operator exibem seleção Semanal/Semestral e os dois checklists oficiais.
+- O resumo mobile informa tipo realizado; recomendações e fotos são opcionais.
+- PMOC seleciona itens de OS e permite não enviá-los às futuras execuções.
+- Catálogos Técnicos identifica “Checklists de manutenção” como fonte única.
+
 ## Gestão — Execuções dos Operadores (2026-07-22)
 
 - Nova rota `/operator-executions` para OWNER/MANAGER com KPIs mensais e tabela comparativa baseada na API real.
@@ -1281,3 +1288,9 @@ Status: concluído.
 - A assinatura oficial vinculada ao usuário é carregada e pré-selecionada no passo Assinatura da criação autônoma e da execução atribuída de OS/RVT.
 - Sem assinatura própria configurada, o Wizard bloqueia conclusão e direciona às configurações.
 - A seleção vale apenas para o documento atual; o PDF usa o snapshot oficial do handoff e não a assinatura principal da organização.
+## Operator — checklist opcional na criação autônoma de OS (2026-07-22)
+
+- O passo Checklist da Ordem de Serviço iniciada no mobile voltou a oferecer seleção múltipla dos itens predefinidos no Catálogo Técnico oficial.
+- A etapa é opcional: nenhum item é incluído automaticamente.
+- Somente os itens selecionados pelo operador são enviados à Operation, já com `done: true`, pois representam atividades realizadas durante a criação autônoma.
+- A semântica da Platform foi preservada: checklists escolhidos pelo Owner para uma atribuição continuam pendentes para execução posterior pelo técnico.

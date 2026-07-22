@@ -1,5 +1,23 @@
 # API Contracts
 
+## Checklists oficiais — RVT e PMOC
+
+`POST/PATCH /api/v1/operations` preserva os campos existentes:
+
+```json
+{
+  "maintenanceType": "WEEKLY",
+  "maintenanceChecklist": [
+    { "maintenanceType": "WEEKLY", "description": "Inspecionar filtros", "executed": true, "result": "YES" },
+    { "maintenanceType": "SEMIANNUAL", "description": "Higienizar serpentinas", "executed": false, "result": "NO" }
+  ]
+}
+```
+
+Para RVT, os tipos oficiais V1 são `WEEKLY` e `SEMIANNUAL`; os dois grupos devem ser enviados, e `maintenanceType` identifica o realizado.
+
+`POST /api/v1/pmoc` e `PATCH /api/v1/pmoc/:id` aceitam `checklistCatalogIds: UUID[]` e `includeChecklistInOperations: boolean`. A projeção retorna `checklists[]` ordenado. Os IDs devem ser itens ativos `CHECKLIST`, da instalação, aplicáveis a `WORK_ORDER` ou `GENERAL`.
+
 ## Gestão — Execuções dos Operadores
 
 Autorização em todos os endpoints: `OWNER | MANAGER`. A fonte do executor é sempre `Assignment.assignedTo`.
@@ -5733,3 +5751,8 @@ OWNER/MANAGER mantêm o comportamento existente. OPERATOR pode chamar somente qu
 - `signatureId` pertence ao próprio usuário, está ativo e possui imagem.
 
 Tentativa de selecionar assinatura de outro usuário retorna `403 FORBIDDEN`. A seleção deixa documento renderizado como `STALE` e a finalização preserva snapshot imutável.
+## Semântica de `checklist` por origem da Ordem de Serviço
+
+- Atendimento autônomo iniciado pelo Operator: envia somente atividades selecionadas e já realizadas, com `done: true`.
+- Atendimento criado/atribuído pela Platform: pode enviar atividades planejadas com `done: false`, que serão marcadas pelo técnico durante a execução.
+- O payload permanece `{ "label": "string", "done": boolean, "note"?: "string" }`; IDs do Catálogo Técnico não fazem parte deste contrato.

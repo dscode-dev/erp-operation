@@ -1,5 +1,15 @@
 # Frontend Integration
 
+## RVT: tipo e checklist
+
+- Consulte itens `CHECKLIST/TECHNICAL_REPORT` separadamente para `WEEKLY` e `SEMIANNUAL`.
+- Mostre os dois grupos; `maintenanceType` define apenas o marcador do realizado.
+- Persistir ambos em `maintenanceChecklist`. Recomendações e imagens são opcionais.
+
+## PMOC: checklist herdado pela OS
+
+Liste o catálogo oficial de OS, envie `checklistCatalogIds` e `includeChecklistInOperations`. O backend cria o snapshot somente ao gerar a OS.
+
 ## Execuções dos Operadores
 
 Use `GET /operator-executions?month=YYYY-MM` na visão de gestão e preserve `month`, busca e paginação. Ao selecionar um operador, carregue o resumo por `/:operatorId` e alterne o mesmo endpoint `/:operatorId/operations` entre `HISTORY` e `AGENDA`. Os números já chegam calculados pelo backend; não recompute taxa, atraso ou duração no navegador e não apresente valores de comissão.
@@ -2549,3 +2559,6 @@ Nos wizards autônomo e atribuído de OS/RVT:
 4. coletar assinatura do cliente, submeter, concluir, finalizar e renderizar normalmente.
 
 O PDF recebe a assinatura pelo `technicalSignatureSnapshot` do handoff. Não enviar imagem/base64 da assinatura técnica no payload da Operation.
+## Checklist de OS iniciado pelo Operator
+
+Na criação autônoma, o frontend deve exibir o Catálogo Técnico como seleção opcional. Deve enviar somente os itens escolhidos, todos com `done: true`. O `catalogId` pode ser usado como chave de interface, mas deve ser removido antes de `POST /operations`. Em atribuições criadas pela Platform, os itens enviados ao técnico permanecem inicialmente com `done: false`.

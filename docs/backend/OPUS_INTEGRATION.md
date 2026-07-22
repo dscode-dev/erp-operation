@@ -1,5 +1,12 @@
 # OPUS Frontend Integration
 
+## Checklists RVT/PMOC
+
+- RVT Platform e Operator usam os mesmos itens classificados como `WEEKLY` e `SEMIANNUAL`.
+- Sempre renderize ambos os grupos; `maintenanceType` é o realizado.
+- PMOC usa `checklistCatalogIds` + `includeChecklistInOperations`; a OS gerada já retorna o snapshot em `checklist`.
+- `/maintenance-checklists?type=CHECKLIST` é o ponto administrativo único.
+
 ## Gestão de execuções por operador
 
 A rota `/operator-executions` é uma projeção gerencial real de Assignment + Operation. Consumir `operatorExecutionsApi.list/get/operations`; não derivar métricas da página atual de Operations. Filtro de competência usa `YYYY-MM`, histórico e agenda são paginados e a navegação de uma linha reutiliza `OperationDetailDrawer`. O Orbit não calcula comissões.

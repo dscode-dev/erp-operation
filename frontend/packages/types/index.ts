@@ -1301,6 +1301,15 @@ export type PmocPlan = {
     technicalCatalogId: string;
     technicalCatalog: Pick<TechnicalCatalog, 'id' | 'type' | 'title' | 'description' | 'active'>;
   }>;
+  checklists?: Array<{
+    technicalCatalogId: string;
+    position: number;
+    technicalCatalog: Pick<
+      TechnicalCatalog,
+      'id' | 'type' | 'title' | 'description' | 'maintenanceType' | 'active'
+    >;
+  }>;
+  includeChecklistInOperations: boolean;
   defaultEstimatedDurationMinutes: number | null;
   defaultOperationObservations: string | null;
   signatureOverrideId: string | null;

@@ -1,5 +1,11 @@
 # ARCHITECTURE — Frontend
 
+## Fonte única de checklist
+
+`TechnicalCatalog(CHECKLIST) → wizard RVT/PMOC → Operation snapshot → DocumentContext → DocumentBuilder → Preview/PDF`.
+
+O frontend não reconstrói checklist durante renderização. RVT envia grupos estruturados; PMOC envia referências e a decisão de herança.
+
 ## Projeção gerencial de operadores
 
 `Platform → operatorExecutionsApi → OperatorExecutionsService → Assignment + Operation`. O frontend apenas formata indicadores calculados pelo backend. Não há store persistente, dataset local, regra de comissão ou interpretação de ownership; `Assignment.assignedTo` permanece autoritativo.
@@ -1154,3 +1160,8 @@ O resumo apresentado na etapa de assinatura é somente uma projeção dos estado
 # Assinatura técnica própria no mobile
 
 O mobile não possui catálogo paralelo. `Signature.userId` identifica a assinatura própria; o Wizard persiste somente seu ID em `OperationDocument.technicalSignatureId`. Na finalização, o backend copia a imagem pelo `DocumentAssetResolver` para `technicalSignatureSnapshot`. Assim, alterações futuras no perfil não modificam PDFs históricos e o DocumentContext continua sendo a única origem do Builder.
+## Semântica do checklist da OS por origem
+
+- OS iniciada pelo Operator: o catálogo é uma lista opcional de atividades realizadas; somente a seleção é persistida e entra com `done: true`.
+- OS criada/atribuída pela Platform: a seleção representa o plano enviado ao atendimento e permanece pendente até a execução do técnico.
+- Ambos os fluxos consomem o mesmo Catálogo Técnico e a mesma propriedade `Operation.checklist`; a diferença é definida na origem do workflow, sem domínio ou endpoint paralelo.

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ClipboardCheck,
+  Check,
   FileCheck2,
   FileText,
   Plus,
@@ -53,6 +54,7 @@ import { Gate } from '@erp/ui/auth/gate';
 import { useAuth } from '@erp/ui/auth/auth-provider';
 import { Drawer } from '@erp/ui/drawer';
 import { EmptyState } from '@erp/ui/empty-state';
+import { StatusChip } from '@erp/ui/status-chip';
 import { SkeletonCard } from '@erp/ui/skeletons';
 import { DocumentViewer } from '@erp/ui/documents/document-viewer';
 import { SignaturePad } from '@erp/ui/documents/signature-pad';
@@ -579,10 +581,10 @@ function ReportWorkflowDrawer({
         page: 1,
         limit: 100,
         active: true,
-        maintenanceType: form.maintenanceType,
+        maintenanceType: type === 'TECHNICAL_REPORT' ? undefined : form.maintenanceType,
         signal,
       }),
-    [form.maintenanceType],
+    [form.maintenanceType, type],
   );
   const isWorkOrder = type === 'WORK_ORDER';
 
@@ -597,6 +599,38 @@ function ReportWorkflowDrawer({
     if (selected) set('technicalSignatureId', selected.id);
     // Selection only follows the organization default while the receipt has no override.
   }, [type, signatures.data, form.technicalSignatureId]);
+
+  useEffect(() => {
+    if (type !== 'TECHNICAL_REPORT' || !checklistTemplates.data?.items.length) return;
+    const official = checklistTemplates.data.items.filter(
+      (item) => item.maintenanceType === 'WEEKLY' || item.maintenanceType === 'SEMIANNUAL',
+    );
+    setForm((current) => {
+      const keys = new Set(
+        current.maintenanceChecklist.map(
+          (item) => `${item.maintenanceType}:${item.templateId ?? item.description}`,
+        ),
+      );
+      const missing = official.filter(
+        (item) => !keys.has(`${item.maintenanceType}:${item.id}`),
+      );
+      if (!missing.length) return current;
+      return {
+        ...current,
+        maintenanceChecklist: [
+          ...current.maintenanceChecklist,
+          ...missing.map((item) => ({
+            templateId: item.id,
+            maintenanceType: item.maintenanceType,
+            description: item.description,
+            executed: false,
+            result: 'NO' as const,
+            observations: '',
+          })),
+        ],
+      };
+    });
+  }, [checklistTemplates.data, type]);
 
   useEffect(() => {
     if (type !== 'RECEIPT' || form.receiptDeclaration || !form.receiptSource) return;
@@ -2412,7 +2446,7 @@ function ContentStep({
     try {
       const created = await onCreateChecklist(description);
       onSet('maintenanceChecklist', [
-        ...selectedChecklistItems,
+        ...form.maintenanceChecklist,
         {
           templateId: created.id,
           maintenanceType: created.maintenanceType,
@@ -2764,195 +2798,78 @@ function ContentStep({
         />
       </div>
     );
-  if (type === 'TECHNICAL_REPORT')
+  if (type === 'TECHNICAL_REPORT') {
+    const groups = [
+      { value: 'WEEKLY' as const, label: 'Semanal' },
+      { value: 'SEMIANNUAL' as const, label: 'Semestral' },
+    ];
     return (
       <div className="space-y-5">
-        <div className="grid gap-4 md:grid-cols-3">
-          <Field label="Mês de referência">
-            <select
-              value={form.referenceMonth}
-              onChange={(event) => onSet('referenceMonth', event.target.value)}
-            >
-              {Array.from({ length: 12 }, (_, index) => (
-                <option key={index + 1} value={index + 1}>
-                  {new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(
-                    new Date(2026, index, 1),
-                  )}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Text
-            label="Ano de referência"
-            value={form.referenceYear}
-            onChange={(value) => onSet('referenceYear', value)}
-          />
-          <Field label="Tipo de manutenção">
-            <select
-              value={form.maintenanceType}
-              onChange={(event) => {
-                onSet('maintenanceType', event.target.value as OperationMaintenanceType);
-                onSet('maintenanceChecklist', []);
-              }}
-            >
-              <option value="WEEKLY">Semanal</option>
-              <option value="MONTHLY">Mensal</option>
-              <option value="QUARTERLY">Trimestral</option>
-              <option value="SEMIANNUAL">Semestral</option>
-              <option value="ANNUAL">Anual</option>
-              <option value="CORRECTIVE">Corretiva</option>
-            </select>
-          </Field>
-        </div>
-        <InspectedEquipmentSelector form={form} equipments={equipments} onSet={onSet} />
-        <section className="space-y-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] p-4">
-          <div>
-            <h3 className="text-sm font-semibold">Checklist de manutenção</h3>
-            <p className="text-caption">
-              Use atividades padronizadas e registre somente a execução e a observação desta visita.
-            </p>
+        <Field label="Tipo de manutenção realizado">
+          <div className="grid gap-3 sm:grid-cols-2">
+            {groups.map((group) => (
+              <button
+                key={group.value}
+                type="button"
+                onClick={() => onSet('maintenanceType', group.value)}
+                className={`flex items-center justify-between rounded-[var(--radius-lg)] border p-4 text-left ${form.maintenanceType === group.value ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5' : 'border-[var(--color-border)]'}`}
+              >
+                <span><strong className="block">{group.label}</strong><span className="text-caption">O relatório exibirá os dois grupos e marcará este como realizado.</span></span>
+                {form.maintenanceType === group.value && <Check className="h-5 w-5 text-[var(--color-primary)]" />}
+              </button>
+            ))}
           </div>
-          <MultiSelect
-            label="Atividades do checklist"
-            options={checklistTemplates.map((template) => ({
-              value: template.id,
-              label: template.description,
-            }))}
-            value={selectedChecklistTemplateIds}
-            onChange={selectChecklistTemplates}
-            placeholder={checklistTemplatesLoading ? 'Carregando atividades…' : 'Buscar atividades'}
-            emptyMessage="Nenhuma atividade cadastrada para esta periodicidade."
-          />
-          {selectedChecklistItems.map((item, index) => (
-            <div
-              key={item.templateId ?? `${item.description}-${index}`}
-              className="grid gap-2 rounded-[var(--radius-md)] bg-[var(--color-muted)]/50 p-3 md:grid-cols-[auto_1fr_280px_auto] md:items-center"
-            >
-              <input
-                type="checkbox"
-                checked={item.executed}
-                aria-label={`Marcar ${item.description} como executada`}
-                onChange={(event) =>
-                  onSet(
-                    'maintenanceChecklist',
-                    selectedChecklistItems.map((current, currentIndex) =>
-                      currentIndex === index
-                        ? { ...current, executed: event.target.checked }
-                        : current,
-                    ),
-                  )
-                }
-              />
-              <span className="text-sm">{item.description}</span>
-              <input
-                value={item.observations}
-                maxLength={2000}
-                onChange={(event) =>
-                  onSet(
-                    'maintenanceChecklist',
-                    selectedChecklistItems.map((current, currentIndex) =>
-                      currentIndex === index
-                        ? { ...current, observations: event.target.value }
-                        : current,
-                    ),
-                  )
-                }
-                placeholder="Observação opcional"
-                className="h-9 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm"
-              />
-              <button
-                type="button"
-                aria-label={`Remover ${item.description}`}
-                onClick={() =>
-                  onSet(
-                    'maintenanceChecklist',
-                    selectedChecklistItems.filter((_, currentIndex) => currentIndex !== index),
-                  )
-                }
-                className="rounded-md p-2 text-[var(--color-muted-foreground)] hover:bg-[var(--color-card)] hover:text-[var(--color-danger)]"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-          ))}
-          {canManageChecklist && (
-            <div className="grid gap-2 md:grid-cols-[1fr_auto]">
-              <input
-                value={newChecklistDescription}
-                maxLength={500}
-                onChange={(event) => setNewChecklistDescription(event.target.value)}
-                placeholder="Nova atividade para esta periodicidade"
-                className="h-10 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm"
-              />
-              <button
-                type="button"
-                disabled={creatingChecklist || newChecklistDescription.trim().length < 3}
-                onClick={() => void createChecklist()}
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 text-sm disabled:opacity-50"
-              >
-                <Plus className="h-4 w-4" /> {creatingChecklist ? 'Adicionando…' : 'Adicionar novo'}
-              </button>
-            </div>
-          )}
+        </Field>
+        <InspectedEquipmentSelector form={form} equipments={equipments} onSet={onSet} />
+        <section className="space-y-4 rounded-[var(--radius-lg)] border border-[var(--color-border)] p-4">
+          <div>
+            <h3 className="text-sm font-semibold">Checklists predefinidos</h3>
+            <p className="text-caption">Semana e Semestral são persistidos juntos. Marque somente os itens executados nesta visita.</p>
+          </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            {groups.map((group) => {
+              const templates = checklistTemplates.filter((item) => item.maintenanceType === group.value);
+              const items = form.maintenanceChecklist.filter((item) => item.maintenanceType === group.value);
+              const selectedIds = templates.filter((template) => items.some((item) => item.templateId === template.id)).map((item) => item.id);
+              return <section key={group.value} className={`space-y-3 rounded-[var(--radius-lg)] border p-3 ${form.maintenanceType === group.value ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5' : 'border-[var(--color-border)]'}`}>
+                <div className="flex items-center justify-between"><h4 className="font-semibold">{group.label}</h4>{form.maintenanceType === group.value && <StatusChip tone="success">Tipo realizado</StatusChip>}</div>
+                <MultiSelect
+                  label={`Itens ${group.label.toLowerCase()}`}
+                  options={templates.map((item) => ({ value: item.id, label: item.description }))}
+                  value={selectedIds}
+                  onChange={(ids) => {
+                    const keepOtherGroups = form.maintenanceChecklist.filter((item) => item.maintenanceType !== group.value);
+                    const current = new Map(items.map((item) => [item.templateId, item]));
+                    const next = templates.filter((item) => ids.includes(item.id)).map((item) => current.get(item.id) ?? ({ templateId: item.id, maintenanceType: group.value, description: item.description, executed: false, result: 'NO' as const, observations: '' }));
+                    onSet('maintenanceChecklist', [...keepOtherGroups, ...next]);
+                  }}
+                  placeholder={checklistTemplatesLoading ? 'Carregando itens…' : 'Selecionar itens'}
+                  emptyMessage="Nenhum item cadastrado para este tipo."
+                />
+                {items.map((item) => {
+                  const globalIndex = form.maintenanceChecklist.indexOf(item);
+                  return <label key={item.templateId ?? `${group.value}-${globalIndex}`} className="flex gap-3 rounded-md bg-[var(--color-card)] p-3 text-sm">
+                    <input type="checkbox" checked={item.executed} onChange={(event) => onSet('maintenanceChecklist', form.maintenanceChecklist.map((current, index) => index === globalIndex ? { ...current, executed: event.target.checked, result: event.target.checked ? 'YES' : 'NO' } : current))} />
+                    <span>{item.description}</span>
+                  </label>;
+                })}
+              </section>;
+            })}
+          </div>
+          {canManageChecklist && <div className="grid gap-2 md:grid-cols-[1fr_auto]">
+            <input value={newChecklistDescription} maxLength={500} onChange={(event) => setNewChecklistDescription(event.target.value)} placeholder={`Novo item ${form.maintenanceType === 'WEEKLY' ? 'semanal' : 'semestral'}`} className="h-10 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm" />
+            <button type="button" disabled={creatingChecklist || newChecklistDescription.trim().length < 3} onClick={() => void createChecklist()} className="inline-flex h-10 items-center justify-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 text-sm disabled:opacity-50"><Plus className="h-4 w-4" /> {creatingChecklist ? 'Adicionando…' : 'Adicionar ao catálogo'}</button>
+          </div>}
           {checklistError && <p className="text-sm text-[var(--color-danger)]">{checklistError}</p>}
         </section>
+        <Area label="Observações" value={form.observations} onChange={(value) => onSet('observations', value)} />
         <section className="space-y-2">
-          <TechnicalCatalogSelector
-            type="OBJECTIVE"
-            label="Objetivo"
-            areas={contextualAreas}
-            workflow="TECHNICAL_REPORT"
-            values={catalogLines(form.objective)}
-            onChange={(values) => onSet('objective', values.join('\n'))}
-          />
-          <Area
-            label="Objetivo da visita"
-            value={form.objective}
-            onChange={(value) => onSet('objective', value)}
-          />
+          <TechnicalCatalogSelector type="RECOMMENDATION" label="Recomendação" areas={contextualAreas} workflow="TECHNICAL_REPORT" values={catalogLines(form.recommendations)} onChange={(values) => onSet('recommendations', values.join('\n'))} />
+          <Area label="Recomendações técnicas (opcional)" value={form.recommendations} onChange={(value) => onSet('recommendations', value)} />
         </section>
-        <section className="space-y-2">
-          <TechnicalCatalogSelector
-            type="SITE_CONDITION"
-            label="Condição"
-            areas={contextualAreas}
-            workflow="TECHNICAL_REPORT"
-            values={catalogLines(form.diagnosis)}
-            onChange={(values) => onSet('diagnosis', values.join('\n'))}
-          />
-          <Area
-            label="Diagnóstico ou situação encontrada"
-            value={form.diagnosis}
-            onChange={(value) => onSet('diagnosis', value)}
-          />
-        </section>
-        <Area
-          label="Atividades executadas"
-          value={form.analysis}
-          onChange={(value) => onSet('analysis', value)}
-        />
-        <section className="space-y-2">
-          <TechnicalCatalogSelector
-            type="RECOMMENDATION"
-            label="Recomendação"
-            areas={contextualAreas}
-            workflow="TECHNICAL_REPORT"
-            values={catalogLines(form.recommendations)}
-            onChange={(values) => onSet('recommendations', values.join('\n'))}
-          />
-          <Area
-            label="Recomendações técnicas"
-            value={form.recommendations}
-            onChange={(value) => onSet('recommendations', value)}
-          />
-        </section>
-        <Area
-          label="Observações finais"
-          value={form.observations}
-          onChange={(value) => onSet('observations', value)}
-        />
       </div>
     );
+  }
   return (
     <div className="space-y-4">
       <Area

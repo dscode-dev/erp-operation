@@ -1,11 +1,12 @@
 import { SignaturesService } from '../src/modules/signatures/signatures.service';
+import { Role } from '@prisma/client';
 
 const actor = {
   id: '11111111-1111-4111-8111-111111111111',
   email: 'owner@orbit.test',
   username: 'owner',
   name: 'Owner',
-  role: 'OWNER',
+  role: Role.OWNER,
   isActive: true,
   mustChangePassword: false,
 } as const;
@@ -39,7 +40,12 @@ describe('SignaturesService soft-delete semantics', () => {
       updatedAt: new Date(),
       user: { id: actor.id, name: actor.name, role: 'OPERATOR', jobTitle: null },
     };
-    const upsert = jest.fn().mockResolvedValue(saved);
+    const upsert = jest.fn<Promise<typeof saved>, [{
+      where: { userId: string };
+      create: { userId: string; name: string; title: string };
+      update: Record<string, unknown>;
+      select: unknown;
+    }]>().mockResolvedValue(saved);
     const prisma = {
       user: { findUnique: jest.fn().mockResolvedValue({ id: actor.id, name: actor.name, jobTitle: null, institutionalSignature: null }) },
       $transaction: jest.fn(async (callback: (tx: unknown) => Promise<unknown>) => callback({
@@ -56,14 +62,17 @@ describe('SignaturesService soft-delete semantics', () => {
 
     await expect(service.upsertOwn(
       { title: 'Técnico de campo' },
-      { buffer: png, mimetype: 'image/png', originalname: 'assinatura.png', size: png.length } as never,
-      { ...actor, role: 'OPERATOR' } as never,
+      { buffer: png, mimetype: 'image/png', originalname: 'assinatura.png', size: png.length },
+      { ...actor, role: Role.OPERATOR },
       context,
     )).resolves.toMatchObject({ id: saved.id, userId: actor.id, hasImage: true });
-    expect(upsert).toHaveBeenCalledWith(expect.objectContaining({
-      where: { userId: actor.id },
-      create: expect.objectContaining({ userId: actor.id, name: actor.name, title: 'Técnico de campo' }),
-    }));
+    const call = upsert.mock.calls[0]?.[0];
+    expect(call?.where).toEqual({ userId: actor.id });
+    expect(call?.create).toMatchObject({
+      userId: actor.id,
+      name: actor.name,
+      title: 'Técnico de campo',
+    });
   });
 
   it('normal list excludes soft-deleted signatures while allowing inactive signatures', async () => {

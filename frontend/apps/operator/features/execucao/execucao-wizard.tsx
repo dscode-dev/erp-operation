@@ -24,9 +24,10 @@ import { MultiSelect } from "@erp/ui/multi-select";
 import { PhotoInput, type CapturedPhoto } from "@erp/ui/photo-input";
 import { SignaturePad } from "@erp/ui/documents/signature-pad";
 import {
-  assignmentsApi, documentsApi, equipmentsApi, inventoryApi, operationApi, useQuery,
+  assignmentsApi, documentsApi, equipmentsApi, inventoryApi, operationApi, technicalCatalogsApi, useQuery,
   type DocumentKind, type EquipmentSummary, type InventoryItem, type OperationChecklistItem,
-  type OperationDetail, type OperationPart, type Product,
+  type OperationDetail, type OperationMaintenanceChecklistItem, type OperationMaintenanceType,
+  type OperationPart, type Product,
 } from "@erp/api";
 import { DOCUMENT_KIND_LABEL } from "@erp/types";
 import { serviceTypeLabel } from "@operator/lib/service-types";
@@ -36,6 +37,10 @@ const STEPS = ["Checklist", "Conteúdo", "Evidências", "Materiais", "Assinatura
 const CUSTOMER_SIGNATURE = new Set<DocumentKind>(["WORK_ORDER", "TECHNICAL_REPORT", "BUDGET", "PMOC"]);
 const DIRECT_COMPLETION = new Set<DocumentKind>(["WORK_ORDER", "TECHNICAL_REPORT"]);
 const inputCls = "w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--color-primary)]";
+const RVT_MAINTENANCE_TYPES: Array<{ value: OperationMaintenanceType; label: string }> = [
+  { value: "WEEKLY", label: "Semanal" },
+  { value: "SEMIANNUAL", label: "Semestral" },
+];
 
 export function ExecucaoWizard({ assignmentId }: { assignmentId: string }) {
   const router = useRouter();
@@ -73,6 +78,8 @@ function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; oper
   const directCompletion = DIRECT_COMPLETION.has(type);
 
   const [checklist, setChecklist] = useState<OperationChecklistItem[]>(operation.checklist);
+  const [maintenanceType, setMaintenanceType] = useState<OperationMaintenanceType>(operation.maintenanceType ?? "SEMIANNUAL");
+  const [maintenanceChecklist, setMaintenanceChecklist] = useState<OperationMaintenanceChecklistItem[]>(operation.maintenanceChecklistItems);
   const [equipmentIds, setEquipmentIds] = useState<string[]>(
     operation.inspectedEquipments.length > 0
       ? operation.inspectedEquipments.map((item) => item.equipmentId)
@@ -98,10 +105,27 @@ function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; oper
     [operation.customer?.id],
   );
   const materials = useQuery((signal) => inventoryApi.listOperationMaterials(operation.id, { signal }), [operation.id]);
+  const rvtChecklistCatalog = useQuery(
+    async (signal) => type === "TECHNICAL_REPORT"
+      ? (await Promise.all(RVT_MAINTENANCE_TYPES.map((item) => technicalCatalogsApi.listChecklistItems("TECHNICAL_REPORT", { maintenanceType: item.value, signal })))).flat()
+      : [],
+    [type],
+  );
   const equipmentOptions = useMemo(
     () => (equipments.data?.items ?? []).map((item) => ({ value: item.id, label: [item.name, item.tag].filter(Boolean).join(" · ") })),
     [equipments.data],
   );
+
+  useEffect(() => {
+    if (type !== "TECHNICAL_REPORT" || maintenanceChecklist.length || rvtChecklistCatalog.loading) return;
+    setMaintenanceChecklist((rvtChecklistCatalog.data ?? []).map((item) => ({
+      maintenanceType: item.maintenanceType ?? "SEMIANNUAL",
+      description: item.title,
+      executed: false,
+      result: "NO",
+      observations: item.description,
+    })));
+  }, [maintenanceChecklist.length, rvtChecklistCatalog.data, rvtChecklistCatalog.loading, type]);
 
   const signatureRequired = CUSTOMER_SIGNATURE.has(type) && !operation.signatureCaptured;
   const technicalSignatureRequired = directCompletion;
@@ -123,6 +147,8 @@ function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; oper
       const equipmentMap = new Map((equipments.data?.items ?? []).map((item) => [item.id, item] as [string, EquipmentSummary]));
       await operationApi.updateOperation(operation.id, {
         checklist,
+        maintenanceType: type === "TECHNICAL_REPORT" ? maintenanceType : null,
+        maintenanceChecklist: type === "TECHNICAL_REPORT" ? maintenanceChecklist : [],
         reportedIssue: issue,
         technicalDiagnosis: diagnosis,
         serviceDescription: service,
@@ -210,11 +236,21 @@ function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; oper
 
       <div className="flex-1 overflow-y-auto p-4">
         {step === 0 && (
-          <ChecklistStep
-            items={checklist}
-            onToggle={(i) => setChecklist((arr) => arr.map((it, idx) => (idx === i ? { ...it, done: !it.done } : it)))}
-            onNote={(i, note) => setChecklist((arr) => arr.map((it, idx) => (idx === i ? { ...it, note } : it)))}
-          />
+          type === "TECHNICAL_REPORT" ? (
+            <AssignedRvtChecklistStep
+              maintenanceType={maintenanceType}
+              onMaintenanceType={setMaintenanceType}
+              items={maintenanceChecklist}
+              loading={rvtChecklistCatalog.loading}
+              onToggle={(index) => setMaintenanceChecklist((current) => current.map((item, currentIndex) => currentIndex === index ? { ...item, executed: !item.executed, result: item.executed ? "NO" : "YES" } : item))}
+            />
+          ) : (
+            <ChecklistStep
+              items={checklist}
+              onToggle={(i) => setChecklist((arr) => arr.map((it, idx) => (idx === i ? { ...it, done: !it.done } : it)))}
+              onNote={(i, note) => setChecklist((arr) => arr.map((it, idx) => (idx === i ? { ...it, note } : it)))}
+            />
+          )
         )}
         {step === 1 && (
           <div className="space-y-4">
@@ -224,11 +260,16 @@ function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; oper
               {managementAssigned && <span className="block text-[11px] text-[var(--color-muted-foreground)]">Definido pela gestão para este atendimento.</span>}
             </div>
             <MultiSelect label="Equipamentos envolvidos" value={equipmentIds} onChange={setEquipmentIds} options={equipmentOptions} placeholder="Selecionar equipamentos" />
-            <TextArea label={type === "WORK_ORDER" ? "Defeito ou solicitação" : type === "TECHNICAL_REPORT" ? "Motivo da visita" : "Necessidade identificada"} value={issue} onChange={setIssue} />
-            {type !== "WORK_ORDER" && <TextArea label="Condições encontradas / diagnóstico" value={diagnosis} onChange={setDiagnosis} />}
-            <TextArea label={type === "WORK_ORDER" ? "Serviços previstos ou executados" : type === "BUDGET" ? "Serviços e peças sugeridos" : "Atividades executadas"} value={service} onChange={setService} />
-            {type !== "WORK_ORDER" && <TextArea label="Recomendações" value={recommendations} onChange={setRecommendations} />}
-            <TextArea label={type === "WORK_ORDER" ? "Observações" : "Observações de campo"} value={observations} onChange={setObservations} />
+            {type === "TECHNICAL_REPORT" ? <>
+              <TextArea label="Observações" value={observations} onChange={setObservations} />
+              <TextArea label="Recomendações técnicas (opcional)" value={recommendations} onChange={setRecommendations} />
+            </> : <>
+              <TextArea label={type === "WORK_ORDER" ? "Defeito ou solicitação" : "Necessidade identificada"} value={issue} onChange={setIssue} />
+              {type !== "WORK_ORDER" && <TextArea label="Condições encontradas / diagnóstico" value={diagnosis} onChange={setDiagnosis} />}
+              <TextArea label={type === "WORK_ORDER" ? "Serviços previstos ou executados" : type === "BUDGET" ? "Serviços e peças sugeridos" : "Atividades executadas"} value={service} onChange={setService} />
+              {type !== "WORK_ORDER" && <TextArea label="Recomendações" value={recommendations} onChange={setRecommendations} />}
+              <TextArea label={type === "WORK_ORDER" ? "Observações" : "Observações de campo"} value={observations} onChange={setObservations} />
+            </>}
           </div>
         )}
         {step === 2 && (
@@ -247,6 +288,8 @@ function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; oper
               operation={operation}
               type={type}
               checklist={checklist}
+              maintenanceType={maintenanceType}
+              maintenanceChecklist={maintenanceChecklist}
               equipmentLabels={equipmentIds.map((id) => equipmentOptions.find((o) => o.value === id)?.label ?? "").filter(Boolean)}
               texts={[
                 ["Problema relatado", issue],
@@ -302,6 +345,20 @@ function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; oper
 }
 
 /* ---------- Steps ---------- */
+
+function AssignedRvtChecklistStep({ maintenanceType, onMaintenanceType, items, loading, onToggle }: {
+  maintenanceType: OperationMaintenanceType;
+  onMaintenanceType: (value: OperationMaintenanceType) => void;
+  items: OperationMaintenanceChecklistItem[];
+  loading: boolean;
+  onToggle: (index: number) => void;
+}) {
+  if (loading) return <SkeletonList rows={6} />;
+  return <div className="space-y-5">
+    <section className="space-y-3"><div><h2 className="font-semibold">Tipo de manutenção</h2><p className="text-caption">Selecione o tipo realizado. Ambos permanecerão visíveis no relatório.</p></div><div className="grid grid-cols-2 gap-3">{RVT_MAINTENANCE_TYPES.map((type) => <button key={type.value} type="button" onClick={() => onMaintenanceType(type.value)} className={`flex min-h-16 items-center justify-between rounded-[var(--radius-lg)] border p-3 ${maintenanceType === type.value ? "border-[var(--color-primary)] bg-[var(--color-primary)]/5" : "border-[var(--color-border)]"}`}><span className="font-medium">{type.label}</span>{maintenanceType === type.value && <Check className="h-5 w-5 text-[var(--color-primary)]" />}</button>)}</div></section>
+    {RVT_MAINTENANCE_TYPES.map((type) => { const indexed = items.map((item, index) => ({ item, index })).filter(({ item }) => item.maintenanceType === type.value); return <section key={type.value} className={`space-y-2 rounded-[var(--radius-lg)] border p-3 ${maintenanceType === type.value ? "border-[var(--color-primary)]" : "border-[var(--color-border)]"}`}><div className="flex items-center justify-between"><h3 className="font-semibold">Checklist {type.label.toLowerCase()}</h3>{maintenanceType === type.value && <span className="rounded-full bg-[var(--color-success)]/10 px-2 py-1 text-xs text-[var(--color-success)]">Selecionado</span>}</div>{indexed.length === 0 ? <p className="text-caption">Nenhum item cadastrado.</p> : indexed.map(({ item, index }) => <button key={`${type.value}-${index}`} type="button" onClick={() => onToggle(index)} className="flex w-full items-center gap-3 rounded-md bg-[var(--color-card)] p-3 text-left">{item.executed ? <CheckCircle2 className="h-5 w-5 shrink-0 text-[var(--color-success)]" /> : <Circle className="h-5 w-5 shrink-0 text-[var(--color-muted-foreground)]" />}<span className="text-sm">{item.description}</span></button>)}</section>; })}
+  </div>;
+}
 
 function ChecklistStep({ items, onToggle, onNote }: { items: OperationChecklistItem[]; onToggle: (i: number) => void; onNote: (i: number, note: string) => void }) {
   if (items.length === 0) {
@@ -425,12 +482,14 @@ function MaterialForm({ operationId, onClose, onSaved }: { operationId: string; 
 }
 
 function RevisaoStep({
-  operation, type, checklist, equipmentLabels, texts, photos, materials,
+  operation, type, checklist, maintenanceType, maintenanceChecklist, equipmentLabels, texts, photos, materials,
   signatureRequired, signatureCaptured, signerName, signerRole, onSignerName, onSignerRole, onSignature,
 }: {
   operation: OperationDetail;
   type: DocumentKind;
   checklist: OperationChecklistItem[];
+  maintenanceType: OperationMaintenanceType;
+  maintenanceChecklist: OperationMaintenanceChecklistItem[];
   equipmentLabels: string[];
   texts: Array<[string, string]>;
   photos: CapturedPhoto[];
@@ -443,7 +502,14 @@ function RevisaoStep({
   onSignerRole: (v: string) => void;
   onSignature: (v: string | null) => void;
 }) {
-  const done = checklist.filter((c) => c.done).length;
+  const reviewChecklist = type === "TECHNICAL_REPORT"
+    ? maintenanceChecklist.map((item) => ({
+        label: `${item.maintenanceType === "WEEKLY" ? "Semanal" : "Semestral"} · ${item.description}`,
+        done: item.executed,
+        note: item.observations,
+      }))
+    : checklist;
+  const done = reviewChecklist.filter((c) => c.done).length;
   const address = operation.address
     ? [operation.address.street, operation.address.number, operation.address.city].filter(Boolean).join(", ")
     : "—";
@@ -469,10 +535,11 @@ function RevisaoStep({
         )}
       </ReviewCard>
 
-      <ReviewCard title={`Checklist (${done}/${checklist.length})`} icon={<ClipboardList className="h-4 w-4" />}>
-        {checklist.length === 0 ? <p className="text-sm text-[var(--color-muted-foreground)]">Sem checklist.</p> : (
+      <ReviewCard title={`Checklist (${done}/${reviewChecklist.length})`} icon={<ClipboardList className="h-4 w-4" />}>
+        {type === "TECHNICAL_REPORT" && <p className="mb-2 text-xs font-medium text-[var(--color-primary)]">Tipo realizado: {maintenanceType === "WEEKLY" ? "Semanal" : "Semestral"}</p>}
+        {reviewChecklist.length === 0 ? <p className="text-sm text-[var(--color-muted-foreground)]">Sem checklist.</p> : (
           <ul className="space-y-1.5">
-            {checklist.map((it, i) => (
+            {reviewChecklist.map((it, i) => (
               <li key={`${it.label}-${i}`} className="flex items-start gap-2 text-sm">
                 {it.done ? <Check className="h-4 w-4 text-[var(--color-success)] shrink-0 mt-0.5" /> : <Circle className="h-4 w-4 text-[var(--color-muted-foreground)] shrink-0 mt-0.5" />}
                 <span>

@@ -14,8 +14,6 @@ import {
   PmocSchedulerStatus,
   Prisma,
   Role,
-  TechnicalCatalogType,
-  TechnicalCatalogWorkflow,
 } from '@prisma/client';
 import { ERROR_CODES } from '../../shared/constants/error-codes.constants';
 import {
@@ -91,6 +89,10 @@ const PLAN_FOR_EXECUTION_INCLUDE = {
   equipments: {
     include: { equipment: { include: { address: true } } },
     orderBy: { createdAt: 'asc' as const },
+  },
+  checklists: {
+    include: { technicalCatalog: { select: { id: true, title: true, active: true } } },
+    orderBy: { position: 'asc' as const },
   },
   maintenancePlan: true,
   defaultOperator: { select: { id: true, role: true, isActive: true, disabledAt: true } },
@@ -513,7 +515,7 @@ export class PmocExecutionRequestsService {
     }
 
     try {
-      const authoritative = await this.buildOperationPayload(
+      const authoritative = this.buildOperationPayload(
         request.pmocPlan,
         request.scheduledFor,
         actor,
@@ -1057,31 +1059,16 @@ export class PmocExecutionRequestsService {
     });
   }
 
-  private async buildOperationPayload(
+  private buildOperationPayload(
     plan: PlanForExecution,
     scheduledFor: Date,
     actor: AuthenticatedUser,
     reviewed?: CreateOperationDto,
     responsibility?: Pick<RequestWithPlan, 'plannedOperator' | 'plannedTechnician'>,
-  ): Promise<CreateOperationDto> {
+  ): CreateOperationDto {
     const equipments = plan.equipments.length
       ? plan.equipments.map((item) => item.equipment)
       : [plan.equipment];
-    const catalog = await this.prisma.technicalCatalog.findMany({
-      where: {
-        organizationId: plan.organizationId,
-        type: TechnicalCatalogType.CHECKLIST,
-        active: true,
-        deletedAt: null,
-        OR: [
-          { workflows: { has: TechnicalCatalogWorkflow.PMOC } },
-          { workflows: { has: TechnicalCatalogWorkflow.GENERAL } },
-        ],
-      },
-      select: { title: true },
-      orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
-      take: 100,
-    });
     const plannedOperator = responsibility?.plannedOperator;
     const activeDefaultOperator =
       plannedOperator?.isActive && !plannedOperator.disabledAt
@@ -1108,7 +1095,12 @@ export class PmocExecutionRequestsService {
       status: reviewed?.status ?? OperationStatus.DRAFT,
       scheduledFor: scheduledFor.toISOString(),
       checklist:
-        reviewed?.checklist ?? catalog.map((item) => ({ label: item.title, done: false })),
+        reviewed?.checklist ??
+        (plan.includeChecklistInOperations
+          ? plan.checklists
+              .filter((item) => item.technicalCatalog.active)
+              .map((item) => ({ label: item.technicalCatalog.title, done: false }))
+          : []),
       observations:
         reviewed?.observations ??
         plan.defaultOperationObservations ??

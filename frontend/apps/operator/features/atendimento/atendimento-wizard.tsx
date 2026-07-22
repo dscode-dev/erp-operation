@@ -8,7 +8,7 @@
  * Reads clients/equipments from the real backend and persists the complete
  * Operation → Assignment → Handoff flow through the official APIs.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Loader2,
@@ -36,6 +36,7 @@ import { StatusPill } from '@erp/ui/status-pill';
 import { SkeletonList } from '@erp/ui/skeletons';
 import { EmptyState } from '@erp/ui/empty-state';
 import { ErrorState } from '@erp/ui/states';
+import { MultiSelect } from '@erp/ui/multi-select';
 import { PhotoInput, type CapturedPhoto } from '@erp/ui/photo-input';
 import { SignaturePad } from '@erp/ui/documents/signature-pad';
 import { TechnicalCatalogSelector } from '@erp/ui/technical-catalog/technical-catalog-selector';
@@ -52,8 +53,11 @@ import {
   type CustomerDetail,
   type EquipmentSummary,
   type EquipmentDetail,
+  type TechnicalCatalog,
   type TechnicalCatalogArea,
   type DocumentKind,
+  type OperationMaintenanceChecklistItem,
+  type OperationMaintenanceType,
   type PmocPlan,
   type PmocExecutionRequest,
 } from '@erp/api';
@@ -80,7 +84,11 @@ const FIELD_DOCUMENT_TYPES: DocumentKind[] = [
   'WORK_ORDER',
   'TECHNICAL_REPORT',
 ];
-type ChecklistItem = { label: string; done: boolean };
+type ChecklistItem = { catalogId: string; label: string; done: boolean; note?: string };
+const RVT_MAINTENANCE_TYPES: Array<{ value: OperationMaintenanceType; label: string }> = [
+  { value: 'WEEKLY', label: 'Semanal' },
+  { value: 'SEMIANNUAL', label: 'Semestral' },
+];
 
 export function AtendimentoWizard({
   initialCustomerId,
@@ -98,6 +106,8 @@ export function AtendimentoWizard({
   const [equipments, setEquipments] = useState<EquipmentSummary[]>([]);
   const [serviceType, setServiceType] = useState<ServiceTypeKey | null>(null);
   const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
+  const [maintenanceType, setMaintenanceType] = useState<OperationMaintenanceType>('SEMIANNUAL');
+  const [maintenanceChecklist, setMaintenanceChecklist] = useState<OperationMaintenanceChecklistItem[]>([]);
   const [reportedIssue, setReportedIssue] = useState('');
   const [serviceDescription, setServiceDescription] = useState('');
   const [observations, setObservations] = useState('');
@@ -160,26 +170,40 @@ export function AtendimentoWizard({
   // andamento — substitui o checklist mock por tipo de serviço.
   const checklistCatalog = useQuery(
     (signal) =>
-      documentType && documentType !== 'PMOC'
+      documentType === 'WORK_ORDER'
         ? technicalCatalogsApi.listChecklistItems(technicalCatalogsApi.documentWorkflow(documentType), { signal })
         : Promise.resolve([]),
     [documentType],
   );
-  const checklistSeededRef = useRef<string | null>(null);
+  const rvtChecklistCatalog = useQuery(
+    async (signal) =>
+      documentType === 'TECHNICAL_REPORT'
+        ? (
+            await Promise.all(
+              RVT_MAINTENANCE_TYPES.map((item) =>
+                technicalCatalogsApi.listChecklistItems('TECHNICAL_REPORT', {
+                  maintenanceType: item.value,
+                  signal,
+                }),
+              ),
+            )
+          ).flat()
+        : [],
+    [documentType],
+  );
   useEffect(() => {
-    if (!documentType || checklistCatalog.loading) return;
-    // Semeia uma única vez por tipo de documento, preservando eventuais toggles
-    // já feitos se o operador reabrir o passo.
-    if (checklistSeededRef.current === documentType) return;
-    checklistSeededRef.current = documentType;
-    setChecklist(
-      (checklistCatalog.data ?? []).map((item) => ({
-        label: item.title,
-        done: false,
-        note: item.description ?? undefined,
-      })),
-    );
-  }, [documentType, checklistCatalog.data, checklistCatalog.loading]);
+    if (documentType !== 'TECHNICAL_REPORT' || rvtChecklistCatalog.loading) return;
+    setMaintenanceChecklist((current) => {
+      if (current.length) return current;
+      return (rvtChecklistCatalog.data ?? []).map((item) => ({
+        maintenanceType: item.maintenanceType ?? 'SEMIANNUAL',
+        description: item.title,
+        executed: false,
+        result: 'NO',
+        observations: item.description,
+      }));
+    });
+  }, [documentType, rvtChecklistCatalog.data, rvtChecklistCatalog.loading]);
 
   const canNext = useMemo(() => {
     switch (step) {
@@ -230,6 +254,8 @@ export function AtendimentoWizard({
         })),
         serviceType,
         checklist,
+        maintenanceType,
+        maintenanceChecklist,
         reportedIssue,
         serviceDescription,
         observations,
@@ -338,15 +364,22 @@ export function AtendimentoWizard({
           </div>
         )}
         {step === 3 && (
-          <ChecklistStep
-            items={checklist}
-            loading={checklistCatalog.loading && checklist.length === 0}
-            onToggle={(i) =>
-              setChecklist((arr) =>
-                arr.map((it, idx) => (idx === i ? { ...it, done: !it.done } : it)),
-              )
-            }
-          />
+          documentType === 'TECHNICAL_REPORT' ? (
+            <RvtMaintenanceChecklistStep
+              maintenanceType={maintenanceType}
+              onMaintenanceType={setMaintenanceType}
+              items={maintenanceChecklist}
+              loading={rvtChecklistCatalog.loading}
+              onToggle={(index) => setMaintenanceChecklist((current) => current.map((item, currentIndex) => currentIndex === index ? { ...item, executed: !item.executed, result: item.executed ? 'NO' : 'YES' } : item))}
+            />
+          ) : (
+            <ChecklistStep
+              catalog={checklistCatalog.data ?? []}
+              selected={checklist}
+              loading={checklistCatalog.loading}
+              onChange={setChecklist}
+            />
+          )
         )}
         {step === 4 && (
           <NotesStep
@@ -378,6 +411,8 @@ export function AtendimentoWizard({
               equipments={equipments}
               serviceType={serviceType}
               checklist={checklist}
+              maintenanceType={maintenanceType}
+              maintenanceChecklist={maintenanceChecklist}
               reportedIssue={reportedIssue}
               serviceDescription={serviceDescription}
               observations={observations}
@@ -397,6 +432,8 @@ export function AtendimentoWizard({
             equipments={equipments}
             serviceType={serviceType}
             checklist={checklist}
+            maintenanceType={maintenanceType}
+            maintenanceChecklist={maintenanceChecklist}
             reportedIssue={reportedIssue}
             serviceDescription={serviceDescription}
             observations={observations}
@@ -863,16 +900,18 @@ function TipoStep({
 }
 
 function ChecklistStep({
-  items,
+  catalog,
+  selected,
   loading,
-  onToggle,
+  onChange,
 }: {
-  items: ChecklistItem[];
+  catalog: TechnicalCatalog[];
+  selected: ChecklistItem[];
   loading?: boolean;
-  onToggle: (i: number) => void;
+  onChange: (items: ChecklistItem[]) => void;
 }) {
   if (loading) return <SkeletonList rows={5} />;
-  if (items.length === 0)
+  if (catalog.length === 0)
     return (
       <EmptyState
         icon={ClipboardList}
@@ -880,29 +919,105 @@ function ChecklistStep({
         description="Nenhum item de checklist está cadastrado em Catálogos Técnicos para este tipo de atendimento. Você pode seguir para a próxima etapa."
       />
     );
+
+  const selectedIds = selected.map((item) => item.catalogId);
+
+  function select(catalogIds: string[]) {
+    const current = new Map(selected.map((item) => [item.catalogId, item]));
+    onChange(
+      catalogIds.flatMap((catalogId) => {
+        const item = catalog.find((candidate) => candidate.id === catalogId);
+        if (!item) return [];
+        return [
+          current.get(catalogId) ?? {
+            catalogId: item.id,
+            label: item.title,
+            note: item.description ?? undefined,
+            // No atendimento iniciado pelo próprio operador, selecionar significa
+            // declarar que a atividade já foi executada.
+            done: true,
+          },
+        ];
+      }),
+    );
+  }
+
   return (
-    <ul className="space-y-2">
-      {items.map((it, i) => (
-        <li key={i}>
-          <button
-            type="button"
-            onClick={() => onToggle(i)}
-            className="w-full flex items-center gap-3 rounded-[var(--radius-md)] border border-[var(--color-border)] p-3.5 text-left active:scale-[0.99]"
-          >
-            {it.done ? (
-              <CheckCircle2 className="h-5 w-5 text-[var(--color-success)] shrink-0" />
-            ) : (
-              <Circle className="h-5 w-5 text-[var(--color-muted-foreground)] shrink-0" />
-            )}
-            <span
-              className={`text-sm ${it.done ? 'line-through text-[var(--color-muted-foreground)]' : ''}`}
+    <div className="space-y-4">
+      <div>
+        <h2 className="font-semibold">Checklist executado</h2>
+        <p className="mt-1 text-caption">
+          Etapa opcional. Selecione apenas as atividades que você realizou neste atendimento. Os
+          itens escolhidos serão registrados como concluídos na Ordem de Serviço.
+        </p>
+      </div>
+      <MultiSelect
+        label="Itens predefinidos"
+        options={catalog.map((item) => ({
+          value: item.id,
+          label: item.title,
+          description: item.description ?? undefined,
+        }))}
+        value={selectedIds}
+        onChange={select}
+        placeholder="Selecionar atividades realizadas"
+        emptyMessage="Nenhum item correspondente foi encontrado."
+      />
+      {selected.length > 0 && (
+        <ul className="space-y-2" aria-label="Atividades selecionadas e concluídas">
+          {selected.map((item) => (
+            <li
+              key={item.catalogId}
+              className="flex items-start gap-3 rounded-[var(--radius-md)] border border-[var(--color-success)]/30 bg-[var(--color-success)]/5 p-3.5"
             >
-              {it.label}
-            </span>
-          </button>
-        </li>
-      ))}
-    </ul>
+              <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-[var(--color-success)]" />
+              <span className="text-sm">
+                <span className="block font-medium">{item.label}</span>
+                <span className="text-caption">Atividade realizada</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {selected.length === 0 && (
+        <p className="rounded-[var(--radius-md)] bg-[var(--color-muted)] px-3 py-2 text-caption">
+          Nenhum item selecionado. Você pode continuar sem adicionar checklist.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function RvtMaintenanceChecklistStep({
+  maintenanceType,
+  onMaintenanceType,
+  items,
+  loading,
+  onToggle,
+}: {
+  maintenanceType: OperationMaintenanceType;
+  onMaintenanceType: (value: OperationMaintenanceType) => void;
+  items: OperationMaintenanceChecklistItem[];
+  loading: boolean;
+  onToggle: (index: number) => void;
+}) {
+  if (loading) return <SkeletonList rows={6} />;
+  return (
+    <div className="space-y-5">
+      <section className="space-y-3">
+        <div><h2 className="font-semibold">Tipo de manutenção</h2><p className="text-caption">Os dois tipos aparecerão no documento. Selecione o realizado nesta visita.</p></div>
+        <div className="grid grid-cols-2 gap-3">
+          {RVT_MAINTENANCE_TYPES.map((type) => <button key={type.value} type="button" onClick={() => onMaintenanceType(type.value)} className={`flex min-h-16 items-center justify-between rounded-[var(--radius-lg)] border p-3 text-left ${maintenanceType === type.value ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5' : 'border-[var(--color-border)]'}`}><span className="font-medium">{type.label}</span>{maintenanceType === type.value && <Check className="h-5 w-5 text-[var(--color-primary)]" />}</button>)}
+        </div>
+      </section>
+      {RVT_MAINTENANCE_TYPES.map((type) => {
+        const indexed = items.map((item, index) => ({ item, index })).filter(({ item }) => item.maintenanceType === type.value);
+        return <section key={type.value} className={`space-y-2 rounded-[var(--radius-lg)] border p-3 ${maintenanceType === type.value ? 'border-[var(--color-primary)]' : 'border-[var(--color-border)]'}`}>
+          <div className="flex items-center justify-between"><h3 className="font-semibold">Checklist {type.label.toLowerCase()}</h3>{maintenanceType === type.value && <StatusChip tone="success">Selecionado</StatusChip>}</div>
+          {indexed.length === 0 ? <p className="text-caption">Nenhum item cadastrado no Catálogo Técnico.</p> : <ul className="space-y-2">{indexed.map(({ item, index }) => <li key={`${type.value}-${index}`}><button type="button" onClick={() => onToggle(index)} className="flex w-full items-center gap-3 rounded-md bg-[var(--color-card)] p-3 text-left">{item.executed ? <CheckCircle2 className="h-5 w-5 shrink-0 text-[var(--color-success)]" /> : <Circle className="h-5 w-5 shrink-0 text-[var(--color-muted-foreground)]" />}<span className="text-sm">{item.description}</span></button></li>)}</ul>}
+        </section>;
+      })}
+    </div>
   );
 }
 
@@ -914,14 +1029,8 @@ function NotesStep({
   onServiceDescription,
   observations,
   onObservations,
-  objectives,
-  onObjectivesChange,
-  conditions,
-  onConditionsChange,
   recommendations,
   onRecommendationsChange,
-  conclusions,
-  onConclusionsChange,
   areas,
 }: {
   documentType: DocumentKind;
@@ -945,74 +1054,23 @@ function NotesStep({
     <div className="space-y-5">
       <section className="space-y-3">
         <h2 className="text-sm font-semibold">Relato do atendimento</h2>
+        {documentType === 'WORK_ORDER' && <>
+          <MobileTextArea label="Defeito ou solicitação" value={reportedIssue} onChange={onReportedIssue} placeholder="Descreva o que foi informado pelo cliente." />
+          <MobileTextArea label="Serviços previstos ou executados" value={serviceDescription} onChange={onServiceDescription} placeholder="Descreva os serviços e verificações realizados." />
+        </>}
         <MobileTextArea
-          label={documentType === 'WORK_ORDER' ? 'Defeito ou solicitação' : 'Objetivo ou motivo da visita'}
-          value={reportedIssue}
-          onChange={onReportedIssue}
-          placeholder="Descreva o que foi informado pelo cliente."
-        />
-        <MobileTextArea
-          label={documentType === 'WORK_ORDER' ? 'Serviços previstos ou executados' : 'Atividades executadas'}
-          value={serviceDescription}
-          onChange={onServiceDescription}
-          placeholder="Descreva os serviços e verificações realizados."
-        />
-        <MobileTextArea
-          label={documentType === 'WORK_ORDER' ? 'Observações' : 'Observações e resultado operacional'}
+          label="Observações"
           value={observations}
           onChange={onObservations}
           placeholder="Registre o resultado, pendências e orientações ao cliente."
         />
       </section>
       {documentType === 'TECHNICAL_REPORT' && <>
-      <section className="space-y-2 border-t border-[var(--color-border)] pt-4">
-        <h2 className="text-sm font-semibold">Objetivos</h2>
-        <TechnicalCatalogSelector
-          type="OBJECTIVE"
-          areas={areas}
-          workflow="TECHNICAL_OPINION"
-          label="Objetivo"
-          values={objectives}
-          onChange={onObjectivesChange}
-          compact
-        />
-      </section>
-      <section className="space-y-2">
-        <h2 className="text-sm font-semibold">Condições observadas</h2>
-        <TechnicalCatalogSelector
-          type="SITE_CONDITION"
-          areas={areas}
-          workflow="TECHNICAL_OPINION"
-          label="Condição"
-          values={conditions}
-          onChange={onConditionsChange}
-          compact
-        />
-      </section>
-      <section className="space-y-2">
-        <h2 className="text-sm font-semibold">Recomendações</h2>
-        <TechnicalCatalogSelector
-          type="RECOMMENDATION"
-          areas={areas}
-          workflow="TECHNICAL_OPINION"
-          label="Recomendação"
-          values={recommendations}
-          onChange={onRecommendationsChange}
-          compact
-        />
-      </section>
-      <section className="space-y-2">
-        <h2 className="text-sm font-semibold">Conclusões</h2>
-        <TechnicalCatalogSelector
-          type="CONCLUSION"
-          areas={areas}
-          workflow="TECHNICAL_OPINION"
-          label="Conclusão"
-          values={conclusions}
-          onChange={onConclusionsChange}
-          compact
-        />
-      </section>
+        <section className="space-y-2 border-t border-[var(--color-border)] pt-4">
+          <h2 className="text-sm font-semibold">Recomendações técnicas <span className="font-normal text-[var(--color-muted-foreground)]">(opcional)</span></h2>
+          <TechnicalCatalogSelector type="RECOMMENDATION" areas={areas} workflow="TECHNICAL_REPORT" label="Recomendação" values={recommendations} onChange={onRecommendationsChange} compact />
+          <MobileTextArea label="Texto das recomendações" value={recommendations.join('\n')} onChange={(value) => onRecommendationsChange(value.split('\n').filter(Boolean))} placeholder="Inclua orientações técnicas quando necessário." />
+        </section>
       </>}
     </div>
   );
@@ -1102,6 +1160,8 @@ function ResumoStep({
   equipments,
   serviceType,
   checklist,
+  maintenanceType,
+  maintenanceChecklist,
   reportedIssue,
   serviceDescription,
   observations,
@@ -1120,6 +1180,8 @@ function ResumoStep({
   equipments: EquipmentSummary[];
   serviceType: ServiceTypeKey | null;
   checklist: ChecklistItem[];
+  maintenanceType: OperationMaintenanceType;
+  maintenanceChecklist: OperationMaintenanceChecklistItem[];
   reportedIssue: string;
   serviceDescription: string;
   observations: string;
@@ -1133,7 +1195,8 @@ function ResumoStep({
   variant?: 'signature' | 'confirmation';
   showSignature?: boolean;
 }) {
-  const done = checklist.filter((c) => c.done).length;
+  const displayedChecklist = documentType === 'TECHNICAL_REPORT' ? maintenanceChecklist : checklist;
+  const done = displayedChecklist.filter((item) => 'executed' in item ? item.executed : item.done).length;
   return (
     <div className="space-y-3">
       <div className="rounded-[var(--radius-md)] border border-[var(--color-info)]/30 bg-[var(--color-info)]/10 px-3 py-2 text-sm text-[var(--color-info)] flex items-start gap-2">
@@ -1160,7 +1223,7 @@ function ResumoStep({
       <SummaryRow
         icon={<CheckCircle2 className="h-4 w-4" />}
         label="Checklist"
-        value={`${done}/${checklist.length} concluídos`}
+        value={`${done}/${displayedChecklist.length} concluídos${documentType === 'TECHNICAL_REPORT' ? ` · ${maintenanceType === 'WEEKLY' ? 'Semanal' : 'Semestral'}` : ''}`}
       />
       <SummaryRow icon={<Camera className="h-4 w-4" />} label="Fotos" value={`${photoCount}`} />
       {showSignature && (

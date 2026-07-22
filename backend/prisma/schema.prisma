@@ -1036,22 +1036,23 @@ model OperationMaintenanceChecklistItem {
 }
 
 model TechnicalCatalog {
-  id              String                     @id @default(uuid()) @db.Uuid
-  organizationId  String                     @map("organization_id") @db.Uuid
-  type            TechnicalCatalogType
-  title           String                     @db.VarChar(500)
-  description     String?                    @db.Text
-  tags            String[]                   @default([])
-  areas           TechnicalCatalogArea[]     @default([GENERAL])
-  workflows       TechnicalCatalogWorkflow[] @default([GENERAL])
-  maintenanceType OperationMaintenanceType?  @map("maintenance_type")
-  sortOrder       Int                        @default(0) @map("sort_order")
-  active          Boolean                    @default(true)
-  deletedAt       DateTime?                  @map("deleted_at") @db.Timestamptz(3)
-  createdAt       DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt       DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(3)
-  organization    Organization               @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  pmocPlanScopes  PmocPlanScope[]
+  id                 String                     @id @default(uuid()) @db.Uuid
+  organizationId     String                     @map("organization_id") @db.Uuid
+  type               TechnicalCatalogType
+  title              String                     @db.VarChar(500)
+  description        String?                    @db.Text
+  tags               String[]                   @default([])
+  areas              TechnicalCatalogArea[]     @default([GENERAL])
+  workflows          TechnicalCatalogWorkflow[] @default([GENERAL])
+  maintenanceType    OperationMaintenanceType?  @map("maintenance_type")
+  sortOrder          Int                        @default(0) @map("sort_order")
+  active             Boolean                    @default(true)
+  deletedAt          DateTime?                  @map("deleted_at") @db.Timestamptz(3)
+  createdAt          DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(3)
+  organization       Organization               @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  pmocPlanScopes     PmocPlanScope[]
+  pmocPlanChecklists PmocPlanChecklist[]
 
   @@index([organizationId, type, active, sortOrder], map: "technical_catalog_lookup_idx")
   @@index([organizationId, maintenanceType, active], map: "technical_catalog_maintenance_idx")
@@ -1329,6 +1330,7 @@ model PmocPlan {
   serviceTypes                    OperationType[]        @default([]) @map("service_types")
   defaultEstimatedDurationMinutes Int?                   @map("default_estimated_duration_minutes")
   defaultOperationObservations    String?                @map("default_operation_observations") @db.Text
+  includeChecklistInOperations    Boolean                @default(true) @map("include_checklist_in_operations")
   signatureOverrideId             String?                @map("signature_override_id") @db.Uuid
   operationalStatus               PmocOperationalStatus  @default(ACTIVE) @map("operational_status")
   lastReservedExecutionNumber     Int                    @default(0) @map("last_reserved_execution_number")
@@ -1360,6 +1362,7 @@ model PmocPlan {
   environments                    PmocEnvironment[]
   equipments                      PmocPlanEquipment[]
   scopes                          PmocPlanScope[]
+  checklists                      PmocPlanChecklist[]
   executionRequests               PmocExecutionRequest[]
   history                         PmocHistory[]
 
@@ -1386,6 +1389,24 @@ model PmocPlanScope {
   @@unique([pmocPlanId, technicalCatalogId], map: "pmoc_plan_scope_plan_catalog_uq")
   @@index([technicalCatalogId], map: "pmoc_plan_scope_catalog_idx")
   @@map("pmoc_plan_scopes")
+}
+
+/// Checklist padrão escolhido no Catálogo Técnico para as futuras OS do PMOC.
+/// A Operation recebe um snapshot no momento da geração; alterações posteriores
+/// no catálogo nunca reescrevem execuções já criadas.
+model PmocPlanChecklist {
+  id                 String           @id @default(uuid()) @db.Uuid
+  pmocPlanId         String           @map("pmoc_plan_id") @db.Uuid
+  technicalCatalogId String           @map("technical_catalog_id") @db.Uuid
+  position           Int
+  createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  pmocPlan           PmocPlan         @relation(fields: [pmocPlanId], references: [id], onDelete: Cascade)
+  technicalCatalog   TechnicalCatalog @relation(fields: [technicalCatalogId], references: [id], onDelete: Restrict)
+
+  @@unique([pmocPlanId, technicalCatalogId], map: "pmoc_plan_checklist_plan_catalog_uq")
+  @@unique([pmocPlanId, position], map: "pmoc_plan_checklist_plan_position_uq")
+  @@index([technicalCatalogId], map: "pmoc_plan_checklist_catalog_idx")
+  @@map("pmoc_plan_checklists")
 }
 
 model PmocExecutionRequest {
