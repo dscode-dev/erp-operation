@@ -2562,3 +2562,6 @@ O PDF recebe a assinatura pelo `technicalSignatureSnapshot` do handoff. Não env
 ## Checklist de OS iniciado pelo Operator
 
 Na criação autônoma, o frontend deve exibir o Catálogo Técnico como seleção opcional. Deve enviar somente os itens escolhidos, todos com `done: true`. O `catalogId` pode ser usado como chave de interface, mas deve ser removido antes de `POST /operations`. Em atribuições criadas pela Platform, os itens enviados ao técnico permanecem inicialmente com `done: false`.
+## Infraestrutura de imagem — 2026-07-22
+
+Não há alteração de integração frontend. A URL base e todos os contratos `/api/v1` permanecem compatíveis.

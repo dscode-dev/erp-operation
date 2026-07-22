@@ -5756,3 +5756,6 @@ Tentativa de selecionar assinatura de outro usuário retorna `403 FORBIDDEN`. A 
 - Atendimento autônomo iniciado pelo Operator: envia somente atividades selecionadas e já realizadas, com `done: true`.
 - Atendimento criado/atribuído pela Platform: pode enviar atividades planejadas com `done: false`, que serão marcadas pelo técnico durante a execução.
 - O payload permanece `{ "label": "string", "done": boolean, "note"?: "string" }`; IDs do Catálogo Técnico não fazem parte deste contrato.
+## Infraestrutura de imagem — 2026-07-22
+
+O ajuste de construção da imagem não altera rotas, payloads, códigos HTTP ou contratos da API V1.

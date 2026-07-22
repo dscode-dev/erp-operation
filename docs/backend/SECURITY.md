@@ -2157,3 +2157,9 @@ The catalog is scoped to the installation Organization in every query. Reads req
 - A API continua aceitando exclusivamente os campos permitidos pelo DTO e rejeita propriedades adicionais via `forbidNonWhitelisted`.
 - A origem Operator não concede alteração de catálogo: o usuário apenas seleciona itens ativos já disponibilizados pela API e grava um snapshot na Operation.
 - A semântica `done: true` vale somente para atividades que o próprio operador declara como realizadas no atendimento autônomo; atribuições da Platform preservam o estado pendente.
+## Dependências da imagem de produção
+
+- A instalação continua determinística por `npm ci` e `package-lock.json`.
+- O runtime recebe dependências podadas com `npm prune --omit=dev`, sem executar uma nova instalação pela rede.
+- Audit e mensagens de financiamento são desabilitados somente durante a construção; a revisão de dependências permanece nos comandos próprios do pipeline.
+- Prisma Client gerado e Prisma CLI de migrations permanecem disponíveis no runtime.

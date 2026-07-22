@@ -3144,3 +3144,9 @@ Status: implementado e validado em PostgreSQL/Docker.
 - `POST /api/v1/operations` continua recebendo o snapshot oficial `{ label, done, note? }`.
 - O Operator voltou a permitir seleção opcional no catálogo; itens escolhidos no atendimento autônomo chegam como `done: true`.
 - O identificador interno do catálogo permanece no frontend e não atravessa a validação `forbidNonWhitelisted`.
+## Docker build — dependências de produção sem instalação duplicada (2026-07-22)
+
+- A imagem da API passou a instalar o lockfile uma única vez no estágio `dependencies`.
+- O estágio `production-dependencies` executa apenas `npm prune --omit=dev`; o runtime copia esse resultado e não acessa o registry npm.
+- O cache BuildKit em `/root/.npm` reduz downloads em reconstruções, mantendo `npm ci` e o lockfile como fontes determinísticas.
+- Build da imagem e verificação interna de NestJS, Prisma Client e Prisma CLI aprovados.
