@@ -1,4 +1,4 @@
-export type PricingConsumer = 'BUDGET' | 'FINANCIAL' | 'INVENTORY' | 'OPERATION';
+export type PricingConsumer = 'BUDGET' | 'FINANCIAL' | 'INVENTORY' | 'OPERATION' | 'SALE';
 
 export interface ResolvedProductPricing {
   pricingId: string;

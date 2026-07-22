@@ -7,6 +7,7 @@ import {
   DOCUMENT_MIME_TYPE,
   DOCUMENT_RENDER_RESOURCE,
   FINANCIAL_DOCUMENT_TYPES,
+  OPERATOR_DIRECT_COMPLETION_DOCUMENT_TYPES,
 } from '../../shared/constants/document-engine.constants';
 import { ERROR_CODES } from '../../shared/constants/error-codes.constants';
 import { dateRangeFilter } from '../../shared/utils/date-range.util';
@@ -320,8 +321,9 @@ export class DocumentEngineService {
     context: DocumentAuditContext,
   ): Promise<unknown> {
     const document = await this.documentOrThrow(documentId);
-    this.assertRenderer(actor);
     this.assertTypeAccess(document.type, actor);
+    await this.assertDocumentAccess(document, actor, context);
+    await this.assertRenderer(document, actor);
     if (document.submittedAt && document.editorialStatus !== 'READY') {
       throw new ApplicationException(
         ERROR_CODES.DOCUMENT_REVIEW_INCOMPLETE,
@@ -392,7 +394,7 @@ export class DocumentEngineService {
             documentId: document.id,
             revision: revisioned.revision,
             action: 'RENDERED',
-            origin: 'PLATFORM',
+            origin: actor.role === Role.OPERATOR ? 'OPERATOR' : 'PLATFORM',
             actorId: actor.id,
             changedFields: ['renderedAt', 'storageKey', 'renderMetadata'],
             snapshot: { renderedAt: new Date().toISOString(), fileSize: pdf.buffer.length },
@@ -543,11 +545,27 @@ export class DocumentEngineService {
     }
   }
 
-  private assertRenderer(actor: AuthenticatedUser): void {
-    if (actor.role !== Role.OWNER && actor.role !== Role.MANAGER) {
+  private async assertRenderer(document: OperationDocument, actor: AuthenticatedUser): Promise<void> {
+    if (actor.role === Role.OWNER || actor.role === Role.MANAGER) return;
+    const directType = OPERATOR_DIRECT_COMPLETION_DOCUMENT_TYPES.includes(
+      document.type as (typeof OPERATOR_DIRECT_COMPLETION_DOCUMENT_TYPES)[number],
+    );
+    const operation = document.operationId
+      ? await this.prisma.operation.findUnique({
+          where: { id: document.operationId },
+          select: { status: true, operatorId: true },
+        })
+      : null;
+    if (
+      actor.role !== Role.OPERATOR ||
+      !directType ||
+      document.editorialStatus !== 'READY' ||
+      operation?.status !== 'COMPLETED' ||
+      operation.operatorId !== actor.id
+    ) {
       throw new ApplicationException(
         ERROR_CODES.FORBIDDEN,
-        'Only OWNER or MANAGER can render final documents',
+        'O operador somente pode emitir OS ou Relatório de Visita Técnica concluídos por ele',
         HttpStatus.FORBIDDEN,
       );
     }

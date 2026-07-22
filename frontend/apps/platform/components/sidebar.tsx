@@ -9,7 +9,6 @@ import {
   ClipboardCheck,
   ClipboardList,
   Users,
-  Wrench,
   Package,
   BarChart3,
   Wallet,
@@ -60,7 +59,6 @@ const groups: NavGroup[] = [
     label: 'Cadastros',
     items: [
       { label: 'Clientes', href: '/clientes', icon: Users },
-      { label: 'Equipamentos', href: '/equipamentos', icon: Wrench },
       { label: 'Produtos', href: '/produtos', icon: Package },
       {
         label: 'Modelos de Relatórios',

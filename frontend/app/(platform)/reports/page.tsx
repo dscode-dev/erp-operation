@@ -25,6 +25,7 @@ import {
   maintenanceChecklistTemplatesApi,
   operationApi,
   pmocApi,
+  salesApi,
   signaturesApi,
   usersApi,
   useQuery,
@@ -44,6 +45,7 @@ import {
   type PmocPlan,
   type CreateOperationPayload,
   type Signature,
+  type Sale,
   type TeamUser,
   type TechnicalCatalogArea,
 } from '@erp/api';
@@ -99,7 +101,8 @@ const REPORT_TYPES: Array<{
 
 type WorkflowForm = {
   workOrderSource: '' | 'EXISTING' | 'NEW';
-  receiptSource: '' | 'MANUAL' | 'OPERATION';
+  receiptSource: '' | 'MANUAL' | 'OPERATION' | 'SALE';
+  saleId: string;
   operationId: string;
   customerId: string;
   addressId: string;
@@ -119,7 +122,13 @@ type WorkflowForm = {
   pmocDefaultTechnicianId: string;
   pmocSignatureOverrideId: string;
   pmocExecutionRequestId: string;
-  pmocRecurrenceFrequency: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY' | 'INTERVAL_DAYS' | 'INTERVAL_MONTHS';
+  pmocRecurrenceFrequency:
+    | 'DAILY'
+    | 'WEEKLY'
+    | 'MONTHLY'
+    | 'YEARLY'
+    | 'INTERVAL_DAYS'
+    | 'INTERVAL_MONTHS';
   pmocRecurrenceInterval: string;
   pmocActive: boolean;
   objective: string;
@@ -178,6 +187,7 @@ defaultPmocEnd.setUTCFullYear(defaultPmocEnd.getUTCFullYear() + 1);
 const emptyForm: WorkflowForm = {
   workOrderSource: '',
   receiptSource: '',
+  saleId: '',
   operationId: '',
   customerId: '',
   addressId: '',
@@ -255,9 +265,16 @@ function receiptDeclaration(form: WorkflowForm, customerName: string): string {
 export default function ReportCenterPage() {
   const router = useRouter();
   const { hasRole } = useAuth();
-  const [workflow, setWorkflow] = useState<{ type: DocumentKind; operationId?: string } | null>(
-    null,
-  );
+  const [workflow, setWorkflow] = useState<{
+    type: DocumentKind;
+    operationId?: string;
+    saleId?: string;
+  } | null>(null);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('create') === 'RECEIPT' && params.get('saleId'))
+      setWorkflow({ type: 'RECEIPT', saleId: params.get('saleId') ?? undefined });
+  }, []);
   const [selectedDocument, setSelectedDocument] = useState<DocumentCatalogItem | null>(null);
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState<DocumentKind | ''>('');
@@ -426,7 +443,15 @@ export default function ReportCenterPage() {
                         <td>{DOCUMENT_KIND_LABEL[item.type]}</td>
                         <td>{item.customer?.name ?? '—'}</td>
                         <td>{item.equipment?.name ?? '—'}</td>
-                        <td>{item.editorialStatus === 'DRAFT' ? 'Rascunho' : item.editorialStatus === 'PENDING' ? 'Pendente' : item.editorialStatus === 'READY' ? 'Pronto' : 'Desatualizado'}</td>
+                        <td>
+                          {item.editorialStatus === 'DRAFT'
+                            ? 'Rascunho'
+                            : item.editorialStatus === 'PENDING'
+                              ? 'Pendente'
+                              : item.editorialStatus === 'READY'
+                                ? 'Pronto'
+                                : 'Desatualizado'}
+                        </td>
                         <td>{formatDate(item.renderedAt ?? item.issuedAt)}</td>
                       </tr>
                     ))}
@@ -449,6 +474,7 @@ export default function ReportCenterPage() {
           <ReportWorkflowDrawer
             type={workflow.type}
             initialOperationId={workflow.operationId}
+            initialSaleId={workflow.saleId}
             onClose={() => setWorkflow(null)}
             onRendered={() => setTick((value) => value + 1)}
           />
@@ -494,11 +520,13 @@ export default function ReportCenterPage() {
 function ReportWorkflowDrawer({
   type,
   initialOperationId,
+  initialSaleId,
   onClose,
   onRendered,
 }: {
   type: DocumentKind;
   initialOperationId?: string;
+  initialSaleId?: string;
   onClose: () => void;
   onRendered: () => void;
 }) {
@@ -513,8 +541,9 @@ function ReportWorkflowDrawer({
   const [busy, setBusy] = useState(false);
   const [creatingPmoc, setCreatingPmoc] = useState(false);
   const [pmocWorkOrderOpen, setPmocWorkOrderOpen] = useState(false);
-  const [pmocWorkOrderPrefill, setPmocWorkOrderPrefill] =
-    useState<CreateOperationPayload | null>(null);
+  const [pmocWorkOrderPrefill, setPmocWorkOrderPrefill] = useState<CreateOperationPayload | null>(
+    null,
+  );
   const [error, setError] = useState<string | null>(null);
   const customers = useQuery<Paginated<Customer>>(
     (signal) => customersApi.listCustomers({ page: 1, limit: 100, signal }),
@@ -526,6 +555,10 @@ function ReportWorkflowDrawer({
   );
   const operations = useQuery<Paginated<OperationSummary>>(
     (signal) => operationApi.listOperations({ page: 1, limit: 100, status: 'COMPLETED', signal }),
+    [],
+  );
+  const sales = useQuery<Paginated<Sale>>(
+    (signal) => salesApi.listSales({ page: 1, limit: 100, status: 'COMPLETED', signal }),
     [],
   );
   const pmocs = useQuery<Paginated<PmocPlan>>(
@@ -556,7 +589,8 @@ function ReportWorkflowDrawer({
   useEffect(() => {
     if (type !== 'RECEIPT' || form.technicalSignatureId) return;
     const available = signatures.data?.items ?? [];
-    const selected = available.find((item) => item.isDefault && item.active) ??
+    const selected =
+      available.find((item) => item.isDefault && item.active) ??
       (available.filter((item) => item.active).length === 1
         ? available.find((item) => item.active)
         : undefined);
@@ -566,7 +600,10 @@ function ReportWorkflowDrawer({
 
   useEffect(() => {
     if (type !== 'RECEIPT' || form.receiptDeclaration || !form.receiptSource) return;
-    set('receiptDeclaration', receiptDeclaration(form, selectedCustomer?.tradeName ?? selectedCustomer?.name ?? ''));
+    set(
+      'receiptDeclaration',
+      receiptDeclaration(form, selectedCustomer?.tradeName ?? selectedCustomer?.name ?? ''),
+    );
     // Initial automatic text remains editable after it is populated.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [type, form.receiptSource, selectedCustomer]);
@@ -576,6 +613,12 @@ function ReportWorkflowDrawer({
     // Initial source is immutable for the drawer lifetime.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialOperationId]);
+
+  useEffect(() => {
+    if (initialSaleId && type === 'RECEIPT') void selectSale(initialSaleId);
+    // The linked sale is immutable for this drawer lifetime.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialSaleId, type]);
 
   useEffect(() => {
     if (!form.customerId) {
@@ -613,7 +656,7 @@ function ReportWorkflowDrawer({
     setForm({ ...emptyForm, workOrderSource: source });
   }
 
-  function selectReceiptSource(source: 'MANUAL' | 'OPERATION') {
+  function selectReceiptSource(source: 'MANUAL' | 'OPERATION' | 'SALE') {
     setOperation(null);
     setHandoff(null);
     setError(null);
@@ -622,6 +665,34 @@ function ReportWorkflowDrawer({
       receiptSource: source,
       operatorId: source === 'MANUAL' ? (session?.user.id ?? '') : '',
     });
+  }
+
+  async function selectSale(id: string) {
+    set('saleId', id);
+    if (!id) return;
+    setError(null);
+    try {
+      const prefill = await salesApi.getReceiptPrefill(id);
+      const amount = Number(prefill.amount);
+      setForm((current) => ({
+        ...current,
+        receiptSource: 'SALE',
+        saleId: prefill.saleId,
+        customerId: prefill.customer.id,
+        addressId: prefill.address?.id ?? '',
+        receiptNumber: prefill.receiptNumber,
+        receiptDate: prefill.issuedAt.slice(0, 10),
+        amount: amount.toFixed(2).replace('.', ','),
+        receiptAmountInWords: brlAmountInWords(amount),
+        receiptService: prefill.service,
+        receiptDescription: prefill.description,
+        receiptWarrantyPreset: 'CUSTOM',
+        receiptWarrantyDays: prefill.warrantyDays ? String(prefill.warrantyDays) : '',
+        receiptDeclarationEdited: false,
+      }));
+    } catch (cause) {
+      setError(message(cause));
+    }
   }
 
   async function selectOperation(id: string) {
@@ -661,8 +732,7 @@ function ReportWorkflowDrawer({
                 detail.receiptNumber ?? `REC-${String(detail.number).padStart(6, '0')}`,
               receiptDate: (detail.completedAt ?? new Date().toISOString()).slice(0, 10),
               amount: receiptAmount === null ? '' : receiptAmount.toFixed(2).replace('.', ','),
-              receiptAmountInWords:
-                receiptAmount === null ? '' : brlAmountInWords(receiptAmount),
+              receiptAmountInWords: receiptAmount === null ? '' : brlAmountInWords(receiptAmount),
               receiptService:
                 detail.receiptService ?? detail.serviceDescription ?? 'serviços técnicos prestados',
               receiptDescription: detail.receiptDescription ?? receiptDescription,
@@ -739,10 +809,9 @@ function ReportWorkflowDrawer({
       ...current,
       pmocId: plan.id,
       pmocMode: 'EXISTING',
-      pmocEquipmentIds: (plan.equipments?.length
+      pmocEquipmentIds: plan.equipments?.length
         ? plan.equipments.map((item) => item.equipmentId)
-        : [plan.equipmentId]
-      ),
+        : [plan.equipmentId],
       pmocResponsible: plan.responsibleTechnician,
       pmocStartDate: plan.startDate.slice(0, 10),
       pmocEndDate: plan.endDate.slice(0, 10),
@@ -754,8 +823,9 @@ function ReportWorkflowDrawer({
       pmocDefaultTechnicianId: plan.defaultTechnicianId ?? '',
       pmocSignatureOverrideId: plan.signatureOverrideId ?? '',
       pmocExecutionRequestId:
-        plan.executionRequests?.find((item) => item.status === 'PENDING' || item.status === 'FAILED')
-          ?.id ??
+        plan.executionRequests?.find(
+          (item) => item.status === 'PENDING' || item.status === 'FAILED',
+        )?.id ??
         plan.executionRequests?.find((item) => item.status === 'GENERATED')?.id ??
         '',
       pmocRecurrenceFrequency: recurrence?.frequency ?? 'MONTHLY',
@@ -779,7 +849,10 @@ function ReportWorkflowDrawer({
       (item) => item.status === 'GENERATED' && item.operationId,
     );
     if (generated?.operationId) {
-      void operationApi.getOperation(generated.operationId).then(setOperation).catch(() => undefined);
+      void operationApi
+        .getOperation(generated.operationId)
+        .then(setOperation)
+        .catch(() => undefined);
     } else {
       setOperation(null);
     }
@@ -789,8 +862,7 @@ function ReportWorkflowDrawer({
     set('pmocId', id);
     if (!id) return;
     try {
-      const plan =
-        pmocs.data?.items.find((item) => item.id === id) ?? (await pmocApi.getPmoc(id));
+      const plan = pmocs.data?.items.find((item) => item.id === id) ?? (await pmocApi.getPmoc(id));
       applyPmocPlan(plan);
     } catch (cause) {
       setError(message(cause));
@@ -805,10 +877,23 @@ function ReportWorkflowDrawer({
         throw new Error('Selecione o cliente e o responsável pela futura Ordem de Serviço.');
       if (form.pmocEquipmentIds.length === 0)
         throw new Error('Selecione ao menos um equipamento controlado pelo PMOC.');
-      if (!form.pmocResponsible.trim())
-        throw new Error('Informe o responsável técnico do PMOC.');
+      if (!form.pmocResponsible.trim()) throw new Error('Informe o responsável técnico do PMOC.');
+      const activeCoverage = await pmocApi.getActiveCoverage(form.customerId);
+      if (
+        activeCoverage.hasActiveCoverage &&
+        !window.confirm(
+          `Este cliente já possui cobertura PMOC ativa:\n\n${activeCoverage.conflicts
+            .map(
+              (item) =>
+                `PMOC-${String(item.number).padStart(6, '0')} · ${item.name} · até ${formatDate(item.endDate)}`,
+            )
+            .join('\n')}\n\nDeseja realmente criar outro PMOC?`,
+        )
+      )
+        return;
       const created = await pmocApi.createPmoc({
         customerId: form.customerId,
+        confirmActiveCoverage: activeCoverage.hasActiveCoverage || undefined,
         equipmentId: form.pmocEquipmentIds[0],
         equipmentIds: form.pmocEquipmentIds,
         responsibleTechnician: form.pmocResponsible,
@@ -964,6 +1049,8 @@ function ReportWorkflowDrawer({
         if (!form.receiptSource) throw new Error('Escolha a origem do Recibo.');
         if (form.receiptSource === 'OPERATION' && !form.operationId)
           throw new Error('Selecione uma Ordem de Serviço concluída.');
+        if (form.receiptSource === 'SALE' && !form.saleId)
+          throw new Error('Selecione uma venda concluída.');
         if (!form.customerId || !form.addressId)
           throw new Error('Cliente e endereço são obrigatórios.');
         if (!form.receiptDate || parseBrl(form.amount) === null)
@@ -987,6 +1074,7 @@ function ReportWorkflowDrawer({
         else {
           detail = await operationApi.createOperation({
             customerId: form.customerId,
+            sourceSaleId: form.receiptSource === 'SALE' ? form.saleId : null,
             addressId: form.addressId,
             equipmentId: null,
             operatorId: form.operatorId || session?.user.id,
@@ -1067,7 +1155,10 @@ function ReportWorkflowDrawer({
         });
       }
       if (form.technicalSignatureId) {
-        documentDraft = await documentsApi.selectHandoffTechnicalSignature(documentDraft.id, form.technicalSignatureId);
+        documentDraft = await documentsApi.selectHandoffTechnicalSignature(
+          documentDraft.id,
+          form.technicalSignatureId,
+        );
       }
       setHandoff(documentDraft);
       setStep(type === 'RECEIPT' ? 4 : 3);
@@ -1090,163 +1181,216 @@ function ReportWorkflowDrawer({
   const previewStep = steps.length - 1;
   return (
     <>
-    <Drawer
-      open
-      onClose={onClose}
-      title={DOCUMENT_KIND_LABEL[type]}
-      eyebrow="Workflow documental"
-      width="max-w-[1240px]"
-      footer={
-        <>
-          <button
-            type="button"
-            onClick={() => (step > 0 ? setStep(step - 1) : onClose())}
-            className="h-9 rounded-[var(--radius-md)] border border-[var(--color-border)] px-4 text-sm"
-          >
-            {step > 0 ? 'Voltar' : 'Cancelar'}
-          </button>
-          {step < previewStep - 1 && (
+      <Drawer
+        open
+        onClose={onClose}
+        title={DOCUMENT_KIND_LABEL[type]}
+        eyebrow="Workflow documental"
+        width="max-w-[1240px]"
+        footer={
+          <>
             <button
               type="button"
-              disabled={
-                creatingPmoc ||
-                (type === 'RECEIPT' && step === 0 && !form.receiptSource) ||
-                (type === 'PMOC' && step === 0 && (!form.pmocId || !operation))
-              }
-              onClick={() => setStep(step + 1)}
-              className="h-9 rounded-[var(--radius-md)] bg-[var(--color-primary)] px-4 text-sm text-[var(--color-primary-foreground)] disabled:opacity-50"
+              onClick={() => (step > 0 ? setStep(step - 1) : onClose())}
+              className="h-9 rounded-[var(--radius-md)] border border-[var(--color-border)] px-4 text-sm"
             >
-              Continuar
+              {step > 0 ? 'Voltar' : 'Cancelar'}
             </button>
-          )}
-          {step === previewStep - 1 && (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={preparePreview}
-              className="h-9 rounded-[var(--radius-md)] bg-[var(--color-primary)] px-4 text-sm text-[var(--color-primary-foreground)] disabled:opacity-50"
-            >
-              {busy ? 'Preparando…' : 'Gerar preview'}
-            </button>
-          )}
-        </>
-      }
-    >
-      <div
-        className={`mb-5 grid gap-2 ${type === 'RECEIPT' ? 'grid-cols-2 md:grid-cols-5' : 'grid-cols-4'}`}
+            {step < previewStep - 1 && (
+              <button
+                type="button"
+                disabled={
+                  creatingPmoc ||
+                  (type === 'RECEIPT' && step === 0 && !form.receiptSource) ||
+                  (type === 'PMOC' && step === 0 && (!form.pmocId || !operation))
+                }
+                onClick={() => setStep(step + 1)}
+                className="h-9 rounded-[var(--radius-md)] bg-[var(--color-primary)] px-4 text-sm text-[var(--color-primary-foreground)] disabled:opacity-50"
+              >
+                Continuar
+              </button>
+            )}
+            {step === previewStep - 1 && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={preparePreview}
+                className="h-9 rounded-[var(--radius-md)] bg-[var(--color-primary)] px-4 text-sm text-[var(--color-primary-foreground)] disabled:opacity-50"
+              >
+                {busy ? 'Preparando…' : 'Gerar preview'}
+              </button>
+            )}
+          </>
+        }
       >
-        {steps.map((label, index) => (
-          <div
-            key={label}
-            className={`rounded-[var(--radius-md)] px-3 py-2 text-center text-xs ${index === step ? 'bg-[var(--color-primary)] text-[var(--color-primary-foreground)]' : index < step ? 'bg-emerald-500/10 text-emerald-700' : 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]'}`}
-          >
-            {index + 1}. {label}
+        <div
+          className={`mb-5 grid gap-2 ${type === 'RECEIPT' ? 'grid-cols-2 md:grid-cols-5' : 'grid-cols-4'}`}
+        >
+          {steps.map((label, index) => (
+            <div
+              key={label}
+              className={`rounded-[var(--radius-md)] px-3 py-2 text-center text-xs ${index === step ? 'bg-[var(--color-primary)] text-[var(--color-primary-foreground)]' : index < step ? 'bg-emerald-500/10 text-emerald-700' : 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]'}`}
+            >
+              {index + 1}. {label}
+            </div>
+          ))}
+        </div>
+        {error && (
+          <div className="mb-4 rounded-[var(--radius-md)] border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-700">
+            {error}
           </div>
-        ))}
-      </div>
-      {error && (
-        <div className="mb-4 rounded-[var(--radius-md)] border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-700">
-          {error}
-        </div>
-      )}
-      {configuration.loading ? (
-        <SkeletonCard />
-      ) : configuration.error ? (
-        <div className="rounded-[var(--radius-md)] border border-amber-500/30 bg-amber-500/10 p-3 text-sm">
-          Não existe configuração ativa para este tipo. O backend impedirá a emissão.
-        </div>
-      ) : (
-        <div className="mb-4 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-muted)]/40 p-3 text-xs">
-          <strong>Template automático:</strong>{' '}
-          {configuration.data?.defaultTemplate?.name ?? 'Não configurado'} ·{' '}
-          <strong>Assinatura:</strong>{' '}
-          {configuration.data?.defaultTemplate?.signatureMode ?? 'NONE'}
-        </div>
-      )}
-      {step === 0 && (
-        <OriginStep
-          type={type}
-          form={form}
-          customers={customers.data?.items ?? []}
-          users={users.data?.items ?? []}
-          operations={operations.data?.items ?? []}
-          pmocs={pmocs.data?.items ?? []}
-          signatures={signatures.data?.items ?? []}
-          addresses={addresses}
-          equipments={equipments}
-          selectedCustomer={selectedCustomer}
-          onSet={set}
-          onWorkOrderSource={selectWorkOrderSource}
-          onReceiptSource={selectReceiptSource}
-          onOperation={selectOperation}
-          onPmoc={selectPmoc}
-          canCreatePmoc={hasRole('OWNER', 'MANAGER')}
-          creatingPmoc={creatingPmoc}
-          onCreatePmoc={createPmocPlan}
-          onUpdatePmoc={updatePmocPlan}
-          onDeletePmoc={deletePmocPlan}
-          onGeneratePmocWorkOrder={openPmocWorkOrderWizard}
-          pmocOperation={operation}
-        />
-      )}
-      {type === 'RECEIPT' && step === 1 && (
-        <ReceiptDataStep
-          form={form}
-          customers={customers.data?.items ?? []}
-          addresses={addresses}
-          customerName={selectedCustomer?.tradeName ?? selectedCustomer?.name ?? ''}
-          onSet={set}
-        />
-      )}
-      {type === 'RECEIPT' && step === 2 && (
-        <ReceiptWarrantyStep
-          form={form}
-          customerName={selectedCustomer?.tradeName ?? selectedCustomer?.name ?? ''}
-          onSet={set}
-        />
-      )}
-      {type === 'RECEIPT' && step === 3 && (
-        <ReceiptSignatureStep
-          form={form}
-          signatures={signatures.data?.items ?? []}
-          onSet={set}
-        />
-      )}
-      {type !== 'RECEIPT' && step === 1 && (
-        <ContentStep
-          type={type}
-          form={form}
-          equipments={equipments}
-          signatures={signatures.data?.items ?? []}
-          checklistTemplates={checklistTemplates.data?.items ?? []}
-          checklistTemplatesLoading={checklistTemplates.loading}
-          canManageChecklist={hasRole('OWNER', 'MANAGER')}
-          onCreateChecklist={createChecklistTemplate}
-          onSet={set}
-        />
-      )}
-      {type !== 'RECEIPT' && step === 2 && <EvidenceStep type={type} form={form} signatures={signatures.data?.items ?? []} onSet={set} />}
-      {step === previewStep && operation && (
-        <div className="space-y-4">
-          {handoff && <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--color-border)] p-3"><div><strong>{handoff.editorialStatus === 'DRAFT' ? 'Rascunho' : handoff.editorialStatus === 'PENDING' ? 'Revisão pendente' : handoff.editorialStatus === 'READY' ? 'Pronto para emissão' : 'Desatualizado'}</strong><p className="text-caption">A criação manual utiliza o mesmo ciclo editorial das coletas do Operator.</p></div><div className="flex gap-2"><button className="h-9 rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 text-sm" onClick={async () => { try { setHandoff(await documentsApi.startHandoffReview(handoff.id)); } catch (cause) { setError(message(cause)); } }}>Salvar como pendente</button><button className="h-9 rounded-[var(--radius-md)] bg-[var(--color-primary)] px-3 text-sm text-[var(--color-primary-foreground)]" onClick={async () => { try { await documentsApi.startHandoffReview(handoff.id); setHandoff(await documentsApi.finalizeHandoffReview(handoff.id)); } catch (cause) { setError(message(cause)); } }}>Finalizar revisão</button></div></div>}
-          <DocumentViewer
-            source={handoff ? { documentId: handoff.id, operationId: operation.id, type } : { operationId: operation.id, type }}
-            canRender={handoff?.editorialStatus === 'READY'}
-            canDownload
-            onRendered={onRendered}
+        )}
+        {configuration.loading ? (
+          <SkeletonCard />
+        ) : configuration.error ? (
+          <div className="rounded-[var(--radius-md)] border border-amber-500/30 bg-amber-500/10 p-3 text-sm">
+            Não existe configuração ativa para este tipo. O backend impedirá a emissão.
+          </div>
+        ) : (
+          <div className="mb-4 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-muted)]/40 p-3 text-xs">
+            <strong>Template automático:</strong>{' '}
+            {configuration.data?.defaultTemplate?.name ?? 'Não configurado'} ·{' '}
+            <strong>Assinatura:</strong>{' '}
+            {configuration.data?.defaultTemplate?.signatureMode ?? 'NONE'}
+          </div>
+        )}
+        {step === 0 && (
+          <OriginStep
+            type={type}
+            form={form}
+            customers={customers.data?.items ?? []}
+            users={users.data?.items ?? []}
+            operations={operations.data?.items ?? []}
+            sales={sales.data?.items ?? []}
+            pmocs={pmocs.data?.items ?? []}
+            signatures={signatures.data?.items ?? []}
+            addresses={addresses}
+            equipments={equipments}
+            selectedCustomer={selectedCustomer}
+            onSet={set}
+            onWorkOrderSource={selectWorkOrderSource}
+            onReceiptSource={selectReceiptSource}
+            onOperation={selectOperation}
+            onSale={selectSale}
+            onPmoc={selectPmoc}
+            canCreatePmoc={hasRole('OWNER', 'MANAGER')}
+            creatingPmoc={creatingPmoc}
+            onCreatePmoc={createPmocPlan}
+            onUpdatePmoc={updatePmocPlan}
+            onDeletePmoc={deletePmocPlan}
+            onGeneratePmocWorkOrder={openPmocWorkOrderWizard}
+            pmocOperation={operation}
           />
-        </div>
-      )}
-    </Drawer>
-    <OperationCreationDrawer
-      open={pmocWorkOrderOpen}
-      mode="work-order"
-      initialValues={pmocWorkOrderPrefill ?? undefined}
-      submitOperation={submitPmocWorkOrder}
-      submitLabel="Confirmar e gerar OS"
-      contextNotice="Dados preenchidos a partir do PMOC e da execução programada. Revise e confirme; a Ordem de Serviço ficará disponível para gerenciamento normalmente."
-      onClose={() => setPmocWorkOrderOpen(false)}
-    />
+        )}
+        {type === 'RECEIPT' && step === 1 && (
+          <ReceiptDataStep
+            form={form}
+            customers={customers.data?.items ?? []}
+            addresses={addresses}
+            customerName={selectedCustomer?.tradeName ?? selectedCustomer?.name ?? ''}
+            onSet={set}
+          />
+        )}
+        {type === 'RECEIPT' && step === 2 && (
+          <ReceiptWarrantyStep
+            form={form}
+            customerName={selectedCustomer?.tradeName ?? selectedCustomer?.name ?? ''}
+            onSet={set}
+          />
+        )}
+        {type === 'RECEIPT' && step === 3 && (
+          <ReceiptSignatureStep form={form} signatures={signatures.data?.items ?? []} onSet={set} />
+        )}
+        {type !== 'RECEIPT' && step === 1 && (
+          <ContentStep
+            type={type}
+            form={form}
+            equipments={equipments}
+            signatures={signatures.data?.items ?? []}
+            checklistTemplates={checklistTemplates.data?.items ?? []}
+            checklistTemplatesLoading={checklistTemplates.loading}
+            canManageChecklist={hasRole('OWNER', 'MANAGER')}
+            onCreateChecklist={createChecklistTemplate}
+            onSet={set}
+          />
+        )}
+        {type !== 'RECEIPT' && step === 2 && (
+          <EvidenceStep
+            type={type}
+            form={form}
+            signatures={signatures.data?.items ?? []}
+            onSet={set}
+          />
+        )}
+        {step === previewStep && operation && (
+          <div className="space-y-4">
+            {handoff && (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--color-border)] p-3">
+                <div>
+                  <strong>
+                    {handoff.editorialStatus === 'DRAFT'
+                      ? 'Rascunho'
+                      : handoff.editorialStatus === 'PENDING'
+                        ? 'Revisão pendente'
+                        : handoff.editorialStatus === 'READY'
+                          ? 'Pronto para emissão'
+                          : 'Desatualizado'}
+                  </strong>
+                  <p className="text-caption">
+                    A criação manual utiliza o mesmo ciclo editorial das coletas do Operator.
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    className="h-9 rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 text-sm"
+                    onClick={async () => {
+                      try {
+                        setHandoff(await documentsApi.startHandoffReview(handoff.id));
+                      } catch (cause) {
+                        setError(message(cause));
+                      }
+                    }}
+                  >
+                    Salvar como pendente
+                  </button>
+                  <button
+                    className="h-9 rounded-[var(--radius-md)] bg-[var(--color-primary)] px-3 text-sm text-[var(--color-primary-foreground)]"
+                    onClick={async () => {
+                      try {
+                        await documentsApi.startHandoffReview(handoff.id);
+                        setHandoff(await documentsApi.finalizeHandoffReview(handoff.id));
+                      } catch (cause) {
+                        setError(message(cause));
+                      }
+                    }}
+                  >
+                    Finalizar revisão
+                  </button>
+                </div>
+              </div>
+            )}
+            <DocumentViewer
+              source={
+                handoff
+                  ? { documentId: handoff.id, operationId: operation.id, type }
+                  : { operationId: operation.id, type }
+              }
+              canRender={handoff?.editorialStatus === 'READY'}
+              canDownload
+              onRendered={onRendered}
+            />
+          </div>
+        )}
+      </Drawer>
+      <OperationCreationDrawer
+        open={pmocWorkOrderOpen}
+        mode="work-order"
+        initialValues={pmocWorkOrderPrefill ?? undefined}
+        submitOperation={submitPmocWorkOrder}
+        submitLabel="Confirmar e gerar OS"
+        contextNotice="Dados preenchidos a partir do PMOC e da execução programada. Revise e confirme; a Ordem de Serviço ficará disponível para gerenciamento normalmente."
+        onClose={() => setPmocWorkOrderOpen(false)}
+      />
     </>
   );
 }
@@ -1257,6 +1401,7 @@ function OriginStep({
   customers,
   users,
   operations,
+  sales,
   pmocs,
   signatures,
   addresses,
@@ -1266,6 +1411,7 @@ function OriginStep({
   onWorkOrderSource,
   onReceiptSource,
   onOperation,
+  onSale,
   onPmoc,
   canCreatePmoc,
   creatingPmoc,
@@ -1280,6 +1426,7 @@ function OriginStep({
   customers: Customer[];
   users: TeamUser[];
   operations: OperationSummary[];
+  sales: Sale[];
   pmocs: PmocPlan[];
   signatures: Signature[];
   addresses: CustomerAddress[];
@@ -1287,8 +1434,9 @@ function OriginStep({
   selectedCustomer: CustomerDetail | null;
   onSet: <K extends keyof WorkflowForm>(key: K, value: WorkflowForm[K]) => void;
   onWorkOrderSource: (source: 'EXISTING' | 'NEW') => void;
-  onReceiptSource: (source: 'MANUAL' | 'OPERATION') => void;
+  onReceiptSource: (source: 'MANUAL' | 'OPERATION' | 'SALE') => void;
   onOperation: (id: string) => void;
+  onSale: (id: string) => void;
   onPmoc: (id: string) => void;
   canCreatePmoc: boolean;
   creatingPmoc: boolean;
@@ -1304,7 +1452,7 @@ function OriginStep({
     );
     return (
       <div className="space-y-5">
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid gap-3 md:grid-cols-3">
           <button
             type="button"
             onClick={() => onReceiptSource('MANUAL')}
@@ -1325,10 +1473,23 @@ function OriginStep({
               Preenche cliente, endereço, serviço, data e valor disponível; tudo permanece editável.
             </span>
           </button>
+          <button
+            type="button"
+            onClick={() => onReceiptSource('SALE')}
+            className={`rounded-[var(--radius-lg)] border p-4 text-left transition ${form.receiptSource === 'SALE' ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5' : 'border-[var(--color-border)] hover:bg-[var(--color-muted)]'}`}
+          >
+            <strong className="block text-sm">A partir de uma venda</strong>
+            <span className="mt-1 block text-caption">
+              Usa produtos, valor, data e garantia registrados para o cliente.
+            </span>
+          </button>
         </div>
         {form.receiptSource === 'OPERATION' && (
           <Field label="Ordem de Serviço concluída">
-            <select value={form.operationId} onChange={(event) => void onOperation(event.target.value)}>
+            <select
+              value={form.operationId}
+              onChange={(event) => void onOperation(event.target.value)}
+            >
               <option value="">Selecione…</option>
               {completedWorkOrders.map((item) => (
                 <option key={item.id} value={item.id}>
@@ -1337,7 +1498,9 @@ function OriginStep({
               ))}
             </select>
             {completedWorkOrders.length === 0 && (
-              <span className="text-caption">Nenhuma Ordem de Serviço concluída foi encontrada.</span>
+              <span className="text-caption">
+                Nenhuma Ordem de Serviço concluída foi encontrada.
+              </span>
             )}
           </Field>
         )}
@@ -1346,7 +1509,25 @@ function OriginStep({
             Os dados do cliente e do recibo serão informados na próxima etapa.
           </p>
         )}
-        {!form.receiptSource && <p className="text-caption">Selecione uma origem para continuar.</p>}
+        {form.receiptSource === 'SALE' && (
+          <Field label="Venda concluída">
+            <select value={form.saleId} onChange={(event) => void onSale(event.target.value)}>
+              <option value="">Selecione…</option>
+              {sales.map((sale) => (
+                <option key={sale.id} value={sale.id}>
+                  V-{String(sale.number).padStart(6, '0')} ·{' '}
+                  {sale.customer.tradeName ?? sale.customer.name} · {formatBrl(Number(sale.total))}
+                </option>
+              ))}
+            </select>
+            {sales.length === 0 && (
+              <span className="text-caption">Nenhuma venda concluída foi encontrada.</span>
+            )}
+          </Field>
+        )}
+        {!form.receiptSource && (
+          <p className="text-caption">Selecione uma origem para continuar.</p>
+        )}
       </div>
     );
   }
@@ -1483,8 +1664,7 @@ function OriginStep({
                   <option value="">Selecione…</option>
                   {pmocs.map((item) => (
                     <option key={item.id} value={item.id}>
-                      {item.maintenancePlan?.name ??
-                        `PMOC-${String(item.number).padStart(6, '0')}`}
+                      {item.maintenancePlan?.name ?? `PMOC-${String(item.number).padStart(6, '0')}`}
                     </option>
                   ))}
                 </select>
@@ -1562,7 +1742,9 @@ function OriginStep({
                     {users
                       .filter((item) => item.isActive && item.role !== 'VIEWER')
                       .map((item) => (
-                        <option key={item.id} value={item.id}>{item.name} · {item.role}</option>
+                        <option key={item.id} value={item.id}>
+                          {item.name} · {item.role}
+                        </option>
                       ))}
                   </select>
                 </Field>
@@ -1575,7 +1757,9 @@ function OriginStep({
                     {users
                       .filter((item) => item.isActive && item.role !== 'VIEWER')
                       .map((item) => (
-                        <option key={item.id} value={item.id}>{item.name} · {item.role}</option>
+                        <option key={item.id} value={item.id}>
+                          {item.name} · {item.role}
+                        </option>
                       ))}
                   </select>
                 </Field>
@@ -1585,9 +1769,13 @@ function OriginStep({
                     onChange={(event) => onSet('pmocSignatureOverrideId', event.target.value)}
                   >
                     <option value="">Política oficial do Template</option>
-                    {signatures.filter((item) => item.active).map((item) => (
-                      <option key={item.id} value={item.id}>{item.name} · {item.title}</option>
-                    ))}
+                    {signatures
+                      .filter((item) => item.active)
+                      .map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.name} · {item.title}
+                        </option>
+                      ))}
                   </select>
                 </Field>
                 <Field label="Início da vigência">
@@ -1604,33 +1792,37 @@ function OriginStep({
                     onChange={(event) => onSet('pmocEndDate', event.target.value)}
                   />
                 </Field>
-                {form.pmocPeriodicity === 'CUSTOM' && <Field label="Recorrência personalizada">
-                  <select
-                    value={form.pmocRecurrenceFrequency}
-                    onChange={(event) =>
-                      onSet(
-                        'pmocRecurrenceFrequency',
-                        event.target.value as WorkflowForm['pmocRecurrenceFrequency'],
-                      )
-                    }
-                  >
-                    <option value="DAILY">Diária</option>
-                    <option value="WEEKLY">Semanal</option>
-                    <option value="MONTHLY">Mensal</option>
-                    <option value="YEARLY">Anual</option>
-                    <option value="INTERVAL_DAYS">Intervalo em dias</option>
-                    <option value="INTERVAL_MONTHS">Intervalo em meses</option>
-                  </select>
-                </Field>}
-                {form.pmocPeriodicity === 'CUSTOM' && <Field label="Intervalo">
-                  <input
-                    type="number"
-                    min={1}
-                    max={3650}
-                    value={form.pmocRecurrenceInterval}
-                    onChange={(event) => onSet('pmocRecurrenceInterval', event.target.value)}
-                  />
-                </Field>}
+                {form.pmocPeriodicity === 'CUSTOM' && (
+                  <Field label="Recorrência personalizada">
+                    <select
+                      value={form.pmocRecurrenceFrequency}
+                      onChange={(event) =>
+                        onSet(
+                          'pmocRecurrenceFrequency',
+                          event.target.value as WorkflowForm['pmocRecurrenceFrequency'],
+                        )
+                      }
+                    >
+                      <option value="DAILY">Diária</option>
+                      <option value="WEEKLY">Semanal</option>
+                      <option value="MONTHLY">Mensal</option>
+                      <option value="YEARLY">Anual</option>
+                      <option value="INTERVAL_DAYS">Intervalo em dias</option>
+                      <option value="INTERVAL_MONTHS">Intervalo em meses</option>
+                    </select>
+                  </Field>
+                )}
+                {form.pmocPeriodicity === 'CUSTOM' && (
+                  <Field label="Intervalo">
+                    <input
+                      type="number"
+                      min={1}
+                      max={3650}
+                      value={form.pmocRecurrenceInterval}
+                      onChange={(event) => onSet('pmocRecurrenceInterval', event.target.value)}
+                    />
+                  </Field>
+                )}
                 <div className="md:col-span-2">
                   <Field label="Cobertura do plano">
                     <textarea
@@ -1855,7 +2047,10 @@ function ReceiptDataStep({
     onSet('amount', value);
     if (amount !== null) onSet('receiptAmountInWords', words);
     if (!form.receiptDeclarationEdited) {
-      onSet('receiptDeclaration', receiptDeclaration({ ...form, amount: value, receiptAmountInWords: words }, customerName));
+      onSet(
+        'receiptDeclaration',
+        receiptDeclaration({ ...form, amount: value, receiptAmountInWords: words }, customerName),
+      );
     }
   }
   return (
@@ -1867,7 +2062,11 @@ function ReceiptDataStep({
           onChange={(value) => onSet('receiptNumber', value)}
         />
         <Field label="Data">
-          <input type="date" value={form.receiptDate} onChange={(event) => onSet('receiptDate', event.target.value)} />
+          <input
+            type="date"
+            value={form.receiptDate}
+            onChange={(event) => onSet('receiptDate', event.target.value)}
+          />
         </Field>
         <Field label="Cliente">
           <select
@@ -1877,18 +2076,32 @@ function ReceiptDataStep({
               onSet('customerId', event.target.value);
               onSet('addressId', '');
               if (!form.receiptDeclarationEdited) {
-                onSet('receiptDeclaration', receiptDeclaration(form, selected?.tradeName ?? selected?.name ?? ''));
+                onSet(
+                  'receiptDeclaration',
+                  receiptDeclaration(form, selected?.tradeName ?? selected?.name ?? ''),
+                );
               }
             }}
           >
             <option value="">Selecione…</option>
-            {customers.map((item) => <option key={item.id} value={item.id}>{item.tradeName ?? item.name}</option>)}
+            {customers.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.tradeName ?? item.name}
+              </option>
+            ))}
           </select>
         </Field>
         <Field label="Endereço">
-          <select value={form.addressId} onChange={(event) => onSet('addressId', event.target.value)}>
+          <select
+            value={form.addressId}
+            onChange={(event) => onSet('addressId', event.target.value)}
+          >
             <option value="">Selecione…</option>
-            {addresses.map((item) => <option key={item.id} value={item.id}>{item.name ?? 'Endereço'} · {item.street}</option>)}
+            {addresses.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name ?? 'Endereço'} · {item.street}
+              </option>
+            ))}
           </select>
         </Field>
         <Text label="Valor" value={form.amount} onChange={updateAmount} inputMode="decimal" />
@@ -1897,25 +2110,48 @@ function ReceiptDataStep({
           value={form.receiptAmountInWords}
           onChange={(value) => {
             onSet('receiptAmountInWords', value);
-            if (!form.receiptDeclarationEdited) onSet('receiptDeclaration', receiptDeclaration({ ...form, receiptAmountInWords: value }, customerName));
+            if (!form.receiptDeclarationEdited)
+              onSet(
+                'receiptDeclaration',
+                receiptDeclaration({ ...form, receiptAmountInWords: value }, customerName),
+              );
           }}
         />
         <div className="md:col-span-2">
-          <Text label="Serviço" value={form.receiptService} onChange={(value) => {
-            onSet('receiptService', value);
-            if (!form.receiptDeclarationEdited) onSet('receiptDeclaration', receiptDeclaration({ ...form, receiptService: value }, customerName));
-          }} />
+          <Text
+            label="Serviço"
+            value={form.receiptService}
+            onChange={(value) => {
+              onSet('receiptService', value);
+              if (!form.receiptDeclarationEdited)
+                onSet(
+                  'receiptDeclaration',
+                  receiptDeclaration({ ...form, receiptService: value }, customerName),
+                );
+            }}
+          />
         </div>
         <div className="md:col-span-2">
-          <Area label="Descrição" value={form.receiptDescription} onChange={(value) => {
-            onSet('receiptDescription', value);
-            if (!form.receiptDeclarationEdited) onSet('receiptDeclaration', receiptDeclaration({ ...form, receiptDescription: value }, customerName));
-          }} />
+          <Area
+            label="Descrição"
+            value={form.receiptDescription}
+            onChange={(value) => {
+              onSet('receiptDescription', value);
+              if (!form.receiptDeclarationEdited)
+                onSet(
+                  'receiptDeclaration',
+                  receiptDeclaration({ ...form, receiptDescription: value }, customerName),
+                );
+            }}
+          />
         </div>
       </div>
       <section className="space-y-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div><h3 className="text-sm font-semibold">Texto da declaração</h3><p className="text-caption">Gerado automaticamente e livremente editável.</p></div>
+          <div>
+            <h3 className="text-sm font-semibold">Texto da declaração</h3>
+            <p className="text-caption">Gerado automaticamente e livremente editável.</p>
+          </div>
           <button
             type="button"
             className="h-9 rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 text-sm"
@@ -1927,36 +2163,57 @@ function ReceiptDataStep({
             Restaurar texto automático
           </button>
         </div>
-        <Area label="Declaração final" value={form.receiptDeclaration} onChange={(value) => {
-          onSet('receiptDeclaration', value);
-          onSet('receiptDeclarationEdited', true);
-        }} />
+        <Area
+          label="Declaração final"
+          value={form.receiptDeclaration}
+          onChange={(value) => {
+            onSet('receiptDeclaration', value);
+            onSet('receiptDeclarationEdited', true);
+          }}
+        />
       </section>
     </div>
   );
 }
 
-function ReceiptWarrantyStep({ form, customerName, onSet }: {
+function ReceiptWarrantyStep({
+  form,
+  customerName,
+  onSet,
+}: {
   form: WorkflowForm;
   customerName: string;
   onSet: <K extends keyof WorkflowForm>(key: K, value: WorkflowForm[K]) => void;
 }) {
   const options: Array<[WorkflowForm['receiptWarrantyPreset'], string]> = [
-    ['NONE', 'Sem garantia'], ['30', '30 dias'], ['60', '60 dias'], ['90', '90 dias'],
-    ['180', '180 dias'], ['365', '1 ano'], ['CUSTOM', 'Personalizado'],
+    ['NONE', 'Sem garantia'],
+    ['30', '30 dias'],
+    ['60', '60 dias'],
+    ['90', '90 dias'],
+    ['180', '180 dias'],
+    ['365', '1 ano'],
+    ['CUSTOM', 'Personalizado'],
   ];
   function select(preset: WorkflowForm['receiptWarrantyPreset']) {
     const days = preset === 'NONE' ? '' : preset === 'CUSTOM' ? form.receiptWarrantyDays : preset;
     const next = { ...form, receiptWarrantyPreset: preset, receiptWarrantyDays: days };
     onSet('receiptWarrantyPreset', preset);
     onSet('receiptWarrantyDays', days);
-    if (!form.receiptDeclarationEdited) onSet('receiptDeclaration', receiptDeclaration(next, customerName));
+    if (!form.receiptDeclarationEdited)
+      onSet('receiptDeclaration', receiptDeclaration(next, customerName));
   }
   return (
     <div className="space-y-4">
       <Field label="Prazo da garantia">
-        <select value={form.receiptWarrantyPreset} onChange={(event) => select(event.target.value as WorkflowForm['receiptWarrantyPreset'])}>
-          {options.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        <select
+          value={form.receiptWarrantyPreset}
+          onChange={(event) => select(event.target.value as WorkflowForm['receiptWarrantyPreset'])}
+        >
+          {options.map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
         </select>
       </Field>
       {form.receiptWarrantyPreset === 'CUSTOM' && (
@@ -1968,57 +2225,108 @@ function ReceiptWarrantyStep({ form, customerName, onSet }: {
             value={form.receiptWarrantyDays}
             onChange={(event) => {
               onSet('receiptWarrantyDays', event.target.value);
-              if (!form.receiptDeclarationEdited) onSet('receiptDeclaration', receiptDeclaration({ ...form, receiptWarrantyDays: event.target.value }, customerName));
+              if (!form.receiptDeclarationEdited)
+                onSet(
+                  'receiptDeclaration',
+                  receiptDeclaration(
+                    { ...form, receiptWarrantyDays: event.target.value },
+                    customerName,
+                  ),
+                );
             }}
           />
         </Field>
       )}
       <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-muted)]/40 p-4">
         <p className="text-sm font-medium">Declaração resultante</p>
-        <p className="mt-2 whitespace-pre-line text-sm text-[var(--color-muted-foreground)]">{form.receiptDeclaration || receiptDeclaration(form, customerName)}</p>
+        <p className="mt-2 whitespace-pre-line text-sm text-[var(--color-muted-foreground)]">
+          {form.receiptDeclaration || receiptDeclaration(form, customerName)}
+        </p>
       </div>
     </div>
   );
 }
 
-function ReceiptSignatureStep({ form, signatures, onSet }: {
+function ReceiptSignatureStep({
+  form,
+  signatures,
+  onSet,
+}: {
   form: WorkflowForm;
   signatures: Signature[];
   onSet: <K extends keyof WorkflowForm>(key: K, value: WorkflowForm[K]) => void;
 }) {
   return (
     <div className="space-y-4">
-      <div><h3 className="text-base font-semibold">Responsável técnico</h3><p className="text-caption">A escolha vale somente para este Recibo. Nenhuma assinatura do cliente será solicitada.</p></div>
-      <div className="grid gap-3 md:grid-cols-2">
-        {signatures.filter((item) => item.active).map((signature) => (
-          <ReceiptSignatureOption
-            key={signature.id}
-            signature={signature}
-            selected={form.technicalSignatureId === signature.id}
-            onSelect={() => onSet('technicalSignatureId', signature.id)}
-          />
-        ))}
+      <div>
+        <h3 className="text-base font-semibold">Responsável técnico</h3>
+        <p className="text-caption">
+          A escolha vale somente para este Recibo. Nenhuma assinatura do cliente será solicitada.
+        </p>
       </div>
-      {signatures.length === 0 && <EmptyState icon={ShieldCheck} title="Nenhuma assinatura ativa" description="Cadastre uma assinatura institucional antes de emitir o Recibo." />}
+      <div className="grid gap-3 md:grid-cols-2">
+        {signatures
+          .filter((item) => item.active)
+          .map((signature) => (
+            <ReceiptSignatureOption
+              key={signature.id}
+              signature={signature}
+              selected={form.technicalSignatureId === signature.id}
+              onSelect={() => onSet('technicalSignatureId', signature.id)}
+            />
+          ))}
+      </div>
+      {signatures.length === 0 && (
+        <EmptyState
+          icon={ShieldCheck}
+          title="Nenhuma assinatura ativa"
+          description="Cadastre uma assinatura institucional antes de emitir o Recibo."
+        />
+      )}
     </div>
   );
 }
 
-function ReceiptSignatureOption({ signature, selected, onSelect }: { signature: Signature; selected: boolean; onSelect: () => void }) {
-  const image = useQuery((signal) => signaturesApi.downloadSignatureImage(signature.id, { signal }), [signature.id]);
+function ReceiptSignatureOption({
+  signature,
+  selected,
+  onSelect,
+}: {
+  signature: Signature;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const image = useQuery(
+    (signal) => signaturesApi.downloadSignatureImage(signature.id, { signal }),
+    [signature.id],
+  );
   return (
-    <button type="button" onClick={onSelect} className={`rounded-[var(--radius-lg)] border p-4 text-left transition ${selected ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5' : 'border-[var(--color-border)] hover:bg-[var(--color-muted)]'}`}>
+    <button
+      type="button"
+      onClick={onSelect}
+      className={`rounded-[var(--radius-lg)] border p-4 text-left transition ${selected ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5' : 'border-[var(--color-border)] hover:bg-[var(--color-muted)]'}`}
+    >
       <div className="grid h-20 place-items-center rounded-md bg-white p-2">
-        {image.data ? <img // eslint-disable-line @next/next/no-img-element
-          src={`data:${image.data.mimeType};base64,${image.data.contentBase64}`}
-          alt={`Assinatura de ${signature.name}`}
-          className="max-h-16 max-w-full object-contain"
-        /> : <span className="text-caption">Carregando assinatura…</span>}
+        {image.data ? (
+          <img // eslint-disable-line @next/next/no-img-element
+            src={`data:${image.data.mimeType};base64,${image.data.contentBase64}`}
+            alt={`Assinatura de ${signature.name}`}
+            className="max-h-16 max-w-full object-contain"
+          />
+        ) : (
+          <span className="text-caption">Carregando assinatura…</span>
+        )}
       </div>
       <p className="mt-3 font-semibold">{signature.name}</p>
       <p className="text-sm text-[var(--color-muted-foreground)]">{signature.title}</p>
-      {signature.professionalCouncil && <p className="text-caption">{signature.professionalCouncil}</p>}
-      {signature.isDefault && <span className="mt-2 inline-flex rounded-full bg-emerald-500/10 px-2 py-1 text-xs text-emerald-700">Assinatura padrão</span>}
+      {signature.professionalCouncil && (
+        <p className="text-caption">{signature.professionalCouncil}</p>
+      )}
+      {signature.isDefault && (
+        <span className="mt-2 inline-flex rounded-full bg-emerald-500/10 px-2 py-1 text-xs text-emerald-700">
+          Assinatura padrão
+        </span>
+      )}
     </button>
   );
 }
@@ -2338,48 +2646,122 @@ function ContentStep({
           </Field>
           <MultiSelect
             label="Procedimentos do catálogo PMOC"
-            options={checklistTemplates.map((template) => ({ value: template.id, label: template.description }))}
+            options={checklistTemplates.map((template) => ({
+              value: template.id,
+              label: template.description,
+            }))}
             value={selectedChecklistTemplateIds}
             onChange={selectChecklistTemplates}
-            placeholder={checklistTemplatesLoading ? 'Carregando procedimentos…' : 'Selecionar procedimentos'}
+            placeholder={
+              checklistTemplatesLoading ? 'Carregando procedimentos…' : 'Selecionar procedimentos'
+            }
             emptyMessage="Nenhum procedimento cadastrado para esta periodicidade."
           />
         </div>
         <section className="space-y-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] p-4">
           <div>
             <h3 className="text-sm font-semibold">Checklist por equipamento</h3>
-            <p className="text-caption">Cada resultado é persistido como snapshot da execução. Selecione Sim, Não ou N.A. e registre a observação quando necessário.</p>
+            <p className="text-caption">
+              Cada resultado é persistido como snapshot da execução. Selecione Sim, Não ou N.A. e
+              registre a observação quando necessário.
+            </p>
           </div>
           {selectedChecklistItems.map((item, index) => (
-            <div key={item.templateId ?? `${item.description}-${index}`} className="grid gap-2 rounded-[var(--radius-md)] bg-[var(--color-muted)]/50 p-3 md:grid-cols-[1.2fr_1.6fr_130px_1.3fr_auto] md:items-center">
+            <div
+              key={item.templateId ?? `${item.description}-${index}`}
+              className="grid gap-2 rounded-[var(--radius-md)] bg-[var(--color-muted)]/50 p-3 md:grid-cols-[1.2fr_1.6fr_130px_1.3fr_auto] md:items-center"
+            >
               <select
                 aria-label={`Equipamento de ${item.description}`}
                 value={item.equipmentId ?? ''}
-                onChange={(event) => onSet('maintenanceChecklist', selectedChecklistItems.map((current, currentIndex) => currentIndex === index ? { ...current, equipmentId: event.target.value || undefined } : current))}
+                onChange={(event) =>
+                  onSet(
+                    'maintenanceChecklist',
+                    selectedChecklistItems.map((current, currentIndex) =>
+                      currentIndex === index
+                        ? { ...current, equipmentId: event.target.value || undefined }
+                        : current,
+                    ),
+                  )
+                }
               >
                 <option value="">Procedimento geral</option>
                 {form.inspectedEquipments.map((selected) => {
-                  const equipment = equipments.find((candidate) => candidate.id === selected.equipmentId);
-                  return <option key={selected.equipmentId} value={selected.equipmentId}>{equipment?.name ?? selected.equipmentId}</option>;
+                  const equipment = equipments.find(
+                    (candidate) => candidate.id === selected.equipmentId,
+                  );
+                  return (
+                    <option key={selected.equipmentId} value={selected.equipmentId}>
+                      {equipment?.name ?? selected.equipmentId}
+                    </option>
+                  );
                 })}
               </select>
               <span className="text-sm">{item.description}</span>
               <select
                 aria-label={`Resultado de ${item.description}`}
                 value={item.result}
-                onChange={(event) => onSet('maintenanceChecklist', selectedChecklistItems.map((current, currentIndex) => currentIndex === index ? { ...current, result: event.target.value as 'YES' | 'NO' | 'NOT_APPLICABLE', executed: event.target.value === 'YES' } : current))}
+                onChange={(event) =>
+                  onSet(
+                    'maintenanceChecklist',
+                    selectedChecklistItems.map((current, currentIndex) =>
+                      currentIndex === index
+                        ? {
+                            ...current,
+                            result: event.target.value as 'YES' | 'NO' | 'NOT_APPLICABLE',
+                            executed: event.target.value === 'YES',
+                          }
+                        : current,
+                    ),
+                  )
+                }
               >
                 <option value="YES">Sim</option>
                 <option value="NO">Não</option>
                 <option value="NOT_APPLICABLE">N.A.</option>
               </select>
-              <input value={item.observations} maxLength={2000} onChange={(event) => onSet('maintenanceChecklist', selectedChecklistItems.map((current, currentIndex) => currentIndex === index ? { ...current, observations: event.target.value } : current))} placeholder="Observação" className="h-9 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm" />
-              <button type="button" aria-label={`Remover ${item.description}`} onClick={() => onSet('maintenanceChecklist', selectedChecklistItems.filter((_, currentIndex) => currentIndex !== index))} className="rounded-md p-2 text-[var(--color-muted-foreground)] hover:text-[var(--color-danger)]"><X className="h-4 w-4" /></button>
+              <input
+                value={item.observations}
+                maxLength={2000}
+                onChange={(event) =>
+                  onSet(
+                    'maintenanceChecklist',
+                    selectedChecklistItems.map((current, currentIndex) =>
+                      currentIndex === index
+                        ? { ...current, observations: event.target.value }
+                        : current,
+                    ),
+                  )
+                }
+                placeholder="Observação"
+                className="h-9 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm"
+              />
+              <button
+                type="button"
+                aria-label={`Remover ${item.description}`}
+                onClick={() =>
+                  onSet(
+                    'maintenanceChecklist',
+                    selectedChecklistItems.filter((_, currentIndex) => currentIndex !== index),
+                  )
+                }
+                className="rounded-md p-2 text-[var(--color-muted-foreground)] hover:text-[var(--color-danger)]"
+              >
+                <X className="h-4 w-4" />
+              </button>
             </div>
           ))}
         </section>
-        <Area label="Objetivo e detalhes da execução" value={form.objective} onChange={(value) => onSet('objective', value)} />
-        <Area label="Observações e conclusão" value={form.observations} onChange={(value) => onSet('observations', value)} />
+        <Area
+          label="Objetivo e detalhes da execução"
+          value={form.objective}
+          onChange={(value) => onSet('objective', value)}
+        />
+        <Area
+          label="Observações e conclusão"
+          value={form.observations}
+          onChange={(value) => onSet('observations', value)}
+        />
       </div>
     );
   if (type === 'TECHNICAL_REPORT')
@@ -2523,7 +2905,11 @@ function ContentStep({
             values={catalogLines(form.objective)}
             onChange={(values) => onSet('objective', values.join('\n'))}
           />
-          <Area label="Objetivo da visita" value={form.objective} onChange={(value) => onSet('objective', value)} />
+          <Area
+            label="Objetivo da visita"
+            value={form.objective}
+            onChange={(value) => onSet('objective', value)}
+          />
         </section>
         <section className="space-y-2">
           <TechnicalCatalogSelector
@@ -2534,7 +2920,11 @@ function ContentStep({
             values={catalogLines(form.diagnosis)}
             onChange={(values) => onSet('diagnosis', values.join('\n'))}
           />
-          <Area label="Diagnóstico ou situação encontrada" value={form.diagnosis} onChange={(value) => onSet('diagnosis', value)} />
+          <Area
+            label="Diagnóstico ou situação encontrada"
+            value={form.diagnosis}
+            onChange={(value) => onSet('diagnosis', value)}
+          />
         </section>
         <Area
           label="Atividades executadas"
@@ -2550,7 +2940,11 @@ function ContentStep({
             values={catalogLines(form.recommendations)}
             onChange={(values) => onSet('recommendations', values.join('\n'))}
           />
-          <Area label="Recomendações técnicas" value={form.recommendations} onChange={(value) => onSet('recommendations', value)} />
+          <Area
+            label="Recomendações técnicas"
+            value={form.recommendations}
+            onChange={(value) => onSet('recommendations', value)}
+          />
         </section>
         <Area
           label="Observações finais"
@@ -2728,7 +3122,9 @@ function EvidenceStep({
   signatures: Signature[];
   onSet: <K extends keyof WorkflowForm>(key: K, value: WorkflowForm[K]) => void;
 }) {
-  const customerSignatureRequired = ['WORK_ORDER', 'TECHNICAL_REPORT', 'BUDGET', 'PMOC'].includes(type);
+  const customerSignatureRequired = ['WORK_ORDER', 'TECHNICAL_REPORT', 'BUDGET', 'PMOC'].includes(
+    type,
+  );
   return (
     <div className="space-y-5">
       {type !== 'WORK_ORDER' && (
@@ -2758,27 +3154,45 @@ function EvidenceStep({
           <span className="text-caption">{form.photos.length} foto(s) selecionada(s).</span>
         </Field>
       )}
-      {customerSignatureRequired && <div>
-        <p className="mb-2 text-sm font-medium">
-          Assinatura do cliente
-        </p>
-        {type === 'PMOC' && (
-          <div className="mb-3 grid gap-3 md:grid-cols-2">
-            <Text label="Nome do cliente/responsável" value={form.customerSignerName} onChange={(value) => onSet('customerSignerName', value)} />
-            <Text label="Função ou vínculo" value={form.customerSignerRole} onChange={(value) => onSet('customerSignerRole', value)} />
-          </div>
-        )}
-        <SignaturePad
-          onChange={(value) => onSet('signatureData', value)}
-          onConfirm={(value) => onSet('signatureData', value)}
-        />
-      </div>}
+      {customerSignatureRequired && (
+        <div>
+          <p className="mb-2 text-sm font-medium">Assinatura do cliente</p>
+          {type === 'PMOC' && (
+            <div className="mb-3 grid gap-3 md:grid-cols-2">
+              <Text
+                label="Nome do cliente/responsável"
+                value={form.customerSignerName}
+                onChange={(value) => onSet('customerSignerName', value)}
+              />
+              <Text
+                label="Função ou vínculo"
+                value={form.customerSignerRole}
+                onChange={(value) => onSet('customerSignerRole', value)}
+              />
+            </div>
+          )}
+          <SignaturePad
+            onChange={(value) => onSet('signatureData', value)}
+            onConfirm={(value) => onSet('signatureData', value)}
+          />
+        </div>
+      )}
       <Field label="Assinatura do responsável técnico">
-        <select value={form.technicalSignatureId} onChange={(event) => onSet('technicalSignatureId', event.target.value)}>
+        <select
+          value={form.technicalSignatureId}
+          onChange={(event) => onSet('technicalSignatureId', event.target.value)}
+        >
           <option value="">Selecione uma assinatura cadastrada…</option>
-          {signatures.map((signature) => <option key={signature.id} value={signature.id}>{signature.name} · {signature.title}{signature.isDefault ? ' · padrão' : ''}</option>)}
+          {signatures.map((signature) => (
+            <option key={signature.id} value={signature.id}>
+              {signature.name} · {signature.title}
+              {signature.isDefault ? ' · padrão' : ''}
+            </option>
+          ))}
         </select>
-        <span className="text-caption">Obrigatória para finalização. A escolha vale somente para este documento.</span>
+        <span className="text-caption">
+          Obrigatória para finalização. A escolha vale somente para este documento.
+        </span>
       </Field>
     </div>
   );

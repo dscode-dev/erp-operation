@@ -22,6 +22,15 @@ export const OPERATOR_HANDOFF_DOCUMENT_TYPES = [
   'PMOC',
 ] as const;
 
+/**
+ * Documentos que o Operator pode iniciar sem uma atribuição da gestão e
+ * concluir em campo sem revisão editorial posterior.
+ */
+export const OPERATOR_DIRECT_COMPLETION_DOCUMENT_TYPES = [
+  'WORK_ORDER',
+  'TECHNICAL_REPORT',
+] as const;
+
 export const CUSTOMER_SIGNATURE_REQUIRED_DOCUMENT_TYPES = [
   'WORK_ORDER',
   'TECHNICAL_REPORT',

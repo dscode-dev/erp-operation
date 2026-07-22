@@ -1,5 +1,15 @@
 # ROUTES — Frontend
 
+## `/operator/atendimento`, `/operator/execucao/[id]` e `/operator/documents`
+
+- `/operator/atendimento`: criação autônoma somente de OS/RVT.
+- `/operator/execucao/[id]`: conclui e emite OS/RVT; demais tipos atribuídos seguem para revisão.
+- `/operator/documents`: permite visualizar, gerar quando recuperável, baixar e compartilhar PDFs oficiais.
+
+## PMOC — criação
+
+As entradas de criação pelo Wizard PMOC e por `/reports` consultam `GET /api/v1/pmoc/active-coverage` e exigem confirmação visual antes de enviar `confirmActiveCoverage: true` ao endpoint oficial de criação.
+
 ## `/reports` — Recibo / Garantia
 
 OWNER/MANAGER iniciam o Recibo manualmente ou por OS concluída no drawer oficial. Nenhuma rota ou
@@ -588,3 +598,13 @@ modo novo cria uma Operation DRAFT oficial e segue Preview → Render → Downlo
 
 - /budgets: central comercial, wizard manual/OS concluída, edição pré-emissão e documento oficial.
 - Nenhuma rota adicional: a aba Orçamentos da Operation abre o mesmo BudgetWizardDrawer com a OS preselecionada.
+# Customer-centric routes
+
+- `/clientes`: listagem; clique na linha abre `/clientes/:id`; edição usa ícone dedicado.
+- `/clientes/:id`: visão geral e gestão relacionada de equipamentos, serviços e vendas.
+- `/equipamentos`: rota legada redireciona para `/clientes` (ou `/clientes/:customerId`).
+- `/equipamentos/:id`: detalhe do ativo preservado.
+- `/reports?create=RECEIPT&saleId=:id`: inicia Recibo preenchido por venda concluída.
+# `/operator/trocar-senha`
+
+Rota obrigatória no primeiro login. Etapas: senha definitiva → dados profissionais e assinatura → encerramento da sessão → novo login.

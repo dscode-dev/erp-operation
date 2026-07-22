@@ -1,5 +1,85 @@
 # API Contracts
 
+## Operator — criação e conclusão de atendimentos
+
+### `POST /api/v1/operations`
+
+Para `OPERATOR`, `documentType` aceita somente:
+
+- `WORK_ORDER`;
+- `TECHNICAL_REPORT`.
+
+O status inicial deve ser `DRAFT`. Outros tipos retornam `403 OPERATION_OPERATOR_DOCUMENT_TYPE_FORBIDDEN`; tentativa de iniciar em outro status retorna `409 OPERATION_INVALID_TRANSITION`. OWNER/MANAGER preservam os contratos de criação existentes.
+
+### `PATCH /api/v1/assignments/:id/complete`
+
+| Documento solicitado | Status da Operation | Resultado |
+| --- | --- | --- |
+| `WORK_ORDER` | `COMPLETED` | Conclusão definitiva, lifecycle/maintenance sincronizados e gestão notificada |
+| `TECHNICAL_REPORT` | `COMPLETED` | Conclusão definitiva, lifecycle/maintenance sincronizados e gestão notificada |
+| Demais tipos atribuídos | `REVIEW` | Mantém revisão da gestão |
+
+### `POST /api/v1/documents/:documentId/handoff/finalize`
+
+O `OPERATOR` pode usar o endpoint somente quando o documento é OS/RVT, pertence à sua Assignment, foi enviado e a Operation está `COMPLETED`. O Handoff passa a `READY`. Demais tipos retornam `403 DOCUMENT_HANDOFF_NOT_ALLOWED`.
+
+### `POST /api/v1/documents/:documentId/render`
+
+O `OPERATOR` pode renderizar somente OS/RVT com Handoff `READY`, Operation `COMPLETED` e `operatorId` igual ao usuário autenticado. O payload de sucesso permanece o contrato oficial do Document Engine. Download continua em `GET /api/v1/documents/:documentId/download`.
+
+## PMOC — cobertura ativa do cliente
+
+### `GET /api/v1/pmoc/active-coverage?customerId={uuid}`
+
+Autorização: `OWNER` ou `MANAGER`.
+
+Resposta `200`:
+
+```json
+{
+  "hasActiveCoverage": true,
+  "checkedAt": "2026-07-22T12:00:00.000Z",
+  "conflicts": [
+    {
+      "id": "uuid",
+      "number": 14,
+      "name": "PMOC Cliente",
+      "coverage": "2026",
+      "startDate": "2026-01-01T00:00:00.000Z",
+      "endDate": "2026-12-31T00:00:00.000Z",
+      "operationalStatus": "ACTIVE",
+      "equipmentCount": 4
+    }
+  ]
+}
+```
+
+### Confirmação na criação
+
+`POST /api/v1/pmoc` aceita o campo aditivo e opcional:
+
+```json
+{ "confirmActiveCoverage": true }
+```
+
+Quando há cobertura ativa e o campo não é `true`, a criação não é persistida e retorna `409`:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "PMOC_ACTIVE_COVERAGE_CONFIRMATION_REQUIRED",
+    "message": "Já existe cobertura PMOC ativa para este cliente. Confirme para continuar.",
+    "details": {
+      "customerId": "uuid",
+      "conflicts": []
+    }
+  }
+}
+```
+
+Após a confirmação, o contrato de sucesso da criação permanece inalterado.
+
 ## ORBIT_SECURITY_FIX01 — política transversal de ownership
 
 Não houve mudança de URL, request ou shape de sucesso. Para usuário `OPERATOR`, todos os contratos
@@ -5467,3 +5547,64 @@ Retorna o DocumentBlueprint oficial sem gerar PDF. Erros: 403 FORBIDDEN, 404 BUD
 - GET /api/v1/budgets/:id/download — binário autenticado application/pdf.
 - PATCH /api/v1/documents/:documentId/handoff/customer-signature — coleta/substitui assinatura do cliente para Budget.
 - PATCH /api/v1/documents/:documentId/handoff/technical-signature — seleciona a assinatura técnica.
+# Sales API — Customer Workspace
+
+Todas as rotas usam `/api/v1`, JWT e o envelope padrão.
+
+## `GET /sales`
+
+Filtros: `page`, `limit`, `customerId`, `status=DRAFT|COMPLETED|CANCELED`, `search`, `from`, `to`. Retorna paginação oficial e itens com cliente, endereço, criador, snapshots dos produtos e recibos relacionados.
+
+## `POST /sales` — OWNER/MANAGER
+
+```json
+{
+  "customerId": "uuid",
+  "customerAddressId": "uuid",
+  "soldAt": "2026-07-22T12:00:00.000Z",
+  "warrantyDays": 90,
+  "warrantyStartsAt": "2026-07-22",
+  "discount": 0,
+  "notes": "Venda e instalação no local",
+  "items": [{ "productId": "uuid", "quantity": 1 }]
+}
+```
+
+O cliente, endereço, produto ativo e preço vigente são validados. Descrição, unidade, custo e preço são snapshots do backend. Retorna `201` com a venda completa. Erros: `404 CUSTOMER_NOT_FOUND|PRODUCT_NOT_FOUND|PRICING_NOT_FOUND`, `409 SALE_INVALID_RELATIONSHIP`, `400 BAD_REQUEST`.
+
+## `GET /sales/:id`, `PATCH /sales/:id`, `DELETE /sales/:id`
+
+- `GET`: OWNER/MANAGER/VIEWER.
+- `PATCH`: somente venda `DRAFT`; aceita os campos de criação, exceto `customerId`.
+- `DELETE`: cancelamento lógico; histórico e número permanecem.
+
+## `PATCH /sales/:id/complete`
+
+Conclui atomicamente uma venda `DRAFT`. Vendas concluídas tornam-se comercialmente imutáveis.
+
+## `GET /sales/:id/receipt-prefill`
+
+Somente vendas `COMPLETED`. Retorna `saleId`, número sugerido, data, cliente, endereço, valor, descrição dos produtos e cobertura da garantia. O Wizard permanece livre para edição antes de criar a `Operation` do tipo `RECEIPT` com `sourceSaleId`.
+# `POST /api/v1/users/complete-first-access`
+
+Conclui o primeiro acesso autenticado em uma única operação. Permitido enquanto `mustChangePassword=true` e liberado pelo guard exclusivamente para este fluxo.
+
+`multipart/form-data`:
+
+- `currentPassword` — senha temporária;
+- `newPassword` — 12 a 128 caracteres;
+- `signatureTitle` — cargo exibido no documento;
+- `profession`, `professionalCouncil`, `registrationNumber`, `department` — opcionais;
+- `file` — PNG ou JPEG, máximo 2 MiB, obrigatório.
+
+Resposta `201`:
+
+```json
+{
+  "completed": true,
+  "signatureId": "uuid",
+  "reauthenticationRequired": true
+}
+```
+
+O backend revoga sessões, desativa `mustChangePassword` e persiste a assinatura na entidade oficial `Signature`. Erros possíveis: `PASSWORD_CURRENT_INVALID`, `PASSWORD_REUSE_NOT_ALLOWED`, `SIGNATURE_IMAGE_REQUIRED`, `UPLOAD_INVALID_MIME_TYPE`, `UPLOAD_FILE_TOO_LARGE`, `VALIDATION_ERROR` e `BAD_REQUEST` quando o primeiro acesso já foi concluído.

@@ -55,6 +55,9 @@ export function workOrderNumber(operation: OperationDetail): string | null {
 export async function createOperationFromDraft(draft: AtendimentoDraft): Promise<AtendimentoSubmission> {
   if (!draft.customerId) throw new Error('Cliente é obrigatório');
   if (!draft.serviceType) throw new Error('Tipo de atendimento é obrigatório');
+  if (draft.documentType !== 'WORK_ORDER' && draft.documentType !== 'TECHNICAL_REPORT') {
+    throw new Error('O operador pode iniciar somente Ordem de Serviço ou Relatório de Visita Técnica.');
+  }
   if (draft.signature && !draft.signerName.trim()) throw new Error('Informe o nome de quem assinou.');
 
   const photos = await Promise.all(
@@ -88,11 +91,10 @@ export async function createOperationFromDraft(draft: AtendimentoDraft): Promise
   const assignment = assignments.items[0];
   if (!assignment) throw new Error('O atendimento foi criado, mas sua execução não foi localizada.');
 
-  // Self-service também passa pelo ciclo oficial: ao concluir, a Operation fica
-  // em "Revisão" aguardando a aprovação do responsável técnico na Platform.
+  // Self-service continua passando pelo Assignment oficial, mas OS/RVT são
+  // concluídos diretamente em campo e não entram em uma fila editorial.
   await assignmentsApi.acceptAssignment(assignment.id);
   await assignmentsApi.startAssignment(assignment.id);
-  await assignmentsApi.completeAssignment(assignment.id, 'Atendimento iniciado e executado pelo operador.');
 
   let draftDocument = await documentsApi.saveHandoffDraft(created.id, draft.documentType);
   if (draft.signature) {
@@ -106,7 +108,10 @@ export async function createOperationFromDraft(draft: AtendimentoDraft): Promise
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Recife',
     });
   }
-  const handoff = await documentsApi.submitHandoff(draftDocument.id);
+  await documentsApi.submitHandoff(draftDocument.id);
+  await assignmentsApi.completeAssignment(assignment.id, 'Atendimento iniciado e executado pelo operador.');
+  const handoff = await documentsApi.finalizeHandoffReview(draftDocument.id);
+  await documentsApi.renderDocument(draftDocument.id);
   const operation = await operationApi.getOperation(created.id);
   return { operation, handoff };
 }

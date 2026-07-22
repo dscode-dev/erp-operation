@@ -1,5 +1,23 @@
 # Security
 
+## Operator — emissão restrita de documentos de campo
+
+- A lista permitida é validada no backend: somente OS/RVT podem ser autoiniciadas por Operator.
+- `status`, `documentType` e chamadas diretas não permitem contornar o workflow.
+- Documentos especiais somente podem ser preparados pelo Operator quando a Assignment foi criada pela gestão.
+- Finalização e renderização exigem ownership da Assignment, tipo permitido, Handoff enviado, Operation `COMPLETED` e identidade do operador responsável.
+- Outros tipos continuam proibidos para emissão pelo Operator e permanecem sob revisão OWNER/MANAGER.
+- A gestão recebe notificação idempotente `OPERATION_COMPLETED`; o texto distingue conclusão definitiva de atendimento aguardando revisão.
+- PDF e compartilhamento continuam usando endpoints autenticados e o Document Engine oficial, sem exposição de `storageKey` ou URL pública.
+
+## PMOC — confirmação segura de cobertura sobreposta
+
+- A consulta e a criação permanecem restritas a `OWNER` e `MANAGER` pelo RBAC existente.
+- A confirmação é validada no backend; ocultar ou manipular o diálogo no cliente não contorna a precondição.
+- A API devolve somente metadados operacionais necessários ao aviso, sem storage keys, conteúdo binário ou dados sensíveis.
+- O override explícito gera `PMOC_ACTIVE_COVERAGE_CONFIRMED` no histórico de auditoria append-only, com ator e referências dos PMOCs ativos.
+- Não foi criada constraint de exclusividade: coberturas simultâneas são permitidas por decisão de negócio após confirmação explícita.
+
 ## ORBIT_SECURITY_FIX01 — ownership autoritativo do Operator
 
 ### Autoridade e estados
@@ -2069,3 +2087,19 @@ The catalog is scoped to the installation Organization in every query. Reads req
 - Totais não são aceitos como autoridade do request: o backend recalcula e o documento usa os valores persistidos, sem consultar Pricing durante renderização.
 - Assinaturas reutilizam validação MIME/binária, limite e Storage UUID do handoff oficial.
 - PDF e imagens passam por endpoints autenticados; contratos não expõem storageKey, paths, tokens ou Base64 documental.
+# Sales security controls — 2026-07-22
+
+- OWNER/MANAGER podem criar, editar, concluir e cancelar; VIEWER é somente leitura; OPERATOR não acessa vendas.
+- UUIDs, datas, dinheiro, quantidade, paginação e limites textuais passam por DTO validation global.
+- Endereço deve pertencer ao cliente; produtos devem estar ativos; preço deve possuir vigência válida.
+- Preços e totais são resolvidos no backend; desconto não pode superar subtotal.
+- Conclusão usa transação e compare-and-set de estado; venda concluída não pode ser editada.
+- Cancelamento é lógico e histórico/auditoria são append-only. Vínculo de Recibo exige venda concluída do mesmo cliente.
+# Segurança da assinatura no primeiro acesso
+
+- O endpoint exige JWT válido, `mustChangePassword=true`, senha temporária correta e imagem obrigatória.
+- A imagem passa pelas mesmas validações binárias, MIME, extensão e limite de 2 MiB das assinaturas administrativas.
+- Storage recebe UUID através do `DocumentAssetResolver`; `storageKey`, path e binário nunca são retornados.
+- Senha, assinatura, revogação de refresh tokens e auditorias são consolidadas transacionalmente no banco; falhas removem o arquivo previamente preparado.
+- `Signature.userId` é único, impedindo duas assinaturas institucionais de onboarding para o mesmo usuário.
+- A assinatura não é marcada automaticamente como padrão global e não altera templates existentes.

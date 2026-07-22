@@ -3,10 +3,9 @@
 /**
  * Documentos do operador (mobile).
  *
- * O operador NÃO gera PDF (a geração exige aprovação do responsável na
- * Platform): aqui ele apenas baixa/compartilha os PDFs já gerados — via share
- * sheet nativo do dispositivo (WhatsApp, E-mail, Telegram…) — e visualiza os
- * documentos ainda em revisão, com o status visível e o download bloqueado.
+ * OS e Visita Técnica concluídas pelo operador podem ser emitidas aqui pelo
+ * Document Engine oficial. Outros documentos atribuídos preservam a revisão
+ * da gestão. Downloads e compartilhamentos usam somente o backend autenticado.
  */
 import { Suspense, useMemo, useState } from "react";
 import { Building2, Download, FileText, Loader2, Share2, ShieldAlert } from "lucide-react";
@@ -125,11 +124,28 @@ function OperatorDocumentsInner() {
     }
   }
 
+  async function emit(row: Row) {
+    setBusy(`emit:${row.id}`);
+    setActionError(null);
+    try {
+      const handoff = await documentsApi.saveHandoffDraft(row.operation.id, row.type);
+      await documentsApi.submitHandoff(handoff.id);
+      await documentsApi.finalizeHandoffReview(handoff.id);
+      await documentsApi.renderDocument(handoff.id);
+      await ops.refetch();
+      setDetail(null);
+    } catch (err) {
+      setActionError(mapActionError(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   return (
     <div className="px-4 pt-4 pb-24 space-y-4">
       <header>
         <h1 className="text-[22px] font-semibold tracking-tight">Documentos</h1>
-        <p className="text-caption">Baixe ou compartilhe os PDFs aprovados; documentos em revisão são somente leitura.</p>
+        <p className="text-caption">Emita, baixe ou compartilhe suas OS e Visitas Técnicas concluídas.</p>
       </header>
 
       <div className="sticky top-12 z-10 -mx-4 px-4 py-2 bg-[var(--color-background)]/95 backdrop-blur">
@@ -153,6 +169,7 @@ function OperatorDocumentsInner() {
           {items.map((d) => {
             const av = AVAILABILITY[d.availability];
             const canGet = d.availability === "AVAILABLE";
+            const canEmit = !canGet && d.operation.status === "COMPLETED" && (d.type === "WORK_ORDER" || d.type === "TECHNICAL_REPORT");
             return (
               <li key={d.id} className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)]">
                 <button type="button" onClick={() => setDetail(d)} className="w-full text-left flex items-center gap-3 p-3.5 active:scale-[0.99] transition-transform">
@@ -167,6 +184,11 @@ function OperatorDocumentsInner() {
                   <div className="flex gap-2 border-t border-[var(--color-border)] px-3.5 py-2">
                     <ActionButton icon={Share2} label="Compartilhar" busy={busy === `share:${d.id}`} onClick={() => void share(d)} primary />
                     <ActionButton icon={Download} label="Baixar" busy={busy === `download:${d.id}`} onClick={() => void download(d)} />
+                  </div>
+                )}
+                {canEmit && (
+                  <div className="border-t border-[var(--color-border)] px-3.5 py-2">
+                    <ActionButton icon={FileText} label="Gerar PDF" busy={busy === `emit:${d.id}`} onClick={() => void emit(d)} primary />
                   </div>
                 )}
               </li>
@@ -195,6 +217,9 @@ function OperatorDocumentsInner() {
                     : "A revisão foi concluída, mas o PDF ainda não foi gerado pela plataforma. Você poderá baixar e compartilhar assim que for emitido."}
                 </span>
               </div>
+            )}
+            {detail.availability !== "AVAILABLE" && detail.operation.status === "COMPLETED" && (detail.type === "WORK_ORDER" || detail.type === "TECHNICAL_REPORT") && (
+              <ActionButton icon={FileText} label="Gerar PDF oficial" busy={busy === `emit:${detail.id}`} onClick={() => void emit(detail)} primary />
             )}
             <DocumentViewer
               source={{ documentId: detail.id, operationId: detail.operation.id, type: detail.type }}

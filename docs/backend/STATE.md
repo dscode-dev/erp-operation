@@ -1,5 +1,22 @@
 # Backend State
 
+## Operator — conclusão direta de OS e Visita Técnica (2026-07-22)
+
+- O Operator pode iniciar autonomamente apenas `WORK_ORDER` e `TECHNICAL_REPORT`; outros tipos exigem criação e atribuição pela gestão.
+- A conclusão do Assignment para esses dois tipos move a Operation diretamente para `COMPLETED`, publica os efeitos oficiais de conclusão e notifica OWNER/MANAGER.
+- Tipos especiais atribuídos continuam terminando em `REVIEW`, sem alteração do workflow existente.
+- O Operator atribuído pode finalizar o Handoff e renderizar somente OS/RVT já concluídas por ele. Preview, Renderer, PDF Engine, Storage e download permanecem os oficiais.
+- A preparação do Handoff agora resolve assinatura e stale state pelo documento do tipo solicitado, evitando que a OS automática interfira no RVT.
+- Nenhuma entidade ou migration foi criada.
+
+## PMOC — confirmação de cobertura ativa (2026-07-22)
+
+- A criação consulta previamente coberturas PMOC ativas do cliente pelo endpoint `GET /api/v1/pmoc/active-coverage`.
+- Cobertura ativa significa PMOC e plano de manutenção ativos, com a data atual entre `startDate` e `endDate` (inclusive). Pausar gerações não encerra a cobertura.
+- Um segundo PMOC continua permitido, mas exige confirmação explícita com `confirmActiveCoverage: true`; sem ela, a API responde `409 PMOC_ACTIVE_COVERAGE_CONFIRMATION_REQUIRED`.
+- A confirmação é registrada de forma append-only em `AuditLog` como `PMOC_ACTIVE_COVERAGE_CONFIRMED`, incluindo os PMOCs ativos identificados.
+- Não houve alteração de entidades nem migration.
+
 ## ORBIT_SECURITY_FIX01 — ownership do Operator certificado (2026-07-18)
 
 - `Assignment` vigente passou a ser a única autoridade para o acesso operacional do papel
@@ -3044,3 +3061,19 @@ Status: implementado e validado em PostgreSQL/Docker.
 ## Fix: intervalo de datas em /documents e /documents/handoffs (2026-07-20)
 
 - `GET /documents` e `GET /documents/handoffs` quebravam com 500 (`PrismaClientValidationError: Invalid Date`) quando `to` vinha como timestamp ISO completo (ex.: dashboard V2 → radar/comparativo), pois o serviço anexava `T23:59:59.999Z` assumindo data-only, gerando `...ZT23:59:59.999Z`. Novo util `shared/utils/date-range.util.ts` (`dateRangeFilter`) aceita data-only (vira fim do dia UTC) e ISO completo (usado como está), e omite limites inválidos. Aplicado nos dois serviços. tsc + 80 testes unit aprovados.
+# Customer Workspace + Sales Foundation — 2026-07-22
+
+- A gestão operacional passou a ser centrada em `Customer`: a página dedicada do cliente reúne visão geral, equipamentos, serviços e vendas.
+- Criado o domínio `Sales` com `Sale`, `SaleItem`, `SaleHistory`, `SaleStatus` e snapshots imutáveis de preço/custo obtidos exclusivamente por `PricingService`.
+- Garantia da venda é persistida por duração, início e término; datas são calculadas no backend.
+- Recibos oficiais continuam sendo `Operation` + Document Engine. `Operation.sourceSaleId` apenas registra a venda de origem e o endpoint de prefill acelera o Wizard sem duplicar o documento.
+- Migration aditiva: `20260722143000_add_sales_domain`.
+- Endpoints: `GET/POST /sales`, `GET/PATCH/DELETE /sales/:id`, `PATCH /sales/:id/complete`, `GET /sales/:id/receipt-prefill`.
+- RBAC: OWNER/MANAGER administram vendas; VIEWER consulta; OPERATOR não acessa o domínio comercial.
+# Operator First Access Signature — 2026-07-22
+
+- O primeiro acesso do Operator agora conclui senha definitiva e assinatura institucional no mesmo fluxo.
+- `Signature.userId` cria vínculo opcional e único com `User`; não existe entidade ou storage paralelo.
+- A assinatura do operador é ativa, usa o mesmo `DocumentAssetResolver` e aparece automaticamente em `GET /signatures` e nos seletores técnicos dos relatórios.
+- Endpoint multipart criado: `POST /api/v1/users/complete-first-access`.
+- Migration aditiva: `20260722190000_user_institutional_signature`.

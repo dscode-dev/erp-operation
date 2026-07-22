@@ -117,6 +117,13 @@ export type SessionUser = {
 };
 
 export type ChangePasswordPayload = { currentPassword: string; newPassword: string };
+export type CompleteFirstAccessPayload = ChangePasswordPayload & {
+  signatureTitle: string;
+  profession?: string;
+  professionalCouncil?: string;
+  registrationNumber?: string;
+  department?: string;
+};
 
 export type CreateUserPayload = {
   email: string;
@@ -251,6 +258,7 @@ export type DocumentTemplate = {
 
 export type Signature = {
   id: string;
+  userId: string | null;
   name: string;
   title: string;
   profession: string | null;
@@ -258,6 +266,7 @@ export type Signature = {
   registrationNumber: string | null;
   department: string | null;
   hasImage: boolean;
+  user?: { id: string; name: string; role: Role; jobTitle: string | null } | null;
   mimeType: string | null;
   originalFileName: string | null;
   fileSize: number | null;
@@ -292,14 +301,18 @@ export type DocumentConfiguration = {
     OrganizationSettings,
     'id' | 'language' | 'timezone' | 'currency' | 'documentPrefix'
   >;
-  defaultTemplate: (DocumentTemplate & {
-    signature?: Signature | null;
-    institutionalSignatures?: Array<{ position: number; signature: Signature }>;
-  }) | null;
-  templates: Array<DocumentTemplate & {
-    signature?: Signature | null;
-    institutionalSignatures?: Array<{ position: number; signature: Signature }>;
-  }>;
+  defaultTemplate:
+    | (DocumentTemplate & {
+        signature?: Signature | null;
+        institutionalSignatures?: Array<{ position: number; signature: Signature }>;
+      })
+    | null;
+  templates: Array<
+    DocumentTemplate & {
+      signature?: Signature | null;
+      institutionalSignatures?: Array<{ position: number; signature: Signature }>;
+    }
+  >;
 };
 
 export type AssetWithContent = {
@@ -672,7 +685,13 @@ export type CreateEquipmentPayload = {
 /* ============ Operations (central operational domain) ============ */
 
 export type OperationType = 'PREVENTIVA' | 'CORRETIVA' | 'INSTALACAO' | 'PROJETO';
-export type OperationStatus = 'DRAFT' | 'PENDING' | 'IN_PROGRESS' | 'REVIEW' | 'COMPLETED' | 'CANCELED';
+export type OperationStatus =
+  | 'DRAFT'
+  | 'PENDING'
+  | 'IN_PROGRESS'
+  | 'REVIEW'
+  | 'COMPLETED'
+  | 'CANCELED';
 export type OperationMaintenanceType =
   | 'WEEKLY'
   | 'MONTHLY'
@@ -712,7 +731,18 @@ export type DocumentHandoff = {
     available: true;
     collectedBy: { id: string; name: string; role: Role } | null;
   };
-  technicalSignature: null | Pick<Signature, 'id' | 'name' | 'title' | 'profession' | 'professionalCouncil' | 'registrationNumber' | 'department' | 'active' | 'hasImage'>;
+  technicalSignature: null | Pick<
+    Signature,
+    | 'id'
+    | 'name'
+    | 'title'
+    | 'profession'
+    | 'professionalCouncil'
+    | 'registrationNumber'
+    | 'department'
+    | 'active'
+    | 'hasImage'
+  >;
   collectedBy: { id: string; name: string; role: Role } | null;
   reviewedBy: { id: string; name: string; role: Role } | null;
   finalizedBy: { id: string; name: string; role: Role } | null;
@@ -878,6 +908,17 @@ export type OperationSummary = {
 };
 
 export type OperationDetail = Omit<OperationSummary, 'equipment'> & {
+  sourceSale?: Pick<
+    Sale,
+    | 'id'
+    | 'number'
+    | 'status'
+    | 'soldAt'
+    | 'warrantyDays'
+    | 'warrantyStartsAt'
+    | 'warrantyEndsAt'
+    | 'total'
+  > | null;
   assignment?: {
     id: string;
     assignedBy: string;
@@ -921,26 +962,28 @@ export type OperationDetail = Omit<OperationSummary, 'equipment'> & {
   signedAt: string | null;
   photos: OperationPhoto[];
   documents: OperationDocument[];
-  maintenanceExecution?: (MaintenanceExecution & {
-    pmocExecutionRequest?: Pick<
-      PmocExecutionRequest,
-      'id' | 'executionNumber' | 'executionYear' | 'status' | 'origin'
-    > | null;
-    plan: MaintenancePlan & {
-      pmocPlan?: {
-        id: string;
-        number: number;
-        periodicity: PmocPeriodicity;
-        generationMode: PmocGenerationMode;
-        responsibleTechnician: string;
-        contractNumber: string | null;
-        artNumber: string | null;
-        equipments: Array<{
-          equipment: Pick<EquipmentSummary, 'id' | 'name' | 'tag'>;
-        }>;
-      } | null;
-    };
-  }) | null;
+  maintenanceExecution?:
+    | (MaintenanceExecution & {
+        pmocExecutionRequest?: Pick<
+          PmocExecutionRequest,
+          'id' | 'executionNumber' | 'executionYear' | 'status' | 'origin'
+        > | null;
+        plan: MaintenancePlan & {
+          pmocPlan?: {
+            id: string;
+            number: number;
+            periodicity: PmocPeriodicity;
+            generationMode: PmocGenerationMode;
+            responsibleTechnician: string;
+            contractNumber: string | null;
+            artNumber: string | null;
+            equipments: Array<{
+              equipment: Pick<EquipmentSummary, 'id' | 'name' | 'tag'>;
+            }>;
+          } | null;
+        };
+      })
+    | null;
 };
 
 export type OperationStats = {
@@ -950,6 +993,7 @@ export type OperationStats = {
 
 export type CreateOperationPayload = {
   customerId: string;
+  sourceSaleId?: string | null;
   addressId?: string | null;
   equipmentId?: string | null;
   /** Delegates the resulting Operation/Assignment when allowed by backend RBAC. */
@@ -1092,10 +1136,26 @@ export type PmocPeriodicity =
   | 'YEARLY'
   | 'CUSTOM';
 export type PmocGenerationMode = 'AUTO' | 'MANUAL' | 'PAUSED';
-export type PmocOperationalStatus = 'ACTIVE' | 'PENDING' | 'OVERDUE' | 'PAUSED' | 'ERROR' | 'EXPIRED';
-export type PmocExecutionRequestStatus = 'PENDING' | 'GENERATING_OS' | 'GENERATED' | 'FAILED' | 'CANCELLED';
+export type PmocOperationalStatus =
+  | 'ACTIVE'
+  | 'PENDING'
+  | 'OVERDUE'
+  | 'PAUSED'
+  | 'ERROR'
+  | 'EXPIRED';
+export type PmocExecutionRequestStatus =
+  | 'PENDING'
+  | 'GENERATING_OS'
+  | 'GENERATED'
+  | 'FAILED'
+  | 'CANCELLED';
 export type PmocExecutionOrigin = 'AUTO' | 'MANUAL';
-export type PmocSchedulerStatus = 'NEVER_RUN' | 'RUNNING' | 'SUCCESS' | 'PARTIAL_FAILURE' | 'FAILED';
+export type PmocSchedulerStatus =
+  | 'NEVER_RUN'
+  | 'RUNNING'
+  | 'SUCCESS'
+  | 'PARTIAL_FAILURE'
+  | 'FAILED';
 
 export type MaintenancePlan = {
   id: string;
@@ -1186,7 +1246,10 @@ export type PmocPlan = {
   defaultOperator?: Pick<TeamUser, 'id' | 'name' | 'username' | 'role'> | null;
   defaultTechnician?: Pick<TeamUser, 'id' | 'name' | 'username' | 'role'> | null;
   defaultAddress?: CustomerAddress | null;
-  signatureOverride?: Pick<Signature, 'id' | 'name' | 'title' | 'professionalCouncil' | 'department' | 'active'> | null;
+  signatureOverride?: Pick<
+    Signature,
+    'id' | 'name' | 'title' | 'professionalCouncil' | 'department' | 'active'
+  > | null;
   executionRequests?: PmocExecutionRequest[];
   equipments?: Array<{
     equipmentId: string;
@@ -1249,22 +1312,27 @@ export type PmocExecutionRequest = {
   cancelledAt: string | null;
   createdAt: string;
   updatedAt: string;
-  operation?: (Pick<OperationSummary, 'id' | 'number' | 'type' | 'status'> & {
-    scheduledFor?: string | null;
-    signedAt?: string | null;
-    _count?: { photos: number };
-    operator?: Pick<TeamUser, 'id' | 'name' | 'username' | 'role'>;
-    documents?: Array<{
-      id: string;
-      number: string;
-      status: OperationDocumentStatus;
-      renderedAt: string | null;
-      fileSize: number | null;
-      revision: number;
-      renderMetadata: Record<string, unknown> | null;
-    }>;
-  }) | null;
-  maintenanceExecution?: Pick<MaintenanceExecution, 'id' | 'scheduledAt' | 'status' | 'executedAt' | 'operationId'> | null;
+  operation?:
+    | (Pick<OperationSummary, 'id' | 'number' | 'type' | 'status'> & {
+        scheduledFor?: string | null;
+        signedAt?: string | null;
+        _count?: { photos: number };
+        operator?: Pick<TeamUser, 'id' | 'name' | 'username' | 'role'>;
+        documents?: Array<{
+          id: string;
+          number: string;
+          status: OperationDocumentStatus;
+          renderedAt: string | null;
+          fileSize: number | null;
+          revision: number;
+          renderMetadata: Record<string, unknown> | null;
+        }>;
+      })
+    | null;
+  maintenanceExecution?: Pick<
+    MaintenanceExecution,
+    'id' | 'scheduledAt' | 'status' | 'executedAt' | 'operationId'
+  > | null;
   plannedOperator?: Pick<TeamUser, 'id' | 'name' | 'username' | 'role' | 'jobTitle'> | null;
   plannedTechnician?: Pick<TeamUser, 'id' | 'name' | 'username' | 'role' | 'jobTitle'> | null;
 };
@@ -1393,6 +1461,70 @@ export type ProductPayload = Partial<{
   primarySupplierId: string | null;
   isActive: boolean;
 }>;
+
+export type SaleStatus = 'DRAFT' | 'COMPLETED' | 'CANCELED';
+export type SaleItem = {
+  id: string;
+  productId: string | null;
+  description: string;
+  quantity: string | number;
+  unit: string;
+  snapshotUnitPrice: string | number;
+  snapshotCost: string | number;
+  total: string | number;
+  product?: Product | null;
+};
+export type Sale = {
+  id: string;
+  number: number;
+  status: SaleStatus;
+  customerId: string;
+  customerAddressId: string | null;
+  soldAt: string;
+  warrantyDays: number | null;
+  warrantyStartsAt: string | null;
+  warrantyEndsAt: string | null;
+  subtotal: string | number;
+  discount: string | number;
+  total: string | number;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  customer: { id: string; name: string; tradeName: string | null };
+  customerAddress: CustomerAddress | null;
+  creator: { id: string; name: string; role: Role };
+  items: SaleItem[];
+  receiptOperations: Array<{
+    id: string;
+    number: number;
+    status: OperationStatus;
+    requestedDocumentType: DocumentTemplateType;
+    createdAt: string;
+  }>;
+};
+export type SalePayload = {
+  customerId: string;
+  customerAddressId?: string | null;
+  soldAt: string;
+  warrantyDays?: number;
+  warrantyStartsAt?: string;
+  discount?: number;
+  notes?: string | null;
+  items: Array<{ productId: string; quantity: number }>;
+};
+export type SaleReceiptPrefill = {
+  saleId: string;
+  receiptNumber: string;
+  issuedAt: string;
+  amount: string | number;
+  service: string;
+  description: string;
+  warrantyDays: number | null;
+  warrantyStartsAt: string | null;
+  warrantyEndsAt: string | null;
+  customer: { id: string; name: string; tradeName: string | null };
+  address: CustomerAddress | null;
+};
 
 export type InventoryItem = {
   id: string;

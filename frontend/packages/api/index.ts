@@ -47,6 +47,7 @@ export * as pricingApi from './pricing';
 export * as budgetsApi from './budgets';
 export * as cepApi from './cep';
 export * as notificationsApi from './notifications';
+export * as salesApi from './sales';
 
 export type {
   ListFinancialAccountsParams,
@@ -57,7 +58,11 @@ export type { ListPurchaseOrdersParams } from './procurement';
 export type { ListMaintenancePlansParams, ListMaintenanceExecutionsParams } from './maintenance';
 export type { ListMaintenanceChecklistTemplatesParams } from './maintenance-checklist-templates';
 export type { ListTechnicalCatalogsParams, TechnicalCatalogPayload } from './technical-catalogs';
-export type { ListPmocParams } from './pmoc';
+export type {
+  ListPmocParams,
+  PmocActiveCoverageConflict,
+  PmocActiveCoverageResult,
+} from './pmoc';
 export type { OperationPhotoContent } from './operation';
 export type { DocumentCatalogItem } from './documents';
 export type { ListSignaturesParams, SignaturePayload } from './signatures';

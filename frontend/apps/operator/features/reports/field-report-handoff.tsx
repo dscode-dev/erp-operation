@@ -18,6 +18,7 @@ import { PhotoInput, type CapturedPhoto } from '@erp/ui/photo-input';
 import { SignaturePad } from '@erp/ui/documents/signature-pad';
 
 const FIELD_TYPES: DocumentKind[] = ['WORK_ORDER', 'TECHNICAL_REPORT', 'TECHNICAL_OPINION', 'BUDGET', 'PMOC'];
+const SELF_SERVICE_TYPES = new Set<DocumentKind>(['WORK_ORDER', 'TECHNICAL_REPORT']);
 const CUSTOMER_SIGNATURE = new Set<DocumentKind>(['WORK_ORDER', 'TECHNICAL_REPORT', 'BUDGET', 'PMOC']);
 const input = 'w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--color-primary)]';
 
@@ -98,7 +99,7 @@ export function FieldReportHandoff({ operation, onSaved }: { operation: Operatio
       <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">Colete os dados em campo. A emissão final será realizada pela Platform.</p>
     </div>
     <div className="space-y-4 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
-      <label className="space-y-1 text-sm"><span className="font-medium">Tipo do relatório</span><select className={input} value={type} onChange={(event) => { setType(event.target.value as DocumentKind); setHandoff(null); }} disabled={isPmoc || managementAssigned}>{FIELD_TYPES.filter((item) => !isPmoc || item === 'PMOC').map((item) => <option key={item} value={item}>{DOCUMENT_KIND_LABEL[item]}</option>)}</select>{managementAssigned && <span className="block text-xs text-[var(--color-muted-foreground)]">Definido pela gestão para este atendimento.</span>}</label>
+      <label className="space-y-1 text-sm"><span className="font-medium">Tipo do relatório</span><select className={input} value={type} onChange={(event) => { setType(event.target.value as DocumentKind); setHandoff(null); }} disabled={isPmoc || managementAssigned}>{FIELD_TYPES.filter((item) => isPmoc ? item === 'PMOC' : managementAssigned ? item === requestedType : SELF_SERVICE_TYPES.has(item)).map((item) => <option key={item} value={item}>{DOCUMENT_KIND_LABEL[item]}</option>)}</select>{managementAssigned && <span className="block text-xs text-[var(--color-muted-foreground)]">Definido pela gestão para este atendimento.</span>}</label>
       <div className="space-y-1 text-sm"><MultiSelect label="Equipamentos envolvidos" value={equipmentIds} onChange={setEquipmentIds} options={options} placeholder="Selecionar equipamentos" /></div>
       <TextArea label={type === 'TECHNICAL_REPORT' ? 'Motivo da visita' : type === 'TECHNICAL_OPINION' ? 'Contexto da inspeção' : type === 'BUDGET' ? 'Necessidade identificada' : 'Problema relatado'} value={issue} onChange={setIssue} />
       <TextArea label="Condições encontradas / diagnóstico" value={diagnosis} onChange={setDiagnosis} />

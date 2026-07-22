@@ -1,4 +1,4 @@
-import { HttpStatus, Inject, Injectable } from '@nestjs/common';
+import { HttpStatus, Inject, Injectable, Optional } from '@nestjs/common';
 import { Prisma, Role } from '@prisma/client';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { extname } from 'node:path';
@@ -22,8 +22,11 @@ import type { AuthenticatedUser } from '../../shared/types/authenticated-user.ty
 import { buildPaginatedResponse, type PaginatedResponse } from '../../shared/types/pagination.types';
 import { PasswordService } from '../auth/password.service';
 import { PrismaService } from '../database/prisma.service';
+import { SIGNATURE_AUDIT_ACTIONS, SIGNATURE_RESOURCE } from '../../shared/constants/signatures.constants';
+import { SignaturesService } from '../signatures/signatures.service';
 import type {
   ChangePasswordDto,
+  CompleteFirstAccessDto,
   CreateUserDto,
   ListUsersQueryDto,
   UpdatePreferencesDto,
@@ -31,6 +34,7 @@ import type {
   UserPermissionDto,
 } from './dto/user.dto';
 import type { UploadedAvatarFile } from './types/uploaded-avatar.type';
+import type { UploadedSignatureFile } from '../signatures/types/uploaded-signature-file.type';
 
 export interface UserAuditContext {
   requestId: string;
@@ -110,6 +114,7 @@ export class UsersService {
     private readonly passwords: PasswordService,
     @Inject(STORAGE_PROVIDER_TOKEN)
     private readonly storage: StorageProviderContract,
+    @Optional() private readonly signatures?: SignaturesService,
   ) {}
 
   async list(query: ListUsersQueryDto): Promise<PaginatedResponse<NormalizedUserResponse>> {
@@ -347,6 +352,140 @@ export class UsersService {
       }),
     ]);
     return { changed: true, reauthenticationRequired: true };
+  }
+
+  async completeFirstAccess(
+    id: string,
+    dto: CompleteFirstAccessDto,
+    file: UploadedSignatureFile | undefined,
+    context: UserAuditContext,
+  ): Promise<{ completed: true; signatureId: string; reauthenticationRequired: true }> {
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        name: true,
+        jobTitle: true,
+        passwordHash: true,
+        mustChangePassword: true,
+        institutionalSignature: { select: { id: true, imageStorageKey: true } },
+      },
+    });
+    if (!user) throw this.userNotFound();
+    if (!user.mustChangePassword) {
+      throw new ApplicationException(
+        ERROR_CODES.BAD_REQUEST,
+        'First access was already completed',
+        HttpStatus.CONFLICT,
+      );
+    }
+    if (!(await this.passwords.verifyPassword(user.passwordHash, dto.currentPassword))) {
+      throw new ApplicationException(
+        ERROR_CODES.PASSWORD_CURRENT_INVALID,
+        'Current password is invalid',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    if (await this.passwords.verify(user.passwordHash, dto.newPassword)) {
+      throw new ApplicationException(
+        ERROR_CODES.PASSWORD_REUSE_NOT_ALLOWED,
+        'New password must be different from the current password',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    if (!this.signatures) {
+      throw new ApplicationException(
+        ERROR_CODES.INTERNAL_SERVER_ERROR,
+        'Signature service is unavailable',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+    const signatures = this.signatures;
+    const passwordHash = await this.passwords.hash(dto.newPassword);
+    const staged = await signatures.stageUserSignatureImage(file);
+    const now = new Date();
+    try {
+      const signature = await this.prisma.$transaction(async (tx) => {
+        const organization = await tx.organization.findFirst({
+          orderBy: { createdAt: 'asc' },
+          select: { id: true },
+        });
+        if (!organization) {
+          throw new ApplicationException(
+            ERROR_CODES.ORGANIZATION_NOT_FOUND,
+            'Organization was not found',
+            HttpStatus.NOT_FOUND,
+          );
+        }
+        const saved = await tx.signature.upsert({
+          where: { userId: id },
+          create: {
+            organizationId: organization.id,
+            userId: id,
+            name: user.name,
+            title: dto.signatureTitle || user.jobTitle || 'Técnico',
+            profession: dto.profession || null,
+            professionalCouncil: dto.professionalCouncil || null,
+            registrationNumber: dto.registrationNumber || null,
+            department: dto.department || null,
+            imageStorageKey: staged.storageKey,
+            mimeType: staged.mimeType,
+            originalFileName: staged.originalFileName,
+            fileSize: staged.fileSize,
+            active: true,
+          },
+          update: {
+            name: user.name,
+            title: dto.signatureTitle || user.jobTitle || 'Técnico',
+            profession: dto.profession || null,
+            professionalCouncil: dto.professionalCouncil || null,
+            registrationNumber: dto.registrationNumber || null,
+            department: dto.department || null,
+            imageStorageKey: staged.storageKey,
+            mimeType: staged.mimeType,
+            originalFileName: staged.originalFileName,
+            fileSize: staged.fileSize,
+            active: true,
+            deletedAt: null,
+          },
+          select: { id: true },
+        });
+        await tx.user.update({
+          where: { id },
+          data: { passwordHash, mustChangePassword: false },
+        });
+        await tx.refreshToken.updateMany({
+          where: { userId: id, revokedAt: null },
+          data: { revokedAt: now },
+        });
+        await tx.auditLog.createMany({
+          data: [
+            this.auditData(USER_AUDIT_ACTIONS.PASSWORD_CHANGED, USER_RESOURCE, id, context, {
+              targetUserId: id,
+              sessionsRevoked: true,
+              firstAccess: true,
+            }),
+            this.auditData(
+              user.institutionalSignature
+                ? SIGNATURE_AUDIT_ACTIONS.SIGNATURE_UPDATED
+                : SIGNATURE_AUDIT_ACTIONS.SIGNATURE_CREATED,
+              SIGNATURE_RESOURCE,
+              id,
+              context,
+              { signatureId: saved.id, userId: id, firstAccess: true, imageUploaded: true },
+            ),
+          ],
+        });
+        return saved;
+      });
+      if (user.institutionalSignature?.imageStorageKey) {
+        await signatures.discardStagedImage(user.institutionalSignature.imageStorageKey);
+      }
+      return { completed: true, signatureId: signature.id, reauthenticationRequired: true };
+    } catch (error) {
+      await signatures.discardStagedImage(staged.storageKey);
+      throw error;
+    }
   }
 
   async getPreferences(userId: string): Promise<PreferencesResponse> {

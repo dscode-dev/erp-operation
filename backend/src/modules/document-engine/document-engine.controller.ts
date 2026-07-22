@@ -97,7 +97,7 @@ export class DocumentEngineController {
     return this.documents.previewDocument(params.documentId, actor, contextFromRequest(request));
   }
 
-  @Roles(Role.OWNER, Role.MANAGER)
+  @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR)
   @Post(':documentId/render')
   renderDocument(
     @Param() params: DocumentIdParamsDto,
@@ -154,7 +154,7 @@ export class DocumentEngineController {
     return this.handoffs.selectTechnicalSignature(documentId, body.signatureId, actor, contextFromRequest(request));
   }
 
-  @Roles(Role.OWNER, Role.MANAGER)
+  @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR)
   @Post(':documentId/handoff/finalize')
   finalizeReview(@Param('documentId', new ParseUUIDPipe({ version: '4' })) documentId: string, @Body() _body: FinalizeDocumentReviewDto, @CurrentUser() actor: AuthenticatedUser, @Req() request: RequestWithId): Promise<unknown> {
     return this.handoffs.finalize(documentId, actor, contextFromRequest(request));

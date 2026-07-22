@@ -16,6 +16,7 @@ import {
   DOCUMENT_ENGINE_AUDIT_ACTIONS,
   DOCUMENT_ENGINE_RESOURCE,
   OPERATOR_HANDOFF_DOCUMENT_TYPES,
+  OPERATOR_DIRECT_COMPLETION_DOCUMENT_TYPES,
 } from '../../shared/constants/document-engine.constants';
 import { ERROR_CODES } from '../../shared/constants/error-codes.constants';
 import { dateRangeFilter } from '../../shared/utils/date-range.util';
@@ -37,6 +38,9 @@ import type { DocumentAuditContext } from './document-engine.service';
 const MANAGEMENT_ROLES: Role[] = [Role.OWNER, Role.MANAGER];
 const OPERATOR_TYPES = new Set<DocumentTemplateType>(
   [...OPERATOR_HANDOFF_DOCUMENT_TYPES] as DocumentTemplateType[],
+);
+const OPERATOR_DIRECT_COMPLETION_TYPES = new Set<DocumentTemplateType>(
+  [...OPERATOR_DIRECT_COMPLETION_DOCUMENT_TYPES] as DocumentTemplateType[],
 );
 const CUSTOMER_SIGNATURE_TYPES = new Set<DocumentTemplateType>(
   [...CUSTOMER_SIGNATURE_REQUIRED_DOCUMENT_TYPES] as DocumentTemplateType[],
@@ -97,7 +101,15 @@ const COLLECTION_OPERATION_INCLUDE = {
   operator: { select: { id: true, name: true } },
   inspectedEquipments: { select: { equipmentId: true } },
   photos: { select: { id: true } },
-  documents: { select: { id: true, renderedAt: true } },
+  documents: {
+    select: {
+      id: true,
+      type: true,
+      renderedAt: true,
+      collectedById: true,
+      technicalSignatureId: true,
+    },
+  },
   assignment: { select: { assignedBy: true, assignedTo: true } },
   maintenanceExecution: {
     select: {
@@ -172,6 +184,17 @@ export class DocumentHandoffService {
   ): Promise<unknown> {
     this.assertTypeAllowed(dto.type, actor);
     const operation = await this.operationForActor(dto.operationId, actor, context);
+    if (
+      actor.role === Role.OPERATOR &&
+      !OPERATOR_DIRECT_COMPLETION_TYPES.has(dto.type) &&
+      operation.assignment?.assignedBy === operation.assignment?.assignedTo
+    ) {
+      throw new ApplicationException(
+        ERROR_CODES.DOCUMENT_HANDOFF_NOT_ALLOWED,
+        'Documentos diferentes de OS e Visita Técnica precisam ser atribuídos pela gestão',
+        HttpStatus.FORBIDDEN,
+      );
+    }
     const origin = actor.role === Role.OPERATOR ? DocumentHandoffOrigin.OPERATOR : DocumentHandoffOrigin.PLATFORM;
     const defaultTechnicalSignatureId = await this.defaultTechnicalSignatureId(
       operation.maintenanceExecution?.plan.pmocPlan?.signatureOverrideId ?? null,
@@ -180,6 +203,7 @@ export class DocumentHandoffService {
       dto.type === DocumentTemplateType.RECEIPT && operation.receiptNumber
         ? operation.receiptNumber
         : formatDocumentNumber(OPERATION_DOCUMENT_PREFIX[dto.type], operation.number);
+    const existingDocument = operation.documents.find((item) => item.type === dto.type) ?? null;
     const document = await this.prisma.$transaction(async (tx) => {
       const saved = await tx.operationDocument.upsert({
         where: { operationId_type: { operationId: dto.operationId, type: dto.type } },
@@ -197,10 +221,12 @@ export class DocumentHandoffService {
         update: {
           number: documentNumber,
           handoffOrigin: origin,
-          ...(operation.documents[0]?.id ? {} : { collectedById: actor.id }),
-          ...(operation.documents[0]?.id ? {} : { technicalSignatureId: defaultTechnicalSignatureId }),
+          ...(existingDocument?.collectedById ? {} : { collectedById: actor.id }),
+          ...(existingDocument?.technicalSignatureId
+            ? {}
+            : { technicalSignatureId: defaultTechnicalSignatureId }),
           collectionSnapshot: this.operationSnapshot(operation),
-          ...(operation.documents[0]?.renderedAt
+          ...(existingDocument?.renderedAt
             ? { editorialStatus: DocumentEditorialStatus.STALE }
             : {}),
         },
@@ -358,8 +384,29 @@ export class DocumentHandoffService {
   }
 
   async finalize(documentId: string, actor: AuthenticatedUser, context: DocumentAuditContext): Promise<unknown> {
-    this.assertReviewer(actor);
     const document = await this.documentOrThrow(documentId);
+    if (actor.role === Role.OPERATOR) {
+      await this.assertAccess(document, actor, context);
+      if (!OPERATOR_DIRECT_COMPLETION_TYPES.has(document.type)) {
+        throw new ApplicationException(
+          ERROR_CODES.DOCUMENT_HANDOFF_NOT_ALLOWED,
+          'Somente Ordem de Serviço e Relatório de Visita Técnica podem ser concluídos diretamente pelo operador',
+          HttpStatus.FORBIDDEN,
+        );
+      }
+      if (!document.submittedAt || document.operation?.status !== 'COMPLETED') {
+        throw new ApplicationException(
+          ERROR_CODES.DOCUMENT_REVIEW_INCOMPLETE,
+          'Conclua o atendimento e envie os dados antes de emitir o documento',
+          HttpStatus.CONFLICT,
+        );
+      }
+    } else {
+      this.assertReviewer(actor);
+    }
+    if (document.editorialStatus === DocumentEditorialStatus.READY && document.finalizedAt) {
+      return this.response(document, true);
+    }
     const issues = this.validationIssues(document, true);
     if (issues.length) {
       throw new ApplicationException(ERROR_CODES.DOCUMENT_REVIEW_INCOMPLETE, 'A revisão possui pendências obrigatórias', HttpStatus.CONFLICT, { issues });
@@ -394,8 +441,13 @@ export class DocumentHandoffService {
             validationIssues: [],
           },
         });
-        await this.appendRevisionTx(tx, saved.id, DocumentRevisionAction.FINALIZED, DocumentHandoffOrigin.PLATFORM, actor.id, ['editorialStatus', 'technicalSignatureSnapshot']);
-        await this.notifyOperatorReadyTx(tx, saved.id, document.operation?.operatorId ?? null);
+        const origin = actor.role === Role.OPERATOR
+          ? DocumentHandoffOrigin.OPERATOR
+          : DocumentHandoffOrigin.PLATFORM;
+        await this.appendRevisionTx(tx, saved.id, DocumentRevisionAction.FINALIZED, origin, actor.id, ['editorialStatus', 'technicalSignatureSnapshot']);
+        if (actor.role !== Role.OPERATOR) {
+          await this.notifyOperatorReadyTx(tx, saved.id, document.operation?.operatorId ?? null);
+        }
         await tx.auditLog.create({ data: this.audit(DOCUMENT_ENGINE_AUDIT_ACTIONS.DOCUMENT_REVIEW_FINALIZED, actor, context, saved.id, document.operationId) });
         return tx.operationDocument.findUniqueOrThrow({ where: { id: saved.id }, include: DOCUMENT_HANDOFF_INCLUDE });
       });

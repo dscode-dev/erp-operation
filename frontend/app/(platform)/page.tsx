@@ -145,7 +145,7 @@ export default function PlatformHome() {
           </DashboardSection>
         </Gate>
 
-        <DashboardSection className="h-full" title="Atividades relevantes e recentes" action={<Link href="/equipamentos" className="text-xs font-medium text-[var(--color-primary)] hover:underline">ver ativos</Link>}>
+        <DashboardSection className="h-full" title="Atividades relevantes e recentes" action={<Link href="/clientes" className="text-xs font-medium text-[var(--color-primary)] hover:underline">ver clientes e ativos</Link>}>
           <RecentActivity loading={lifecycle.loading && !lifecycle.data} error={lifecycle.error} onRetry={lifecycle.refetch} events={lifecycle.data?.items ?? []} />
         </DashboardSection>
       </div>

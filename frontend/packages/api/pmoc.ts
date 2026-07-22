@@ -16,6 +16,7 @@ import type {
 export type CreatePmocPayload = {
   name?: string;
   customerId: string;
+  confirmActiveCoverage?: boolean;
   equipmentId: string;
   equipmentIds?: string[];
   scopeCatalogIds?: string[];
@@ -42,6 +43,23 @@ export type CreatePmocPayload = {
     interval?: number;
   };
   active?: boolean;
+};
+
+export type PmocActiveCoverageConflict = {
+  id: string;
+  number: number;
+  name: string;
+  coverage: string | null;
+  startDate: string;
+  endDate: string;
+  operationalStatus: string;
+  equipmentCount: number;
+};
+
+export type PmocActiveCoverageResult = {
+  hasActiveCoverage: boolean;
+  checkedAt: string;
+  conflicts: PmocActiveCoverageConflict[];
 };
 
 export type UpdatePmocPayload = Partial<
@@ -109,6 +127,13 @@ export function getNameSuggestion(
   opts?: { signal?: AbortSignal },
 ): Promise<{ name: string; provisionalNumber: number }> {
   return api.get('/pmoc/name-suggestion', { query: { customerId }, signal: opts?.signal });
+}
+
+export function getActiveCoverage(
+  customerId: string,
+  opts?: { signal?: AbortSignal },
+): Promise<PmocActiveCoverageResult> {
+  return api.get('/pmoc/active-coverage', { query: { customerId }, signal: opts?.signal });
 }
 
 export function createPmoc(payload: CreatePmocPayload): Promise<PmocPlan> {

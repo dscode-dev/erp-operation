@@ -125,7 +125,7 @@ describe('Field Report Handoff', () => {
     expect(storage.saves).toHaveLength(3);
   });
 
-  it('enforces Assignment authorization, document matrix and management-only finalization', async () => {
+  it('enforces Assignment authorization and management finalization for special documents', async () => {
     await createOrganization();
     const owner = await createActor(Role.OWNER, 'matrix-owner');
     const operator = await createActor(Role.OPERATOR, 'matrix-operator');
@@ -141,6 +141,61 @@ describe('Field Report Handoff', () => {
     await expect(service.finalize(opinion.id, operator, audit)).rejects.toMatchObject({ status: 403 });
     await service.startReview(opinion.id, owner, audit);
     await expect(service.finalize(opinion.id, owner, audit)).rejects.toMatchObject({ status: 409 });
+  });
+
+  it('allows the assigned operator to finalize a completed Work Order', async () => {
+    const organization = await createOrganization();
+    const operator = await createActor(Role.OPERATOR, 'direct-work-order-operator');
+    const operation = await createOperation(operator);
+    await prisma.assignment.create({
+      data: { operationId: operation.id, assignedBy: operator.id, assignedTo: operator.id },
+    });
+    const signatureKey = 'documents/signatures/direct-work-order.png';
+    storage.files.set(signatureKey, PNG);
+    await prisma.signature.create({
+      data: {
+        organizationId: organization.id,
+        name: 'Responsável técnica padrão',
+        title: 'Responsável técnica',
+        imageStorageKey: signatureKey,
+        mimeType: 'image/png',
+        originalFileName: 'direct-work-order.png',
+        fileSize: PNG.length,
+        active: true,
+        isDefault: true,
+      },
+    });
+    await prisma.operation.update({
+      where: { id: operation.id },
+      data: {
+        status: 'COMPLETED',
+        completedAt: new Date(),
+        signatureData: `data:image/png;base64,${PNG.toString('base64')}`,
+        customerSignerName: 'Cliente em campo',
+        signedAt: new Date(),
+      },
+    });
+    await prisma.operationDocument.create({
+      data: {
+        operationId: operation.id,
+        type: DocumentTemplateType.WORK_ORDER,
+        number: 'OS-000001',
+      },
+    });
+
+    const draft = await service.saveDraft(
+      { operationId: operation.id, type: DocumentTemplateType.WORK_ORDER },
+      operator,
+      audit,
+    ) as { id: string; technicalSignature: { id: string } };
+    expect(draft.technicalSignature.id).toBeTruthy();
+    await service.submit(draft.id, operator, audit);
+    await expect(service.finalize(draft.id, operator, audit)).resolves.toMatchObject({
+      editorialStatus: 'READY',
+      finalizedBy: { id: operator.id },
+    });
+    await expect(prisma.operationDocument.findUniqueOrThrow({ where: { id: draft.id } }))
+      .resolves.toMatchObject({ editorialStatus: 'READY', finalizedById: operator.id });
   });
 
   it('prioritizes the PMOC technical signature override when preparing the official handoff', async () => {
@@ -184,28 +239,18 @@ describe('Field Report Handoff', () => {
     ).resolves.toMatchObject({ technicalSignature: { id: override.id, name: override.name } });
   });
 
-  it('keeps operator-initiated work in DRAFT until management starts approval', async () => {
+  it('rejects a special document initiated by an operator without management assignment', async () => {
     await createOrganization();
-    const owner = await createActor(Role.OWNER, 'self-review-owner');
     const operator = await createActor(Role.OPERATOR, 'self-review-operator');
     const operation = await createOperation(operator);
     await prisma.assignment.create({
       data: { operationId: operation.id, assignedBy: operator.id, assignedTo: operator.id },
     });
 
-    const draft = await service.saveDraft(
+    await expect(service.saveDraft(
       { operationId: operation.id, type: DocumentTemplateType.TECHNICAL_OPINION },
       operator,
       audit,
-    ) as { id: string };
-    await expect(service.submit(draft.id, operator, audit)).resolves.toMatchObject({
-      editorialStatus: 'DRAFT',
-      workflowStatus: 'DRAFT',
-      assignmentOrigin: 'OPERATOR',
-    });
-    await expect(service.startReview(draft.id, owner, audit)).resolves.toMatchObject({
-      editorialStatus: 'PENDING',
-      workflowStatus: 'REVIEW',
-    });
+    )).rejects.toMatchObject({ status: 403 });
   });
 });

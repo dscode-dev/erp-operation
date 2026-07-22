@@ -1,5 +1,19 @@
 # Frontend Integration
 
+## Operator — fluxo OS/RVT concluído em campo
+
+Criação autônoma deve oferecer somente Ordem de Serviço e Relatório de Visita Técnica. O fluxo oficial é: criar Operation `DRAFT` → aceitar/iniciar Assignment → salvar coleta e assinatura → salvar/enviar Handoff → concluir Assignment → finalizar Handoff → renderizar documento → baixar/compartilhar pelo endpoint autenticado.
+
+Para documentos especiais criados pela gestão, o Operator apenas executa a Assignment e envia a coleta; a conclusão permanece em `REVIEW`. O frontend não deve inferir permissão somente pelo tipo: erros `403/409` do backend continuam autoritativos.
+
+Se a renderização falhar após a conclusão, a área Documentos pode repetir `save/submit/finalize/render` para OS/RVT concluídas, sem criar documento paralelo.
+
+## PMOC — confirmação de cobertura ativa
+
+Ao selecionar o cliente em um novo PMOC, consulte `GET /pmoc/active-coverage?customerId=...`. Se `hasActiveCoverage` for verdadeiro, exiba os PMOCs encontrados e solicite confirmação antes da criação. Somente após confirmação envie `confirmActiveCoverage: true` no `POST /pmoc`.
+
+O frontend também deve tratar `409 PMOC_ACTIVE_COVERAGE_CONFIRMATION_REQUIRED`, pois uma cobertura pode ser criada entre a consulta e o envio. Nesse caso, deve atualizar o aviso e pedir nova confirmação. Não aplicar essa verificação durante edição ou revisão de um PMOC existente.
+
 ## ORBIT_SECURITY_FIX01 — integração de ownership
 
 - O frontend não deve filtrar operações, documentos, fotos, histórico ou execuções por operador.
@@ -2464,3 +2478,19 @@ Drawer. OWNER/MANAGER podem renderizar; o backend permanece a autoridade.
 4. Após criar, use budget.document.id para escolher assinatura técnica e coletar assinatura do cliente pelo handoff oficial.
 5. Preview usa GET /budgets/:id/preview; emissão usa POST /budgets/:id/render; download usa GET /budgets/:id/download.
 6. document.editorialStatus=STALE exige nova emissão. DocumentViewer permanece o único visualizador.
+# Integração Customer Workspace e Vendas
+
+- A lista de clientes navega para `/clientes/:id`; o drawer é reservado a criar/editar.
+- Equipamentos: consumir `GET /equipments?customerId=:id` com paginação.
+- Serviços: consumir `GET /operations?customerId=:id` com paginação; o detalhe continua no `OperationDetailDrawer` oficial.
+- Vendas: consumir `GET /sales?customerId=:id`; nunca calcular preço, custo, total ou fim da garantia como autoridade no frontend.
+- Para Recibo vindo de venda, selecionar uma venda concluída, chamar `GET /sales/:id/receipt-prefill` e criar a operação documental com `sourceSaleId`. Preview, render e download continuam no Document Engine.
+- Estados esperados: loading, erro/retry, vazio, `DRAFT`, `COMPLETED`, `CANCELED`.
+# Primeiro acesso do Operator
+
+1. Validar senha temporária, nova senha e confirmação localmente.
+2. Capturar e confirmar a assinatura com `SignaturePad`.
+3. Enviar um único multipart para `POST /users/complete-first-access`.
+4. Limpar tokens e redirecionar ao login; todas as sessões foram revogadas.
+
+A assinatura retornada pertence ao mesmo catálogo de `GET /signatures`. Nenhum frontend deve copiá-la para estado persistente, base64 pública ou cadastro paralelo.

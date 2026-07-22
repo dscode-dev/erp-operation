@@ -115,6 +115,49 @@ describe('AppSec Maintenance Planning and PMOC closure', () => {
     expect(errorCode(mismatchedEquipment)).toBe(ERROR_CODES.PMOC_INVALID_RELATIONSHIP);
   });
 
+  it('warns about active customer coverage and creates another PMOC only after explicit confirmation', async () => {
+    const graph = await createCustomerGraph();
+    const startDate = new Date();
+    startDate.setUTCDate(startDate.getUTCDate() - 30);
+    const endDate = new Date();
+    endDate.setUTCFullYear(endDate.getUTCFullYear() + 1);
+    const payload = {
+      customerId: graph.customerId,
+      equipmentId: graph.equipmentId,
+      equipmentIds: [graph.equipmentId],
+      responsibleTechnician: owner.user.name,
+      startDate: startDate.toISOString(),
+      endDate: endDate.toISOString(),
+    };
+
+    const first = await authPost(owner, '/api/v1/pmoc').send(payload);
+    expect(first.status).toBe(201);
+    const firstData = (first.body as { data: { id: string } }).data;
+
+    const coverage = await authGet(
+      owner,
+      `/api/v1/pmoc/active-coverage?customerId=${graph.customerId}`,
+    );
+    expect(coverage.status).toBe(200);
+    expect((coverage.body as { data: { hasActiveCoverage: boolean; conflicts: unknown[] } }).data)
+      .toMatchObject({ hasActiveCoverage: true, conflicts: [expect.objectContaining({ id: firstData.id })] });
+
+    const unconfirmed = await authPost(owner, '/api/v1/pmoc').send(payload);
+    expect(unconfirmed.status).toBe(409);
+    expect(errorCode(unconfirmed)).toBe(ERROR_CODES.PMOC_ACTIVE_COVERAGE_CONFIRMATION_REQUIRED);
+    await expect(prisma.pmocPlan.count({ where: { customerId: graph.customerId } })).resolves.toBe(1);
+
+    const confirmed = await authPost(owner, '/api/v1/pmoc').send({
+      ...payload,
+      confirmActiveCoverage: true,
+    });
+    expect(confirmed.status).toBe(201);
+    await expect(prisma.pmocPlan.count({ where: { customerId: graph.customerId } })).resolves.toBe(2);
+    await expect(prisma.auditLog.count({
+      where: { action: 'PMOC_ACTIVE_COVERAGE_CONFIRMED', actor: owner.user.id },
+    })).resolves.toBe(1);
+  });
+
   it('assigns an independent PMOC number and derives the official plan name from it', async () => {
     const graph = await createCustomerGraph();
     const customer = await prisma.customer.findUniqueOrThrow({ where: { id: graph.customerId } });

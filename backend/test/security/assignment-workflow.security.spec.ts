@@ -1,6 +1,6 @@
-import { AssignmentEventType, AssignmentStatus, Role } from '@prisma/client';
+import { AssignmentEventType, AssignmentStatus, DocumentTemplateType, OperationType, Role } from '@prisma/client';
 import { ERROR_CODES } from '../../src/shared/constants/error-codes.constants';
-import { createOperation, createOrganization, prisma } from '../integration/helpers';
+import { createCustomerGraph, createOperation, createOrganization, prisma } from '../integration/helpers';
 import {
   authPatch,
   authPost,
@@ -77,6 +77,45 @@ describe('AppSec Assignment workflow abuse', () => {
       where: { operationId: operation.id, event: AssignmentEventType.ACCEPTED },
     });
     expect(acceptedCount).toBe(1);
+  });
+
+  it('completes a Work Order directly and notifies management without review', async () => {
+    const operation = await createOperation(operatorA.user);
+    const assignment = await createAssignment(operation.id, operatorA.user.id);
+
+    expect((await authPatch(operatorA, `/api/v1/assignments/${assignment.id}/accept`)).status).toBe(200);
+    expect((await authPatch(operatorA, `/api/v1/assignments/${assignment.id}/start`)).status).toBe(200);
+    expect((await authPatch(operatorA, `/api/v1/assignments/${assignment.id}/complete`).send({
+      notes: 'OS concluída em campo',
+    })).status).toBe(200);
+
+    await expect(prisma.operation.findUniqueOrThrow({ where: { id: operation.id } }))
+      .resolves.toMatchObject({ status: 'COMPLETED' });
+    await expect(prisma.notification.findFirstOrThrow({
+      where: { recipientUserId: owner.user.id, entityId: operation.id },
+    })).resolves.toMatchObject({ title: 'Atendimento concluído' });
+  });
+
+  it('allows autonomous OS/RVT creation but rejects special document types', async () => {
+    const graph = await createCustomerGraph();
+    const base = {
+      customerId: graph.customerId,
+      equipmentId: graph.equipmentId,
+      type: OperationType.CORRETIVA,
+      status: 'DRAFT',
+    };
+
+    expect((await authPost(operatorA, '/api/v1/operations').send({
+      ...base,
+      documentType: DocumentTemplateType.TECHNICAL_REPORT,
+    })).status).toBe(201);
+
+    const forbidden = await authPost(operatorA, '/api/v1/operations').send({
+      ...base,
+      documentType: DocumentTemplateType.PMOC,
+    });
+    expect(forbidden.status).toBe(403);
+    expect(errorCode(forbidden)).toBe(ERROR_CODES.OPERATION_OPERATOR_DOCUMENT_TYPE_FORBIDDEN);
   });
 
   async function createAssignment(

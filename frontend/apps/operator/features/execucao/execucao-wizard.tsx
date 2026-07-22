@@ -6,8 +6,8 @@
  * Fluxo: Checklist → Coleta → Fotos → Materiais → Revisão do cliente (visão
  * geral organizada + assinatura). Ao finalizar: salva os dados na Operation,
  * registra o handoff do documento, coleta a assinatura do cliente e conclui a
- * execução — a Operation vai para "Revisão", aguardando aprovação do
- * responsável técnico na Platform.
+ * execução. OS e Visita Técnica são concluídas e emitidas no próprio fluxo;
+ * documentos especiais atribuídos preservam a revisão da gestão.
  */
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -33,6 +33,7 @@ import { serviceTypeLabel } from "@operator/lib/service-types";
 
 const STEPS = ["Checklist", "Coleta", "Fotos", "Materiais", "Revisão do cliente"] as const;
 const CUSTOMER_SIGNATURE = new Set<DocumentKind>(["WORK_ORDER", "TECHNICAL_REPORT", "BUDGET", "PMOC"]);
+const DIRECT_COMPLETION = new Set<DocumentKind>(["WORK_ORDER", "TECHNICAL_REPORT"]);
 const inputCls = "w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--color-primary)]";
 
 export function ExecucaoWizard({ assignmentId }: { assignmentId: string }) {
@@ -68,6 +69,7 @@ function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; oper
 
   const managementAssigned = Boolean(operation.assignment && operation.assignment.assignedBy !== operation.assignment.assignedTo);
   const type: DocumentKind = operation.requestedDocumentType ?? "WORK_ORDER";
+  const directCompletion = DIRECT_COMPLETION.has(type);
 
   const [checklist, setChecklist] = useState<OperationChecklistItem[]>(operation.checklist);
   const [equipmentIds, setEquipmentIds] = useState<string[]>(
@@ -151,6 +153,10 @@ function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; oper
       }
       await documentsApi.submitHandoff(handoff.id);
       await assignmentsApi.completeAssignment(assignmentId, "Atendimento concluído pelo operador em campo");
+      if (directCompletion) {
+        await documentsApi.finalizeHandoffReview(handoff.id);
+        await documentsApi.renderDocument(handoff.id);
+      }
       photos.forEach((photo) => URL.revokeObjectURL(photo.url));
       setDone(true);
     } catch (err) {
@@ -169,10 +175,13 @@ function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; oper
           </div>
           <h1 className="text-section-title mt-4">Atendimento concluído</h1>
           <p className="text-sm text-[var(--color-muted-foreground)] mt-2">
-            Os dados foram enviados para revisão do responsável técnico. A operação ficará como <strong>Revisão</strong> até a aprovação.
+            {directCompletion
+              ? "O atendimento foi concluído e o PDF oficial já está disponível. A gestão foi notificada."
+              : "Os dados foram enviados para revisão da gestão."}
           </p>
           <div className="mt-6 space-y-2">
-            <button type="button" onClick={() => router.push(`/operator/services/${assignmentId}`)} className="w-full rounded-[var(--radius-md)] bg-[var(--color-primary)] text-[var(--color-primary-foreground)] h-12 text-sm font-semibold active:scale-[0.99]">Ver atendimento</button>
+            {directCompletion && <button type="button" onClick={() => router.push("/operator/documents")} className="w-full rounded-[var(--radius-md)] bg-[var(--color-primary)] text-[var(--color-primary-foreground)] h-12 text-sm font-semibold active:scale-[0.99]">Baixar ou compartilhar PDF</button>}
+            <button type="button" onClick={() => router.push(`/operator/services/${assignmentId}`)} className="w-full rounded-[var(--radius-md)] border border-[var(--color-border)] h-12 text-sm font-medium hover:bg-[var(--color-muted)]">Ver atendimento</button>
             <button type="button" onClick={() => router.push("/operator/services")} className="w-full rounded-[var(--radius-md)] border border-[var(--color-border)] h-12 text-sm font-medium hover:bg-[var(--color-muted)]">Minhas ordens</button>
           </div>
         </div>
@@ -254,7 +263,7 @@ function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; oper
       <WizardFooter
         onBack={back}
         onNext={next}
-        nextLabel={isLast ? "Concluir e enviar para revisão" : "Continuar"}
+        nextLabel={isLast ? (directCompletion ? "Concluir e gerar PDF" : "Concluir e enviar para revisão") : "Continuar"}
         nextDisabled={isLast && !canFinish}
         loading={submitting}
         isLast={isLast}

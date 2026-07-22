@@ -90,6 +90,7 @@ export class OperationInspectedEquipmentDto {
 }
 
 export class CreateOperationDto {
+  @IsOptional() @IsUUID('4') sourceSaleId?: string;
   @IsUUID('4') customerId!: string;
   @IsOptional() @IsUUID('4') addressId?: string;
   @IsOptional() @IsUUID('4') equipmentId?: string;

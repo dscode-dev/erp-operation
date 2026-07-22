@@ -1,5 +1,13 @@
 # ARCHITECTURE — Frontend
 
+## Operator — conclusão documental
+
+O frontend não gera PDF nem altera estados por conta própria. Ele encadeia os contratos oficiais `Operation → Assignment → Handoff → Document Engine`. A política visual separa OS/RVT de documentos especiais, mas o backend revalida tipo, ownership e estado em cada transição. A recuperação de emissão reutiliza o mesmo `OperationDocument` e o mesmo `DocumentViewer`.
+
+## PMOC — precondição orientada pelo backend
+
+O frontend realiza uma consulta preventiva para boa UX, mas não replica a regra de cobertura. O `POST /pmoc` revalida a condição e pode responder `409`; o cliente então solicita confirmação e repete a chamada com o override explícito. Isso preserva consistência em concorrência e evita que a UI se torne autoridade de negócio.
+
 ## DC-05 — arquitetura do Recibo
 
 O frontend coleta snapshots e orquestra APIs oficiais. `currency-words.ts` converte o valor para
@@ -1113,3 +1121,9 @@ BudgetWizardDrawer
 ```
 
 A seleção opcional da OS apenas preenche campos editáveis. Product, Pricing e Inventory não participam da composição DC-06. Preview e PDF consomem o mesmo Blueprint.
+# Customer Workspace architecture
+
+O cliente é o ponto de navegação para ativos, atendimentos e vendas, mas cada domínio mantém ownership no backend. `equipmentsApi`, `operationApi` e `salesApi` continuam independentes e recebem `customerId` como filtro. `SaleFormDrawer` envia somente intenção (`productId`, quantidade, garantia); `PricingService` e `SalesService` são autoridades sobre snapshots e totais. Recibo permanece no fluxo `Operation → Document Engine` e referencia a venda por `sourceSaleId`.
+# Operator signature onboarding
+
+A assinatura de primeiro acesso utiliza a mesma entidade `Signature`, API, validação, Storage e seletores da Platform. O frontend converte o PNG confirmado pelo `SignaturePad` em `File` apenas para o multipart e não mantém base64 após a requisição. A associação `Signature.userId` preserva ownership sem criar um domínio paralelo.

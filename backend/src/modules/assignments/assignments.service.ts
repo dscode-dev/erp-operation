@@ -3,12 +3,14 @@ import {
   AssetLifecycleEventType,
   AssignmentEventType,
   AssignmentStatus,
+  DocumentTemplateType,
   OperationStatus,
   Prisma,
   Role,
 } from '@prisma/client';
 import { ASSIGNMENT_AUDIT_ACTIONS, ASSIGNMENT_RESOURCE } from '../../shared/constants/assignments.constants';
 import { ERROR_CODES } from '../../shared/constants/error-codes.constants';
+import { OPERATOR_DIRECT_COMPLETION_DOCUMENT_TYPES } from '../../shared/constants/document-engine.constants';
 import { PMOC_MIN_PROCEDURE_IMAGES } from '../../shared/constants/pmoc.constants';
 import { ApplicationException } from '../../shared/exceptions/application.exception';
 import type { AuthenticatedUser } from '../../shared/types/authenticated-user.type';
@@ -291,6 +293,7 @@ export class AssignmentsService {
       select: {
         operation: {
           select: {
+            requestedDocumentType: true,
             _count: { select: { photos: true } },
             maintenanceExecution: {
               select: { plan: { select: { pmocPlan: { select: { id: true } } } } },
@@ -313,6 +316,10 @@ export class AssignmentsService {
         },
       );
     }
+    const directCompletion = OPERATOR_DIRECT_COMPLETION_DOCUMENT_TYPES.includes(
+      (assignment?.operation.requestedDocumentType ?? DocumentTemplateType.WORK_ORDER) as
+        (typeof OPERATOR_DIRECT_COMPLETION_DOCUMENT_TYPES)[number],
+    );
     return this.transition(id, actor, context, {
       event: AssignmentEventType.COMPLETED,
       action: ASSIGNMENT_AUDIT_ACTIONS.ASSIGNMENT_COMPLETED,
@@ -322,9 +329,10 @@ export class AssignmentsService {
       allowedFrom: [AssignmentStatus.STARTED],
       description: 'Assignment completed',
       notes: dto.notes,
-      // Field completion sends the operation to REVIEW; the completion
-      // side-effects (lifecycle + maintenance sync) fire on approval.
-      operationStatus: 'REVIEW',
+      // OS e Visita Técnica são concluídas em campo. Os demais tipos atribuídos
+      // preservam o workflow editorial de revisão da gestão.
+      operationStatus: directCompletion ? 'COMPLETED' : 'REVIEW',
+      syncOperationCompletion: directCompletion,
     });
   }
 

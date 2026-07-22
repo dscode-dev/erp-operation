@@ -26,7 +26,6 @@ import {
   Circle,
   QrCode,
   X,
-  FileCheck2,
   FileSearch,
 } from 'lucide-react';
 import { WizardProgressHeader } from '@erp/ui/wizard/progress-header';
@@ -80,8 +79,6 @@ const STEPS = [
 const FIELD_DOCUMENT_TYPES: DocumentKind[] = [
   'WORK_ORDER',
   'TECHNICAL_REPORT',
-  'TECHNICAL_OPINION',
-  'BUDGET',
 ];
 const CUSTOMER_SIGNATURE_TYPES = new Set<DocumentKind>([
   'WORK_ORDER',
@@ -119,7 +116,7 @@ export function AtendimentoWizard({
 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [result, setResult] = useState<{ operationId: string; documentNumber: string; documentType: DocumentKind; workflowStatus: string } | null>(
+  const [result, setResult] = useState<{ operationId: string; documentNumber: string; documentType: DocumentKind } | null>(
     null,
   );
   const [startedAt] = useState(() => new Date().toISOString());
@@ -254,7 +251,6 @@ export function AtendimentoWizard({
         operationId: submission.operation.id,
         documentNumber: submission.handoff.number ?? workOrderNumber(submission.operation) ?? `OP-${submission.operation.number}`,
         documentType,
-        workflowStatus: submission.handoff.workflowStatus,
       });
     } catch (err) {
       setSubmitError(
@@ -272,8 +268,8 @@ export function AtendimentoWizard({
       <SuccessView
         documentNumber={result.documentNumber}
         documentType={result.documentType}
-        workflowStatus={result.workflowStatus}
         onDone={() => router.push('/operator')}
+        onDocuments={() => router.push('/operator/documents')}
         onNew={() => window.location.reload()}
       />
     );
@@ -283,6 +279,8 @@ export function AtendimentoWizard({
     return <AttendanceTypeStep onSelect={setDocumentType} onClose={() => router.push('/operator')} />;
   }
 
+  // Compatibilidade de rota/estado antigo: PMOC não é mais oferecido para
+  // início autônomo, mas um estado já aberto continua direcionado ao fluxo oficial.
   if (documentType === 'PMOC') {
     return <PmocStartStep onBack={() => setDocumentType(null)} />;
   }
@@ -400,7 +398,7 @@ function AttendanceTypeStep({ onSelect, onClose }: { onSelect: (type: DocumentKi
           <div>
             <p className="text-caption uppercase tracking-wider">Nova atividade</p>
             <h1 className="text-[22px] font-semibold tracking-tight">O que você vai realizar?</h1>
-            <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">Você pode iniciar uma coleta mesmo sem uma atribuição. Ela ficará aguardando aprovação da gestão.</p>
+            <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">Você pode iniciar uma Ordem de Serviço ou Visita Técnica mesmo sem atribuição. Ao concluir, o PDF oficial será gerado.</p>
           </div>
           <button type="button" onClick={onClose} className="grid h-10 w-10 place-items-center rounded-full border border-[var(--color-border)]"><X className="h-4 w-4" /></button>
         </header>
@@ -413,11 +411,6 @@ function AttendanceTypeStep({ onSelect, onClose }: { onSelect: (type: DocumentKi
               <ChevronRight className="h-5 w-5 text-[var(--color-muted-foreground)]" />
             </button>
           ))}
-          <button type="button" onClick={() => onSelect('PMOC')} className="flex w-full items-center gap-3 rounded-[var(--radius-lg)] border border-[var(--color-primary)]/25 bg-[var(--color-primary)]/5 p-4 text-left active:scale-[0.99]">
-            <span className="grid h-11 w-11 place-items-center rounded-[var(--radius-md)] bg-[var(--color-primary)]/10 text-[var(--color-primary)]"><FileCheck2 className="h-5 w-5" /></span>
-            <span className="min-w-0 flex-1"><span className="block font-semibold">PMOC</span><span className="block text-xs text-[var(--color-muted-foreground)]">Assumir uma execução disponível de um plano ativo</span></span>
-            <ChevronRight className="h-5 w-5 text-[var(--color-muted-foreground)]" />
-          </button>
         </div>
       </div>
     </div>
@@ -1100,14 +1093,14 @@ function ResumoStep({
 function SuccessView({
   documentNumber,
   documentType,
-  workflowStatus,
   onDone,
+  onDocuments,
   onNew,
 }: {
   documentNumber: string;
   documentType: DocumentKind;
-  workflowStatus: string;
   onDone: () => void;
+  onDocuments: () => void;
   onNew: () => void;
 }) {
   return (
@@ -1116,18 +1109,25 @@ function SuccessView({
         <div className="mx-auto h-16 w-16 rounded-full bg-[var(--color-success)]/12 grid place-items-center text-[var(--color-success)]">
           <CheckCircle2 className="h-9 w-9" />
         </div>
-        <h1 className="text-section-title mt-4">Atendimento enviado para aprovação</h1>
+        <h1 className="text-section-title mt-4">Atendimento concluído</h1>
         <p className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-[var(--color-primary)]/30 bg-[var(--color-primary)]/10 px-3 py-1 text-sm font-medium text-[var(--color-primary)]">
           <FileText className="h-4 w-4" /> {documentNumber}
         </p>
         <p className="text-sm text-[var(--color-muted-foreground)] mt-2">
-          {DOCUMENT_KIND_LABEL[documentType]} registrado como {workflowStatus === 'DRAFT' ? 'rascunho aguardando aprovação' : 'em revisão'} pela equipe responsável. A operação ficou em <strong>Revisão</strong> até o aprove do responsável técnico.
+          {DOCUMENT_KIND_LABEL[documentType]} concluído e PDF oficial gerado. A gestão foi notificada e o documento já pode ser baixado ou compartilhado.
         </p>
         <div className="mt-6 space-y-2">
           <button
             type="button"
-            onClick={onNew}
+            onClick={onDocuments}
             className="w-full rounded-[var(--radius-md)] bg-[var(--color-primary)] text-[var(--color-primary-foreground)] h-12 text-sm font-semibold active:scale-[0.99]"
+          >
+            Baixar ou compartilhar PDF
+          </button>
+          <button
+            type="button"
+            onClick={onNew}
+            className="w-full rounded-[var(--radius-md)] border border-[var(--color-border)] h-12 text-sm font-medium hover:bg-[var(--color-muted)]"
           >
             Novo atendimento
           </button>

@@ -1,5 +1,21 @@
 # STATE — Frontend
 
+## Operator — OS/RVT com emissão direta (2026-07-22)
+
+- A tela Novo Atendimento oferece somente Ordem de Serviço e Relatório de Visita Técnica.
+- PMOC e demais relatórios não possuem mais entrada autônoma; continuam disponíveis na fila quando atribuídos pela gestão.
+- OS/RVT autoiniciadas ou atribuídas concluem diretamente, geram o PDF oficial e direcionam para download/compartilhamento.
+- A tela Documentos permite recuperar a emissão de OS/RVT concluídas caso o render anterior não tenha terminado.
+- Tipos especiais mantêm a mensagem e o estado de revisão.
+
+## PMOC — confirmação de cobertura ativa (2026-07-22)
+
+- O Wizard oficial consulta coberturas ativas ao selecionar um cliente em uma nova criação.
+- Coberturas existentes são apresentadas em aviso contextual e em confirmação explícita, sem impedir a decisão do Owner/Manager.
+- O fluxo da Central de Relatórios aplica a mesma precondição.
+- Edição e revisão de PMOCs existentes não disparam a confirmação.
+- O backend permanece como autoridade e respostas `409` também abrem o fluxo de confirmação.
+
 ## DC-05 — Recibo / Garantia (2026-07-18)
 
 - Central de Relatórios oferece Recibo para OWNER/MANAGER em cinco etapas: origem, dados, garantia,
@@ -1205,3 +1221,14 @@ Status: concluído.
 
 - Layout final em 4 linhas: (1) Resumo executivo (6 KPIs clicáveis); (2) Comparativo operacional (barras mês atual × anterior) à esquerda + Saúde financeira (gráfico único Receitas×Despesas×Saldo) à direita; (3) **Cobertura de atividades** (gráfico radar/teia de aranha comparando mês atual × anterior por tipo de documento: OS, Visitas, Laudos, PMOC, Orçamentos, Recibos) à esquerda com width menor + **Atividades relevantes e recentes** (asset-lifecycle) à direita com width maior — substitui o antigo "feed inteligente" (removido, junto do texto "preparado para IA"); (4) Timeline operacional (Hoje / 7 dias) à esquerda com width maior + **Carga por operador** à direita.
 - Radar usa contagens exatas por período via `documentsApi.listHandoffs({type,from,to})`. Sem novas regras/entidades/IA. Build, lint e typecheck aprovados.
+# Customer Workspace e Vendas — 2026-07-22
+
+- `/clientes` agora navega para a página dedicada; drawer somente para criar/editar.
+- `/clientes/:id` possui abas Visão geral, Equipamentos, Serviços e Vendas, todas com API real e paginação.
+- A listagem independente `/equipamentos` redireciona para Clientes; detalhes individuais permanecem compatíveis.
+- Criado fluxo de venda por cliente com produtos reais, snapshots do backend, garantia e integração do Recibo.
+# Operator first access signature — 2026-07-22
+
+- `/operator/trocar-senha` agora possui dois passos: senha definitiva e cadastro da assinatura técnica.
+- O fluxo usa `SignaturePad`, dados profissionais e endpoint multipart real.
+- Ao concluir, a sessão é encerrada e a assinatura fica disponível no catálogo institucional utilizado pelos relatórios.

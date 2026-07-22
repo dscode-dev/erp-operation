@@ -36,6 +36,7 @@ import {
   type OperationPhoto,
   type OperationType,
   type PmocGenerationMode,
+  type PmocActiveCoverageResult,
   type PmocPeriodicity,
   type PmocPlan,
   type Signature,
@@ -141,6 +142,7 @@ export function PmocPlanWizard({ open, onClose, onCreated, pmoc = null, onUpdate
   const [signatureFeedback, setSignatureFeedback] = useState<string | null>(null);
   const [previewRevision, setPreviewRevision] = useState(0);
   const [draftPhotos, setDraftPhotos] = useState<CapturedPhoto[]>([]);
+  const [coverageConfirmation, setCoverageConfirmation] = useState<PmocActiveCoverageResult | null>(null);
 
   const reviewRequest = pmoc?.executionRequests?.find((item) => item.operation) ?? null;
   const reviewOperationId = reviewRequest?.operation?.id ?? null;
@@ -162,6 +164,12 @@ export function PmocPlanWizard({ open, onClose, onCreated, pmoc = null, onUpdate
       ? pmocApi.getNameSuggestion(form.customerId, { signal })
       : Promise.resolve(null),
     [form.customerId],
+  );
+  const activeCoverage = useQuery<PmocActiveCoverageResult | null>(
+    (signal) => !editing && !reviewing && form.customerId
+      ? pmocApi.getActiveCoverage(form.customerId, { signal })
+      : Promise.resolve(null),
+    [editing, reviewing, form.customerId],
   );
   const scopes = useQuery(
     (signal) => technicalCatalogsApi.list({
@@ -224,6 +232,7 @@ export function PmocPlanWizard({ open, onClose, onCreated, pmoc = null, onUpdate
     setSelectorOpen(false);
     setSignatureFeedback(null);
     setDraftPhotos([]);
+    setCoverageConfirmation(null);
   }, [initialReviewSection, open, pmoc, reviewHandoff.data, reviewing]);
 
   useEffect(() => {
@@ -329,14 +338,19 @@ export function PmocPlanWizard({ open, onClose, onCreated, pmoc = null, onUpdate
     true,
   ];
 
-  async function submit() {
+  async function submit(confirmActiveCoverage = false) {
     if (!validByStep.every(Boolean) || !form.equipmentIds[0]) return;
+    if (!confirmActiveCoverage && activeCoverage.data?.hasActiveCoverage) {
+      setCoverageConfirmation(activeCoverage.data);
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
       const pmoc = await pmocApi.createPmoc({
         ...(nameEdited ? { name: form.name } : {}),
         customerId: form.customerId,
+        confirmActiveCoverage: confirmActiveCoverage || undefined,
         equipmentId: form.equipmentIds[0],
         equipmentIds: form.equipmentIds,
         scopeCatalogIds: form.scopeCatalogIds,
@@ -366,6 +380,20 @@ export function PmocPlanWizard({ open, onClose, onCreated, pmoc = null, onUpdate
         onClose();
       }
     } catch (cause) {
+      if (
+        cause instanceof ApiClientError &&
+        cause.code === "PMOC_ACTIVE_COVERAGE_CONFIRMATION_REQUIRED"
+      ) {
+        const conflicts = Array.isArray(cause.details.conflicts)
+          ? cause.details.conflicts as PmocActiveCoverageResult["conflicts"]
+          : [];
+        setCoverageConfirmation({
+          hasActiveCoverage: true,
+          checkedAt: new Date().toISOString(),
+          conflicts,
+        });
+        return;
+      }
       setError(cause instanceof ApiClientError ? cause.message : "Não foi possível criar o PMOC.");
     } finally {
       setSaving(false);
@@ -460,6 +488,13 @@ export function PmocPlanWizard({ open, onClose, onCreated, pmoc = null, onUpdate
         {!reviewing && <Stepper step={step} onStep={setStep} />}
         {error && <Notice tone="danger">{error}</Notice>}
         {documentConfig.error && <Notice tone="danger">Não foi possível consultar a configuração documental. Tente novamente antes de concluir.</Notice>}
+        {!editing && activeCoverage.data?.hasActiveCoverage && (
+          <Notice tone="warning">
+            <strong>Este cliente já possui cobertura PMOC ativa.</strong><br />
+            {activeCoverage.data.conflicts.map(activeCoverageLabel).join("; ")}. Você poderá revisar
+            os dados e confirmar conscientemente a criação de um novo plano na última etapa.
+          </Notice>
+        )}
 
         {step === 0 && <IdentificationStep
           form={form}
@@ -468,6 +503,7 @@ export function PmocPlanWizard({ open, onClose, onCreated, pmoc = null, onUpdate
           set={set}
           onCustomer={(customerId) => {
             if (editing) return;
+            setCoverageConfirmation(null);
             setForm((current) => ({ ...current, customerId, addressId: "", equipmentIds: [], name: "" }));
             setNameEdited(false);
           }}
@@ -549,6 +585,21 @@ export function PmocPlanWizard({ open, onClose, onCreated, pmoc = null, onUpdate
       submitLabel="Criar primeira Ordem de Serviço"
       contextNotice="A primeira Ordem de Serviço será criada com os dados deste PMOC e ficará disponível para gerenciamento normalmente."
       onClose={() => { setOperationOpen(false); onClose(); }}
+    />
+    <ConfirmDialog
+      open={Boolean(coverageConfirmation)}
+      title="Este cliente já possui PMOC ativo"
+      confirmLabel="Criar mesmo assim"
+      cancelLabel="Revisar cadastro"
+      description={coverageConfirmation ? <div className="space-y-2">
+        <p>Existe cobertura vigente para este cliente:</p>
+        <ul className="list-disc space-y-1 pl-5">
+          {coverageConfirmation.conflicts.map((item) => <li key={item.id}>{activeCoverageLabel(item)}</li>)}
+        </ul>
+        <p>Deseja realmente continuar e criar outro PMOC?</p>
+      </div> : undefined}
+      onClose={() => setCoverageConfirmation(null)}
+      onConfirm={() => submit(true)}
     />
   </>;
 }
@@ -794,7 +845,7 @@ function Section({ icon: Icon, title, text, children }: { icon: LucideIcon; titl
 function Field({ label, children, required = false, optional = false, hint }: { label: string; children: React.ReactNode; required?: boolean; optional?: boolean; hint?: string }) { return <label className="grid gap-1.5 text-sm font-medium"><span>{label}{required && <span className="ml-1 text-[var(--color-danger)]">*</span>}{optional && <span className="ml-1 font-normal text-[var(--color-muted-foreground)]">(opcional)</span>}</span>{children}{hint && <span className="text-xs font-normal text-[var(--color-muted-foreground)]">{hint}</span>}</label>; }
 function Readonly({ label, value }: { label: string; value: string }) { return <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-muted)]/30 p-3"><span className="block text-xs text-[var(--color-muted-foreground)]">{label}</span><strong className="mt-1 block text-sm">{value}</strong></div>; }
 function Choice({ checked, onChange, title, text }: { checked: boolean; onChange: () => void; title: string; text: string }) { return <label className={`flex gap-3 rounded-lg border p-3 ${checked ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5' : 'border-[var(--color-border)]'}`}><input type="radio" checked={checked} onChange={onChange} /><span><strong className="text-sm">{title}</strong><span className="block text-xs text-[var(--color-muted-foreground)]">{text}</span></span></label>; }
-function Notice({ tone, children }: { tone: "danger" | "info" | "neutral"; children: React.ReactNode }) { const color = tone === "danger" ? "border-red-500/30 bg-red-500/10 text-red-700" : tone === "info" ? "border-blue-500/30 bg-blue-500/10 text-blue-700" : "border-[var(--color-border)] bg-[var(--color-muted)]"; return <div className={`rounded-lg border p-3 text-sm ${color}`}>{children}</div>; }
+function Notice({ tone, children }: { tone: "danger" | "info" | "neutral" | "warning"; children: React.ReactNode }) { const color = tone === "danger" ? "border-red-500/30 bg-red-500/10 text-red-700" : tone === "warning" ? "border-amber-500/30 bg-amber-500/10 text-amber-800" : tone === "info" ? "border-blue-500/30 bg-blue-500/10 text-blue-700" : "border-[var(--color-border)] bg-[var(--color-muted)]"; return <div className={`rounded-lg border p-3 text-sm ${color}`}>{children}</div>; }
 function Projection({ projection, detailed = false }: { projection: ReturnType<typeof project>; detailed?: boolean }) { return <div className="space-y-3 rounded-xl bg-[var(--color-muted)] p-4"><div className="grid gap-3 sm:grid-cols-3"><Metric label="Execuções previstas" value={String(projection.count)} /><Metric label="Período" value={`${projection.months} meses`} /><Metric label="Próxima execução" value={formatDate(projection.next)} /></div>{detailed && <div className="grid gap-2 border-t border-[var(--color-border)] pt-3 sm:grid-cols-2 lg:grid-cols-3">{projection.dates.slice(0, 6).map((date, index) => <div key={`${date}-${index}`} className="rounded-lg bg-[var(--color-card)] p-2 text-sm"><span className="text-xs text-[var(--color-muted-foreground)]">Execução {String(index + 1).padStart(3, '0')}</span><strong className="block">{formatDate(date)}</strong></div>)}{projection.dates.length > 6 && <div className="grid place-items-center rounded-lg border border-dashed border-[var(--color-border)] p-2 text-xs text-[var(--color-muted-foreground)]">+ {projection.dates.length - 6} execuções</div>}</div>}</div>; }
 function Metric({ label, value }: { label: string; value: string }) { return <div><span className="block text-xs text-[var(--color-muted-foreground)]">{label}</span><strong className="text-sm">{value}</strong></div>; }
 function SummaryCard({ title, rows, onEdit }: { title: string; rows: Array<[string, string]>; onEdit: () => void }) { return <section className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4"><div className="mb-3 flex items-center justify-between"><h4 className="font-semibold">{title}</h4><button type="button" onClick={onEdit} className="text-xs font-medium text-[var(--color-primary)]">Editar</button></div><dl className="space-y-2">{rows.map(([label, value]) => <div key={label} className="flex justify-between gap-4 border-b border-[var(--color-border)]/70 pb-2 last:border-0"><dt className="text-xs text-[var(--color-muted-foreground)]">{label}</dt><dd className="max-w-[65%] text-right text-sm font-medium">{value}</dd></div>)}</dl></section>; }
@@ -812,6 +863,7 @@ function operationTypeLabel(value: OperationType) { return SERVICE_TYPES.find((i
 function signatureModeLabel(value: string) { return ({ NONE: 'Sem assinatura', FIXED: 'Assinatura institucional', COLLECTED: 'Coleta em campo', HYBRID: 'Assinatura híbrida' } as Record<string, string>)[value] ?? value; }
 function priorityLabel(value: Form['priority']) { return ({ LOW: 'Baixa', MEDIUM: 'Média', HIGH: 'Alta', CRITICAL: 'Crítica' } as const)[value]; }
 function roleLabel(value: string) { return ({ OWNER: "Owner", MANAGER: "Manager", OPERATOR: "Operator", VIEWER: "Viewer" } as Record<string, string>)[value] ?? value; }
+function activeCoverageLabel(item: PmocActiveCoverageResult["conflicts"][number]) { return `PMOC-${String(item.number).padStart(6, "0")} · ${item.name} · cobertura até ${new Date(item.endDate).toLocaleDateString("pt-BR")}`; }
 function evidenceFileDataUrl(file: File): Promise<string> { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = () => reject(new Error("Não foi possível ler a imagem.")); reader.readAsDataURL(file); }); }
 const primary = "inline-flex h-10 items-center gap-2 rounded-[var(--radius-md)] bg-[var(--color-primary)] px-4 text-sm font-medium text-[var(--color-primary-foreground)] disabled:opacity-50";
 const secondary = "inline-flex h-10 items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] px-4 text-sm font-medium";

@@ -5,6 +5,7 @@ import type {
   AssetWithContent,
   AvatarMeta,
   ChangePasswordPayload,
+  CompleteFirstAccessPayload,
   CreateUserPayload,
   CreateUserResult,
   Paginated,
@@ -28,6 +29,28 @@ export async function changePassword(
     "/users/change-password",
     payload,
   );
+  clearTokens();
+  return result;
+}
+
+export async function completeFirstAccess(
+  payload: CompleteFirstAccessPayload,
+  file: File,
+): Promise<{ completed: boolean; signatureId: string; reauthenticationRequired: boolean }> {
+  const form = new FormData();
+  form.append('currentPassword', payload.currentPassword);
+  form.append('newPassword', payload.newPassword);
+  form.append('signatureTitle', payload.signatureTitle);
+  if (payload.profession) form.append('profession', payload.profession);
+  if (payload.professionalCouncil) form.append('professionalCouncil', payload.professionalCouncil);
+  if (payload.registrationNumber) form.append('registrationNumber', payload.registrationNumber);
+  if (payload.department) form.append('department', payload.department);
+  form.append('file', file);
+  const result = await api.upload<{
+    completed: boolean;
+    signatureId: string;
+    reauthenticationRequired: boolean;
+  }>('/users/complete-first-access', form);
   clearTokens();
   return result;
 }

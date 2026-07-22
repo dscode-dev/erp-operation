@@ -6,6 +6,7 @@ import {
   type StorageProviderContract,
 } from '../../infra/storage/storage-provider.type';
 import { ERROR_CODES } from '../../shared/constants/error-codes.constants';
+import { OPERATOR_DIRECT_COMPLETION_DOCUMENT_TYPES } from '../../shared/constants/document-engine.constants';
 import { PMOC_MIN_PROCEDURE_IMAGES } from '../../shared/constants/pmoc.constants';
 import {
   MAX_OPERATION_PHOTOS,
@@ -98,6 +99,7 @@ const OPERATION_INCLUDE = {
     },
   },
   assignment: { select: { id: true, assignedBy: true, assignedTo: true, status: true } },
+  sourceSale: { select: { id: true, number: true, status: true, soldAt: true, warrantyDays: true, warrantyStartsAt: true, warrantyEndsAt: true, total: true } },
 } satisfies Prisma.OperationInclude;
 
 const OPERATION_LIST_INCLUDE = {
@@ -209,6 +211,27 @@ export class OperationsService {
     context: OperationAuditContext,
     transactionHook?: OperationCreationTransactionHook,
   ): Promise<unknown> {
+    const requestedDocumentType = dto.documentType ?? DocumentTemplateType.WORK_ORDER;
+    if (
+      actor.role === Role.OPERATOR &&
+      !OPERATOR_DIRECT_COMPLETION_DOCUMENT_TYPES.includes(
+        requestedDocumentType as (typeof OPERATOR_DIRECT_COMPLETION_DOCUMENT_TYPES)[number],
+      )
+    ) {
+      throw new ApplicationException(
+        ERROR_CODES.OPERATION_OPERATOR_DOCUMENT_TYPE_FORBIDDEN,
+        'O operador pode iniciar somente Ordem de Serviço ou Relatório de Visita Técnica',
+        HttpStatus.FORBIDDEN,
+        { allowedTypes: [...OPERATOR_DIRECT_COMPLETION_DOCUMENT_TYPES] },
+      );
+    }
+    if (actor.role === Role.OPERATOR && dto.status && dto.status !== 'DRAFT') {
+      throw new ApplicationException(
+        ERROR_CODES.OPERATION_INVALID_TRANSITION,
+        'Um atendimento iniciado pelo operador deve começar como rascunho',
+        HttpStatus.CONFLICT,
+      );
+    }
     await this.validateRelations(dto.customerId, dto.addressId, dto.equipmentId);
     this.validateReferencePeriod(dto.referenceMonth, dto.referenceYear);
     const inspectedEquipments = await this.resolveInspectedEquipments(
@@ -225,6 +248,16 @@ export class OperationsService {
       );
     }
     const assignment = await this.resolveOperatorAssignment(dto.operatorId, actor);
+    const sourceSale = dto.sourceSaleId
+      ? await this.prisma.sale.findFirst({ where: { id: dto.sourceSaleId, customerId: dto.customerId, status: 'COMPLETED' } })
+      : null;
+    if (dto.sourceSaleId && !sourceSale) {
+      throw new ApplicationException(
+        ERROR_CODES.SALE_INVALID_RELATIONSHIP,
+        'Completed sale does not belong to the selected customer',
+        HttpStatus.CONFLICT,
+      );
+    }
     const signatureData = this.normalizeSignatureData(dto.signatureData);
 
     // Operation + auto Work Order draft are created atomically. The OS number is
@@ -233,6 +266,7 @@ export class OperationsService {
       const operation = await tx.operation.create({
         data: {
           customerId: dto.customerId,
+          sourceSaleId: sourceSale?.id ?? null,
           addressId: dto.addressId ?? null,
           equipmentId: dto.equipmentId ?? null,
           operatorId: assignment.operatorId,
@@ -287,6 +321,16 @@ export class OperationsService {
           signedAt: signatureData ? (dto.signedAt ? new Date(dto.signedAt) : new Date()) : null,
         },
       });
+      if (sourceSale) {
+        await tx.saleHistory.create({
+          data: {
+            saleId: sourceSale.id,
+            actorId: actor.id,
+            action: 'RECEIPT_LINKED',
+            metadata: { operationId: operation.id, operationNumber: operation.number },
+          },
+        });
+      }
       if (dto.documentType !== DocumentTemplateType.RECEIPT) {
         await tx.operationDocument.create({
           data: {

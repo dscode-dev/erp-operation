@@ -1,205 +1,563 @@
-"use client";
+'use client';
 
-import { use, useState } from "react";
-import Link from "next/link";
-import { Phone, Mail, MapPin, FileText, Wrench, Building2, Pencil } from "lucide-react";
-import { Breadcrumbs } from "@platform/components/breadcrumbs";
-import { PageHeader } from "@platform/components/page-header";
-import { InfoCard, InfoRow } from "@platform/components/info-card";
-import { DataTable, type Column } from "@platform/components/data-table";
-import { StatusPill, type Status } from "@erp/ui/status-pill";
-import { SkeletonCard } from "@erp/ui/skeletons";
-import { AsyncBoundary } from "@erp/ui/states";
-import { EmptyState } from "@erp/ui/empty-state";
-import { Gate } from "@erp/ui/auth/gate";
-import { CustomerFormDrawer } from "@platform/components/customer-form-drawer";
-import { ExportButton } from "@platform/components/export-button";
-import { AssetTimeline } from "@erp/ui/assets/asset-timeline";
-import { OperationDetailDrawer } from "@platform/components/operation-detail-drawer";
+import { use, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { CircleDollarSign, MapPin, Pencil, Plus, ReceiptText, Wrench } from 'lucide-react';
+import { Breadcrumbs } from '@platform/components/breadcrumbs';
+import { PageHeader } from '@platform/components/page-header';
+import { InfoCard, InfoRow } from '@platform/components/info-card';
+import { DataTable, type Column } from '@platform/components/data-table';
+import { Pagination } from '@platform/components/pagination';
+import { CustomerFormDrawer } from '@platform/components/customer-form-drawer';
+import { EquipmentFormDrawer } from '@platform/components/equipment-form-drawer';
+import { SaleFormDrawer } from '@platform/components/sale-form-drawer';
+import { OperationDetailDrawer } from '@platform/components/operation-detail-drawer';
+import { AsyncBoundary, ErrorState } from '@erp/ui/states';
+import { EmptyState } from '@erp/ui/empty-state';
+import { SkeletonCard, SkeletonList } from '@erp/ui/skeletons';
+import { StatusPill } from '@erp/ui/status-pill';
+import { Gate } from '@erp/ui/auth/gate';
+import { useAuth } from '@erp/ui/auth/auth-provider';
 import {
   customersApi,
   equipmentsApi,
-  pmocApi,
+  operationApi,
+  salesApi,
   useQuery,
   type CustomerDetail,
-  type EquipmentStatus,
+  type EquipmentDetail,
   type EquipmentSummary,
-} from "@erp/api";
-import { formatDate, maskCep } from "@erp/utils";
+  type OperationSummary,
+  type Sale,
+} from '@erp/api';
+import { formatCurrencyBRL, formatDate, formatDateTime, maskCep } from '@erp/utils';
 
-const EQUIPMENT_STATUS: Record<EquipmentStatus, Status> = {
-  ACTIVE: "success",
-  MAINTENANCE: "warning",
-  INACTIVE: "offline",
-  RETIRED: "danger",
-};
-
-const equipmentCols: Column<EquipmentSummary>[] = [
-  { key: "tag", header: "Tag", className: "w-[120px]", cell: (e) => <span className="font-mono text-xs text-[var(--color-muted-foreground)]">{e.tag ?? "—"}</span> },
-  { key: "name", header: "Equipamento", cell: (e) => <div className="font-medium truncate">{e.name}</div> },
-  { key: "type", header: "Tipo", className: "w-[140px]", cell: (e) => <span className="text-sm">{e.type}</span> },
-  { key: "status", header: "Status", className: "w-[140px]", cell: (e) => <StatusPill status={EQUIPMENT_STATUS[e.status]} /> },
-];
+type Tab = 'overview' | 'equipment' | 'services' | 'sales';
+const formatMoney = formatCurrencyBRL;
 
 export default function ClienteDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const [editing, setEditing] = useState(false);
-  const [operationId, setOperationId] = useState<string | null>(null);
-
-  const detail = useQuery<CustomerDetail>((signal) => customersApi.getCustomer(id, { signal }), [id]);
-  const equipments = useQuery(
-    (signal) => equipmentsApi.listEquipments({ customerId: id, limit: 50, signal }),
+  const { hasRole } = useAuth();
+  const [tab, setTab] = useState<Tab>('overview');
+  const [editingCustomer, setEditingCustomer] = useState(false);
+  const detail = useQuery<CustomerDetail>(
+    (signal) => customersApi.getCustomer(id, { signal }),
     [id],
   );
-  const pmocs = useQuery(
-    (signal) => pmocApi.listPmoc({ customerId: id, active: true, page: 1, limit: 5, signal }),
-    [id],
-  );
-
   return (
-    <div className="space-y-6 max-w-[1400px]">
-      <Breadcrumbs items={[{ label: "Clientes", href: "/clientes" }, { label: detail.data?.name ?? "…" }]} />
-
+    <div className="max-w-[1400px] space-y-6">
+      <Breadcrumbs
+        items={[{ label: 'Clientes', href: '/clientes' }, { label: detail.data?.name ?? '…' }]}
+      />
       <AsyncBoundary
         loading={detail.loading}
         error={detail.error}
         data={detail.data}
         onRetry={detail.refetch}
-        skeleton={<div className="grid gap-3 lg:grid-cols-3">{Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)}</div>}
+        skeleton={<SkeletonCard />}
       >
-        {(c) => (
+        {(customer) => (
           <>
             <PageHeader
-              eyebrow={c.type === "COMPANY" ? "Empresa" : "Pessoa"}
-              title={c.name}
-              description={c.tradeName ?? c.email ?? undefined}
+              eyebrow={customer.type === 'COMPANY' ? 'Empresa' : 'Pessoa'}
+              title={customer.name}
+              description={customer.tradeName ?? customer.email ?? undefined}
               actions={
-                <>
-                  <ExportButton
-                    label="Exportar ficha"
-                    fileName={`cliente-${c.id}`}
-                    rows={[c]}
-                  />
-                  <Gate roles={["OWNER", "MANAGER"]}>
-                    <button onClick={() => setEditing(true)} className="inline-flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 h-9 text-sm hover:bg-[var(--color-muted)]">
-                      <Pencil className="h-4 w-4" /> Editar
-                    </button>
-                  </Gate>
-                </>
+                <Gate roles={['OWNER', 'MANAGER']}>
+                  <button className="btn-secondary" onClick={() => setEditingCustomer(true)}>
+                    <Pencil className="h-4 w-4" />
+                    Editar cliente
+                  </button>
+                </Gate>
               }
             />
-
-            <div className="flex flex-wrap items-center gap-2">
-              <StatusPill status={c.isActive ? "success" : "offline"} label={c.isActive ? "Ativo" : "Inativo"} />
-              <span className="text-caption">Cadastrado em {formatDate(c.createdAt)}</span>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              <div className="lg:col-span-2 space-y-4">
-                <InfoCard
-                  title="Equipamentos no cliente"
-                  action={<Link href={`/equipamentos?customerId=${c.id}`} className="text-caption hover:text-[var(--color-foreground)]">Ver inventário</Link>}
+            <nav
+              className="flex gap-1 overflow-x-auto border-b border-[var(--color-border)]"
+              aria-label="Áreas do cliente"
+            >
+              {(
+                [
+                  ['overview', 'Visão geral'],
+                  ['equipment', 'Equipamentos'],
+                  ['services', 'Serviços'],
+                  ...(hasRole('OWNER', 'MANAGER', 'VIEWER') ? [['sales', 'Vendas']] : []),
+                ] as Array<[Tab, string]>
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  onClick={() => setTab(value)}
+                  className={`border-b-2 px-4 py-3 text-sm font-medium ${tab === value ? 'border-[var(--color-primary)] text-[var(--color-primary)]' : 'border-transparent text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]'}`}
                 >
-                  {equipments.loading && !equipments.data ? (
-                    <SkeletonCard />
-                  ) : equipments.data && equipments.data.items.length > 0 ? (
-                    <DataTable columns={equipmentCols} rows={equipments.data.items} rowHref={(e) => `/equipamentos/${e.id}`} />
-                  ) : (
-                    <EmptyState icon={Wrench} title="Sem equipamentos" description="Nenhum equipamento vinculado a este cliente." />
-                  )}
-                </InfoCard>
-
-                <InfoCard title="Timeline consolidada">
-                  <AssetTimeline customerId={c.id} onOpenOperation={setOperationId} />
-                </InfoCard>
-
-                {c.addresses.length > 0 && (
-                  <InfoCard title="Endereços">
-                    <ul className="space-y-2">
-                      {c.addresses.map((a) => (
-                        <li key={a.id} className="rounded-[var(--radius-md)] border border-[var(--color-border)] p-3">
-                          <div className="flex items-center gap-2">
-                            <MapPin className="h-4 w-4 text-[var(--color-muted-foreground)]" />
-                            <span className="text-sm font-medium">{a.name ?? "Endereço"}</span>
-                            {a.isPrimary && <span className="text-[10px] uppercase rounded bg-[var(--color-primary)]/10 text-[var(--color-primary)] px-1.5 py-0.5">Principal</span>}
-                          </div>
-                          <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">
-                            {[a.street, a.number, a.district].filter(Boolean).join(", ")}
-                            {a.city ? ` — ${a.city}/${a.state ?? ""}` : ""}
-                            {a.zipCode ? ` · CEP ${maskCep(a.zipCode)}` : ""}
-                          </p>
-                        </li>
-                      ))}
-                    </ul>
-                  </InfoCard>
-                )}
-              </div>
-
-              <div className="space-y-4">
-                <InfoCard title="PMOC">
-                  {pmocs.loading && !pmocs.data ? <SkeletonCard /> : pmocs.data?.items.length ? (() => { const plan = pmocs.data.items[0]; return <div className="space-y-3"><InfoRow label="Plano ativo" value={<Link className="font-medium text-[var(--color-primary)]" href={`/pmoc/${plan.id}`}>{plan.maintenancePlan?.name ?? `PMOC-${String(plan.number).padStart(6, "0")}`}</Link>} /><InfoRow label="Cobertura" value={plan.coverage ?? "Não informada"} /><InfoRow label="Periodicidade" value={plan.periodicity} /><InfoRow label="Última execução" value={formatDate(plan.overview?.lastExecutionDate ?? plan.lastExecutionDate)} /><InfoRow label="Próxima execução" value={formatDate(plan.nextExecutionDate)} /><InfoRow label="Equipamentos cobertos" value={String(plan.equipments?.length ?? 1)} />{pmocs.data.pagination.total > 1 && <Link href={`/pmoc?customerId=${c.id}`} className="inline-flex text-xs font-medium text-[var(--color-primary)]">Ver todos os {pmocs.data.pagination.total} planos</Link>}</div>; })() : <p className="text-sm text-[var(--color-muted-foreground)]">Nenhum plano PMOC ativo para este cliente.</p>}
-                </InfoCard>
-
-                <InfoCard title="Dados do cliente">
-                  <InfoRow label="Documento" value={<span className="font-mono text-xs">{c.cnpj ?? c.cpf ?? "—"}</span>} />
-                  <InfoRow label="E-mail" value={c.email ?? "—"} />
-                  <InfoRow label="Telefone" value={c.phone ?? "—"} />
-                  {c.secondaryPhone && <InfoRow label="Telefone 2" value={c.secondaryPhone} />}
-                </InfoCard>
-
-                <InfoCard title={`Contatos (${c.contacts.length})`}>
-                  {c.contacts.length === 0 ? (
-                    <p className="text-sm text-[var(--color-muted-foreground)]">Nenhum contato cadastrado.</p>
-                  ) : (
-                    <ul className="space-y-3">
-                      {c.contacts.map((ct) => (
-                        <li key={ct.id} className="rounded-[var(--radius-md)] border border-[var(--color-border)] p-3">
-                          <div className="flex items-center justify-between">
-                            <span className="font-medium text-sm">{ct.name}</span>
-                            <span className="text-caption">{ct.role}</span>
-                          </div>
-                          <div className="mt-2 flex flex-col gap-1 text-xs text-[var(--color-muted-foreground)]">
-                            {ct.phone && <span className="inline-flex items-center gap-1.5"><Phone className="h-3 w-3" /> {ct.phone}</span>}
-                            {ct.email && <span className="inline-flex items-center gap-1.5"><Mail className="h-3 w-3" /> {ct.email}</span>}
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </InfoCard>
-
-                <InfoCard title={`Anexos (${c.attachments.length})`}>
-                  {c.attachments.length === 0 ? (
-                    <p className="text-sm text-[var(--color-muted-foreground)]">Nenhum anexo.</p>
-                  ) : (
-                    <ul className="space-y-2">
-                      {c.attachments.map((at) => (
-                        <li key={at.id} className="flex items-center gap-2 text-sm">
-                          <FileText className="h-4 w-4 text-[var(--color-muted-foreground)]" />
-                          <span className="truncate">{at.originalFileName}</span>
-                          <span className="text-caption ml-auto">{at.category}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </InfoCard>
-
-                {c.notes && (
-                  <InfoCard title="Observações">
-                    <p className="text-sm leading-relaxed text-[var(--color-muted-foreground)]">{c.notes}</p>
-                  </InfoCard>
-                )}
-              </div>
-            </div>
-
-            <CustomerFormDrawer open={editing} onClose={() => setEditing(false)} onSaved={detail.refetch} customer={c} />
-            <OperationDetailDrawer operationId={operationId} open={operationId !== null} onClose={() => setOperationId(null)} />
+                  {label}
+                </button>
+              ))}
+            </nav>
+            {tab === 'overview' && <Overview customer={customer} />}
+            {tab === 'equipment' && <EquipmentTab customerId={id} />}
+            {tab === 'services' && <ServicesTab customerId={id} />}
+            {tab === 'sales' && <SalesTab customer={customer} />}
+            <CustomerFormDrawer
+              open={editingCustomer}
+              onClose={() => setEditingCustomer(false)}
+              onSaved={detail.refetch}
+              customer={customer}
+            />
           </>
         )}
       </AsyncBoundary>
-
-      {/* Placeholder icon usage to keep Building2 import meaningful when empty */}
-      <span className="sr-only"><Building2 className="h-0 w-0" /></span>
     </div>
+  );
+}
+
+function Overview({ customer }: { customer: CustomerDetail }) {
+  return (
+    <div className="grid gap-4 lg:grid-cols-3">
+      <InfoCard title="Dados do cliente">
+        <InfoRow
+          label="Status"
+          value={
+            <StatusPill
+              status={customer.isActive ? 'success' : 'offline'}
+              label={customer.isActive ? 'Ativo' : 'Inativo'}
+            />
+          }
+        />
+        <InfoRow label="Documento" value={customer.cnpj ?? customer.cpf ?? '—'} />
+        <InfoRow label="E-mail" value={customer.email ?? '—'} />
+        <InfoRow label="Telefone" value={customer.phone ?? '—'} />
+        <InfoRow label="Cadastro" value={formatDate(customer.createdAt)} />
+      </InfoCard>
+      <InfoCard title="Endereços">
+        <div className="space-y-3">
+          {customer.addresses.map((address) => (
+            <div key={address.id} className="rounded-lg border border-[var(--color-border)] p-3">
+              <div className="flex items-center gap-2 font-medium">
+                <MapPin className="h-4 w-4" />
+                {address.name}
+                {address.isPrimary && (
+                  <span className="rounded bg-[var(--color-primary)]/10 px-1.5 py-0.5 text-[10px] text-[var(--color-primary)]">
+                    PRINCIPAL
+                  </span>
+                )}
+              </div>
+              <p className="mt-1 text-caption">
+                {[
+                  address.street,
+                  address.number,
+                  address.district,
+                  `${address.city}/${address.state}`,
+                  address.zipCode ? `CEP ${maskCep(address.zipCode)}` : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </p>
+            </div>
+          ))}
+          {!customer.addresses.length && (
+            <p className="text-caption">Nenhum endereço cadastrado.</p>
+          )}
+        </div>
+      </InfoCard>
+      <InfoCard title="Contatos">
+        <div className="space-y-3">
+          {customer.contacts.map((contact) => (
+            <div key={contact.id} className="rounded-lg border border-[var(--color-border)] p-3">
+              <strong className="text-sm">{contact.name}</strong>
+              <p className="text-caption">
+                {[contact.role, contact.phone, contact.email].filter(Boolean).join(' · ')}
+              </p>
+            </div>
+          ))}
+          {!customer.contacts.length && <p className="text-caption">Nenhum contato cadastrado.</p>}
+        </div>
+      </InfoCard>
+    </div>
+  );
+}
+
+function EquipmentTab({ customerId }: { customerId: string }) {
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
+  const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState<EquipmentDetail | null>(null);
+  const list = useQuery(
+    (signal) => equipmentsApi.listEquipments({ customerId, page, limit, signal }),
+    [customerId, page, limit],
+  );
+  const columns = useMemo<Column<EquipmentSummary>[]>(
+    () => [
+      {
+        key: 'name',
+        header: 'Equipamento',
+        cell: (item) => (
+          <div>
+            <strong>{item.name}</strong>
+            <p className="text-caption">
+              {item.tag ?? item.serialNumber ?? 'Sem identificação auxiliar'}
+            </p>
+          </div>
+        ),
+      },
+      {
+        key: 'model',
+        header: 'Modelo',
+        cell: (item) =>
+          [item.manufacturer, item.model, item.capacity].filter(Boolean).join(' · ') || '—',
+      },
+      {
+        key: 'status',
+        header: 'Status',
+        cell: (item) => (
+          <StatusPill
+            status={
+              item.status === 'ACTIVE'
+                ? 'success'
+                : item.status === 'MAINTENANCE'
+                  ? 'warning'
+                  : 'offline'
+            }
+            label={item.status}
+          />
+        ),
+      },
+      {
+        key: 'actions',
+        header: '',
+        className: 'w-16',
+        cell: (item) => (
+          <Gate roles={['OWNER', 'MANAGER']}>
+            <button
+              className="rounded-md border border-[var(--color-border)] p-2"
+              onClick={async (event) => {
+                event.stopPropagation();
+                setEditing(await equipmentsApi.getEquipment(item.id));
+                setFormOpen(true);
+              }}
+            >
+              <Pencil className="h-4 w-4" />
+            </button>
+          </Gate>
+        ),
+      },
+    ],
+    [],
+  );
+  return (
+    <section className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold">Equipamentos do cliente</h2>
+          <p className="text-caption">Cadastro, manutenção e acesso ao histórico de cada ativo.</p>
+        </div>
+        <Gate roles={['OWNER', 'MANAGER']}>
+          <button
+            className="btn-primary"
+            onClick={() => {
+              setEditing(null);
+              setFormOpen(true);
+            }}
+          >
+            <Plus className="h-4 w-4" />
+            Novo equipamento
+          </button>
+        </Gate>
+      </div>
+      {list.loading && !list.data ? (
+        <SkeletonList rows={5} />
+      ) : list.error ? (
+        <ErrorState error={list.error} onRetry={list.refetch} />
+      ) : list.data?.items.length ? (
+        <>
+          <DataTable
+            columns={columns}
+            rows={list.data.items}
+            rowHref={(item) => `/equipamentos/${item.id}`}
+          />
+          <Pagination
+            pagination={list.data.pagination}
+            onPageChange={setPage}
+            onPageSizeChange={(value) => {
+              setLimit(value);
+              setPage(1);
+            }}
+          />
+        </>
+      ) : (
+        <EmptyState
+          icon={Wrench}
+          title="Nenhum equipamento"
+          description="Cadastre o primeiro equipamento deste cliente."
+        />
+      )}
+      <EquipmentFormDrawer
+        open={formOpen}
+        onClose={() => setFormOpen(false)}
+        onSaved={list.refetch}
+        equipment={editing}
+        presetCustomerId={customerId}
+      />
+    </section>
+  );
+}
+
+function ServicesTab({ customerId }: { customerId: string }) {
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
+  const [operationId, setOperationId] = useState<string | null>(null);
+  const list = useQuery(
+    (signal) => operationApi.listOperations({ customerId, page, limit, signal }),
+    [customerId, page, limit],
+  );
+  const columns: Column<OperationSummary>[] = [
+    {
+      key: 'number',
+      header: 'Atendimento',
+      cell: (item) => <strong>OS-{String(item.number).padStart(6, '0')}</strong>,
+    },
+    {
+      key: 'document',
+      header: 'Serviço / documento',
+      cell: (item) => (
+        <div>
+          {item.requestedDocumentType}
+          <p className="text-caption">{item.type}</p>
+        </div>
+      ),
+    },
+    {
+      key: 'equipment',
+      header: 'Equipamento',
+      cell: (item) => item.equipment?.name ?? 'Sem equipamento específico',
+    },
+    { key: 'operator', header: 'Responsável', cell: (item) => item.operator?.name ?? '—' },
+    {
+      key: 'status',
+      header: 'Status',
+      cell: (item) => (
+        <StatusPill
+          status={
+            item.status === 'COMPLETED'
+              ? 'success'
+              : item.status === 'CANCELED'
+                ? 'danger'
+                : 'warning'
+          }
+          label={item.status}
+        />
+      ),
+    },
+    {
+      key: 'date',
+      header: 'Data',
+      cell: (item) => formatDateTime(item.completedAt ?? item.scheduledFor ?? item.createdAt),
+    },
+  ];
+  return (
+    <section className="space-y-4">
+      <div>
+        <h2 className="text-lg font-semibold">Serviços registrados</h2>
+        <p className="text-caption">
+          Ordens de Serviço, visitas, laudos e demais atendimentos vinculados ao cliente.
+        </p>
+      </div>
+      {list.loading && !list.data ? (
+        <SkeletonList rows={5} />
+      ) : list.error ? (
+        <ErrorState error={list.error} onRetry={list.refetch} />
+      ) : list.data?.items.length ? (
+        <>
+          <DataTable
+            columns={columns}
+            rows={list.data.items}
+            onRowClick={(item) => setOperationId(item.id)}
+          />
+          <Pagination
+            pagination={list.data.pagination}
+            onPageChange={setPage}
+            onPageSizeChange={(value) => {
+              setLimit(value);
+              setPage(1);
+            }}
+          />
+        </>
+      ) : (
+        <EmptyState
+          icon={ReceiptText}
+          title="Nenhum serviço registrado"
+          description="Os atendimentos do cliente aparecerão aqui."
+        />
+      )}
+      <OperationDetailDrawer
+        operationId={operationId}
+        open={Boolean(operationId)}
+        onClose={() => setOperationId(null)}
+      />
+    </section>
+  );
+}
+
+function SalesTab({ customer }: { customer: CustomerDetail }) {
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
+  const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState<Sale | null>(null);
+  const list = useQuery(
+    (signal) => salesApi.listSales({ customerId: customer.id, page, limit, signal }),
+    [customer.id, page, limit],
+  );
+  const reload = () => list.refetch();
+  const columns: Column<Sale>[] = [
+    {
+      key: 'number',
+      header: 'Venda',
+      cell: (item) => <strong>V-{String(item.number).padStart(6, '0')}</strong>,
+    },
+    { key: 'date', header: 'Data', cell: (item) => formatDate(item.soldAt) },
+    {
+      key: 'items',
+      header: 'Itens',
+      cell: (item) => (
+        <div>
+          {item.items.length} produto(s)
+          <p className="text-caption truncate max-w-xs">
+            {item.items.map((line) => line.description).join(', ')}
+          </p>
+        </div>
+      ),
+    },
+    { key: 'total', header: 'Total', cell: (item) => formatMoney(Number(item.total)) },
+    {
+      key: 'warranty',
+      header: 'Garantia',
+      cell: (item) =>
+        item.warrantyDays ? (
+          <div>
+            {item.warrantyDays} dias
+            <p className="text-caption">até {formatDate(item.warrantyEndsAt)}</p>
+          </div>
+        ) : (
+          'Sem garantia'
+        ),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      cell: (item) => (
+        <StatusPill
+          status={
+            item.status === 'COMPLETED'
+              ? 'success'
+              : item.status === 'CANCELED'
+                ? 'danger'
+                : 'warning'
+          }
+          label={item.status}
+        />
+      ),
+    },
+    {
+      key: 'actions',
+      header: 'Ações',
+      cell: (item) => (
+        <div className="flex flex-wrap gap-1" onClick={(event) => event.stopPropagation()}>
+          {item.status === 'DRAFT' && (
+            <Gate roles={['OWNER', 'MANAGER']}>
+              <button
+                className="btn-secondary"
+                onClick={() => {
+                  setEditing(item);
+                  setFormOpen(true);
+                }}
+              >
+                Editar
+              </button>
+              <button
+                className="btn-secondary"
+                onClick={async () => {
+                  await salesApi.completeSale(item.id);
+                  reload();
+                }}
+              >
+                Concluir
+              </button>
+            </Gate>
+          )}
+          {item.status === 'COMPLETED' && (
+            <Link className="btn-secondary" href={`/reports?create=RECEIPT&saleId=${item.id}`}>
+              Criar recibo
+            </Link>
+          )}
+          {item.status !== 'CANCELED' && (
+            <Gate roles={['OWNER', 'MANAGER']}>
+              <button
+                className="btn-secondary text-[var(--color-danger)]"
+                onClick={async () => {
+                  if (!window.confirm('Deseja realmente cancelar esta venda? O histórico será preservado.')) return;
+                  await salesApi.cancelSale(item.id);
+                  reload();
+                }}
+              >
+                Cancelar
+              </button>
+            </Gate>
+          )}
+        </div>
+      ),
+    },
+  ];
+  return (
+    <section className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold">Vendas do cliente</h2>
+          <p className="text-caption">
+            Produtos, datas e cobertura de garantia preservados para emissão de recibos.
+          </p>
+        </div>
+        <Gate roles={['OWNER', 'MANAGER']}>
+          <button
+            className="btn-primary"
+            onClick={() => {
+              setEditing(null);
+              setFormOpen(true);
+            }}
+          >
+            <Plus className="h-4 w-4" />
+            Nova venda
+          </button>
+        </Gate>
+      </div>
+      {list.loading && !list.data ? (
+        <SkeletonList rows={5} />
+      ) : list.error ? (
+        <ErrorState error={list.error} onRetry={list.refetch} />
+      ) : list.data?.items.length ? (
+        <>
+          <DataTable columns={columns} rows={list.data.items} />
+          <Pagination
+            pagination={list.data.pagination}
+            onPageChange={setPage}
+            onPageSizeChange={(value) => {
+              setLimit(value);
+              setPage(1);
+            }}
+          />
+        </>
+      ) : (
+        <EmptyState
+          icon={CircleDollarSign}
+          title="Nenhuma venda registrada"
+          description="Registre produtos vendidos para controlar a garantia e emitir o recibo."
+        />
+      )}
+      <SaleFormDrawer
+        open={formOpen}
+        onClose={() => setFormOpen(false)}
+        onSaved={reload}
+        customerId={customer.id}
+        addresses={customer.addresses}
+        sale={editing}
+      />
+    </section>
   );
 }

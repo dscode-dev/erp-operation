@@ -74,6 +74,11 @@ export class PmocNameSuggestionQueryDto {
   customerId!: string;
 }
 
+export class PmocActiveCoverageQueryDto {
+  @IsUUID('4')
+  customerId!: string;
+}
+
 export class PmocDashboardQueryDto {
   @IsOptional()
   @IsDateString()
@@ -90,6 +95,11 @@ export class CreatePmocPlanDto {
 
   @IsUUID('4')
   customerId!: string;
+
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  confirmActiveCoverage?: boolean;
 
   @IsUUID('4')
   equipmentId!: string;

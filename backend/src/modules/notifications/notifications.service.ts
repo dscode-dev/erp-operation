@@ -138,6 +138,7 @@ export class NotificationsService {
     assignmentId: string,
   ): Promise<void> {
     const assignment = await this.assignmentForNotificationTx(tx, assignmentId);
+    const completedDirectly = assignment.operation.status === 'COMPLETED';
     const organizationId = await this.organizationIdTx(tx);
     const managers = await this.managementRecipientsTx(tx);
     await this.createManyIdempotentTx(
@@ -147,8 +148,10 @@ export class NotificationsService {
         recipientUserId,
         type: NotificationType.OPERATION_COMPLETED,
         severity: NotificationSeverity.SUCCESS,
-        title: 'Atendimento aguardando revisão',
-        message: `Operação #${assignment.operation.number} foi concluída em campo por ${assignment.assignee.name} e aguarda sua revisão e aprovação.`,
+        title: completedDirectly ? 'Atendimento concluído' : 'Atendimento aguardando revisão',
+        message: completedDirectly
+          ? `Operação #${assignment.operation.number} foi concluída em campo por ${assignment.assignee.name}.`
+          : `Operação #${assignment.operation.number} foi concluída em campo por ${assignment.assignee.name} e aguarda sua revisão e aprovação.`,
         entityType: NotificationEntityType.OPERATION,
         entityId: assignment.operationId,
         actionUrl: operationActionUrl(assignment.operationId),
@@ -349,7 +352,7 @@ export class NotificationsService {
     id: string;
     operationId: string;
     assignedTo: string;
-    operation: { number: number };
+    operation: { number: number; status: string };
     assignee: { name: string };
   }> {
     return tx.assignment.findUniqueOrThrow({
@@ -358,7 +361,7 @@ export class NotificationsService {
         id: true,
         operationId: true,
         assignedTo: true,
-        operation: { select: { number: true } },
+        operation: { select: { number: true, status: true } },
         assignee: { select: { name: true } },
       },
     });

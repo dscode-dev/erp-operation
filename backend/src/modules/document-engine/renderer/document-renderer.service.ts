@@ -371,7 +371,7 @@ export class DocumentRendererService {
       {
         component,
         height: blockHeight,
-        draw: (x, y, blockWidth) => {
+        draw: (x, y, blockWidth): RenderedElement[] => {
           const elements: RenderedElement[] = [];
           const colWidth = (blockWidth - gap * (columns.length - 1)) / columns.length;
           elements.push({

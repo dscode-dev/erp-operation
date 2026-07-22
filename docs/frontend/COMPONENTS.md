@@ -1,5 +1,16 @@
 # COMPONENTS — Frontend
 
+## Operator — atendimento e documentos
+
+- `AtendimentoWizard`: seletor autônomo reduzido a OS/RVT e sucesso com acesso ao PDF.
+- `ExecucaoWizard`: escolhe o término pela política recebida do domínio; OS/RVT finalizam/renderizam, tipos especiais enviam para revisão.
+- `FieldReportHandoff`: impede troca local para tipo especial em operação autoiniciada.
+- `OperatorDocuments`: emissão recuperável, preview oficial, download e compartilhamento autenticados.
+
+## PMOC — aviso de cobertura ativa
+
+O `PmocPlanWizard` reutiliza o `ConfirmDialog` oficial para confirmar uma nova cobertura quando o cliente já possui PMOC ativo. O aviso contextual lista os conflitos retornados pela API; nenhuma regra local determina se a cobertura está ativa.
+
 ## DC-05 — Wizard de Recibo
 
 - `ReceiptDataStep`: snapshots administrativos e declaração editável.
@@ -779,3 +790,12 @@ Tipos:
 - BudgetWizardDrawer: wizard oficial reutilizado em /budgets e OperationDetailDrawer; suporta origem, dados, itens, valores, condições e assinaturas.
 - BudgetItemsEditor: etapa interna do wizard para SERVICE/MATERIAL, com adicionar, remover e reordenar.
 - Reutilizados SignaturePad, CustomerSignaturePreview, TechnicalSignaturePreview e DocumentViewer; nenhum capturador, preview ou gerador PDF paralelo foi criado.
+# Customer Workspace components
+
+- `SaleFormDrawer`: cria/edita venda de um cliente usando produtos ativos; não calcula preço localmente.
+- `ClienteDetailPage`: shell tabulado para dados cadastrais, equipamentos, serviços e vendas.
+- Componentes reutilizados: `EquipmentFormDrawer`, `OperationDetailDrawer`, `CustomerFormDrawer`, `DataTable`, `Pagination`, `StatusPill`.
+# First-access identity components
+
+- `ChangePasswordScreen`: mantém o fluxo simples na Platform e apresenta o onboarding em dois passos no Operator.
+- `SignaturePad`: reutilizado para captura e confirmação da assinatura do técnico; nenhuma captura paralela foi criada.

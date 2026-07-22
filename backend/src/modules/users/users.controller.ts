@@ -18,6 +18,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { Role } from '@prisma/client';
 import { memoryStorage } from 'multer';
 import { MAX_AVATAR_SIZE_BYTES } from '../../shared/constants/users.constants';
+import { MAX_SIGNATURE_IMAGE_SIZE_BYTES } from '../../shared/constants/signatures.constants';
 import { AllowPasswordChangeRequired } from '../../shared/decorators/allow-password-change-required.decorator';
 import { CurrentUser } from '../../shared/decorators/current-user.decorator';
 import { Roles } from '../../shared/decorators/roles.decorator';
@@ -25,12 +26,14 @@ import type { AuthenticatedUser } from '../../shared/types/authenticated-user.ty
 import type { RequestWithId } from '../../shared/types/request-with-id.type';
 import {
   ChangePasswordDto,
+  CompleteFirstAccessDto,
   CreateUserDto,
   ListUsersQueryDto,
   UpdatePreferencesDto,
   UpdateUserDto,
 } from './dto/user.dto';
 import type { UploadedAvatarFile } from './types/uploaded-avatar.type';
+import type { UploadedSignatureFile } from '../signatures/types/uploaded-signature-file.type';
 import { UsersService, type UserAuditContext } from './users.service';
 
 @Controller('users')
@@ -85,6 +88,24 @@ export class UsersController {
     @Req() request: RequestWithId,
   ): Promise<unknown> {
     return this.users.changePassword(user.id, body, this.context(request));
+  }
+
+  @AllowPasswordChangeRequired()
+  @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR, Role.VIEWER)
+  @Post('complete-first-access')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: MAX_SIGNATURE_IMAGE_SIZE_BYTES, files: 1 },
+    }),
+  )
+  completeFirstAccess(
+    @Body() body: CompleteFirstAccessDto,
+    @UploadedFile() file: UploadedSignatureFile | undefined,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() request: RequestWithId,
+  ): Promise<unknown> {
+    return this.users.completeFirstAccess(user.id, body, file, this.context(request));
   }
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR, Role.VIEWER)

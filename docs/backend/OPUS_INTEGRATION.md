@@ -1,5 +1,21 @@
 # OPUS Frontend Integration
 
+## Operator — matriz de atendimento em campo
+
+- Início autônomo: somente `WORK_ORDER` e `TECHNICAL_REPORT`.
+- OS/RVT atribuídas pela gestão: também concluem diretamente, sem tela de aprovação.
+- PMOC, Laudo, Orçamento e demais tipos: aparecem apenas quando atribuídos e preservam `REVIEW`.
+- Depois de OS/RVT concluída, usar `POST /documents/:id/handoff/finalize`, `POST /documents/:id/render` e `GET /documents/:id/download`.
+- Compartilhamento usa o arquivo retornado pelo download autenticado; nunca storage URL, Base64 persistente ou PDF local.
+
+## PMOC — precondição de cobertura ativa
+
+- Consultar `GET /pmoc/active-coverage?customerId={uuid}` após a escolha do cliente.
+- Mostrar aviso não bloqueante com número, nome e fim da cobertura dos PMOCs retornados.
+- Se o usuário confirmar, reenviar a criação com `confirmActiveCoverage: true`.
+- Tratar o erro `409 PMOC_ACTIVE_COVERAGE_CONFIRMATION_REQUIRED` da mesma forma; a API continua sendo a autoridade contra bypass e condições de corrida.
+- A confirmação não é exigida em alterações de PMOCs existentes.
+
 ## ORBIT_SECURITY_FIX01 — regra obrigatória para clientes web/PWA
 
 `Assignment` é a única fonte de autorização do Operator. Consuma as listagens normalmente e nunca
@@ -1914,3 +1930,9 @@ Operator PWA: starting a non-PMOC assignment opens the guided execution wizard
 (`/operator/execucao/:assignmentId`) — Checklist → Coleta → Fotos → Materiais →
 Revisão do cliente (overview + assinatura). Finishing submits the handoff and
 completes the assignment, sending the operation to `REVIEW`.
+# Customer Workspace / Sales handoff
+
+Implementação visual oficial: `/clientes` → `/clientes/:id` → abas Equipamentos, Serviços e Vendas. Vendas usam `salesApi`; itens enviados contêm apenas `productId` e `quantity`. O backend retorna snapshots e totais. O atalho “Criar recibo” abre `/reports?create=RECEIPT&saleId=:id`; o Wizard consulta o prefill real e não usa mock.
+# Operator onboarding signature
+
+O componente compartilhado `ChangePasswordScreen` possui dois passos no variant `operator`: senha definitiva e assinatura técnica. A chamada final é `usersApi.completeFirstAccess(payload, file)`. A assinatura passa a aparecer automaticamente nos seletores oficiais já alimentados por `signaturesApi.listSignatures({ active: true })`.

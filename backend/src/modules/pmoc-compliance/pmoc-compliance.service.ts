@@ -57,6 +57,29 @@ export interface PmocAuditContext {
 
 type PmocPayload = Prisma.PmocPlanGetPayload<{ include: typeof PMOC_INCLUDE }>;
 
+const ACTIVE_COVERAGE_SELECT = {
+  id: true,
+  number: true,
+  coverage: true,
+  startDate: true,
+  endDate: true,
+  operationalStatus: true,
+  maintenancePlan: { select: { name: true } },
+  _count: { select: { equipments: true } },
+} satisfies Prisma.PmocPlanSelect;
+
+type ActiveCoveragePlan = Prisma.PmocPlanGetPayload<{ select: typeof ACTIVE_COVERAGE_SELECT }>;
+type ActiveCoverageProjection = {
+  id: string;
+  number: number;
+  name: string;
+  coverage: string | null;
+  startDate: Date;
+  endDate: Date;
+  operationalStatus: PmocOperationalStatus;
+  equipmentCount: number;
+};
+
 const PMOC_INCLUDE = {
   organization: { select: { id: true, legalName: true, tradeName: true } },
   customer: { select: { id: true, name: true, tradeName: true } },
@@ -305,6 +328,21 @@ export class PmocComplianceService implements ComplianceEvaluator<{
     };
   }
 
+  async activeCoverage(customerId: string): Promise<{
+    hasActiveCoverage: boolean;
+    checkedAt: string;
+    conflicts: ActiveCoverageProjection[];
+  }> {
+    await this.customerForPmocOrThrow(customerId);
+    const checkedAt = new Date();
+    const plans = await this.activeCoveragePlans(customerId, checkedAt);
+    return {
+      hasActiveCoverage: plans.length > 0,
+      checkedAt: checkedAt.toISOString(),
+      conflicts: plans.map((plan) => this.activeCoverageProjection(plan)),
+    };
+  }
+
   async create(
     dto: CreatePmocPlanDto,
     actor: AuthenticatedUser,
@@ -319,6 +357,19 @@ export class PmocComplianceService implements ComplianceEvaluator<{
 
     const organization = await this.organizationOrThrow();
     const customer = await this.customerForPmocOrThrow(dto.customerId);
+    const activeCoveragePlans = await this.activeCoveragePlans(dto.customerId, new Date());
+    if (activeCoveragePlans.length && !dto.confirmActiveCoverage) {
+      throw new ApplicationException(
+        ERROR_CODES.PMOC_ACTIVE_COVERAGE_CONFIRMATION_REQUIRED,
+        'Este cliente já possui cobertura PMOC ativa. Confirme se deseja criar outro plano.',
+        HttpStatus.CONFLICT,
+        {
+          customerId: dto.customerId,
+          conflicts: activeCoveragePlans.map((plan) => this.activeCoverageProjection(plan)),
+        },
+      );
+    }
+    const activeCoverageConfirmed = activeCoveragePlans.length > 0 && dto.confirmActiveCoverage === true;
     const equipment = await this.equipmentForCustomerOrThrow(dto.equipmentId, dto.customerId);
     const equipmentIds = this.unique([dto.equipmentId, ...(dto.equipmentIds ?? [])]);
     await this.equipmentsForCustomerOrThrow(equipmentIds, dto.customerId);
@@ -482,8 +533,25 @@ export class PmocComplianceService implements ComplianceEvaluator<{
           equipmentId: dto.equipmentId,
           maintenancePlanId: maintenancePlan.id,
           pmocNumber: pmoc.number,
+          activeCoverageConfirmed,
+          existingActivePmocIds: activeCoveragePlans.map((plan) => plan.id),
         }),
       });
+      if (activeCoverageConfirmed) {
+        await tx.auditLog.create({
+          data: this.audit(
+            PMOC_AUDIT_ACTIONS.ACTIVE_COVERAGE_CONFIRMED,
+            PMOC_RESOURCE,
+            actor.id,
+            context,
+            {
+              pmocPlanId: pmoc.id,
+              customerId: dto.customerId,
+              existingActivePmocIds: activeCoveragePlans.map((plan) => plan.id),
+            },
+          ),
+        });
+      }
       await tx.auditLog.create({
         data: this.audit(
           (dto.generationMode ?? PmocGenerationMode.MANUAL) === PmocGenerationMode.AUTO
@@ -1584,6 +1652,39 @@ export class PmocComplianceService implements ComplianceEvaluator<{
 
   private dateOnly(value: string): Date {
     return new Date(value);
+  }
+
+  private activeCoveragePlans(customerId: string, reference: Date): Promise<ActiveCoveragePlan[]> {
+    const day = new Date(Date.UTC(
+      reference.getUTCFullYear(),
+      reference.getUTCMonth(),
+      reference.getUTCDate(),
+    ));
+    return this.prisma.pmocPlan.findMany({
+      where: {
+        customerId,
+        active: true,
+        startDate: { lte: day },
+        endDate: { gte: day },
+        maintenancePlan: { active: true },
+      },
+      select: ACTIVE_COVERAGE_SELECT,
+      orderBy: [{ endDate: 'asc' }, { number: 'asc' }],
+      take: 20,
+    });
+  }
+
+  private activeCoverageProjection(plan: ActiveCoveragePlan): ActiveCoverageProjection {
+    return {
+      id: plan.id,
+      number: plan.number,
+      name: plan.maintenancePlan.name,
+      coverage: plan.coverage,
+      startDate: plan.startDate,
+      endDate: plan.endDate,
+      operationalStatus: plan.operationalStatus,
+      equipmentCount: plan._count.equipments,
+    };
   }
 
   private clean(value: string): string {

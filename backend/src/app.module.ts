@@ -31,6 +31,7 @@ import { FinancialModule } from './modules/financial/financial.module';
 import { ProcurementModule } from './modules/procurement/procurement.module';
 import { ListExportModule } from './modules/list-exports/list-export.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { SalesModule } from './modules/sales/sales.module';
 import { GlobalExceptionFilter } from './shared/filters/global-exception.filter';
 import { RequestLoggingInterceptor } from './shared/interceptors/request-logging.interceptor';
 import { ResponseEnvelopeInterceptor } from './shared/interceptors/response-envelope.interceptor';
@@ -71,6 +72,7 @@ import { ResponseEnvelopeInterceptor } from './shared/interceptors/response-enve
     FinancialModule,
     ProcurementModule,
     NotificationsModule,
+    SalesModule,
     HealthModule,
   ],
   providers: [

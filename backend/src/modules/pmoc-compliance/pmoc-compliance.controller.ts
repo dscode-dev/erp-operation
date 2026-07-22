@@ -24,6 +24,7 @@ import {
   GeneratePmocWorkOrderDto,
   ListPmocExecutionRequestsQueryDto,
   ListPmocQueryDto,
+  PmocActiveCoverageQueryDto,
   PmocNameSuggestionQueryDto,
   PmocDashboardQueryDto,
   ReschedulePmocExecutionRequestDto,
@@ -64,6 +65,12 @@ export class PmocComplianceController {
   }
 
   @Roles(Role.OWNER, Role.MANAGER)
+  @Get('pmoc/active-coverage')
+  activeCoverage(@Query() query: PmocActiveCoverageQueryDto): Promise<unknown> {
+    return this.pmoc.activeCoverage(query.customerId);
+  }
+
+  @Roles(Role.OWNER, Role.MANAGER)
   @Post('pmoc/scheduler/run')
   runScheduler(
     @Query() query: RunPmocSchedulerQueryDto,
@@ -90,7 +97,7 @@ export class PmocComplianceController {
     return this.executionRequests.prefill(id, actor);
   }
 
-  @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR)
+  @Roles(Role.OWNER, Role.MANAGER)
   @Post('pmoc/execution-requests/:id/generate-work-order')
   generateWorkOrder(
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,

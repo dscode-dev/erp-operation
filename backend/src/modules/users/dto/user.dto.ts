@@ -181,6 +181,26 @@ export class ChangePasswordDto {
   newPassword!: string;
 }
 
+export class CompleteFirstAccessDto extends ChangePasswordDto {
+  @Transform(({ value }) => trim(value))
+  @IsString()
+  @MinLength(2)
+  @MaxLength(120)
+  signatureTitle!: string;
+
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(120)
+  profession?: string;
+
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(120)
+  professionalCouncil?: string;
+
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(80)
+  registrationNumber?: string;
+
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(120)
+  department?: string;
+}
+
 export class UpdatePreferencesDto {
   @IsOptional()
   @IsIn(USER_THEMES)

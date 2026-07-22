@@ -30,6 +30,7 @@ export interface SignatureAuditContext {
 
 const SIGNATURE_SELECT = {
   id: true,
+  userId: true,
   name: true,
   title: true,
   profession: true,
@@ -45,6 +46,7 @@ const SIGNATURE_SELECT = {
   deletedAt: true,
   createdAt: true,
   updatedAt: true,
+  user: { select: { id: true, name: true, role: true, jobTitle: true } },
 } satisfies Prisma.SignatureSelect;
 
 const SIGNATURE_INTERNAL_SELECT = {
@@ -58,6 +60,13 @@ export type SignatureResponse = Prisma.SignatureGetPayload<{ select: typeof SIGN
 export interface SignatureImageResponse extends SignatureResponse {
   contentBase64: string;
 }
+
+export type StagedSignatureImage = {
+  storageKey: string;
+  mimeType: string;
+  originalFileName: string;
+  fileSize: number;
+};
 
 @Injectable()
 export class SignaturesService {
@@ -246,6 +255,25 @@ export class SignaturesService {
       ...this.toResponse(signature),
       contentBase64: stored.content.toString('base64'),
     };
+  }
+
+  async stageUserSignatureImage(file: UploadedSignatureFile | undefined): Promise<StagedSignatureImage> {
+    this.validateImage(file);
+    const validFile = file as UploadedSignatureFile;
+    const stored = await this.assets.saveSignatureImage({
+      content: validFile.buffer,
+      extension: this.extensionFor(validFile),
+    });
+    return {
+      storageKey: stored.storageKey,
+      mimeType: validFile.mimetype,
+      originalFileName: this.sanitizeOriginalName(validFile.originalname),
+      fileSize: validFile.size,
+    };
+  }
+
+  async discardStagedImage(storageKey: string): Promise<void> {
+    await this.assets.delete(storageKey).catch(() => undefined);
   }
 
   private async signatureOrThrow(
