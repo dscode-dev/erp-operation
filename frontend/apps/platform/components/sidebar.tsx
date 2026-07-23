@@ -99,7 +99,7 @@ const groups: NavGroup[] = [
       { label: 'Financeiro', href: '/financial', icon: Wallet, permission: 'canFinancial' },
       { label: 'Orçamentos', href: '/budgets', icon: ReceiptText, roles: ['OWNER', 'MANAGER'] },
       {
-        label: 'Execuções dos Operadores',
+        label: 'Técnicos de Campo',
         href: '/operator-executions',
         icon: Activity,
         roles: ['OWNER', 'MANAGER'],

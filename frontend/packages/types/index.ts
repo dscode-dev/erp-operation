@@ -1609,6 +1609,7 @@ export type SalePayload = {
   items: Array<{ productId: string; quantity: number }>;
 };
 export type SaleReceiptPrefill = {
+  origin: 'SALE';
   saleId: string;
   receiptNumber: string;
   issuedAt: string;
@@ -1618,7 +1619,13 @@ export type SaleReceiptPrefill = {
   warrantyDays: number | null;
   warrantyStartsAt: string | null;
   warrantyEndsAt: string | null;
-  customer: { id: string; name: string; tradeName: string | null };
+  customer: {
+    id: string;
+    name: string;
+    tradeName: string | null;
+    cpf: string | null;
+    cnpj: string | null;
+  };
   address: CustomerAddress | null;
 };
 

@@ -183,6 +183,7 @@ export function AtendimentoWizard({
               RVT_MAINTENANCE_TYPES.map((item) =>
                 technicalCatalogsApi.listChecklistItems('TECHNICAL_REPORT', {
                   maintenanceType: item.value,
+                  includeGeneral: false,
                   signal,
                 }),
               ),

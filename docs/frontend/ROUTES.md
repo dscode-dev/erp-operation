@@ -1,5 +1,22 @@
 # ROUTES — Frontend
 
+## `/clientes/:id`
+
+- Visão Geral: KPIs operacionais, cadastro, endereços, contatos gerenciáveis e atendimentos recentes.
+- Serviços: listagem paginada e criação contextual de atendimento.
+- O cliente permanece fixo ao abrir o drawer pela página; nenhuma rota adicional foi criada.
+
+## `/clientes/:id` → Vendas → Criar recibo
+
+O atalho abre `/reports?create=RECEIPT&saleId=:id`. O Wizard consome o prefill da venda concluída,
+identifica o cliente por nome/CPF/CNPJ e gera uma declaração de venda de produtos antes do Preview.
+
+## `/operacoes` e `/agenda` — OS a partir de PMOC
+
+O drawer oficial oferece origem PMOC. Após escolher plano e execução pendente, o usuário revisa o
+prefill completo e só então cria/atribui a OS. Não existe rota, formulário ou criação de Operation
+paralela.
+
 ## Checklists RVT/PMOC
 
 - `/maintenance-checklists?type=CHECKLIST`: administração dos itens.
@@ -650,3 +667,8 @@ Em ambas as rotas, `WORK_ORDER` e `TECHNICAL_REPORT` concluem, finalizam o hando
 ## Ajuste funcional — Operator
 
 - O wizard acessível pelo início autônomo de uma Ordem de Serviço mantém a etapa opcional de checklist, com seleção dos itens oficiais e registro imediato como executados.
+## `/maintenance-checklists?type=RVT_CHECKLIST`
+
+Abre a aba administrativa exclusiva dos itens Semanais e Semestrais do Relatório de Visita
+Técnica. A rota física permanece única; `RVT_CHECKLIST` é somente uma chave de apresentação para
+o filtro oficial `CHECKLIST + TECHNICAL_REPORT`.

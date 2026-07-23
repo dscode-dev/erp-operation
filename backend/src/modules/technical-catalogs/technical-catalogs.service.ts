@@ -105,10 +105,15 @@ export class TechnicalCatalogsService {
           ],
         }
       : {};
-    const workflowCompatibility = query.workflow
+    const requestedWorkflows = query.workflowsAny?.length
+      ? query.workflowsAny
+      : query.workflow
+        ? [query.workflow]
+        : [];
+    const workflowCompatibility = requestedWorkflows.length
       ? {
           OR: [
-            { workflows: { has: query.workflow } },
+            { workflows: { hasSome: requestedWorkflows } },
             ...(query.includeGeneral
               ? [{ workflows: { has: TechnicalCatalogWorkflow.GENERAL } }]
               : []),
@@ -149,7 +154,9 @@ export class TechnicalCatalogsService {
       items.sort((left, right) => {
         const relevance = (item: (typeof items)[number]): number => {
           const exactArea = query.areas?.some((area) => item.areas.includes(area)) ?? false;
-          const exactWorkflow = query.workflow ? item.workflows.includes(query.workflow) : false;
+          const exactWorkflow = requestedWorkflows.some((workflow) =>
+            item.workflows.includes(workflow),
+          );
           return Number(exactArea) + Number(exactWorkflow);
         };
         return relevance(right) - relevance(left) || left.sortOrder - right.sortOrder;

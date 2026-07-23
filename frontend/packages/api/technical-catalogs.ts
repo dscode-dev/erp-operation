@@ -19,6 +19,7 @@ export type ListTechnicalCatalogsParams = {
   maintenanceType?: OperationMaintenanceType;
   areas?: TechnicalCatalogArea[];
   workflow?: TechnicalCatalogWorkflow;
+  workflowsAny?: TechnicalCatalogWorkflow[];
   includeGeneral?: boolean;
   active?: boolean;
   sortBy?: 'sortOrder' | 'title' | 'updatedAt';
@@ -41,9 +42,9 @@ export type TechnicalCatalogPayload = {
 export function list(
   params: ListTechnicalCatalogsParams = {},
 ): Promise<Paginated<TechnicalCatalog>> {
-  const { signal, areas, ...query } = params;
+  const { signal, areas, workflowsAny, ...query } = params;
   return api.get<Paginated<TechnicalCatalog>>('/technical-catalogs', {
-    query: { ...query, areas: areas?.join(',') },
+    query: { ...query, areas: areas?.join(','), workflowsAny: workflowsAny?.join(',') },
     signal,
   });
 }
@@ -105,12 +106,16 @@ export function documentWorkflow(type: DocumentTemplateType): TechnicalCatalogWo
  */
 export function listChecklistItems(
   workflow: TechnicalCatalogWorkflow,
-  opts?: { maintenanceType?: OperationMaintenanceType; signal?: AbortSignal },
+  opts?: {
+    maintenanceType?: OperationMaintenanceType;
+    includeGeneral?: boolean;
+    signal?: AbortSignal;
+  },
 ): Promise<TechnicalCatalog[]> {
   return list({
     type: 'CHECKLIST',
     workflow,
-    includeGeneral: true,
+    includeGeneral: opts?.includeGeneral ?? true,
     active: true,
     maintenanceType: opts?.maintenanceType,
     sortBy: 'sortOrder',

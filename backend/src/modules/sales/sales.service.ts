@@ -11,7 +11,17 @@ import type { CreateSaleDto, ListSalesQueryDto, SaleItemInputDto, UpdateSaleDto 
 
 type AuditContext = { requestId: string; ip: string | null; userAgent: string | null };
 const INCLUDE = {
-  customer: { select: { id: true, name: true, tradeName: true, email: true, phone: true } },
+  customer: {
+    select: {
+      id: true,
+      name: true,
+      tradeName: true,
+      cpf: true,
+      cnpj: true,
+      email: true,
+      phone: true,
+    },
+  },
   customerAddress: true,
   creator: { select: { id: true, name: true, role: true } },
   items: { include: { product: true }, orderBy: { sortOrder: 'asc' as const } },
@@ -101,7 +111,25 @@ export class SalesService {
   async receiptPrefill(id: string): Promise<unknown> {
     const sale = await this.saleOrThrow(id);
     if (sale.status !== SaleStatus.COMPLETED) throw new ApplicationException(ERROR_CODES.SALE_INVALID_STATE, 'Only completed sales can originate receipts', HttpStatus.CONFLICT);
-    return { saleId: sale.id, receiptNumber: `REC-V${String(sale.number).padStart(6, '0')}`, issuedAt: sale.soldAt, amount: sale.total, service: sale.items.map((item) => item.description).join(', '), description: sale.notes ?? sale.items.map((item) => `${String(item.quantity)} ${item.unit} — ${item.description}`).join('\n'), warrantyDays: sale.warrantyDays, warrantyStartsAt: sale.warrantyStartsAt, warrantyEndsAt: sale.warrantyEndsAt, customer: sale.customer, address: sale.customerAddress };
+    const itemDescription = sale.items
+      .map((item) => `${String(item.quantity)} ${item.unit} — ${item.description}`)
+      .join('\n');
+    return {
+      origin: 'SALE',
+      saleId: sale.id,
+      receiptNumber: `REC-V${String(sale.number).padStart(6, '0')}`,
+      issuedAt: sale.soldAt,
+      amount: sale.total,
+      service: sale.items.map((item) => item.description).join(', '),
+      description: [itemDescription, sale.notes ? `Observações: ${sale.notes}` : null]
+        .filter(Boolean)
+        .join('\n'),
+      warrantyDays: sale.warrantyDays,
+      warrantyStartsAt: sale.warrantyStartsAt,
+      warrantyEndsAt: sale.warrantyEndsAt,
+      customer: sale.customer,
+      address: sale.customerAddress,
+    };
   }
 
   private async snapshotItems(inputs: SaleItemInputDto[], at: Date): Promise<SaleSnapshotItem[]> {

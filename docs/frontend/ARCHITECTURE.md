@@ -1,5 +1,48 @@
 # ARCHITECTURE — Frontend
 
+## Cliente 360
+
+```text
+/clientes/:id
+├── operations/stats?customerId → KPIs
+├── operations?customerId → recentes + Serviços
+├── customers/:id/contacts → CRUD de contatos
+└── OperationCreationDrawer(customerId locked) → Operation oficial
+```
+
+KPIs são agregados no PostgreSQL/backend e não derivados da paginação. O drawer contextual apenas
+fixa a seleção visual; autorização e integridade continuam no domínio Operation.
+
+## Recibo originado por venda
+
+```text
+Sale COMPLETED
+→ receipt-prefill (cliente + documento + snapshots)
+→ declaração automática sensível à origem
+→ Operation RECEIPT com sourceSaleId
+→ DocumentContext
+→ Blueprint → Preview/PDF
+```
+
+O formulário não consulta Product/Pricing e não reconstitui a venda. A declaração automática é
+editável, mas depois de persistida torna-se snapshot documental.
+
+## Geração operacional a partir do PMOC
+
+```text
+PmocPlan
+→ PmocExecutionRequest PENDING
+→ prefill autoritativo
+→ OperationCreationDrawer (revisão)
+→ generate-work-order
+→ Operation + Assignment + MaintenanceExecution
+→ Operator
+```
+
+Selecionar a origem nunca persiste dados. O frontend não reconstrói a cobertura nem cria a
+Operation diretamente; apenas revisa campos permitidos. A materialização do checklist por
+equipamento e as validações de vínculo permanecem no backend.
+
 ## Fonte única de checklist
 
 `TechnicalCatalog(CHECKLIST) → wizard RVT/PMOC → Operation snapshot → DocumentContext → DocumentBuilder → Preview/PDF`.
@@ -1165,3 +1208,16 @@ O mobile não possui catálogo paralelo. `Signature.userId` identifica a assinat
 - OS iniciada pelo Operator: o catálogo é uma lista opcional de atividades realizadas; somente a seleção é persistida e entra com `done: true`.
 - OS criada/atribuída pela Platform: a seleção representa o plano enviado ao atendimento e permanece pendente até a execução do técnico.
 - Ambos os fluxos consomem o mesmo Catálogo Técnico e a mesma propriedade `Operation.checklist`; a diferença é definida na origem do workflow, sem domínio ou endpoint paralelo.
+## Classificação dos checklists documentais
+
+```text
+TechnicalCatalog
+├── CHECKLIST + WORK_ORDER/PMOC  → OS e PMOC
+└── CHECKLIST + TECHNICAL_REPORT
+    ├── WEEKLY                   → RVT semanal
+    └── SEMIANNUAL               → RVT semestral
+```
+
+A separação é feita por workflow no catálogo oficial. Não existem arrays locais, tabela paralela
+ou adaptação no Document Engine. Os wizards geram o mesmo snapshot estruturado da Operation, que
+continua alimentando Preview e PDF.

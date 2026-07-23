@@ -1,5 +1,28 @@
 # Backend State
 
+## Cliente 360 — métricas operacionais contextualizadas (2026-07-23)
+
+- `GET /operations/stats` aceita `customerId` opcional e calcula todos os estados somente para o cliente selecionado.
+- O filtro é combinado com `OperationAccessService.operationScope`; nenhuma métrica pode ampliar o conjunto autorizado ao ator.
+- CRUD de contatos e criação de Operation permanecem nos serviços oficiais existentes. Nenhuma entidade ou migration foi criada.
+
+## Recibo originado por venda — declaração comercial (2026-07-23)
+
+- `GET /sales/:id/receipt-prefill` passou a incluir CPF/CNPJ do cliente e a origem explícita `SALE`.
+- O prefill preserva sempre os itens vendidos e acrescenta as observações da venda, em vez de substituir os produtos pelas observações.
+- A declaração automática distingue venda de produtos de prestação de serviços e identifica o cliente por nome e CNPJ/CPF.
+- O fallback do `DocumentBuilder` aplica a mesma semântica usando `Operation.sourceSaleId`; declarações editadas e snapshotadas continuam imutáveis.
+- Nenhuma entidade, migration, renderer ou fluxo documental paralelo foi criado.
+
+## PMOC → Ordem de Serviço operacional (2026-07-23)
+
+- A geração manual continua usando exclusivamente `PmocExecutionRequest`; selecionar uma execução na Platform carrega o prefill e a OS só é persistida após a revisão do wizard oficial.
+- Cliente, endereço, equipamentos cobertos, identidade/número da execução e vínculo com o plano são autoritativos no backend. Operador, agenda, textos e procedimentos podem ser revisados antes da geração.
+- O checklist selecionado no PMOC agora gera também o snapshot estruturado `OperationMaintenanceChecklistItem`, multiplicado pelos equipamentos cobertos. É esse snapshot que o Operator executa e que o documento PMOC consome.
+- `Operation.checklist` foi preservado para compatibilidade com a OS. `Operation.inspectedEquipments` sempre recebe toda a cobertura do PMOC e não pode ser reduzido pelo payload revisado.
+- A criação pela `OperationsService` mantém Assignment, MaintenanceExecution, auditoria e vínculo da Execution Request na mesma transação oficial.
+- Nenhuma entidade ou migration foi criada.
+
 ## RVT e PMOC — checklists oficiais do Catálogo Técnico (2026-07-22)
 
 - RVT persiste o tipo realizado em `Operation.maintenanceType` e os grupos Semanal/Semestral em `OperationMaintenanceChecklistItem`; ambos seguem no mesmo Blueprint, com apenas o realizado marcado.
@@ -3150,3 +3173,15 @@ Status: implementado e validado em PostgreSQL/Docker.
 - O estágio `production-dependencies` executa apenas `npm prune --omit=dev`; o runtime copia esse resultado e não acessa o registry npm.
 - O cache BuildKit em `/root/.npm` reduz downloads em reconstruções, mantendo `npm ci` e o lockfile como fontes determinísticas.
 - Build da imagem e verificação interna de NestJS, Prisma Client e Prisma CLI aprovados.
+## Catálogo exclusivo de checklist do RVT (2026-07-23)
+
+- `TechnicalCatalog` permanece como fonte única, sem nova entidade ou endpoint paralelo.
+- Itens do RVT são classificados por `type=CHECKLIST`, workflow exclusivo
+  `TECHNICAL_REPORT` e periodicidade `WEEKLY` ou `SEMIANNUAL`.
+- Itens operacionais de OS/PMOC permanecem classificados nos workflows `WORK_ORDER`/`PMOC`.
+- `GET /technical-catalogs` ganhou o filtro aditivo `workflowsAny` para consultas OR entre
+  workflows, preservando `workflow` e `includeGeneral`.
+- Migration `20260723123000_rvt_checklist_catalog_defaults`: 11 itens Semanais e 7 Semestrais,
+  editáveis e soft-deletáveis.
+- O bootstrap de produção replica os mesmos defaults para instalações novas nas quais a
+  Organization é criada depois do migrate; reexecução não duplica nem restaura itens removidos.

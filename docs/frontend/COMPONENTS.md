@@ -1,5 +1,27 @@
 # COMPONENTS — Frontend
 
+## Cliente 360
+
+- `CustomerKpi`: indicador compacto para total, concluídos, em execução e pendências.
+- `CustomerContactFormDrawer`: criação/edição de contato com validação e API oficial.
+- `ConfirmDialog`: confirmação de exclusão de contato.
+- `OperationCreationDrawer.lockCustomer`: preserva o cliente contextual e mantém endereço/equipamentos editáveis.
+- `OperationDetailDrawer`: reutilizado pelos atendimentos recentes e pela aba Serviços.
+
+## Wizard de Recibo — semântica comercial
+
+- `ReceiptDataStep` adapta labels e declaração conforme `receiptSource`.
+- `receiptCustomerLabel` formata nome + CPF/CNPJ.
+- `receiptDeclaration` separa venda de produtos e serviços prestados, preservando edição manual.
+- `ReceiptWarrantyStep` atualiza a garantia sem perder a semântica da origem.
+
+## OS originada em PMOC
+
+- `PmocOperationSource`: seleciona plano/execução e carrega o prefill sem persistir Operation.
+- `OperationCreationDrawer`: revisa o prefill e chama a geração oficial no último passo.
+- `PmocSourceSummary`: apresenta origem, execução, agenda, cobertura e quantidade de procedimentos.
+- `ReadonlyPmocCustomer` e `ReadonlyPmocEquipments`: deixam explícitos os dados autoritativos herdados do plano.
+
 ## Checklists de manutenção
 
 - `RvtMaintenanceChecklistStep`: RVT iniciado pelo Operator.
@@ -846,3 +868,11 @@ Tipos:
 - `OperatorSignatureSettings`: cadastro/atualização da assinatura própria no perfil mobile usando `SignaturePad` e API oficial.
 - `OperatorSignatureChoice`: card reutilizado nos wizards autônomo e atribuído; pré-seleciona exclusivamente a assinatura vinculada ao ator e orienta configuração quando ausente.
 - `SignatureIdentity`: preview seguro da própria assinatura e metadados profissionais; não recebe storage path.
+## Catálogos Técnicos — checklist do RVT
+
+- `TechnicalCatalogsPage`: adiciona a tab virtual `Checklist do RVT`, projetada sobre registros
+  oficiais `CHECKLIST/TECHNICAL_REPORT`.
+- `TechnicalCatalogDrawer`: recebe workflows fixos e periodicidades permitidas conforme a aba,
+  impedindo classificação acidental de um item de RVT como OS/PMOC.
+- Os seletores dos wizards continuam reutilizando `MultiSelect`; os dados vêm exclusivamente da
+  API.

@@ -1,5 +1,28 @@
 # OPUS Frontend Integration
 
+## Cliente 360
+
+Na aba Visão Geral, use `operationApi.getOperationStats({ customerId })` e uma lista limitada de
+operações recentes. Contatos usam o CRUD aninhado oficial e confirmação antes da exclusão. Na aba
+Serviços, `OperationCreationDrawer` recebe `initialValues.customerId` + `lockCustomer`; nunca crie
+outro formulário de Operation.
+
+## Declaração do Recibo por origem
+
+- `SALE`: consumir `GET /sales/:id/receipt-prefill`, mostrar CPF/CNPJ e usar “venda de produtos”.
+- `OPERATION` ou manual: usar “serviços prestados”.
+- Nunca gerar a declaração com placeholder enquanto o cliente estiver carregando.
+- Itens e observações chegam juntos em `description`; o usuário pode editar o texto final.
+- Preview/PDF continuam consumindo o snapshot `receiptDeclaration` pelo Document Engine.
+
+## OS originada em PMOC
+
+`PmocOperationSource` apenas escolhe plano/execução e carrega o prefill. A revisão acontece no
+`OperationCreationDrawer`; somente o último passo chama `generateWorkOrder`. Cliente/equipamentos
+são readonly, enquanto operador, agenda, procedimentos e textos permanecem revisáveis. A API
+preserva toda a cobertura e entrega ao Operator o checklist estruturado por equipamento. Não use
+`operationApi.createOperation` nesse fluxo.
+
 ## Checklists RVT/PMOC
 
 - RVT Platform e Operator usam os mesmos itens classificados como `WEEKLY` e `SEMIANNUAL`.
@@ -1969,3 +1992,10 @@ OS e RVT autônomos ou atribuídos apresentam conferência completa junto à ass
 # Operator own technical signature
 
 Use exclusivamente `signaturesApi.getMySignature/saveMySignature/downloadMySignatureImage`. A assinatura própria é pré-selecionada no passo Assinatura de OS/RVT e persistida pelo endpoint oficial de seleção do handoff. O backend rejeita IDs de terceiros; nunca carregue o catálogo global no mobile.
+## Catálogo de checklist do RVT — 2026-07-23
+
+- A aba visual `Checklist do RVT` é uma projeção de `TechnicalCatalog`, não um domínio novo.
+- Filtro oficial: `CHECKLIST + TECHNICAL_REPORT + includeGeneral=false`.
+- Periodicidades V1: `WEEKLY` e `SEMIANNUAL`.
+- OS/PMOC utilizam `workflowsAny=WORK_ORDER,PMOC` e permanecem isolados do RVT.
+- Platform e Operator consomem a mesma origem; não manter arrays ou defaults locais.

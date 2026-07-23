@@ -33,6 +33,7 @@ import type {
   ListOperationsQueryDto,
   OperationChecklistItemDto,
   OperationPhotoInputDto,
+  OperationStatsQueryDto,
   UpdateOperationDto,
 } from './dto/operation.dto';
 
@@ -171,8 +172,14 @@ export class OperationsService {
     return buildPaginatedResponse(items, total, query.page, query.limit);
   }
 
-  async stats(actor: AuthenticatedUser): Promise<Record<string, unknown>> {
-    const where = this.access.operationScope(actor);
+  async stats(
+    query: OperationStatsQueryDto,
+    actor: AuthenticatedUser,
+  ): Promise<Record<string, unknown>> {
+    const where: Prisma.OperationWhereInput = {
+      ...this.access.operationScope(actor),
+      ...(query.customerId ? { customerId: query.customerId } : {}),
+    };
     const [total, draft, pending, inProgress, review, completed, canceled] = await this.prisma.$transaction([
       this.prisma.operation.count({ where }),
       this.prisma.operation.count({ where: { ...where, status: 'DRAFT' } }),

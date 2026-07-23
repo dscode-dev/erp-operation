@@ -50,6 +50,13 @@ export class ListTechnicalCatalogsQueryDto {
   @IsEnum(TechnicalCatalogArea, { each: true })
   areas?: TechnicalCatalogArea[];
   @IsOptional() @IsEnum(TechnicalCatalogWorkflow) workflow?: TechnicalCatalogWorkflow;
+  @IsOptional()
+  @Transform(({ value }) => enumList(value))
+  @IsArray()
+  @ArrayMaxSize(6)
+  @ArrayUnique()
+  @IsEnum(TechnicalCatalogWorkflow, { each: true })
+  workflowsAny?: TechnicalCatalogWorkflow[];
   @IsOptional() @Transform(({ value }) => boolean(value)) @IsBoolean() includeGeneral?: boolean;
   @IsOptional() @Transform(({ value }) => boolean(value)) @IsBoolean() active?: boolean;
   @IsOptional() @IsIn(['sortOrder', 'title', 'updatedAt']) sortBy = 'sortOrder';

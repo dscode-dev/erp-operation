@@ -1,6 +1,7 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import {
   DocumentTemplateType,
+  MaintenanceChecklistResult,
   MaintenanceExecutionStatus,
   NotificationType,
   OperationMaintenanceType,
@@ -91,7 +92,11 @@ const PLAN_FOR_EXECUTION_INCLUDE = {
     orderBy: { createdAt: 'asc' as const },
   },
   checklists: {
-    include: { technicalCatalog: { select: { id: true, title: true, active: true } } },
+    include: {
+      technicalCatalog: {
+        select: { id: true, title: true, active: true, maintenanceType: true },
+      },
+    },
     orderBy: { position: 'asc' as const },
   },
   maintenancePlan: true,
@@ -1083,6 +1088,19 @@ export class PmocExecutionRequestsService {
       plan.equipment.addressId ??
       plan.customer.addresses[0]?.id ??
       undefined;
+    const maintenanceType = this.maintenanceType(plan.periodicity);
+    const activeChecklist = plan.includeChecklistInOperations
+      ? plan.checklists.filter((item) => item.technicalCatalog.active)
+      : [];
+    const operationChecklist =
+      reviewed?.checklist ??
+      activeChecklist.map((item) => ({ label: item.technicalCatalog.title, done: false }));
+    const checklistMaintenanceTypes = new Map(
+      activeChecklist.map((item) => [
+        item.technicalCatalog.title,
+        item.technicalCatalog.maintenanceType,
+      ]),
+    );
     return {
       ...reviewed,
       customerId: plan.customerId,
@@ -1094,26 +1112,30 @@ export class PmocExecutionRequestsService {
       serviceTypes: plan.serviceTypes.length ? plan.serviceTypes : [plan.defaultOperationType],
       status: reviewed?.status ?? OperationStatus.DRAFT,
       scheduledFor: scheduledFor.toISOString(),
-      checklist:
-        reviewed?.checklist ??
-        (plan.includeChecklistInOperations
-          ? plan.checklists
-              .filter((item) => item.technicalCatalog.active)
-              .map((item) => ({ label: item.technicalCatalog.title, done: false }))
-          : []),
+      checklist: operationChecklist,
       observations:
         reviewed?.observations ??
         plan.defaultOperationObservations ??
         `Execução preventiva vinculada ao PMOC-${String(plan.number).padStart(6, '0')}.${plan.defaultEstimatedDurationMinutes ? ` Duração estimada: ${plan.defaultEstimatedDurationMinutes} minutos.` : ''}`,
       reportedIssue: reviewed?.reportedIssue ?? `Execução programada do ${plan.maintenancePlan.name}.`,
       serviceDescription: reviewed?.serviceDescription ?? plan.coverage ?? plan.observations ?? undefined,
-      maintenanceType: reviewed?.maintenanceType ?? this.maintenanceType(plan.periodicity),
-      inspectedEquipments:
-        reviewed?.inspectedEquipments ??
+      maintenanceType,
+      maintenanceChecklist: operationChecklist.flatMap((item) =>
         equipments.map((equipment) => ({
           equipmentId: equipment.id,
-          sector: equipment.address?.name ?? equipment.name,
+          maintenanceType: checklistMaintenanceTypes.get(item.label) ?? maintenanceType,
+          description: item.label,
+          executed: false,
+          result: MaintenanceChecklistResult.NO,
         })),
+      ),
+      // A cobertura da execução pertence ao PMOC. O frontend pode revisar os
+      // textos e o responsável, mas não retirar equipamentos do plano ao gerar
+      // uma OS.
+      inspectedEquipments: equipments.map((equipment) => ({
+        equipmentId: equipment.id,
+        sector: equipment.address?.name ?? equipment.name,
+      })),
     };
   }
 

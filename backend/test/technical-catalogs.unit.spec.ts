@@ -119,11 +119,53 @@ describe('TechnicalCatalogsService', () => {
       },
       {
         OR: [
-          { workflows: { has: TechnicalCatalogWorkflow.TECHNICAL_OPINION } },
+          { workflows: { hasSome: [TechnicalCatalogWorkflow.TECHNICAL_OPINION] } },
           { workflows: { has: TechnicalCatalogWorkflow.GENERAL } },
         ],
       },
     ]);
+  });
+
+  it('filters a shared catalog tab by any requested workflow without including RVT records', async () => {
+    const prisma = {
+      organization: { findFirst: jest.fn().mockResolvedValue({ id: organizationId }) },
+      technicalCatalog: {
+        findMany: jest.fn((args: unknown) => ({ operation: 'findMany', args })),
+        count: jest.fn((args: unknown) => ({ operation: 'count', args })),
+      },
+      $transaction: jest.fn().mockResolvedValue([[], 0]),
+    };
+    const service = new TechnicalCatalogsService(prisma as never);
+
+    await service.list({
+      page: 1,
+      limit: 100,
+      type: TechnicalCatalogType.CHECKLIST,
+      workflowsAny: [
+        TechnicalCatalogWorkflow.WORK_ORDER,
+        TechnicalCatalogWorkflow.PMOC,
+      ],
+      includeGeneral: true,
+      sortBy: 'sortOrder',
+      order: 'asc',
+    });
+
+    const args = prisma.technicalCatalog.findMany.mock.calls[0]?.[0] as {
+      where: { AND: unknown[] };
+    };
+    expect(args.where.AND[1]).toEqual({
+      OR: [
+        {
+          workflows: {
+            hasSome: [
+              TechnicalCatalogWorkflow.WORK_ORDER,
+              TechnicalCatalogWorkflow.PMOC,
+            ],
+          },
+        },
+        { workflows: { has: TechnicalCatalogWorkflow.GENERAL } },
+      ],
+    });
   });
 
   it('creates sanitized catalog content and audit in one transaction', async () => {

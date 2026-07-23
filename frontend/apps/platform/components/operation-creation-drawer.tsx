@@ -10,6 +10,7 @@ import { StatusChip } from "@erp/ui/status-chip";
 import { TechnicalCatalogSelector } from "@erp/ui/technical-catalog/technical-catalog-selector";
 import {
   ApiClientError,
+  customersApi,
   equipmentsApi,
   operationApi,
   pmocApi,
@@ -35,6 +36,11 @@ import {
 
 type Mode = "operation" | "schedule" | "service" | "work-order";
 type Step = 0 | 1 | 2 | 3 | 4;
+type PmocOperationDraft = {
+  plan: PmocPlan;
+  request: PmocExecutionRequest;
+  prefill: CreateOperationPayload;
+};
 
 const STEPS = ["Cliente", "Escopo", "Execução", "Checklist", "Confirmar"];
 
@@ -81,6 +87,7 @@ export function OperationCreationDrawer({
   submitOperation,
   submitLabel,
   contextNotice,
+  lockCustomer = false,
 }: {
   open: boolean;
   mode?: Mode;
@@ -90,6 +97,7 @@ export function OperationCreationDrawer({
   submitOperation?: (payload: CreateOperationPayload) => Promise<OperationDetail>;
   submitLabel?: string;
   contextNotice?: string;
+  lockCustomer?: boolean;
 }) {
   const copy = MODE_COPY[mode];
   const [step, setStep] = useState<Step>(0);
@@ -111,6 +119,13 @@ export function OperationCreationDrawer({
   const [created, setCreated] = useState<OperationDetail | null>(null);
   // Origem da operação: avulsa (fluxo manual) ou a partir de um PMOC existente.
   const [source, setSource] = useState<"manual" | "pmoc">("manual");
+  const [pmocDraft, setPmocDraft] = useState<PmocOperationDraft | null>(null);
+  const activeInitialValues = pmocDraft?.prefill ?? initialValues;
+  const customer = useQuery(
+    (signal) =>
+      customerId ? customersApi.getCustomer(customerId, { signal }) : Promise.resolve(null),
+    [customerId],
+  );
   const equipments = useQuery(
     (signal) => customerId
       ? equipmentsApi.listEquipments({ customerId, limit: 100, signal })
@@ -119,36 +134,40 @@ export function OperationCreationDrawer({
   );
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setPmocDraft(null);
+      setSource("manual");
+      return;
+    }
     setStep(0);
-    setSource("manual");
-    setCustomerId(initialValues?.customerId ?? "");
-    setAddressId(initialValues?.addressId ?? "");
-    setEquipmentId(initialValues?.equipmentId ?? initialValues?.inspectedEquipments?.[0]?.equipmentId ?? "");
+    setCustomerId(activeInitialValues?.customerId ?? "");
+    setAddressId(activeInitialValues?.addressId ?? "");
+    setEquipmentId(activeInitialValues?.equipmentId ?? activeInitialValues?.inspectedEquipments?.[0]?.equipmentId ?? "");
     setEquipmentIds(
-      initialValues?.inspectedEquipments?.map((item) => item.equipmentId) ??
-        (initialValues?.equipmentId ? [initialValues.equipmentId] : []),
+      activeInitialValues?.inspectedEquipments?.map((item) => item.equipmentId) ??
+        (activeInitialValues?.equipmentId ? [activeInitialValues.equipmentId] : []),
     );
-    setOperatorId(initialValues?.operatorId ?? "");
-    setType(initialValues?.type ?? "PREVENTIVA");
-    setDocumentType(initialValues?.documentType ?? "WORK_ORDER");
-    const schedule = initialValues?.scheduledFor ? localDateTime(initialValues.scheduledFor) : null;
+    setOperatorId(activeInitialValues?.operatorId ?? "");
+    setType(activeInitialValues?.type ?? "PREVENTIVA");
+    setDocumentType(activeInitialValues?.documentType ?? "WORK_ORDER");
+    const schedule = activeInitialValues?.scheduledFor ? localDateTime(activeInitialValues.scheduledFor) : null;
     setDate(schedule?.date ?? "");
     setTime(schedule?.time ?? "");
-    setChecklist(initialValues?.checklist?.map((item) => item.label) ?? []);
-    setObservations(initialValues?.observations ?? "");
-    setReportedIssue(initialValues?.reportedIssue ?? "");
-    setServiceDescription(initialValues?.serviceDescription ?? "");
+    setChecklist(activeInitialValues?.checklist?.map((item) => item.label) ?? []);
+    setObservations(activeInitialValues?.observations ?? "");
+    setReportedIssue(activeInitialValues?.reportedIssue ?? "");
+    setServiceDescription(activeInitialValues?.serviceDescription ?? "");
     setSaving(false);
     setError(null);
     setCreated(null);
-  }, [initialValues, open]);
+  }, [activeInitialValues, open, pmocDraft]);
 
   const scheduledFor = useMemo(() => {
     if (!date || !time) return null;
     return new Date(`${date}T${time}:00`).toISOString();
   }, [date, time]);
-  const documentTypeLocked = initialValues?.documentType === "PMOC";
+  const documentTypeLocked = activeInitialValues?.documentType === "PMOC";
+  const isPmocOperation = Boolean(pmocDraft || documentTypeLocked);
   // Origem PMOC disponível ao criar uma operação/agendamento (não em contexto já travado em PMOC).
   const canChooseSource = !documentTypeLocked && (mode === "operation" || mode === "schedule");
 
@@ -163,12 +182,12 @@ export function OperationCreationDrawer({
     setError(null);
     try {
       const payload: CreateOperationPayload = {
-        ...initialValues,
+        ...activeInitialValues,
         customerId,
         addressId: addressId || null,
         equipmentId: equipmentId || null,
         inspectedEquipments: equipmentIds.map((id) => {
-          const existing = initialValues?.inspectedEquipments?.find((item) => item.equipmentId === id);
+          const existing = activeInitialValues?.inspectedEquipments?.find((item) => item.equipmentId === id);
           const equipment = equipments.data?.items.find((item) => item.id === id);
           return {
             equipmentId: id,
@@ -182,7 +201,7 @@ export function OperationCreationDrawer({
         // Nasce como rascunho; a atribuição ao operador leva a operação para
         // "Pendente" no backend, e só o início da execução muda para
         // "Em andamento".
-        status: initialValues?.status ?? "DRAFT",
+        status: activeInitialValues?.status ?? "DRAFT",
         scheduledFor,
         operatorId: operatorId || null,
         checklist: checklist.map((label) => ({ label, done: false })),
@@ -190,9 +209,34 @@ export function OperationCreationDrawer({
         reportedIssue: reportedIssue || null,
         serviceDescription: serviceDescription || null,
       };
-      const operation = submitOperation
-        ? await submitOperation(payload)
-        : await operationApi.createOperation(payload);
+      let operation: OperationDetail;
+      if (pmocDraft) {
+        const generate = async (allowEarly = false) => {
+          const generated = await pmocApi.generateWorkOrder(pmocDraft.request.id, payload, {
+            allowEarly,
+          });
+          const operationId = generated.operationId ?? generated.generatedOperationId;
+          if (!operationId) throw new Error("A Ordem de Serviço foi gerada, mas não foi localizada.");
+          return operationApi.getOperation(operationId);
+        };
+        try {
+          operation = await generate();
+        } catch (cause) {
+          if (
+            cause instanceof ApiClientError &&
+            cause.code === "PMOC_EXECUTION_TOO_EARLY" &&
+            window.confirm(`${cause.message}\n\nDeseja confirmar o adiantamento desta execução?`)
+          ) {
+            operation = await generate(true);
+          } else {
+            throw cause;
+          }
+        }
+      } else {
+        operation = submitOperation
+          ? await submitOperation(payload)
+          : await operationApi.createOperation(payload);
+      }
       setCreated(operation);
       onCreated?.(operation);
     } catch (err) {
@@ -212,7 +256,7 @@ export function OperationCreationDrawer({
       footer={
         created ? (
           <button onClick={onClose} className={primaryBtn}>Concluir</button>
-        ) : source === "pmoc" ? (
+        ) : source === "pmoc" && !pmocDraft ? (
           <button onClick={onClose} className={secondaryBtn}>Fechar</button>
         ) : (
           <>
@@ -225,7 +269,7 @@ export function OperationCreationDrawer({
               </button>
             ) : (
               <button onClick={submit} disabled={saving || !canNext} className={primaryBtn}>
-                {saving ? "Criando…" : (submitLabel ?? "Criar")}
+                {saving ? "Criando…" : (pmocDraft ? "Criar Ordem de Serviço" : (submitLabel ?? "Criar"))}
               </button>
             )}
           </>
@@ -236,8 +280,17 @@ export function OperationCreationDrawer({
         <p className="text-sm text-[var(--color-muted-foreground)]">{copy.description}</p>
         {!created && canChooseSource && (
           <div className="grid grid-cols-2 gap-2">
-            <SourceCard active={source === "pmoc"} onClick={() => setSource("pmoc")} icon={ShieldCheck} title="A partir de um PMOC" description="Gera a OS de uma execução programada, com todos os dados do plano." />
-            <SourceCard active={source === "manual"} onClick={() => setSource("manual")} icon={ClipboardList} title="Operação avulsa" description="Cadastre um atendimento do zero." />
+            <SourceCard active={source === "pmoc"} onClick={() => setSource("pmoc")} icon={ShieldCheck} title="A partir de um PMOC" description="Revise os dados do plano antes de criar e atribuir a OS." />
+            <SourceCard
+              active={source === "manual"}
+              onClick={() => {
+                setPmocDraft(null);
+                setSource("manual");
+              }}
+              icon={ClipboardList}
+              title="Operação avulsa"
+              description="Cadastre um atendimento do zero."
+            />
           </div>
         )}
         {contextNotice && (
@@ -250,38 +303,87 @@ export function OperationCreationDrawer({
             O atendimento será encaminhado ao operador selecionado e todo o histórico será preservado.
           </div>
         )}
-        {error && source === "manual" && <div className="rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 px-3 py-2 text-sm text-[var(--color-danger)]">{error}</div>}
+        {error && <div className="rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 px-3 py-2 text-sm text-[var(--color-danger)]">{error}</div>}
         {created ? (
           <div className="rounded-[var(--radius-lg)] border border-[var(--color-success)]/30 bg-[var(--color-success)]/10 p-5 text-[var(--color-success)]">
             <div className="flex items-center gap-2 font-semibold"><Check className="h-5 w-5" /> {copy.success}</div>
             <p className="mt-2 text-sm">Atendimento #{String(created.number).padStart(6, "0")}. A Ordem de Serviço fica disponível na área de documentos.</p>
           </div>
-        ) : source === "pmoc" ? (
-          <PmocOperationSource onCreated={(op) => { setCreated(op); onCreated?.(op); }} />
+        ) : source === "pmoc" && !pmocDraft ? (
+          <PmocOperationSource
+            onReview={(plan, request, prefill) => {
+              setPmocDraft({ plan, request, prefill });
+              setError(null);
+            }}
+          />
         ) : (
           <>
+            {pmocDraft && (
+              <PmocSourceSummary
+                draft={pmocDraft}
+                customerName={customer.data?.tradeName ?? customer.data?.name}
+                equipmentNames={(equipments.data?.items ?? [])
+                  .filter((item) => equipmentIds.includes(item.id))
+                  .map((item) => item.name)}
+                onChange={() => setPmocDraft(null)}
+              />
+            )}
             <Stepper step={step} />
             {step === 0 && (
               <div className="space-y-3">
-                <CustomerSelect value={customerId} onChange={(id) => { setCustomerId(id); setAddressId(""); setEquipmentId(""); setEquipmentIds([]); }} />
-                <CustomerAddressSelect customerId={customerId} value={addressId} onChange={setAddressId} />
+                {isPmocOperation ? (
+                  <ReadonlyPmocCustomer
+                    customerName={customer.data?.tradeName ?? customer.data?.name}
+                    address={customer.data?.addresses.find((item) => item.id === addressId)}
+                    description="Cliente e local são herdados do PMOC para preservar a cobertura contratada."
+                  />
+                ) : lockCustomer ? (
+                  <>
+                    <ReadonlyField
+                      label="Cliente"
+                      value={customer.data?.tradeName ?? customer.data?.name ?? "Carregando…"}
+                    />
+                    <CustomerAddressSelect
+                      customerId={customerId}
+                      value={addressId}
+                      onChange={setAddressId}
+                    />
+                    <p className="text-caption">
+                      Cliente definido pela página atual. Selecione apenas o local do atendimento.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <CustomerSelect value={customerId} onChange={(id) => { setCustomerId(id); setAddressId(""); setEquipmentId(""); setEquipmentIds([]); }} />
+                    <CustomerAddressSelect customerId={customerId} value={addressId} onChange={setAddressId} />
+                  </>
+                )}
               </div>
             )}
             {step === 1 && (
               <div className="space-y-3">
-                <MultiSelect
-                  label="Equipamentos da Ordem de Serviço"
-                  value={equipmentIds}
-                  onChange={(ids) => { setEquipmentIds(ids); setEquipmentId(ids[0] ?? ""); }}
-                  options={(equipments.data?.items ?? []).map((equipment) => ({
-                    value: equipment.id,
-                    label: equipment.name,
-                    description: equipment.tag ?? equipment.type,
-                  }))}
-                  placeholder={customerId ? "Selecione um ou mais equipamentos" : "Selecione primeiro o cliente"}
-                  emptyMessage="Nenhum equipamento ativo disponível para este cliente."
-                />
-                <p className="text-caption">Todos os equipamentos selecionados serão preservados na OS, no Operator e no documento. O primeiro permanece como equipamento principal para compatibilidade.</p>
+                {isPmocOperation ? (
+                  <ReadonlyPmocEquipments
+                    equipmentIds={equipmentIds}
+                    equipments={equipments.data?.items ?? []}
+                  />
+                ) : (
+                  <>
+                    <MultiSelect
+                      label="Equipamentos da Ordem de Serviço"
+                      value={equipmentIds}
+                      onChange={(ids) => { setEquipmentIds(ids); setEquipmentId(ids[0] ?? ""); }}
+                      options={(equipments.data?.items ?? []).map((equipment) => ({
+                        value: equipment.id,
+                        label: equipment.name,
+                        description: equipment.tag ?? equipment.type,
+                      }))}
+                      placeholder={customerId ? "Selecione um ou mais equipamentos" : "Selecione primeiro o cliente"}
+                      emptyMessage="Nenhum equipamento ativo disponível para este cliente."
+                    />
+                    <p className="text-caption">Todos os equipamentos selecionados serão preservados na OS, no Operator e no documento. O primeiro permanece como equipamento principal para compatibilidade.</p>
+                  </>
+                )}
               </div>
             )}
             {step === 2 && (
@@ -294,7 +396,11 @@ export function OperationCreationDrawer({
                     ))}
                   </select>
                 </Field>
-                <p className="text-caption">PMOC continua sendo atribuído pelo plano oficial. Os demais atendimentos usarão o documento selecionado.</p>
+                <p className="text-caption">
+                  {isPmocOperation
+                    ? "A OS permanecerá vinculada a esta execução do PMOC. Selecione o técnico que receberá o atendimento no Operator."
+                    : "PMOC continua sendo atribuído pelo plano oficial. Os demais atendimentos usarão o documento selecionado."}
+                </p>
                 <UserSelect value={operatorId} onChange={setOperatorId} />
                 <DateTimePicker date={date} time={time} onDate={setDate} onTime={setTime} />
               </div>
@@ -302,7 +408,9 @@ export function OperationCreationDrawer({
             {step === 3 && (
               <div className="space-y-3">
                 <p className="text-caption">
-                  Selecione os checks que o operador deverá seguir. Os itens vêm de <strong>Catálogos Técnicos</strong> para o documento <strong>{DOCUMENT_KIND_LABEL[documentType]}</strong>; você também pode adicionar itens personalizados.
+                  {isPmocOperation
+                    ? "Revise os procedimentos herdados do PMOC. Cada item selecionado será entregue ao técnico para execução em todos os equipamentos cobertos."
+                    : <>Selecione os checks que o operador deverá seguir. Os itens vêm de <strong>Catálogos Técnicos</strong> para o documento <strong>{DOCUMENT_KIND_LABEL[documentType]}</strong>; você também pode adicionar itens personalizados.</>}
                 </p>
                 <TechnicalCatalogSelector
                   type="CHECKLIST"
@@ -362,6 +470,101 @@ function localDateTime(value: string): { date: string; time: string } {
 
 /* ---------- Origem da operação ---------- */
 
+function PmocSourceSummary({
+  draft,
+  customerName,
+  equipmentNames,
+  onChange,
+}: {
+  draft: PmocOperationDraft;
+  customerName?: string;
+  equipmentNames: string[];
+  onChange: () => void;
+}) {
+  return (
+    <div className="rounded-[var(--radius-lg)] border border-[var(--color-primary)]/25 bg-[var(--color-primary)]/5 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-primary)]">Origem PMOC</p>
+          <p className="mt-1 font-semibold">
+            PMOC-{String(draft.plan.number).padStart(6, "0")} · Execução {String(draft.request.executionNumber).padStart(3, "0")}
+          </p>
+        </div>
+        <button type="button" onClick={onChange} className={secondaryBtn}>Trocar execução</button>
+      </div>
+      <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+        <div><dt className="text-[var(--color-muted-foreground)]">Cliente</dt><dd>{customerName ?? "Carregando…"}</dd></div>
+        <div><dt className="text-[var(--color-muted-foreground)]">Data prevista</dt><dd>{new Date(draft.request.scheduledFor).toLocaleString("pt-BR")}</dd></div>
+        <div><dt className="text-[var(--color-muted-foreground)]">Equipamentos cobertos</dt><dd>{equipmentNames.length || draft.prefill.inspectedEquipments?.length || 0}</dd></div>
+        <div><dt className="text-[var(--color-muted-foreground)]">Procedimentos enviados</dt><dd>{draft.prefill.checklist?.length ?? 0}</dd></div>
+      </dl>
+    </div>
+  );
+}
+
+function ReadonlyPmocCustomer({
+  customerName,
+  address,
+  description,
+}: {
+  customerName?: string;
+  address?: {
+    name: string | null;
+    street: string | null;
+    number: string | null;
+    district: string | null;
+    city: string | null;
+    state: string | null;
+  };
+  description: string;
+}) {
+  const addressText = address
+    ? [address.name, [address.street, address.number].filter(Boolean).join(", "), address.district, address.city, address.state]
+        .filter(Boolean)
+        .join(" · ")
+    : "Endereço principal definido no PMOC";
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      <ReadonlyField label="Cliente" value={customerName ?? "Carregando…"} />
+      <ReadonlyField label="Local do atendimento" value={addressText} />
+      <p className="text-caption sm:col-span-2">{description}</p>
+    </div>
+  );
+}
+
+function ReadonlyPmocEquipments({
+  equipmentIds,
+  equipments,
+}: {
+  equipmentIds: string[];
+  equipments: Array<{ id: string; name: string; tag: string | null; type: string }>;
+}) {
+  const selected = equipmentIds.map((id) => equipments.find((equipment) => equipment.id === id));
+  return (
+    <div className="space-y-3">
+      <p className="text-sm font-medium">Equipamentos cobertos pelo PMOC</p>
+      <div className="space-y-2">
+        {selected.map((equipment, index) => (
+          <div key={equipment?.id ?? equipmentIds[index]} className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-muted)]/35 px-3 py-2">
+            <p className="text-sm font-medium">{equipment?.name ?? `Equipamento ${index + 1}`}</p>
+            <p className="text-xs text-[var(--color-muted-foreground)]">{equipment?.tag ?? equipment?.type ?? equipmentIds[index]}</p>
+          </div>
+        ))}
+      </div>
+      <p className="text-caption">A cobertura pertence ao PMOC e não pode ser removida nesta OS. Os equipamentos seguirão para o Operator e para o documento final.</p>
+    </div>
+  );
+}
+
+function ReadonlyField({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="mb-1 text-sm font-medium">{label}</p>
+      <div className="min-h-10 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-muted)]/45 px-3 py-2 text-sm">{value}</div>
+    </div>
+  );
+}
+
 function SourceCard({ active, onClick, icon: Icon, title, description }: { active: boolean; onClick: () => void; icon: typeof ShieldCheck; title: string; description: string }) {
   return (
     <button
@@ -383,13 +586,15 @@ function daysUntil(iso: string): number {
 }
 
 /**
- * Geração de OS a partir de uma execução programada de um PMOC. Traz os dados do
- * plano, permite atribuir um operador e confirma o adiantamento quando a execução
- * é muito futura (registrado na plataforma pelo backend).
+ * Seleciona uma execução programada e carrega o prefill oficial. A OS somente é
+ * gerada depois da revisão no wizard principal.
  */
-function PmocOperationSource({ onCreated }: { onCreated: (operation: OperationDetail) => void }) {
+function PmocOperationSource({
+  onReview,
+}: {
+  onReview: (plan: PmocPlan, request: PmocExecutionRequest, prefill: CreateOperationPayload) => void;
+}) {
   const [planId, setPlanId] = useState("");
-  const [operatorId, setOperatorId] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -402,29 +607,16 @@ function PmocOperationSource({ onCreated }: { onCreated: (operation: OperationDe
     [planId],
   );
 
-  async function generate(request: PmocExecutionRequest, allowEarly = false) {
+  async function review(request: PmocExecutionRequest) {
     setBusy(request.id);
     setError(null);
     try {
       const prefill = await pmocApi.getExecutionRequestPrefill(request.id);
-      const generated = await pmocApi.generateWorkOrder(
-        request.id,
-        { ...prefill, documentType: "PMOC", operatorId: operatorId || prefill.operatorId },
-        { allowEarly },
-      );
-      const operationId = generated.operationId ?? generated.generatedOperationId;
-      if (!operationId) throw new Error("A execução foi gerada, mas a operação não foi localizada.");
-      const operation = await operationApi.getOperation(operationId);
-      onCreated(operation);
+      const plan = (plans.data ?? []).find((item) => item.id === planId);
+      if (!plan) throw new Error("O PMOC selecionado não foi localizado.");
+      onReview(plan, request, prefill);
     } catch (cause) {
-      if (cause instanceof ApiClientError && cause.code === "PMOC_EXECUTION_TOO_EARLY") {
-        setBusy(null);
-        if (window.confirm(`${cause.message}\n\nDeseja registrar o adiantamento e gerar a OS mesmo assim?`)) {
-          void generate(request, true);
-        }
-        return;
-      }
-      setError(cause instanceof ApiClientError ? cause.message : "Não foi possível gerar a OS do PMOC.");
+      setError(cause instanceof ApiClientError ? cause.message : "Não foi possível carregar os dados desta execução.");
     } finally {
       setBusy(null);
     }
@@ -447,12 +639,7 @@ function PmocOperationSource({ onCreated }: { onCreated: (operation: OperationDe
       )}
 
       {planId && (
-        <>
-          <Field label="Operador responsável (opcional)">
-            <UserSelect value={operatorId} onChange={setOperatorId} />
-          </Field>
-
-          <div className="space-y-1.5">
+        <div className="space-y-1.5">
             <span className="text-sm font-medium">Execuções pendentes</span>
             {requests.loading && !requests.data ? (
               <SkeletonList rows={3} />
@@ -464,7 +651,7 @@ function PmocOperationSource({ onCreated }: { onCreated: (operation: OperationDe
                   const early = daysUntil(request.scheduledFor) > EARLY_THRESHOLD_DAYS;
                   return (
                     <li key={request.id}>
-                      <button type="button" disabled={Boolean(busy)} onClick={() => void generate(request)} className="flex w-full items-center justify-between gap-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-3 text-left transition hover:bg-[var(--color-muted)] disabled:opacity-60">
+                      <button type="button" disabled={Boolean(busy)} onClick={() => void review(request)} className="flex w-full items-center justify-between gap-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-3 text-left transition hover:bg-[var(--color-muted)] disabled:opacity-60">
                         <span className="min-w-0">
                           <span className="block text-sm font-semibold">Execução {String(request.executionNumber).padStart(3, "0")}</span>
                           <span className="block text-xs text-[var(--color-muted-foreground)]">Prevista para {new Date(request.scheduledFor).toLocaleDateString("pt-BR")}</span>
@@ -480,7 +667,6 @@ function PmocOperationSource({ onCreated }: { onCreated: (operation: OperationDe
               </ul>
             )}
           </div>
-        </>
       )}
     </div>
   );

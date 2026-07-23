@@ -793,6 +793,34 @@ describe('DocumentEngine foundation', () => {
     expect(pdf.buffer.subarray(0, 5).toString('latin1')).toBe('%PDF-');
   });
 
+  it('distinguishes a product sale receipt and identifies the customer in the fallback declaration', () => {
+    const context = operationContext(DocumentTemplateType.RECEIPT);
+    const operation = context.operation as Record<string, unknown>;
+    Object.assign(operation, {
+      sourceSaleId: '8b490e18-72bb-42bd-a51d-fb57457a1a97',
+      receiptAmount: 1350,
+      receiptAmountInWords: 'mil e trezentos e cinquenta reais',
+      receiptService: 'Compressor',
+      receiptDescription: '1 UN — Compressor',
+      receiptWarrantyDays: 90,
+      receiptDeclaration: null,
+    });
+    const built = (
+      new DocumentBuilderService({} as never) as unknown as {
+        buildFromContext: (ctx: unknown) => DocumentBlueprint;
+      }
+    ).buildFromContext(context);
+    const declaration = built.sections
+      .find((section) => section.id === 'receipt-declaration')
+      ?.components.find((component) => component.kind === 'paragraph');
+    const text = declaration?.kind === 'paragraph' ? declaration.text : '';
+
+    expect(text).toContain('Hospital Santa Clara, CNPJ nº 00.000.000/0001-00');
+    expect(text).toContain('correspondente à venda de produtos: Compressor');
+    expect(text).toContain('garantia de 90 dias sobre os produtos fornecidos');
+    expect(text).not.toContain('referente ao serviço de');
+  });
+
   it('certifies PMOC equipment checklists, photos and semantic signatures in one Blueprint', async () => {
     const context = operationContext(DocumentTemplateType.PMOC);
     const operation = context.operation as Record<string, unknown>;

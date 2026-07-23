@@ -1,5 +1,94 @@
 # API Contracts
 
+## Métricas de operações por cliente
+
+### `GET /api/v1/operations/stats?customerId={uuid}`
+
+`customerId` é opcional e validado como UUID v4. Sem o parâmetro, preserva o contrato global.
+
+```json
+{
+  "total": 12,
+  "byStatus": {
+    "DRAFT": 1,
+    "PENDING": 2,
+    "IN_PROGRESS": 3,
+    "REVIEW": 1,
+    "COMPLETED": 5,
+    "CANCELED": 0
+  }
+}
+```
+
+O RBAC e o ownership do ator são aplicados antes da agregação.
+
+## Recibo originado por venda — prefill enriquecido
+
+### `GET /api/v1/sales/:id/receipt-prefill`
+
+Resposta aditiva:
+
+```json
+{
+  "origin": "SALE",
+  "saleId": "uuid",
+  "receiptNumber": "REC-V000007",
+  "issuedAt": "2026-07-23T12:00:00.000Z",
+  "amount": "1350.00",
+  "service": "Compressor",
+  "description": "1.000 UN — Compressor\nObservações: entrega na unidade principal",
+  "warrantyDays": 90,
+  "customer": {
+    "id": "uuid",
+    "name": "Vectra Consultoria e Serviços LTDA",
+    "tradeName": "Vectra Consultoria e Serviços",
+    "cpf": null,
+    "cnpj": "12345678000190"
+  },
+  "address": null
+}
+```
+
+Somente venda `COMPLETED`. `description` sempre contém os itens snapshotados e, quando presentes,
+as observações da venda. Os campos existentes foram preservados; `origin`, `cpf` e `cnpj` são
+aditivos.
+
+## PMOC → Ordem de Serviço — prefill e geração revisada
+
+### `GET /api/v1/pmoc/execution-requests/:id/prefill`
+
+OWNER/MANAGER recebem um `CreateOperationPayload` pronto para revisão. O payload contém cliente,
+endereço, equipamento principal compatível, todos os `inspectedEquipments`, tipos de serviço,
+operador padrão, agenda, textos e checklist do plano.
+
+Além do `checklist` compatível, `maintenanceChecklist` contém um item por procedimento e por
+equipamento coberto, inicialmente com `executed: false` e `result: "NO"`.
+
+### `POST /api/v1/pmoc/execution-requests/:id/generate-work-order`
+
+```json
+{
+  "operation": {
+    "customerId": "uuid",
+    "equipmentId": "uuid",
+    "inspectedEquipments": [{ "equipmentId": "uuid", "sector": "Sala técnica" }],
+    "type": "PREVENTIVA",
+    "documentType": "PMOC",
+    "operatorId": "uuid",
+    "scheduledFor": "2026-08-01T12:00:00.000Z",
+    "checklist": [{ "label": "Inspecionar filtros", "done": false }],
+    "observations": "Orientações para o atendimento"
+  }
+}
+```
+
+O backend sempre sobrescreve a identidade do cliente, cobertura de equipamentos, vínculo PMOC,
+data da execução e tipo documental com os dados autoritativos da Execution Request. A lista
+revisada em `checklist` é materializada como checklist estruturado de campo. Informar `operatorId`
+válido cria a Assignment pelo fluxo oficial.
+
+Respostas existentes e erros de estado/adiantamento permanecem inalterados. Não houve novo endpoint.
+
 ## Checklists oficiais — RVT e PMOC
 
 `POST/PATCH /api/v1/operations` preserva os campos existentes:
@@ -5759,3 +5848,27 @@ Tentativa de selecionar assinatura de outro usuário retorna `403 FORBIDDEN`. A 
 ## Infraestrutura de imagem — 2026-07-22
 
 O ajuste de construção da imagem não altera rotas, payloads, códigos HTTP ou contratos da API V1.
+## Catálogos Técnicos — filtros de workflow do checklist
+
+`GET /api/v1/technical-catalogs`
+
+Novo query param aditivo:
+
+- `workflowsAny=WORK_ORDER,PMOC`: retorna itens aplicáveis a qualquer workflow informado.
+- `includeGeneral=true`: acrescenta itens `GENERAL` à seleção.
+- `workflow=TECHNICAL_REPORT&includeGeneral=false`: contrato oficial do checklist exclusivo do RVT.
+
+Os registros do RVT continuam usando o payload existente:
+
+```json
+{
+  "type": "CHECKLIST",
+  "title": "Limpeza de filtro de ar",
+  "areas": ["GENERAL", "HVAC"],
+  "workflows": ["TECHNICAL_REPORT"],
+  "maintenanceType": "WEEKLY",
+  "active": true
+}
+```
+
+Criação, edição, reordenação, ativação/desativação e exclusão utilizam os contratos existentes.

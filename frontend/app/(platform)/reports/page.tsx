@@ -23,11 +23,11 @@ import {
   customersApi,
   documentsApi,
   equipmentsApi,
-  maintenanceChecklistTemplatesApi,
   operationApi,
   pmocApi,
   salesApi,
   signaturesApi,
+  technicalCatalogsApi,
   usersApi,
   useQuery,
   type Customer,
@@ -255,12 +255,62 @@ function receiptWarrantyLabel(days: string): string {
   return `${value} ${value === 1 ? 'dia' : 'dias'}`;
 }
 
-function receiptDeclaration(form: WorkflowForm, customerName: string): string {
+type ReceiptCustomerIdentity = Pick<Customer, 'name' | 'tradeName' | 'cpf' | 'cnpj'>;
+
+function formatCustomerDocument(value: string): string {
+  const digits = value.replace(/\D/g, '');
+  if (digits.length === 11)
+    return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+  if (digits.length === 14)
+    return digits.replace(
+      /(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/,
+      '$1.$2.$3/$4-$5',
+    );
+  return value;
+}
+
+function receiptCustomerLabel(customer?: ReceiptCustomerIdentity | null): string {
+  if (!customer) return '{CLIENTE}';
+  const name = customer.tradeName?.trim() || customer.name.trim();
+  if (customer.cnpj) return `${name}, CNPJ nº ${formatCustomerDocument(customer.cnpj)}`;
+  if (customer.cpf) return `${name}, CPF nº ${formatCustomerDocument(customer.cpf)}`;
+  return name;
+}
+
+function sentence(value: string): string {
+  const normalized = value.trim().replace(/[.;,\s]+$/, '');
+  return normalized ? `${normalized}.` : '';
+}
+
+function receiptDeclaration(
+  form: WorkflowForm,
+  customer?: ReceiptCustomerIdentity | null,
+): string {
   const amount = parseBrl(form.amount);
-  const first = `Recebemos de ${customerName || '{CLIENTE}'} a importância de ${amount === null ? '{VALOR_NUMÉRICO}' : formatBrl(amount)} (${form.receiptAmountInWords || '{VALOR_EXTENSO}'}), referente ao serviço de ${form.receiptService || '{SERVIÇO}'}, descrito como ${form.receiptDescription || '{DESCRIÇÃO}'}.`;
+  const customerLabel = receiptCustomerLabel(customer);
+  const formattedAmount = amount === null ? '{VALOR_NUMÉRICO}' : formatBrl(amount);
+  const amountInWords = form.receiptAmountInWords || '{VALOR_EXTENSO}';
+  const subject = form.receiptService || (form.receiptSource === 'SALE' ? '{PRODUTOS}' : '{SERVIÇO}');
+  const description = form.receiptDescription.trim();
+  const first =
+    form.receiptSource === 'SALE'
+      ? [
+          `Recebemos de ${customerLabel} a quantia de ${formattedAmount} (${amountInWords}), correspondente à venda de produtos: ${sentence(subject)}`,
+          description ? `Itens fornecidos: ${sentence(description)}` : '',
+        ]
+          .filter(Boolean)
+          .join('\n\n')
+      : [
+          `Recebemos de ${customerLabel} a quantia de ${formattedAmount} (${amountInWords}), correspondente aos serviços prestados: ${sentence(subject)}`,
+          description && description.trim() !== subject.trim()
+            ? `Descrição dos serviços: ${sentence(description)}`
+            : '',
+        ]
+          .filter(Boolean)
+          .join('\n\n');
   const second = Number(form.receiptWarrantyDays)
-    ? `Damos por este recibo a devida quitação e garantia de ${receiptWarrantyLabel(form.receiptWarrantyDays)}, contados a partir da data deste documento.`
-    : 'Damos por este recibo a devida quitação.';
+    ? `Damos, por este recibo, a devida quitação e garantia de ${receiptWarrantyLabel(form.receiptWarrantyDays)} ${form.receiptSource === 'SALE' ? 'sobre os produtos fornecidos' : 'sobre os serviços prestados'}, contados a partir da data deste documento.`
+    : 'Damos, por este recibo, a devida quitação.';
   return `${first}\n\n${second}`;
 }
 
@@ -575,15 +625,31 @@ function ReportWorkflowDrawer({
     (signal) => signaturesApi.listSignatures({ page: 1, limit: 100, active: true, signal }),
     [],
   );
-  const checklistTemplates = useQuery<Paginated<MaintenanceChecklistTemplate>>(
-    (signal) =>
-      maintenanceChecklistTemplatesApi.list({
+  const checklistTemplates = useQuery<MaintenanceChecklistTemplate[]>(
+    async (signal) => {
+      if (type !== 'TECHNICAL_REPORT' && type !== 'PMOC') return [];
+      const page = await technicalCatalogsApi.list({
         page: 1,
         limit: 100,
+        type: 'CHECKLIST',
         active: true,
-        maintenanceType: type === 'TECHNICAL_REPORT' ? undefined : form.maintenanceType,
+        maintenanceType: type === 'PMOC' ? form.maintenanceType : undefined,
+        workflow: type === 'TECHNICAL_REPORT' ? 'TECHNICAL_REPORT' : 'PMOC',
+        includeGeneral: type === 'PMOC',
+        sortBy: 'sortOrder',
+        order: 'asc',
         signal,
-      }),
+      });
+      return page.items.map((item) => ({
+        id: item.id,
+        organizationId: item.organizationId,
+        maintenanceType: item.maintenanceType!,
+        description: item.title,
+        active: item.active,
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+      }));
+    },
     [form.maintenanceType, type],
   );
   const isWorkOrder = type === 'WORK_ORDER';
@@ -601,8 +667,8 @@ function ReportWorkflowDrawer({
   }, [type, signatures.data, form.technicalSignatureId]);
 
   useEffect(() => {
-    if (type !== 'TECHNICAL_REPORT' || !checklistTemplates.data?.items.length) return;
-    const official = checklistTemplates.data.items.filter(
+    if (type !== 'TECHNICAL_REPORT' || !checklistTemplates.data?.length) return;
+    const official = checklistTemplates.data.filter(
       (item) => item.maintenanceType === 'WEEKLY' || item.maintenanceType === 'SEMIANNUAL',
     );
     setForm((current) => {
@@ -633,14 +699,23 @@ function ReportWorkflowDrawer({
   }, [checklistTemplates.data, type]);
 
   useEffect(() => {
-    if (type !== 'RECEIPT' || form.receiptDeclaration || !form.receiptSource) return;
-    set(
-      'receiptDeclaration',
-      receiptDeclaration(form, selectedCustomer?.tradeName ?? selectedCustomer?.name ?? ''),
-    );
-    // Initial automatic text remains editable after it is populated.
+    if (
+      type !== 'RECEIPT' ||
+      form.receiptDeclarationEdited ||
+      !form.receiptSource ||
+      (form.customerId && !selectedCustomer)
+    )
+      return;
+    set('receiptDeclaration', receiptDeclaration(form, selectedCustomer));
+    // Wait for the complete customer record so the automatic text never persists placeholders.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [type, form.receiptSource, selectedCustomer]);
+  }, [
+    type,
+    form.receiptSource,
+    form.receiptDeclarationEdited,
+    form.customerId,
+    selectedCustomer,
+  ]);
 
   useEffect(() => {
     if (initialOperationId) void selectOperation(initialOperationId);
@@ -708,22 +783,29 @@ function ReportWorkflowDrawer({
     try {
       const prefill = await salesApi.getReceiptPrefill(id);
       const amount = Number(prefill.amount);
-      setForm((current) => ({
-        ...current,
-        receiptSource: 'SALE',
-        saleId: prefill.saleId,
-        customerId: prefill.customer.id,
-        addressId: prefill.address?.id ?? '',
-        receiptNumber: prefill.receiptNumber,
-        receiptDate: prefill.issuedAt.slice(0, 10),
-        amount: amount.toFixed(2).replace('.', ','),
-        receiptAmountInWords: brlAmountInWords(amount),
-        receiptService: prefill.service,
-        receiptDescription: prefill.description,
-        receiptWarrantyPreset: 'CUSTOM',
-        receiptWarrantyDays: prefill.warrantyDays ? String(prefill.warrantyDays) : '',
-        receiptDeclarationEdited: false,
-      }));
+      setForm((current) => {
+        const next: WorkflowForm = {
+          ...current,
+          receiptSource: 'SALE',
+          saleId: prefill.saleId,
+          customerId: prefill.customer.id,
+          addressId: prefill.address?.id ?? '',
+          receiptNumber: prefill.receiptNumber,
+          receiptDate: prefill.issuedAt.slice(0, 10),
+          amount: amount.toFixed(2).replace('.', ','),
+          receiptAmountInWords: brlAmountInWords(amount),
+          receiptService: prefill.service,
+          receiptDescription: prefill.description,
+          receiptWarrantyPreset: 'CUSTOM',
+          receiptWarrantyDays: prefill.warrantyDays ? String(prefill.warrantyDays) : '',
+          receiptDeclaration: '',
+          receiptDeclarationEdited: false,
+        };
+        return {
+          ...next,
+          receiptDeclaration: receiptDeclaration(next, prefill.customer),
+        };
+      });
     } catch (cause) {
       setError(message(cause));
     }
@@ -772,6 +854,7 @@ function ReportWorkflowDrawer({
               receiptDescription: detail.receiptDescription ?? receiptDescription,
               receiptWarrantyPreset: '90' as const,
               receiptWarrantyDays: '90',
+              receiptDeclaration: detail.receiptDeclaration ?? '',
               receiptDeclarationEdited: Boolean(detail.receiptDeclaration),
             }
           : {}),
@@ -819,17 +902,6 @@ function ReportWorkflowDrawer({
           currentSituation: item.currentSituationSnapshot ?? '',
         })),
       }));
-      if (type === 'RECEIPT') {
-        setForm((current) => ({
-          ...current,
-          receiptDeclaration:
-            detail.receiptDeclaration ??
-            receiptDeclaration(
-              current,
-              detail.customer?.name ?? selectedCustomer?.tradeName ?? selectedCustomer?.name ?? '',
-            ),
-        }));
-      }
     } catch (cause) {
       setError(message(cause));
     }
@@ -1065,13 +1137,30 @@ function ReportWorkflowDrawer({
   }
 
   async function createChecklistTemplate(description: string) {
-    const created = await maintenanceChecklistTemplatesApi.create({
+    const created = await technicalCatalogsApi.create({
+      type: 'CHECKLIST',
+      title: description,
+      description: null,
+      tags:
+        type === 'TECHNICAL_REPORT'
+          ? ['rvt', 'manutencao', form.maintenanceType.toLowerCase()]
+          : ['manutencao'],
+      areas: ['GENERAL', 'HVAC'],
+      workflows:
+        type === 'TECHNICAL_REPORT' ? ['TECHNICAL_REPORT'] : ['WORK_ORDER', 'PMOC'],
       maintenanceType: form.maintenanceType,
-      description,
       active: true,
     });
     await checklistTemplates.refetch();
-    return created;
+    return {
+      id: created.id,
+      organizationId: created.organizationId,
+      maintenanceType: created.maintenanceType!,
+      description: created.title,
+      active: created.active,
+      createdAt: created.createdAt,
+      updatedAt: created.updatedAt,
+    };
   }
 
   async function preparePreview() {
@@ -1321,14 +1410,14 @@ function ReportWorkflowDrawer({
             form={form}
             customers={customers.data?.items ?? []}
             addresses={addresses}
-            customerName={selectedCustomer?.tradeName ?? selectedCustomer?.name ?? ''}
+            customer={selectedCustomer}
             onSet={set}
           />
         )}
         {type === 'RECEIPT' && step === 2 && (
           <ReceiptWarrantyStep
             form={form}
-            customerName={selectedCustomer?.tradeName ?? selectedCustomer?.name ?? ''}
+            customer={selectedCustomer}
             onSet={set}
           />
         )}
@@ -1341,7 +1430,7 @@ function ReportWorkflowDrawer({
             form={form}
             equipments={equipments}
             signatures={signatures.data?.items ?? []}
-            checklistTemplates={checklistTemplates.data?.items ?? []}
+            checklistTemplates={checklistTemplates.data ?? []}
             checklistTemplatesLoading={checklistTemplates.loading}
             canManageChecklist={hasRole('OWNER', 'MANAGER')}
             onCreateChecklist={createChecklistTemplate}
@@ -2066,13 +2155,13 @@ function ReceiptDataStep({
   form,
   customers,
   addresses,
-  customerName,
+  customer,
   onSet,
 }: {
   form: WorkflowForm;
   customers: Customer[];
   addresses: CustomerAddress[];
-  customerName: string;
+  customer: CustomerDetail | null;
   onSet: <K extends keyof WorkflowForm>(key: K, value: WorkflowForm[K]) => void;
 }) {
   function updateAmount(value: string) {
@@ -2083,7 +2172,7 @@ function ReceiptDataStep({
     if (!form.receiptDeclarationEdited) {
       onSet(
         'receiptDeclaration',
-        receiptDeclaration({ ...form, amount: value, receiptAmountInWords: words }, customerName),
+        receiptDeclaration({ ...form, amount: value, receiptAmountInWords: words }, customer),
       );
     }
   }
@@ -2112,7 +2201,7 @@ function ReceiptDataStep({
               if (!form.receiptDeclarationEdited) {
                 onSet(
                   'receiptDeclaration',
-                  receiptDeclaration(form, selected?.tradeName ?? selected?.name ?? ''),
+                  receiptDeclaration(form, selected),
                 );
               }
             }}
@@ -2147,34 +2236,38 @@ function ReceiptDataStep({
             if (!form.receiptDeclarationEdited)
               onSet(
                 'receiptDeclaration',
-                receiptDeclaration({ ...form, receiptAmountInWords: value }, customerName),
+                receiptDeclaration({ ...form, receiptAmountInWords: value }, customer),
               );
           }}
         />
         <div className="md:col-span-2">
           <Text
-            label="Serviço"
+            label={form.receiptSource === 'SALE' ? 'Produtos vendidos' : 'Serviço prestado'}
             value={form.receiptService}
             onChange={(value) => {
               onSet('receiptService', value);
               if (!form.receiptDeclarationEdited)
                 onSet(
                   'receiptDeclaration',
-                  receiptDeclaration({ ...form, receiptService: value }, customerName),
+                  receiptDeclaration({ ...form, receiptService: value }, customer),
                 );
             }}
           />
         </div>
         <div className="md:col-span-2">
           <Area
-            label="Descrição"
+            label={
+              form.receiptSource === 'SALE'
+                ? 'Itens e observações da venda'
+                : 'Descrição dos serviços'
+            }
             value={form.receiptDescription}
             onChange={(value) => {
               onSet('receiptDescription', value);
               if (!form.receiptDeclarationEdited)
                 onSet(
                   'receiptDeclaration',
-                  receiptDeclaration({ ...form, receiptDescription: value }, customerName),
+                  receiptDeclaration({ ...form, receiptDescription: value }, customer),
                 );
             }}
           />
@@ -2191,7 +2284,7 @@ function ReceiptDataStep({
             className="h-9 rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 text-sm"
             onClick={() => {
               onSet('receiptDeclarationEdited', false);
-              onSet('receiptDeclaration', receiptDeclaration(form, customerName));
+              onSet('receiptDeclaration', receiptDeclaration(form, customer));
             }}
           >
             Restaurar texto automático
@@ -2212,11 +2305,11 @@ function ReceiptDataStep({
 
 function ReceiptWarrantyStep({
   form,
-  customerName,
+  customer,
   onSet,
 }: {
   form: WorkflowForm;
-  customerName: string;
+  customer: CustomerDetail | null;
   onSet: <K extends keyof WorkflowForm>(key: K, value: WorkflowForm[K]) => void;
 }) {
   const options: Array<[WorkflowForm['receiptWarrantyPreset'], string]> = [
@@ -2234,7 +2327,7 @@ function ReceiptWarrantyStep({
     onSet('receiptWarrantyPreset', preset);
     onSet('receiptWarrantyDays', days);
     if (!form.receiptDeclarationEdited)
-      onSet('receiptDeclaration', receiptDeclaration(next, customerName));
+      onSet('receiptDeclaration', receiptDeclaration(next, customer));
   }
   return (
     <div className="space-y-4">
@@ -2264,7 +2357,7 @@ function ReceiptWarrantyStep({
                   'receiptDeclaration',
                   receiptDeclaration(
                     { ...form, receiptWarrantyDays: event.target.value },
-                    customerName,
+                    customer,
                   ),
                 );
             }}
@@ -2274,7 +2367,7 @@ function ReceiptWarrantyStep({
       <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-muted)]/40 p-4">
         <p className="text-sm font-medium">Declaração resultante</p>
         <p className="mt-2 whitespace-pre-line text-sm text-[var(--color-muted-foreground)]">
-          {form.receiptDeclaration || receiptDeclaration(form, customerName)}
+          {form.receiptDeclaration || receiptDeclaration(form, customer)}
         </p>
       </div>
     </div>

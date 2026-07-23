@@ -7,6 +7,7 @@ import type { RequestWithId } from '../../shared/types/request-with-id.type';
 import {
   CreateOperationDto,
   ListOperationsQueryDto,
+  OperationStatsQueryDto,
   UpdateOperationDto,
   UpdateOperationPhotoDto,
 } from './dto/operation.dto';
@@ -24,8 +25,11 @@ export class OperationsController {
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR, Role.VIEWER)
   @Get('stats')
-  stats(@CurrentUser() actor: AuthenticatedUser): Promise<Record<string, unknown>> {
-    return this.operations.stats(actor);
+  stats(
+    @Query() query: OperationStatsQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ): Promise<Record<string, unknown>> {
+    return this.operations.stats(query, actor);
   }
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR)

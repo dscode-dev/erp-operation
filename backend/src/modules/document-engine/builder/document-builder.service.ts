@@ -940,13 +940,20 @@ export class DocumentBuilderService {
           Number(operation.receiptAmount),
         )
       : 'R$ 0,00';
+    const customerLabel = this.receiptCustomerLabel(operation.customer);
+    const isSaleReceipt = Boolean(operation.sourceSaleId);
+    const subject =
+      operation.receiptService ?? (isSaleReceipt ? 'produtos fornecidos' : 'serviços prestados');
+    const description = operation.receiptDescription ?? 'sem descrição complementar';
     const declaration =
       operation.receiptDeclaration ??
       [
-        `Recebemos de ${operation.customer.tradeName ?? operation.customer.name} a importância de ${amount} (${operation.receiptAmountInWords ?? 'valor não informado'}), referente ao serviço de ${operation.receiptService ?? 'serviço prestado'}, descrito como ${operation.receiptDescription ?? 'sem descrição complementar'}.`,
+        isSaleReceipt
+          ? `Recebemos de ${customerLabel} a quantia de ${amount} (${operation.receiptAmountInWords ?? 'valor não informado'}), correspondente à venda de produtos: ${subject}. Itens fornecidos: ${description}.`
+          : `Recebemos de ${customerLabel} a quantia de ${amount} (${operation.receiptAmountInWords ?? 'valor não informado'}), correspondente aos serviços prestados: ${subject}. Descrição dos serviços: ${description}.`,
         operation.receiptWarrantyDays
-          ? `Damos por este recibo a devida quitação e garantia de ${warranty}, contados a partir da data deste documento.`
-          : 'Damos por este recibo a devida quitação.',
+          ? `Damos, por este recibo, a devida quitação e garantia de ${warranty} ${isSaleReceipt ? 'sobre os produtos fornecidos' : 'sobre os serviços prestados'}, contados a partir da data deste documento.`
+          : 'Damos, por este recibo, a devida quitação.',
       ].join('\n\n');
     return [
       {
@@ -2083,6 +2090,30 @@ export class DocumentBuilderService {
       PROJETO: 'Projeto / inspeção técnica',
     };
     return labels[value] ?? value;
+  }
+
+  private receiptCustomerLabel(customer: {
+    name: string;
+    tradeName: string | null;
+    cpf: string | null;
+    cnpj: string | null;
+  }): string {
+    const name = customer.tradeName?.trim() || customer.name.trim();
+    if (customer.cnpj) return `${name}, CNPJ nº ${this.customerDocument(customer.cnpj)}`;
+    if (customer.cpf) return `${name}, CPF nº ${this.customerDocument(customer.cpf)}`;
+    return name;
+  }
+
+  private customerDocument(value: string): string {
+    const digits = value.replace(/\D/g, '');
+    if (digits.length === 11)
+      return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+    if (digits.length === 14)
+      return digits.replace(
+        /(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/,
+        '$1.$2.$3/$4-$5',
+      );
+    return value;
   }
 
   private date(value: Date | string | null): string {

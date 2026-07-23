@@ -55,8 +55,12 @@ export function exportOperationsPdf(params?: {
   return api.blob('/operations/export', { query, signal });
 }
 
-export function getOperationStats(opts?: { signal?: AbortSignal }): Promise<OperationStats> {
-  return api.get<OperationStats>('/operations/stats', opts);
+export function getOperationStats(opts?: {
+  customerId?: string;
+  signal?: AbortSignal;
+}): Promise<OperationStats> {
+  const { signal, ...query } = opts ?? {};
+  return api.get<OperationStats>('/operations/stats', { query, signal });
 }
 
 export function getOperation(

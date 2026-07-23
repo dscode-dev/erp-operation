@@ -42,6 +42,10 @@ export class ListOperationsQueryDto {
   @IsOptional() @IsEnum(OperationStatus) status?: OperationStatus;
 }
 
+export class OperationStatsQueryDto {
+  @IsOptional() @IsUUID('4') customerId?: string;
+}
+
 export class OperationChecklistItemDto {
   @Transform(({ value }) => trim(value)) @IsString() @MaxLength(200) label!: string;
   @IsBoolean() done!: boolean;

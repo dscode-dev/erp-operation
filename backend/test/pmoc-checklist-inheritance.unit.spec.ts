@@ -1,4 +1,9 @@
-import { OperationType, Role } from '@prisma/client';
+import {
+  MaintenanceChecklistResult,
+  OperationMaintenanceType,
+  OperationType,
+  Role,
+} from '@prisma/client';
 import { PmocExecutionRequestsService } from '../src/modules/pmoc-compliance/pmoc-execution-requests.service';
 import type { AuthenticatedUser } from '../src/shared/types/authenticated-user.type';
 
@@ -19,6 +24,12 @@ function plan(includeChecklistInOperations: boolean): Record<string, unknown> {
     addressId: null,
     address: null,
   };
+  const secondEquipment = {
+    id: '66666666-6666-4666-8666-666666666666',
+    name: 'Condensadora principal',
+    addressId: null,
+    address: { name: 'Cobertura' },
+  };
   return {
     id: '33333333-3333-4333-8333-333333333333',
     number: 14,
@@ -26,7 +37,7 @@ function plan(includeChecklistInOperations: boolean): Record<string, unknown> {
     customerId: '55555555-5555-4555-8555-555555555555',
     equipmentId: equipment.id,
     equipment,
-    equipments: [{ equipment }],
+    equipments: [{ equipment }, { equipment: secondEquipment }],
     customer: { addresses: [] },
     maintenancePlan: { name: 'PMOC Cliente' },
     defaultOperator: null,
@@ -44,11 +55,21 @@ function plan(includeChecklistInOperations: boolean): Record<string, unknown> {
     checklists: [
       {
         position: 0,
-        technicalCatalog: { id: 'catalog-1', title: 'Inspecionar filtros', active: true },
+        technicalCatalog: {
+          id: 'catalog-1',
+          title: 'Inspecionar filtros',
+          active: true,
+          maintenanceType: OperationMaintenanceType.MONTHLY,
+        },
       },
       {
         position: 1,
-        technicalCatalog: { id: 'catalog-2', title: 'Item desativado', active: false },
+        technicalCatalog: {
+          id: 'catalog-2',
+          title: 'Item desativado',
+          active: false,
+          maintenanceType: null,
+        },
       },
     ],
   };
@@ -67,19 +88,90 @@ describe('PMOC checklist inheritance', () => {
         plan: unknown,
         scheduledFor: Date,
         actor: AuthenticatedUser,
-      ) => { checklist?: Array<{ label: string; done: boolean }> };
+        reviewed?: {
+          checklist: Array<{ label: string; done: boolean }>;
+          inspectedEquipments: Array<{ equipmentId: string; sector: string }>;
+        },
+      ) => {
+        checklist?: Array<{ label: string; done: boolean }>;
+        maintenanceChecklist?: Array<{
+          equipmentId: string;
+          maintenanceType: OperationMaintenanceType;
+          description: string;
+          executed: boolean;
+          result: MaintenanceChecklistResult;
+        }>;
+        inspectedEquipments?: Array<{ equipmentId: string; sector: string }>;
+      };
     }
   ).buildOperationPayload.bind(service);
 
   it('snapshots only active selected items when PMOC sends its checklist', () => {
-    expect(build(plan(true), new Date('2026-08-01T12:00:00.000Z'), actor).checklist).toEqual([
+    const payload = build(plan(true), new Date('2026-08-01T12:00:00.000Z'), actor);
+    expect(payload.checklist).toEqual([
       { label: 'Inspecionar filtros', done: false },
+    ]);
+    expect(payload.maintenanceChecklist).toEqual([
+      {
+        equipmentId: '22222222-2222-4222-8222-222222222222',
+        maintenanceType: OperationMaintenanceType.MONTHLY,
+        description: 'Inspecionar filtros',
+        executed: false,
+        result: MaintenanceChecklistResult.NO,
+      },
+      {
+        equipmentId: '66666666-6666-4666-8666-666666666666',
+        maintenanceType: OperationMaintenanceType.MONTHLY,
+        description: 'Inspecionar filtros',
+        executed: false,
+        result: MaintenanceChecklistResult.NO,
+      },
+    ]);
+    expect(payload.inspectedEquipments).toEqual([
+      {
+        equipmentId: '22222222-2222-4222-8222-222222222222',
+        sector: 'Split 18.000 BTU',
+      },
+      {
+        equipmentId: '66666666-6666-4666-8666-666666666666',
+        sector: 'Cobertura',
+      },
     ]);
   });
 
   it('generates the Work Order without checklist when the owner opts out', () => {
-    expect(build(plan(false), new Date('2026-08-01T12:00:00.000Z'), actor).checklist).toEqual(
-      [],
+    const payload = build(plan(false), new Date('2026-08-01T12:00:00.000Z'), actor);
+    expect(payload.checklist).toEqual([]);
+    expect(payload.maintenanceChecklist).toEqual([]);
+  });
+
+  it('expands the reviewed checklist into the field checklist without changing PMOC coverage', () => {
+    const payload = build(
+      plan(true),
+      new Date('2026-08-01T12:00:00.000Z'),
+      actor,
+      {
+        checklist: [{ label: 'Procedimento adicional', done: false }],
+        inspectedEquipments: [],
+      },
     );
+
+    expect(payload.maintenanceChecklist).toEqual([
+      {
+        equipmentId: '22222222-2222-4222-8222-222222222222',
+        maintenanceType: OperationMaintenanceType.MONTHLY,
+        description: 'Procedimento adicional',
+        executed: false,
+        result: MaintenanceChecklistResult.NO,
+      },
+      {
+        equipmentId: '66666666-6666-4666-8666-666666666666',
+        maintenanceType: OperationMaintenanceType.MONTHLY,
+        description: 'Procedimento adicional',
+        executed: false,
+        result: MaintenanceChecklistResult.NO,
+      },
+    ]);
+    expect(payload.inspectedEquipments).toHaveLength(2);
   });
 });

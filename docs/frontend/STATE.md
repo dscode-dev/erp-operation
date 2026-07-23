@@ -1,5 +1,26 @@
 # STATE — Frontend
 
+## Cliente 360 — Visão Geral e Serviços (2026-07-23)
+
+- Visão Geral recebeu KPIs reais de atendimentos, identificação reorganizada, endereços responsivos e lista das cinco operações recentes.
+- Contatos podem ser adicionados, editados e excluídos com confirmação por OWNER/MANAGER; contato principal utiliza a regra oficial do backend.
+- Serviços recebeu “Novo atendimento”, abrindo o `OperationCreationDrawer` com cliente predefinido/bloqueado e endereço/equipamentos contextuais.
+- Status, tipos e documentos aparecem em pt-BR pelas fontes compartilhadas.
+
+## Recibo de venda — declaração corrigida (2026-07-23)
+
+- A seleção de uma venda concluída gera imediatamente a declaração com o cliente real, incluindo CNPJ/CPF.
+- A origem `SALE` usa redação de venda de produtos; OS/manual usam redação de serviços prestados.
+- Itens vendidos e observações aparecem juntos, com labels adequados no formulário.
+- O carregamento assíncrono do cliente não grava mais o placeholder `{CLIENTE}`.
+
+## PMOC → Ordem de Serviço revisável (2026-07-23)
+
+- “A partir de um PMOC” não gera mais uma OS ao primeiro clique. A seleção da execução carrega o prefill e abre as cinco etapas do `OperationCreationDrawer`.
+- Cliente, local e equipamentos cobertos aparecem como dados herdados e protegidos; operador, agenda, checklist e conteúdo podem ser conferidos antes da criação.
+- O resumo identifica PMOC, número da execução, data prevista, equipamentos e procedimentos. É possível trocar a execução sem fechar o drawer.
+- A última etapa chama somente `generateWorkOrder`; Assignment e vínculo PMOC continuam sob autoridade do backend.
+
 ## RVT/PMOC — checklist oficial (2026-07-22)
 
 - RVT Platform e Operator exibem seleção Semanal/Semestral e os dois checklists oficiais.
@@ -1294,3 +1315,13 @@ Status: concluído.
 - A etapa é opcional: nenhum item é incluído automaticamente.
 - Somente os itens selecionados pelo operador são enviados à Operation, já com `done: true`, pois representam atividades realizadas durante a criação autônoma.
 - A semântica da Platform foi preservada: checklists escolhidos pelo Owner para uma atribuição continuam pendentes para execução posterior pelo técnico.
+## Catálogo dedicado do RVT (2026-07-23)
+
+- Catálogos Técnicos possui a nova aba `Checklist do RVT`, isolada visual e funcionalmente do
+  checklist operacional de OS/PMOC.
+- A aba aceita somente periodicidades Semanal e Semestral e fixa o workflow
+  `TECHNICAL_REPORT`.
+- Platform, Operator autônomo e Operator atribuído consultam somente esse catálogo no RVT, sem
+  itens `GENERAL` ou de OS/PMOC.
+- Os 18 defaults vêm do backend e continuam totalmente editáveis, reordenáveis, desativáveis e
+  removíveis.

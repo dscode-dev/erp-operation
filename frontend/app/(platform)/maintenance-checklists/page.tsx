@@ -41,11 +41,15 @@ const MAINTENANCE_TYPES: Array<{ value: OperationMaintenanceType; label: string 
   { value: 'ANNUAL', label: 'Anual' },
   { value: 'CORRECTIVE', label: 'Corretiva' },
 ];
+const RVT_MAINTENANCE_TYPES = MAINTENANCE_TYPES.filter(
+  (item) => item.value === 'WEEKLY' || item.value === 'SEMIANNUAL',
+);
+type CatalogTab = TechnicalCatalogType | 'RVT_CHECKLIST';
 
 export default function TechnicalCatalogsPage() {
   const { hasRole } = useAuth();
   const canEdit = hasRole('OWNER', 'MANAGER');
-  const [selectedType, setSelectedType] = useState<TechnicalCatalogType | null>(null);
+  const [selectedType, setSelectedType] = useState<CatalogTab | null>(null);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
   const [search, setSearch] = useState('');
@@ -69,26 +73,52 @@ export default function TechnicalCatalogsPage() {
   useEffect(() => {
     if (selectedType || !types.data?.length) return;
     const requested = new URLSearchParams(window.location.search).get('type');
-    const matched = types.data.find((item) => item.value === requested);
-    setSelectedType(matched?.value ?? types.data[0].value);
+    const matched =
+      requested === 'RVT_CHECKLIST'
+        ? 'RVT_CHECKLIST'
+        : types.data.find((item) => item.value === requested)?.value;
+    setSelectedType(matched ?? types.data[0].value);
   }, [selectedType, types.data]);
+  const isRvtChecklist = selectedType === 'RVT_CHECKLIST';
+  const effectiveType = isRvtChecklist ? 'CHECKLIST' : selectedType;
   const catalogs = useQuery<Paginated<TechnicalCatalog>>(
     (signal) =>
       technicalCatalogsApi.list({
         page,
         limit,
         search: search || undefined,
-        type: selectedType ?? undefined,
+        type: effectiveType ?? undefined,
         maintenanceType:
-          selectedType === 'CHECKLIST' && maintenanceType ? maintenanceType : undefined,
+          effectiveType === 'CHECKLIST' && maintenanceType ? maintenanceType : undefined,
         areas: area ? [area] : undefined,
-        workflow: workflow || undefined,
+        workflow:
+          isRvtChecklist
+            ? 'TECHNICAL_REPORT'
+            : selectedType === 'CHECKLIST'
+              ? undefined
+              : workflow || undefined,
+        workflowsAny:
+          selectedType === 'CHECKLIST' && !workflow ? ['WORK_ORDER', 'PMOC'] : undefined,
+        includeGeneral: selectedType === 'CHECKLIST' && !workflow,
         active: active ? active === 'true' : undefined,
         sortBy,
         order: 'asc',
         signal,
       }),
-    [page, limit, search, selectedType, maintenanceType, area, workflow, active, sortBy, tick],
+    [
+      page,
+      limit,
+      search,
+      selectedType,
+      effectiveType,
+      isRvtChecklist,
+      maintenanceType,
+      area,
+      workflow,
+      active,
+      sortBy,
+      tick,
+    ],
   );
 
   function changed(text: string) {
@@ -101,8 +131,8 @@ export default function TechnicalCatalogsPage() {
     const items = catalogs.data?.items ?? [];
     const index = items.findIndex((candidate) => candidate.id === item.id);
     const target = items[index + direction];
-    if (!target || !selectedType) return;
-    await technicalCatalogsApi.reorder(selectedType, [
+    if (!target || !effectiveType) return;
+    await technicalCatalogsApi.reorder(effectiveType, [
       { id: item.id, sortOrder: target.sortOrder },
       { id: target.id, sortOrder: item.sortOrder },
     ]);
@@ -136,7 +166,7 @@ export default function TechnicalCatalogsPage() {
           }
         />
         <div className="flex gap-2 overflow-x-auto border-b border-[var(--color-border)] pb-2">
-          {(types.data ?? []).map((type) => (
+          {(types.data ?? []).flatMap((type) => [
             <button
               key={type.value}
               type="button"
@@ -144,12 +174,30 @@ export default function TechnicalCatalogsPage() {
                 setSelectedType(type.value);
                 setPage(1);
                 setMaintenanceType('');
+                setWorkflow('');
               }}
               className={`whitespace-nowrap rounded-[var(--radius-md)] px-3 py-2 text-sm ${selectedType === type.value ? 'bg-[var(--color-primary)] text-[var(--color-primary-foreground)]' : 'hover:bg-[var(--color-muted)]'}`}
             >
               {type.label}
-            </button>
-          ))}
+            </button>,
+            ...(type.value === 'CHECKLIST'
+              ? [
+                  <button
+                    key="RVT_CHECKLIST"
+                    type="button"
+                    onClick={() => {
+                      setSelectedType('RVT_CHECKLIST');
+                      setPage(1);
+                      setMaintenanceType('');
+                      setWorkflow('');
+                    }}
+                    className={`whitespace-nowrap rounded-[var(--radius-md)] px-3 py-2 text-sm ${isRvtChecklist ? 'bg-[var(--color-primary)] text-[var(--color-primary-foreground)]' : 'hover:bg-[var(--color-muted)]'}`}
+                  >
+                    Checklist do RVT
+                  </button>,
+                ]
+              : []),
+          ])}
         </div>
         {notice && (
           <div className="rounded-[var(--radius-md)] border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700">
@@ -158,9 +206,18 @@ export default function TechnicalCatalogsPage() {
         )}
         {selectedType === 'CHECKLIST' && (
           <div className="rounded-[var(--radius-lg)] border border-blue-500/25 bg-blue-500/5 p-4 text-sm">
-            <strong>Checklists oficiais de manutenção</strong>
+            <strong>Checklist operacional de OS e PMOC</strong>
             <p className="mt-1 text-[var(--color-muted-foreground)]">
-              Cadastre aqui os itens Semanais e Semestrais usados no RVT e os itens reutilizados por Ordens de Serviço e PMOC. A estrutura já permanece preparada para outras periodicidades.
+              Cadastre aqui somente atividades enviadas para Ordens de Serviço e planos PMOC.
+            </p>
+          </div>
+        )}
+        {isRvtChecklist && (
+          <div className="rounded-[var(--radius-lg)] border border-emerald-500/25 bg-emerald-500/5 p-4 text-sm">
+            <strong>Checklist exclusivo do Relatório de Visita Técnica</strong>
+            <p className="mt-1 text-[var(--color-muted-foreground)]">
+              Itens Semanais e Semestrais consumidos exclusivamente pelos wizards de RVT da
+              Platform e do Operator.
             </p>
           </div>
         )}
@@ -177,7 +234,7 @@ export default function TechnicalCatalogsPage() {
               className="min-w-0 flex-1 bg-transparent text-sm outline-none"
             />
           </label>
-          {selectedType === 'CHECKLIST' ? (
+          {effectiveType === 'CHECKLIST' ? (
             <select
               value={maintenanceType}
               onChange={(event) => {
@@ -187,7 +244,7 @@ export default function TechnicalCatalogsPage() {
               className="h-10 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm"
             >
               <option value="">Periodicidade</option>
-              {MAINTENANCE_TYPES.map((item) => (
+              {(isRvtChecklist ? RVT_MAINTENANCE_TYPES : MAINTENANCE_TYPES).map((item) => (
                 <option key={item.value} value={item.value}>
                   {item.label}
                 </option>
@@ -209,19 +266,25 @@ export default function TechnicalCatalogsPage() {
               <option key={item.value} value={item.value}>{item.label}</option>
             ))}
           </select>
-          <select
-            value={workflow}
-            onChange={(event) => {
-              setWorkflow(event.target.value as TechnicalCatalogWorkflow | '');
-              setPage(1);
-            }}
-            className="h-10 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm"
-          >
-            <option value="">Todos os workflows</option>
-            {(taxonomy.data?.workflows ?? []).map((item) => (
-              <option key={item.value} value={item.value}>{item.label}</option>
-            ))}
-          </select>
+          {isRvtChecklist || selectedType === 'CHECKLIST' ? (
+            <div className="flex h-10 items-center rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-muted)] px-3 text-sm">
+              {isRvtChecklist ? 'Relatório de Visita Técnica' : 'Ordem de Serviço e PMOC'}
+            </div>
+          ) : (
+            <select
+              value={workflow}
+              onChange={(event) => {
+                setWorkflow(event.target.value as TechnicalCatalogWorkflow | '');
+                setPage(1);
+              }}
+              className="h-10 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm"
+            >
+              <option value="">Workflows da aba</option>
+              {(taxonomy.data?.workflows ?? []).map((item) => (
+                <option key={item.value} value={item.value}>{item.label}</option>
+              ))}
+            </select>
+          )}
           <select
             value={active}
             onChange={(event) => {
@@ -274,7 +337,7 @@ export default function TechnicalCatalogsPage() {
                 <tr>
                   <th className="px-4 py-3">Ordem</th>
                   <th className="px-4 py-3">Título</th>
-                  {selectedType === 'CHECKLIST' && <th className="px-4 py-3">Periodicidade</th>}
+                  {effectiveType === 'CHECKLIST' && <th className="px-4 py-3">Periodicidade</th>}
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3 text-right">Ações</th>
                 </tr>
@@ -296,7 +359,7 @@ export default function TechnicalCatalogsPage() {
                         </div>
                       )}
                     </td>
-                    {selectedType === 'CHECKLIST' && (
+                    {effectiveType === 'CHECKLIST' && (
                       <td className="px-4 py-3">
                         {MAINTENANCE_TYPES.find((type) => type.value === item.maintenanceType)
                           ?.label ?? '—'}
@@ -385,10 +448,14 @@ export default function TechnicalCatalogsPage() {
             </div>
           </div>
         )}
-        {editor && selectedType && (
+        {editor && effectiveType && (
           <TechnicalCatalogDrawer
             item={editor === 'create' ? null : editor}
-            type={selectedType}
+            type={effectiveType}
+            fixedWorkflows={
+              isRvtChecklist ? ['TECHNICAL_REPORT'] : selectedType === 'CHECKLIST' ? ['WORK_ORDER', 'PMOC'] : undefined
+            }
+            maintenanceTypes={isRvtChecklist ? RVT_MAINTENANCE_TYPES : MAINTENANCE_TYPES}
             taxonomy={taxonomy.data ?? undefined}
             onClose={() => setEditor(null)}
             onSaved={(message) => {
@@ -421,12 +488,16 @@ function TechnicalCatalogDrawer({
   item,
   type,
   taxonomy,
+  fixedWorkflows,
+  maintenanceTypes,
   onClose,
   onSaved,
 }: {
   item: TechnicalCatalog | null;
   type: TechnicalCatalogType;
   taxonomy?: TechnicalCatalogTaxonomy;
+  fixedWorkflows?: TechnicalCatalogWorkflow[];
+  maintenanceTypes: Array<{ value: OperationMaintenanceType; label: string }>;
   onClose: () => void;
   onSaved: (message: string) => void;
 }) {
@@ -435,10 +506,10 @@ function TechnicalCatalogDrawer({
   const [tags, setTags] = useState(item?.tags.join(', ') ?? '');
   const [areas, setAreas] = useState<TechnicalCatalogArea[]>(item?.areas ?? ['GENERAL']);
   const [workflows, setWorkflows] = useState<TechnicalCatalogWorkflow[]>(
-    item?.workflows ?? ['GENERAL'],
+    fixedWorkflows ?? item?.workflows ?? ['GENERAL'],
   );
   const [maintenanceType, setMaintenanceType] = useState<OperationMaintenanceType>(
-    item?.maintenanceType ?? 'SEMIANNUAL',
+    item?.maintenanceType ?? maintenanceTypes[0]?.value ?? 'SEMIANNUAL',
   );
   const [active, setActive] = useState(item?.active ?? true);
   const [saving, setSaving] = useState(false);
@@ -520,12 +591,26 @@ function TechnicalCatalogDrawer({
           values={areas}
           onChange={setAreas}
         />
-        <CatalogMultiChoice
-          label="Workflows aplicáveis"
-          options={taxonomy?.workflows ?? []}
-          values={workflows}
-          onChange={setWorkflows}
-        />
+        {fixedWorkflows ? (
+          <div className="grid gap-1 text-sm font-medium">
+            Uso no sistema
+            <div className="rounded border border-[var(--color-border)] bg-[var(--color-muted)] p-3 font-normal">
+              {fixedWorkflows
+                .map(
+                  (workflow) =>
+                    taxonomy?.workflows.find((item) => item.value === workflow)?.label ?? workflow,
+                )
+                .join(' e ')}
+            </div>
+          </div>
+        ) : (
+          <CatalogMultiChoice
+            label="Workflows aplicáveis"
+            options={taxonomy?.workflows ?? []}
+            values={workflows}
+            onChange={setWorkflows}
+          />
+        )}
         {type === 'CHECKLIST' && (
           <label className="grid gap-1 text-sm font-medium">
             Periodicidade
@@ -536,7 +621,7 @@ function TechnicalCatalogDrawer({
               }
               className="h-10 rounded border border-[var(--color-border)] bg-[var(--color-card)] px-3"
             >
-              {MAINTENANCE_TYPES.map((option) => (
+              {maintenanceTypes.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
                 </option>

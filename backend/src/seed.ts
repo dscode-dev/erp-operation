@@ -1,4 +1,11 @@
-import { PrismaClient, Role } from '@prisma/client';
+import {
+  OperationMaintenanceType,
+  PrismaClient,
+  Role,
+  TechnicalCatalogArea,
+  TechnicalCatalogType,
+  TechnicalCatalogWorkflow,
+} from '@prisma/client';
 import * as argon2 from 'argon2';
 import { ARGON2_OPTIONS } from './infra/security/argon2.constants';
 import { MIN_PASSWORD_LENGTH } from './shared/constants/users.constants';
@@ -59,6 +66,7 @@ async function main(): Promise<void> {
   // The whole application assumes a single Organization exists (profile, settings,
   // templates all resolve `findFirst`). Guarantee one so first login works.
   await ensureDefaultOrganization();
+  await ensureRvtChecklistDefaults();
   const [emailUser, usernameUser, userCount] = await Promise.all([
     prisma.user.findUnique({ where: { email: input.email } }),
     prisma.user.findUnique({ where: { username: input.username } }),
@@ -276,6 +284,70 @@ async function ensureDefaultOrganization(): Promise<void> {
   process.stdout.write(
     `${JSON.stringify({ event: 'organization_bootstrap_created', organizationId: organization.id })}\n`,
   );
+}
+
+const RVT_CHECKLIST_DEFAULTS: Array<{
+  maintenanceType: OperationMaintenanceType;
+  title: string;
+  sortOrder: number;
+}> = [
+  { maintenanceType: OperationMaintenanceType.SEMIANNUAL, title: 'Desinstalação dos equipamentos internos', sortOrder: 0 },
+  { maintenanceType: OperationMaintenanceType.SEMIANNUAL, title: 'Limpeza total dos trocadores de calor (com produtos químicos não corrosivos)', sortOrder: 1 },
+  { maintenanceType: OperationMaintenanceType.SEMIANNUAL, title: 'Lubrificação do motor ventilador', sortOrder: 2 },
+  { maintenanceType: OperationMaintenanceType.SEMIANNUAL, title: 'Aplicação de banho de borracha no chassi', sortOrder: 3 },
+  { maintenanceType: OperationMaintenanceType.SEMIANNUAL, title: 'Limpeza dos ventiladores dos evaporadores e lubrificação dos mancais', sortOrder: 4 },
+  { maintenanceType: OperationMaintenanceType.SEMIANNUAL, title: 'Substituição (quando necessário) dos terminais de fios carbonizados', sortOrder: 5 },
+  { maintenanceType: OperationMaintenanceType.SEMIANNUAL, title: 'Recomendação para execução dos serviços', sortOrder: 6 },
+  { maintenanceType: OperationMaintenanceType.WEEKLY, title: 'Limpeza de filtro de ar', sortOrder: 0 },
+  { maintenanceType: OperationMaintenanceType.WEEKLY, title: 'Limpeza dos painéis de comando', sortOrder: 1 },
+  { maintenanceType: OperationMaintenanceType.WEEKLY, title: 'Limpeza exterior dos equipamentos', sortOrder: 2 },
+  { maintenanceType: OperationMaintenanceType.WEEKLY, title: 'Desobstrução do dreno', sortOrder: 3 },
+  { maintenanceType: OperationMaintenanceType.WEEKLY, title: 'Verificar ruídos mecânicos estranhos', sortOrder: 4 },
+  { maintenanceType: OperationMaintenanceType.WEEKLY, title: 'Verificar o estado das fiações nas instalações elétricas', sortOrder: 5 },
+  { maintenanceType: OperationMaintenanceType.WEEKLY, title: 'Verificar aperto de todos os terminais', sortOrder: 6 },
+  { maintenanceType: OperationMaintenanceType.WEEKLY, title: 'Medir tensão de alimentação elétrica, corrente nominal dos compressores e ventiladores', sortOrder: 7 },
+  { maintenanceType: OperationMaintenanceType.WEEKLY, title: 'Verificar e regular relés térmicos, sensores de temperatura, termostato, circuito elétrico de comando e pressostato', sortOrder: 8 },
+  { maintenanceType: OperationMaintenanceType.WEEKLY, title: 'Verificar folga dos eixos dos ventiladores', sortOrder: 9 },
+  { maintenanceType: OperationMaintenanceType.WEEKLY, title: 'Recomendação para execução dos serviços', sortOrder: 10 },
+];
+
+/**
+ * Defaults de produção para instalações novas. A migration cobre organizações
+ * existentes; este bootstrap cobre a organização criada depois do migrate em um
+ * banco vazio. Itens removidos pelo Owner não são recriados.
+ */
+async function ensureRvtChecklistDefaults(): Promise<void> {
+  const organization = await prisma.organization.findFirst({ select: { id: true } });
+  if (!organization) throw new Error('Organization is required before RVT checklist bootstrap');
+  const existing = await prisma.technicalCatalog.findMany({
+    where: {
+      organizationId: organization.id,
+      type: TechnicalCatalogType.CHECKLIST,
+      maintenanceType: { in: [OperationMaintenanceType.WEEKLY, OperationMaintenanceType.SEMIANNUAL] },
+      workflows: { has: TechnicalCatalogWorkflow.TECHNICAL_REPORT },
+    },
+    select: { maintenanceType: true, title: true },
+  });
+  const keys = new Set(
+    existing.map((item) => `${item.maintenanceType}:${item.title.trim().toLocaleLowerCase('pt-BR')}`),
+  );
+  const missing = RVT_CHECKLIST_DEFAULTS.filter(
+    (item) => !keys.has(`${item.maintenanceType}:${item.title.toLocaleLowerCase('pt-BR')}`),
+  );
+  if (!missing.length) return;
+  await prisma.technicalCatalog.createMany({
+    data: missing.map((item) => ({
+      organizationId: organization.id,
+      type: TechnicalCatalogType.CHECKLIST,
+      title: item.title,
+      tags: ['rvt', 'manutencao', item.maintenanceType.toLowerCase()],
+      areas: [TechnicalCatalogArea.GENERAL, TechnicalCatalogArea.HVAC],
+      workflows: [TechnicalCatalogWorkflow.TECHNICAL_REPORT],
+      maintenanceType: item.maintenanceType,
+      sortOrder: item.sortOrder,
+      active: true,
+    })),
+  });
 }
 
 main()

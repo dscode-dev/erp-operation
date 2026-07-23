@@ -2,7 +2,21 @@
 
 import { use, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { CircleDollarSign, MapPin, Pencil, Plus, ReceiptText, Wrench } from 'lucide-react';
+import {
+  Activity,
+  CheckCircle2,
+  CircleDollarSign,
+  Clock3,
+  ContactRound,
+  Mail,
+  MapPin,
+  Pencil,
+  Phone,
+  Plus,
+  ReceiptText,
+  Trash2,
+  Wrench,
+} from 'lucide-react';
 import { Breadcrumbs } from '@platform/components/breadcrumbs';
 import { PageHeader } from '@platform/components/page-header';
 import { InfoCard, InfoRow } from '@platform/components/info-card';
@@ -12,25 +26,34 @@ import { CustomerFormDrawer } from '@platform/components/customer-form-drawer';
 import { EquipmentFormDrawer } from '@platform/components/equipment-form-drawer';
 import { SaleFormDrawer } from '@platform/components/sale-form-drawer';
 import { OperationDetailDrawer } from '@platform/components/operation-detail-drawer';
+import { OperationCreationDrawer } from '@platform/components/operation-creation-drawer';
+import { CustomerContactFormDrawer } from '@platform/components/customer-contact-form-drawer';
 import { AsyncBoundary, ErrorState } from '@erp/ui/states';
 import { EmptyState } from '@erp/ui/empty-state';
 import { SkeletonCard, SkeletonList } from '@erp/ui/skeletons';
 import { StatusPill } from '@erp/ui/status-pill';
+import { ConfirmDialog } from '@erp/ui/confirm-dialog';
 import { Gate } from '@erp/ui/auth/gate';
 import { useAuth } from '@erp/ui/auth/auth-provider';
 import {
+  ApiClientError,
   customersApi,
   equipmentsApi,
   operationApi,
   salesApi,
   useQuery,
   type CustomerDetail,
+  type CustomerContact,
+  type CreateOperationPayload,
   type EquipmentDetail,
   type EquipmentSummary,
   type OperationSummary,
+  type OperationStats,
   type Sale,
 } from '@erp/api';
 import { formatCurrencyBRL, formatDate, formatDateTime, maskCep } from '@erp/utils';
+import { DOCUMENT_KIND_LABEL } from '@erp/types';
+import { OPERATION_STATUS, OPERATION_TYPE_LABEL, operationCode } from '@erp/ui/operations/operation-shared';
 
 type Tab = 'overview' | 'equipment' | 'services' | 'sales';
 const formatMoney = formatCurrencyBRL;
@@ -92,7 +115,7 @@ export default function ClienteDetailPage({ params }: { params: Promise<{ id: st
                 </button>
               ))}
             </nav>
-            {tab === 'overview' && <Overview customer={customer} />}
+            {tab === 'overview' && <Overview customer={customer} onRefresh={detail.refetch} />}
             {tab === 'equipment' && <EquipmentTab customerId={id} />}
             {tab === 'services' && <ServicesTab customerId={id} />}
             {tab === 'sales' && <SalesTab customer={customer} />}
@@ -109,69 +132,364 @@ export default function ClienteDetailPage({ params }: { params: Promise<{ id: st
   );
 }
 
-function Overview({ customer }: { customer: CustomerDetail }) {
+function Overview({
+  customer,
+  onRefresh,
+}: {
+  customer: CustomerDetail;
+  onRefresh: () => void;
+}) {
+  const { hasRole } = useAuth();
+  const canManage = hasRole('OWNER', 'MANAGER');
+  const [contactOpen, setContactOpen] = useState(false);
+  const [editingContact, setEditingContact] = useState<CustomerContact | null>(null);
+  const [deletingContact, setDeletingContact] = useState<CustomerContact | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [contactError, setContactError] = useState<string | null>(null);
+  const [operationId, setOperationId] = useState<string | null>(null);
+  const stats = useQuery<OperationStats>(
+    (signal) => operationApi.getOperationStats({ customerId: customer.id, signal }),
+    [customer.id],
+  );
+  const recent = useQuery(
+    (signal) => operationApi.listOperations({ customerId: customer.id, page: 1, limit: 5, signal }),
+    [customer.id],
+  );
+  const pending =
+    (stats.data?.byStatus.DRAFT ?? 0) +
+    (stats.data?.byStatus.PENDING ?? 0) +
+    (stats.data?.byStatus.REVIEW ?? 0);
+
+  async function removeContact() {
+    if (!deletingContact) return;
+    setDeleting(true);
+    setContactError(null);
+    try {
+      await customersApi.deleteContact(customer.id, deletingContact.id);
+      setDeletingContact(null);
+      onRefresh();
+    } catch (cause) {
+      setContactError(
+        cause instanceof ApiClientError ? cause.message : 'Não foi possível excluir o contato.',
+      );
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
-    <div className="grid gap-4 lg:grid-cols-3">
-      <InfoCard title="Dados do cliente">
-        <InfoRow
-          label="Status"
-          value={
-            <StatusPill
-              status={customer.isActive ? 'success' : 'offline'}
-              label={customer.isActive ? 'Ativo' : 'Inativo'}
+    <>
+      <div className="space-y-5">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <CustomerKpi
+            icon={Activity}
+            label="Atendimentos"
+            value={stats.loading ? '…' : String(stats.data?.total ?? 0)}
+            hint="Total registrado"
+          />
+          <CustomerKpi
+            icon={CheckCircle2}
+            label="Concluídos"
+            value={stats.loading ? '…' : String(stats.data?.byStatus.COMPLETED ?? 0)}
+            hint="Operações finalizadas"
+            tone="success"
+          />
+          <CustomerKpi
+            icon={Wrench}
+            label="Em execução"
+            value={stats.loading ? '…' : String(stats.data?.byStatus.IN_PROGRESS ?? 0)}
+            hint="Atendimentos em campo"
+            tone="primary"
+          />
+          <CustomerKpi
+            icon={Clock3}
+            label="Pendências"
+            value={stats.loading ? '…' : String(pending)}
+            hint="Rascunho, pendente ou revisão"
+            tone="warning"
+          />
+        </div>
+
+        {stats.error && (
+          <ErrorState error={stats.error} onRetry={stats.refetch} />
+        )}
+
+        <div className="grid gap-4 xl:grid-cols-[1.05fr_1.35fr]">
+          <InfoCard title="Identificação e canais">
+            <InfoRow
+              label="Status"
+              value={
+                <StatusPill
+                  status={customer.isActive ? 'success' : 'offline'}
+                  label={customer.isActive ? 'Ativo' : 'Inativo'}
+                />
+              }
             />
-          }
-        />
-        <InfoRow label="Documento" value={customer.cnpj ?? customer.cpf ?? '—'} />
-        <InfoRow label="E-mail" value={customer.email ?? '—'} />
-        <InfoRow label="Telefone" value={customer.phone ?? '—'} />
-        <InfoRow label="Cadastro" value={formatDate(customer.createdAt)} />
-      </InfoCard>
-      <InfoCard title="Endereços">
-        <div className="space-y-3">
-          {customer.addresses.map((address) => (
-            <div key={address.id} className="rounded-lg border border-[var(--color-border)] p-3">
-              <div className="flex items-center gap-2 font-medium">
-                <MapPin className="h-4 w-4" />
-                {address.name}
-                {address.isPrimary && (
-                  <span className="rounded bg-[var(--color-primary)]/10 px-1.5 py-0.5 text-[10px] text-[var(--color-primary)]">
-                    PRINCIPAL
-                  </span>
-                )}
+            {customer.tradeName && <InfoRow label="Nome fantasia" value={customer.tradeName} />}
+            <InfoRow
+              label={customer.type === 'COMPANY' ? 'CNPJ' : 'CPF'}
+              value={customer.cnpj ?? customer.cpf ?? 'Não informado'}
+            />
+            <InfoRow label="E-mail principal" value={customer.email ?? 'Não informado'} />
+            <InfoRow label="Telefone principal" value={customer.phone ?? 'Não informado'} />
+            {customer.secondaryPhone && (
+              <InfoRow label="Telefone adicional" value={customer.secondaryPhone} />
+            )}
+            <InfoRow label="Cliente desde" value={formatDate(customer.createdAt)} />
+            {customer.notes && <InfoRow label="Observações" value={customer.notes} />}
+          </InfoCard>
+
+          <InfoCard title={`Endereços (${customer.addresses.length})`}>
+            <div className="grid gap-3 md:grid-cols-2">
+              {customer.addresses.map((address) => (
+                <div
+                  key={address.id}
+                  className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-muted)]/25 p-3"
+                >
+                  <div className="flex items-center gap-2 font-medium">
+                    <MapPin className="h-4 w-4 text-[var(--color-primary)]" />
+                    {address.name || 'Endereço'}
+                    {address.isPrimary && (
+                      <span className="rounded-full bg-[var(--color-primary)]/10 px-2 py-0.5 text-[10px] font-semibold text-[var(--color-primary)]">
+                        PRINCIPAL
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-2 text-caption">
+                    {[
+                      [address.street, address.number].filter(Boolean).join(', '),
+                      address.district,
+                      [address.city, address.state].filter(Boolean).join('/'),
+                      address.zipCode ? `CEP ${maskCep(address.zipCode)}` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ') || 'Dados de endereço incompletos'}
+                  </p>
+                </div>
+              ))}
+              {!customer.addresses.length && (
+                <EmptyState
+                  icon={MapPin}
+                  title="Nenhum endereço"
+                  description="Edite o cliente para cadastrar o primeiro endereço."
+                />
+              )}
+            </div>
+          </InfoCard>
+        </div>
+
+        <div className="grid gap-4 xl:grid-cols-[1.35fr_1fr]">
+          <InfoCard title="Atendimentos recentes">
+            {recent.loading && !recent.data ? (
+              <SkeletonList rows={3} />
+            ) : recent.error ? (
+              <ErrorState error={recent.error} onRetry={recent.refetch} />
+            ) : recent.data?.items.length ? (
+              <div className="divide-y divide-[var(--color-border)]">
+                {recent.data.items.map((operation) => (
+                  <button
+                    key={operation.id}
+                    type="button"
+                    onClick={() => setOperationId(operation.id)}
+                    className="flex w-full items-center justify-between gap-4 py-3 text-left hover:text-[var(--color-primary)]"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold">
+                        {operationCode(operation.number)} ·{' '}
+                        {DOCUMENT_KIND_LABEL[operation.requestedDocumentType]}
+                      </p>
+                      <p className="truncate text-caption">
+                        {operation.equipment?.name ?? 'Sem equipamento específico'} ·{' '}
+                        {OPERATION_TYPE_LABEL[operation.type]}
+                      </p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <StatusPill
+                        status={
+                          operation.status === 'COMPLETED'
+                            ? 'success'
+                            : operation.status === 'CANCELED'
+                              ? 'danger'
+                              : 'warning'
+                        }
+                        label={OPERATION_STATUS[operation.status].label}
+                      />
+                      <p className="mt-1 text-caption">
+                        {formatDate(operation.completedAt ?? operation.scheduledFor ?? operation.createdAt)}
+                      </p>
+                    </div>
+                  </button>
+                ))}
               </div>
-              <p className="mt-1 text-caption">
-                {[
-                  address.street,
-                  address.number,
-                  address.district,
-                  `${address.city}/${address.state}`,
-                  address.zipCode ? `CEP ${maskCep(address.zipCode)}` : null,
-                ]
-                  .filter(Boolean)
-                  .join(' · ')}
-              </p>
+            ) : (
+              <EmptyState
+                icon={Wrench}
+                title="Nenhum atendimento"
+                description="As operações deste cliente aparecerão aqui."
+              />
+            )}
+          </InfoCard>
+
+          <InfoCard
+            title={`Contatos (${customer.contacts.length})`}
+            action={
+              canManage ? (
+                <button
+                  type="button"
+                  className="btn-secondary h-8 px-2.5"
+                  onClick={() => {
+                    setContactError(null);
+                    setEditingContact(null);
+                    setContactOpen(true);
+                  }}
+                >
+                  <Plus className="h-4 w-4" />
+                  Adicionar
+                </button>
+              ) : undefined
+            }
+          >
+            <div className="space-y-3">
+              {contactError && (
+                <div className="rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 p-3 text-sm text-[var(--color-danger)]">
+                  {contactError}
+                </div>
+              )}
+              {customer.contacts.map((contact) => (
+                <div
+                  key={contact.id}
+                  className="rounded-[var(--radius-md)] border border-[var(--color-border)] p-3"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <strong className="text-sm">{contact.name}</strong>
+                        {contact.isPrimary && (
+                          <span className="rounded-full bg-[var(--color-primary)]/10 px-2 py-0.5 text-[10px] font-semibold text-[var(--color-primary)]">
+                            PRINCIPAL
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-caption">{contact.role ?? 'Contato do cliente'}</p>
+                    </div>
+                    {canManage && (
+                      <div className="flex gap-1">
+                        <button
+                          type="button"
+                          aria-label={`Editar ${contact.name}`}
+                          className="rounded-md p-2 hover:bg-[var(--color-muted)]"
+                          onClick={() => {
+                            setContactError(null);
+                            setEditingContact(contact);
+                            setContactOpen(true);
+                          }}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`Excluir ${contact.name}`}
+                          className="rounded-md p-2 text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10"
+                          onClick={() => {
+                            setContactError(null);
+                            setDeletingContact(contact);
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <div className="mt-3 space-y-1 text-caption">
+                    {contact.phone && (
+                      <p className="flex items-center gap-2">
+                        <Phone className="h-3.5 w-3.5" /> {contact.phone}
+                      </p>
+                    )}
+                    {contact.email && (
+                      <p className="flex items-center gap-2 break-all">
+                        <Mail className="h-3.5 w-3.5" /> {contact.email}
+                      </p>
+                    )}
+                    {contact.notes && <p className="pt-1">{contact.notes}</p>}
+                  </div>
+                </div>
+              ))}
+              {!customer.contacts.length && (
+                <EmptyState
+                  icon={ContactRound}
+                  title="Nenhum contato cadastrado"
+                  description={
+                    canManage
+                      ? 'Adicione a primeira pessoa de contato deste cliente.'
+                      : 'Ainda não existem contatos disponíveis.'
+                  }
+                />
+              )}
             </div>
-          ))}
-          {!customer.addresses.length && (
-            <p className="text-caption">Nenhum endereço cadastrado.</p>
-          )}
+          </InfoCard>
         </div>
-      </InfoCard>
-      <InfoCard title="Contatos">
-        <div className="space-y-3">
-          {customer.contacts.map((contact) => (
-            <div key={contact.id} className="rounded-lg border border-[var(--color-border)] p-3">
-              <strong className="text-sm">{contact.name}</strong>
-              <p className="text-caption">
-                {[contact.role, contact.phone, contact.email].filter(Boolean).join(' · ')}
-              </p>
-            </div>
-          ))}
-          {!customer.contacts.length && <p className="text-caption">Nenhum contato cadastrado.</p>}
+      </div>
+
+      <CustomerContactFormDrawer
+        open={contactOpen}
+        customerId={customer.id}
+        contact={editingContact}
+        onClose={() => setContactOpen(false)}
+        onSaved={onRefresh}
+      />
+      <ConfirmDialog
+        open={Boolean(deletingContact)}
+        title="Excluir contato?"
+        description={`O contato ${deletingContact?.name ?? ''} deixará de aparecer neste cliente.`}
+        confirmLabel={deleting ? 'Excluindo…' : 'Excluir contato'}
+        danger
+        onClose={() => {
+          if (!deleting) setDeletingContact(null);
+        }}
+        onConfirm={removeContact}
+      />
+      <OperationDetailDrawer
+        operationId={operationId}
+        open={Boolean(operationId)}
+        onClose={() => setOperationId(null)}
+      />
+    </>
+  );
+}
+
+function CustomerKpi({
+  icon: Icon,
+  label,
+  value,
+  hint,
+  tone = 'neutral',
+}: {
+  icon: typeof Activity;
+  label: string;
+  value: string;
+  hint: string;
+  tone?: 'neutral' | 'primary' | 'success' | 'warning';
+}) {
+  const tones = {
+    neutral: 'bg-[var(--color-muted)] text-[var(--color-foreground)]',
+    primary: 'bg-[var(--color-primary)]/10 text-[var(--color-primary)]',
+    success: 'bg-[var(--color-success)]/10 text-[var(--color-success)]',
+    warning: 'bg-[var(--color-warning)]/10 text-[var(--color-warning)]',
+  };
+  return (
+    <article className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 shadow-[var(--shadow-card)]">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-caption">{label}</p>
+          <p className="mt-1 text-2xl font-semibold tracking-tight">{value}</p>
+          <p className="mt-1 text-caption">{hint}</p>
         </div>
-      </InfoCard>
-    </div>
+        <span className={`grid h-10 w-10 place-items-center rounded-[var(--radius-md)] ${tones[tone]}`}>
+          <Icon className="h-5 w-5" />
+        </span>
+      </div>
+    </article>
   );
 }
 
@@ -304,6 +622,16 @@ function ServicesTab({ customerId }: { customerId: string }) {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
   const [operationId, setOperationId] = useState<string | null>(null);
+  const [creationOpen, setCreationOpen] = useState(false);
+  const creationDefaults = useMemo<Partial<CreateOperationPayload>>(
+    () => ({
+      customerId,
+      type: 'PREVENTIVA',
+      documentType: 'WORK_ORDER',
+      status: 'DRAFT',
+    }),
+    [customerId],
+  );
   const list = useQuery(
     (signal) => operationApi.listOperations({ customerId, page, limit, signal }),
     [customerId, page, limit],
@@ -312,15 +640,15 @@ function ServicesTab({ customerId }: { customerId: string }) {
     {
       key: 'number',
       header: 'Atendimento',
-      cell: (item) => <strong>OS-{String(item.number).padStart(6, '0')}</strong>,
+      cell: (item) => <strong>{operationCode(item.number)}</strong>,
     },
     {
       key: 'document',
       header: 'Serviço / documento',
       cell: (item) => (
         <div>
-          {item.requestedDocumentType}
-          <p className="text-caption">{item.type}</p>
+          {DOCUMENT_KIND_LABEL[item.requestedDocumentType]}
+          <p className="text-caption">{OPERATION_TYPE_LABEL[item.type]}</p>
         </div>
       ),
     },
@@ -342,7 +670,7 @@ function ServicesTab({ customerId }: { customerId: string }) {
                 ? 'danger'
                 : 'warning'
           }
-          label={item.status}
+          label={OPERATION_STATUS[item.status].label}
         />
       ),
     },
@@ -354,11 +682,19 @@ function ServicesTab({ customerId }: { customerId: string }) {
   ];
   return (
     <section className="space-y-4">
-      <div>
-        <h2 className="text-lg font-semibold">Serviços registrados</h2>
-        <p className="text-caption">
-          Ordens de Serviço, visitas, laudos e demais atendimentos vinculados ao cliente.
-        </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-lg font-semibold">Serviços registrados</h2>
+          <p className="text-caption">
+            Ordens de Serviço, visitas, laudos e demais atendimentos vinculados ao cliente.
+          </p>
+        </div>
+        <Gate roles={['OWNER', 'MANAGER']}>
+          <button type="button" className="btn-primary" onClick={() => setCreationOpen(true)}>
+            <Plus className="h-4 w-4" />
+            Novo atendimento
+          </button>
+        </Gate>
       </div>
       {list.loading && !list.data ? (
         <SkeletonList rows={5} />
@@ -391,6 +727,17 @@ function ServicesTab({ customerId }: { customerId: string }) {
         operationId={operationId}
         open={Boolean(operationId)}
         onClose={() => setOperationId(null)}
+      />
+      <OperationCreationDrawer
+        open={creationOpen}
+        mode="service"
+        initialValues={creationDefaults}
+        lockCustomer
+        contextNotice="Este atendimento será criado diretamente para o cliente selecionado."
+        onClose={() => setCreationOpen(false)}
+        onCreated={() => {
+          void list.refetch();
+        }}
       />
     </section>
   );

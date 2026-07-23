@@ -1,5 +1,29 @@
 # Security
 
+## Métricas e contatos no contexto do cliente
+
+- `customerId` de stats passa por validação UUID e é acrescentado ao escopo de Operation já autorizado.
+- Para OPERATOR, os agregados continuam limitados às Assignments permitidas; conhecer o cliente não amplia ownership.
+- Contatos permanecem mutáveis somente por OWNER/MANAGER, com DTO whitelist, validação de telefone/e-mail e auditoria existente.
+- A criação contextual de serviço não confia no bloqueio visual: RBAC, cliente, endereço, equipamentos e operador são revalidados pelo backend.
+
+## Recibo de venda — integridade do prefill
+
+- O prefill continua disponível somente para vendas concluídas e sob o RBAC existente.
+- Cliente, documento, itens, valores e garantia são lidos dos snapshots oficiais da venda; IDs ou textos do frontend não alteram a venda concluída.
+- CPF/CNPJ retornados pertencem ao próprio cliente vinculado à venda e são usados somente na identificação administrativa do recibo.
+- A Operation documental valida `sourceSaleId`, cliente e estado `COMPLETED` antes de aceitar o vínculo.
+- Declaração final permanece sanitizada e limitada pelo DTO; nenhum preço, Storage ou documento é consultado diretamente durante renderização.
+
+## Integridade da OS gerada por PMOC
+
+- Somente OWNER/MANAGER podem revisar e gerar a OS pela Execution Request.
+- O backend ignora tentativas de trocar cliente, retirar equipamento coberto, alterar identidade da execução ou romper o vínculo PMOC.
+- Operador informado continua sujeito às validações de usuário ativo, papel permitido e instalação da `OperationsService`; a Assignment não é criada pelo frontend.
+- Checklist de campo é reconstruído no servidor a partir da revisão permitida e da cobertura autoritativa, com limites do DTO de Operation.
+- Geração, Assignment, MaintenanceExecution e vínculo da request permanecem transacionais e idempotentes; uma request já gerada não produz segunda OS.
+- O fluxo não expõe scheduler metadata, storage, assinatura, token ou dados de outra organização.
+
 ## Integridade dos checklists RVT/PMOC
 
 - Itens PMOC são validados por organização, atividade, soft delete, tipo `CHECKLIST` e aplicabilidade à OS.
@@ -2163,3 +2187,13 @@ The catalog is scoped to the installation Organization in every query. Reads req
 - O runtime recebe dependências podadas com `npm prune --omit=dev`, sem executar uma nova instalação pela rede.
 - Audit e mensagens de financiamento são desabilitados somente durante a construção; a revisão de dependências permanece nos comandos próprios do pipeline.
 - Prisma Client gerado e Prisma CLI de migrations permanecem disponíveis no runtime.
+## Isolamento dos checklists por workflow
+
+- Toda consulta permanece limitada à Organization da instalação.
+- O filtro `workflowsAny` é validado como enum, sem aceitar valores arbitrários e limitado a seis
+  entradas.
+- A administração mantém RBAC oficial: leitura conforme roles existentes; mutações somente
+  OWNER/MANAGER, com auditoria e soft delete.
+- Defaults não são restaurados após exclusão, evitando contrariar uma decisão administrativa.
+- Operations e documentos persistem snapshots; alterações posteriores no catálogo não reescrevem
+  histórico.

@@ -107,7 +107,7 @@ function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; oper
   const materials = useQuery((signal) => inventoryApi.listOperationMaterials(operation.id, { signal }), [operation.id]);
   const rvtChecklistCatalog = useQuery(
     async (signal) => type === "TECHNICAL_REPORT"
-      ? (await Promise.all(RVT_MAINTENANCE_TYPES.map((item) => technicalCatalogsApi.listChecklistItems("TECHNICAL_REPORT", { maintenanceType: item.value, signal })))).flat()
+      ? (await Promise.all(RVT_MAINTENANCE_TYPES.map((item) => technicalCatalogsApi.listChecklistItems("TECHNICAL_REPORT", { maintenanceType: item.value, includeGeneral: false, signal })))).flat()
       : [],
     [type],
   );
