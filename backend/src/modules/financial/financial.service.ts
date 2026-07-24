@@ -450,9 +450,11 @@ export class FinancialService {
     endToday.setHours(23, 59, 59, 999);
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    // Janela da evolução (Saúde financeira): últimos 6 meses.
+    const flowStart = new Date(now.getFullYear(), now.getMonth() - 5, 1);
 
     const pending: Prisma.FinancialEntryWhereInput = { deletedAt: null, status: FinancialEntryStatus.PENDING };
-    const [accounts, receivableToday, payableToday, overdueReceivable, overduePayable, incomeMonth, expenseMonth, pendingEntries] =
+    const [accounts, receivableToday, payableToday, overdueReceivable, overduePayable, incomeMonth, expenseMonth, pendingEntries, flowEntries] =
       await this.prisma.$transaction([
         this.prisma.financialAccount.findMany({ where: { deletedAt: null, active: true }, select: { currentBalance: true } }),
         this.sumAmount({ ...pending, type: FinancialEntryType.RECEIVABLE, dueDate: { gte: startToday, lte: endToday } }),
@@ -467,10 +469,25 @@ export class FinancialService {
           orderBy: { dueDate: 'asc' },
           take: 500,
         }),
+        // Evolução: todos os lançamentos ativos (pagos e pendentes) da janela,
+        // considerados na data efetiva (paidAt quando pago, senão dueDate).
+        this.prisma.financialEntry.findMany({
+          where: {
+            deletedAt: null,
+            status: { not: FinancialEntryStatus.CANCELED },
+            OR: [
+              { paidAt: { gte: flowStart } },
+              { AND: [{ paidAt: null }, { dueDate: { gte: flowStart } }] },
+            ],
+          },
+          select: { type: true, amount: true, dueDate: true, paidAt: true },
+          orderBy: { dueDate: 'asc' },
+          take: 2000,
+        }),
       ]);
     const currentBalance = accounts.reduce((sum, item) => sum + Number(item.currentBalance), 0);
     const projectedBalance = pendingEntries.reduce((sum, item) => sum + this.signedAmount(item.type, item.amount), currentBalance);
-    const monthlyFlow = this.monthlyFlow(pendingEntries);
+    const monthlyFlow = this.monthlyFlow(flowEntries);
     return {
       receivableToday: this.moneyString(receivableToday._sum.amount),
       payableToday: this.moneyString(payableToday._sum.amount),
@@ -643,16 +660,29 @@ export class FinancialService {
     return this.prisma.financialEntry.aggregate({ where, _sum: { amount: true } });
   }
 
-  private monthlyFlow(entries: Array<{ dueDate: Date; type: FinancialEntryType; amount: Prisma.Decimal }>): Array<Record<string, string>> {
+  private monthlyFlow(
+    entries: Array<{ dueDate: Date; paidAt?: Date | null; type: FinancialEntryType; amount: Prisma.Decimal }>,
+    monthsBack = 6,
+  ): Array<Record<string, string>> {
+    const now = new Date();
+    const monthKey = (date: Date): string =>
+      `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    // Pré-preenche os últimos `monthsBack` meses (inclui o atual) em ordem, para
+    // a evolução renderizar uma linha contínua mesmo em meses sem lançamentos.
     const months = new Map<string, { income: number; expenses: number; net: number }>();
+    for (let offset = monthsBack - 1; offset >= 0; offset -= 1) {
+      const date = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+      months.set(monthKey(date), { income: 0, expenses: 0, net: 0 });
+    }
     for (const entry of entries) {
-      const key = entry.dueDate.toISOString().slice(0, 7);
-      const current = months.get(key) ?? { income: 0, expenses: 0, net: 0 };
+      // Data efetiva: quando pago, usa a data do pagamento; senão, o vencimento.
+      const effective = entry.paidAt ?? entry.dueDate;
+      const current = months.get(monthKey(effective));
+      if (!current) continue; // fora da janela
       const signed = this.signedAmount(entry.type, entry.amount);
       if (signed >= 0) current.income += signed;
       else current.expenses += Math.abs(signed);
       current.net += signed;
-      months.set(key, current);
     }
     return [...months.entries()].map(([month, value]) => ({
       month,
