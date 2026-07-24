@@ -47,6 +47,7 @@ export class UpdateMaintenanceReminderDto {
 }
 
 export class PmocUpcomingQueryDto {
+  @IsOptional()
   @IsUUID('4')
-  customerId!: string;
+  customerId?: string;
 }

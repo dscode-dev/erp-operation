@@ -1754,11 +1754,12 @@ export class DocumentBuilderService {
       ],
     });
 
-    const signature = this.signatureComponent(context);
+    // Orçamento não coleta assinatura do cliente — só o responsável técnico.
+    const signature = this.signatureComponent(context, null, true);
     if (signature) {
       sections.push({
         id: 'signature',
-        title: 'Assinaturas',
+        title: 'Assinatura do responsável técnico',
         critical: true,
         components: [signature],
       });
@@ -1791,12 +1792,16 @@ export class DocumentBuilderService {
   private signatureComponent(
     context: DocumentBuildContext,
     institutionalSignedAt: string | null = null,
+    onlyInstitutional = false,
   ): DocumentBlueprintComponent | null {
     const { signature } = context;
-    if (!signature.requiresSignature || signature.signatureMode === SignatureMode.NONE) return null;
+    if (signature.signatureMode === SignatureMode.NONE) return null;
+    // Orçamento: ignora assinaturas de execução (cliente/técnico em campo) e
+    // exige apenas o responsável técnico institucional.
+    if (!onlyInstitutional && !signature.requiresSignature) return null;
 
     const signatures: Extract<DocumentBlueprintComponent, { kind: 'signature' }>['signatures'] = [];
-    for (const execution of signature.executionSignatures) {
+    for (const execution of onlyInstitutional ? [] : signature.executionSignatures) {
       signatures.push({
         id: `execution-signature-${execution.role}`,
         role: 'collected',
@@ -1841,10 +1846,11 @@ export class DocumentBuilderService {
       });
     }
 
+    if (onlyInstitutional && signatures.length === 0) return null;
     return {
       id: 'document-signature',
       kind: 'signature',
-      mode: signature.signatureMode,
+      mode: onlyInstitutional ? SignatureMode.FIXED : signature.signatureMode,
       signatures,
       keepTogether: true,
     };

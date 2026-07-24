@@ -182,18 +182,18 @@ export class MaintenanceRemindersService {
   }
 
   /**
-   * Seção de baixa prioridade: próximas execuções previstas de PMOCs ativos do
-   * cliente (somente leitura). Limitada às 5 mais próximas para não poluir.
+   * Próximas execuções previstas de PMOCs ativos (somente leitura). Sem cliente,
+   * lista de todos; com `customerId`, filtra o cliente. Ordenadas por data.
    */
-  async pmocUpcoming(customerId: string, _actor: AuthenticatedUser): Promise<unknown> {
+  async pmocUpcoming(customerId: string | undefined, _actor: AuthenticatedUser): Promise<unknown> {
     const requests = await this.prisma.pmocExecutionRequest.findMany({
       where: {
         status: PmocExecutionRequestStatus.PENDING,
         scheduledFor: { gte: new Date() },
-        pmocPlan: { customerId, active: true },
+        pmocPlan: { active: true, ...(customerId ? { customerId } : {}) },
       },
       orderBy: { scheduledFor: 'asc' },
-      take: 5,
+      take: 100,
       select: {
         id: true,
         executionNumber: true,
@@ -204,6 +204,7 @@ export class MaintenanceRemindersService {
             number: true,
             periodicity: true,
             maintenancePlan: { select: { name: true } },
+            customer: { select: { name: true, tradeName: true } },
             equipment: { select: { id: true, name: true, tag: true } },
           },
         },
@@ -217,6 +218,7 @@ export class MaintenanceRemindersService {
       pmocNumber: request.pmocPlan.number,
       periodicity: request.pmocPlan.periodicity,
       planName: request.pmocPlan.maintenancePlan?.name ?? null,
+      customerName: request.pmocPlan.customer?.tradeName ?? request.pmocPlan.customer?.name ?? null,
       equipment: request.pmocPlan.equipment
         ? { name: request.pmocPlan.equipment.name, tag: request.pmocPlan.equipment.tag }
         : null,

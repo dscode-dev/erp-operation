@@ -8,11 +8,12 @@
  * altura fixa: nada ultrapassa os limites; excedente vira "+N mais".
  */
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AlarmClock, AlertTriangle, CalendarClock, Check, ChevronLeft, ChevronRight, Calendar as CalendarIcon, CircleCheck, Plus, ShieldCheck, Wrench, X } from "lucide-react";
 import { PageHeader } from "@platform/components/page-header";
 import { OperationCreationDrawer } from "@platform/components/operation-creation-drawer";
 import { Drawer } from "@erp/ui/drawer";
+import { ConfirmDialog } from "@erp/ui/confirm-dialog";
 import { Gate } from "@erp/ui/auth/gate";
 import { EmptyState } from "@erp/ui/empty-state";
 import { SkeletonList } from "@erp/ui/skeletons";
@@ -308,31 +309,61 @@ function formatDate(iso: string): string {
   return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString("pt-BR");
 }
 
+const REM_PAGE_SIZE = 10;
+const NEAR_DAYS = 5;
+
+function daysUntil(iso: string): number {
+  return Math.ceil((new Date(iso).getTime() - Date.now()) / 86_400_000);
+}
+/** Lembrete pendente com a próxima execução a no máximo NEAR_DAYS dias (inclui vencidos). */
+function isNearReminder(reminder: MaintenanceReminder): boolean {
+  return reminder.status === "PENDING" && daysUntil(reminder.dueDate) <= NEAR_DAYS;
+}
+
 function RemindersTab() {
   const [statusFilter, setStatusFilter] = useState<MaintenanceReminderStatus>("PENDING");
   const [customerId, setCustomerId] = useState("");
+  const [nearOnly, setNearOnly] = useState(false);
   const [tick, setTick] = useState(0);
   const bump = () => setTick((v) => v + 1);
+  const [pagePrev, setPagePrev] = useState(1);
+  const [pageInst, setPageInst] = useState(1);
+  const [pagePmoc, setPagePmoc] = useState(1);
+  const [confirming, setConfirming] = useState<{ reminder: MaintenanceReminder; action: "DONE" | "DISMISSED" } | null>(null);
+  const [createOsFor, setCreateOsFor] = useState<MaintenanceReminder | null>(null);
 
   const stats = useQuery((s) => maintenanceRemindersApi.getReminderStats({ signal: s }), [tick]);
   const reminders = useQuery(
-    (s) => maintenanceRemindersApi.listReminders({ status: statusFilter, customerId: customerId || undefined, limit: 50, signal: s }),
+    (s) => maintenanceRemindersApi.listReminders({ status: statusFilter, customerId: customerId || undefined, limit: 100, signal: s }),
     [statusFilter, customerId, tick],
     { refetchInterval: 20_000, refetchOnFocus: true },
   );
-  const customers = useQuery((s) => customersApi.listCustomers({ limit: 200, signal: s }), []);
+  const customers = useQuery((s) => customersApi.listCustomers({ limit: 100, signal: s }), []);
   const pmocUpcoming = useQuery<PmocUpcomingItem[]>(
-    (s) => (customerId ? maintenanceRemindersApi.listPmocUpcoming(customerId, { signal: s }) : Promise.resolve([])),
-    [customerId],
+    (s) => maintenanceRemindersApi.listPmocUpcoming(customerId || undefined, { signal: s }),
+    [customerId, tick],
   );
 
-  async function patch(id: string, payload: { dueDate?: string; status?: MaintenanceReminderStatus; notes?: string }) {
+  // Ao mudar filtros, volta as seções para a primeira página.
+  useEffect(() => { setPagePrev(1); setPageInst(1); setPagePmoc(1); }, [statusFilter, customerId, nearOnly]);
+
+  async function patch(id: string, payload: { dueDate?: string; status?: MaintenanceReminderStatus }) {
     await maintenanceRemindersApi.updateReminder(id, payload);
     bump();
   }
 
-  const items = reminders.data?.items ?? [];
+  const allItems = reminders.data?.items ?? [];
+  const filtered = nearOnly ? allItems.filter(isNearReminder) : allItems;
+  const preventivas = filtered.filter((r) => r.operationType === "PREVENTIVA");
+  const instalacoes = filtered.filter((r) => r.operationType === "INSTALACAO");
   const kpis = stats.data;
+  const remindersLoading = reminders.loading && !reminders.data;
+  const rowHandlers = {
+    onConclude: (r: MaintenanceReminder) => setConfirming({ reminder: r, action: "DONE" as const }),
+    onDismiss: (r: MaintenanceReminder) => setConfirming({ reminder: r, action: "DISMISSED" as const }),
+    onCreateOs: setCreateOsFor,
+    onPatch: patch,
+  };
 
   return (
     <div className="space-y-5">
@@ -347,48 +378,126 @@ function RemindersTab() {
         {STATUS_FILTERS.map(([value, label]) => (
           <button key={value} type="button" onClick={() => setStatusFilter(value)} className={reminderChip(statusFilter === value)}>{label}</button>
         ))}
+        <button type="button" onClick={() => setNearOnly((v) => !v)} className={`inline-flex items-center gap-1.5 ${reminderChip(nearOnly)}`} title="Filtrar lembretes com execução em até 5 dias">
+          <AlertTriangle className="h-3.5 w-3.5" /> Próximos ≤{NEAR_DAYS} dias
+        </button>
         <select value={customerId} onChange={(e) => setCustomerId(e.target.value)} className="ml-auto h-9 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-2 text-sm outline-none focus:border-[var(--color-primary)]">
           <option value="">Todos os clientes</option>
           {(customers.data?.items ?? []).map((c: Customer) => <option key={c.id} value={c.id}>{c.tradeName ?? c.name}</option>)}
         </select>
       </div>
 
-      {/* Prioridade visual: lembretes gerados a partir de OS */}
-      <section className="space-y-2">
-        <div className="flex items-center gap-2 text-sm font-semibold"><Wrench className="h-4 w-4 text-[var(--color-primary)]" /> Lembretes de manutenção (OS Preventiva/Instalação)</div>
-        {reminders.loading && !reminders.data ? (
-          <SkeletonList rows={5} />
-        ) : reminders.error && !reminders.data ? (
-          <ErrorState error={reminders.error} onRetry={reminders.refetch} />
-        ) : items.length === 0 ? (
-          <EmptyState icon={AlarmClock} title="Nenhum lembrete" description="Os lembretes são criados automaticamente ao registrar uma OS de manutenção preventiva ou instalação." />
-        ) : (
-          <ul className="space-y-2">{items.map((r) => <ReminderRow key={r.id} reminder={r} onPatch={patch} />)}</ul>
-        )}
-      </section>
+      {reminders.error && !reminders.data ? (
+        <ErrorState error={reminders.error} onRetry={reminders.refetch} />
+      ) : (
+        <>
+          <ReminderSection title="Preventivas" icon={Wrench} loading={remindersLoading} items={preventivas} page={pagePrev} onPage={setPagePrev} emptyLabel={nearOnly ? "Nenhuma preventiva com execução nos próximos dias." : "Nenhuma preventiva neste filtro."} {...rowHandlers} />
+          <ReminderSection title="Instalações" icon={Plus} loading={remindersLoading} items={instalacoes} page={pageInst} onPage={setPageInst} emptyLabel={nearOnly ? "Nenhuma instalação com execução nos próximos dias." : "Nenhuma instalação neste filtro."} {...rowHandlers} />
+          <PmocSection loading={pmocUpcoming.loading && !pmocUpcoming.data} error={pmocUpcoming.error} onRetry={pmocUpcoming.refetch} items={pmocUpcoming.data ?? []} page={pagePmoc} onPage={setPagePmoc} showCustomer={!customerId} />
+        </>
+      )}
 
-      {/* Baixa prioridade: próximas execuções de PMOC (somente leitura) */}
-      <section className="space-y-2 rounded-[var(--radius-lg)] border border-dashed border-[var(--color-border)] bg-[var(--color-muted)]/20 p-4">
-        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-[var(--color-muted-foreground)]"><ShieldCheck className="h-3.5 w-3.5" /> Próximas execuções de PMOC · somente leitura</div>
-        {!customerId ? (
-          <p className="text-caption">Selecione um cliente acima para ver as próximas execuções previstas nos PMOCs ativos dele (até 5).</p>
-        ) : pmocUpcoming.loading && !pmocUpcoming.data ? (
-          <SkeletonList rows={2} />
-        ) : (pmocUpcoming.data ?? []).length === 0 ? (
-          <p className="text-caption">Nenhuma execução de PMOC prevista para este cliente.</p>
-        ) : (
-          <ul className="divide-y divide-[var(--color-border)]">
-            {(pmocUpcoming.data ?? []).map((p) => (
-              <li key={p.id} className="flex items-center gap-3 py-2 text-sm">
+      <ConfirmDialog
+        open={confirming !== null}
+        danger={confirming?.action === "DISMISSED"}
+        title={confirming?.action === "DONE" ? "Concluir lembrete?" : "Dispensar lembrete?"}
+        description={confirming?.action === "DONE" ? "O lembrete será marcado como concluído e sairá da lista de pendentes." : "O lembrete será dispensado e sairá da lista de pendentes."}
+        confirmLabel={confirming?.action === "DONE" ? "Concluir" : "Dispensar"}
+        onClose={() => setConfirming(null)}
+        onConfirm={async () => { if (confirming) await patch(confirming.reminder.id, { status: confirming.action }); }}
+      />
+
+      <OperationCreationDrawer
+        open={createOsFor !== null}
+        mode="operation"
+        initialValues={createOsFor ? { customerId: createOsFor.customerId, equipmentId: createOsFor.equipmentId ?? undefined, type: createOsFor.operationType, documentType: "WORK_ORDER" } : undefined}
+        onClose={() => setCreateOsFor(null)}
+        onCreated={() => { setCreateOsFor(null); bump(); }}
+      />
+    </div>
+  );
+}
+
+function ReminderSection({ title, icon: Icon, loading, items, page, onPage, emptyLabel, onConclude, onDismiss, onCreateOs, onPatch }: {
+  title: string;
+  icon: typeof Wrench;
+  loading: boolean;
+  items: MaintenanceReminder[];
+  page: number;
+  onPage: (p: number) => void;
+  emptyLabel: string;
+  onConclude: (reminder: MaintenanceReminder) => void;
+  onDismiss: (reminder: MaintenanceReminder) => void;
+  onCreateOs: (reminder: MaintenanceReminder) => void;
+  onPatch: (id: string, payload: { dueDate?: string; status?: MaintenanceReminderStatus }) => Promise<void>;
+}) {
+  const totalPages = Math.max(1, Math.ceil(items.length / REM_PAGE_SIZE));
+  const current = Math.min(page, totalPages);
+  const slice = items.slice((current - 1) * REM_PAGE_SIZE, current * REM_PAGE_SIZE);
+  return (
+    <section className="space-y-2 border-t border-[var(--color-border)] pt-4">
+      <div className="flex items-center gap-2 text-sm font-semibold"><Icon className="h-4 w-4 text-[var(--color-primary)]" /> {title} <span className="text-caption font-normal">({items.length})</span></div>
+      {loading ? (
+        <SkeletonList rows={3} />
+      ) : items.length === 0 ? (
+        <p className="rounded-[var(--radius-md)] bg-[var(--color-muted)]/40 px-3 py-6 text-center text-caption">{emptyLabel}</p>
+      ) : (
+        <>
+          <ul className="space-y-2">{slice.map((r) => <ReminderRow key={r.id} reminder={r} highlighted={isNearReminder(r)} onConclude={onConclude} onDismiss={onDismiss} onCreateOs={onCreateOs} onPatch={onPatch} />)}</ul>
+          <Pager page={current} totalPages={totalPages} onPage={onPage} />
+        </>
+      )}
+    </section>
+  );
+}
+
+function PmocSection({ loading, error, onRetry, items, page, onPage, showCustomer }: {
+  loading: boolean;
+  error: unknown;
+  onRetry: () => void;
+  items: PmocUpcomingItem[];
+  page: number;
+  onPage: (p: number) => void;
+  showCustomer: boolean;
+}) {
+  const totalPages = Math.max(1, Math.ceil(items.length / REM_PAGE_SIZE));
+  const current = Math.min(page, totalPages);
+  const slice = items.slice((current - 1) * REM_PAGE_SIZE, current * REM_PAGE_SIZE);
+  return (
+    <section className="space-y-2 border-t border-[var(--color-border)] pt-4">
+      <div className="flex items-center gap-2 text-sm font-semibold"><ShieldCheck className="h-4 w-4 text-[var(--color-muted-foreground)]" /> Próximas execuções de PMOC <span className="text-caption font-normal">· somente leitura ({items.length})</span></div>
+      {loading ? (
+        <SkeletonList rows={3} />
+      ) : error ? (
+        <ErrorState error={error} onRetry={onRetry} />
+      ) : items.length === 0 ? (
+        <p className="rounded-[var(--radius-md)] bg-[var(--color-muted)]/40 px-3 py-6 text-center text-caption">Nenhuma execução de PMOC prevista.</p>
+      ) : (
+        <>
+          <ul className="divide-y divide-[var(--color-border)] rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)]">
+            {slice.map((p) => (
+              <li key={p.id} className="flex items-center gap-3 px-3 py-2.5 text-sm">
                 <CalendarClock className="h-4 w-4 shrink-0 text-[var(--color-muted-foreground)]" />
-                <span className="min-w-0 flex-1 truncate">{p.planName ?? `PMOC-${String(p.pmocNumber).padStart(6, "0")}`}{p.equipment ? ` · ${p.equipment.name}` : ""}</span>
+                <span className="min-w-0 flex-1 truncate">{p.planName ?? `PMOC-${String(p.pmocNumber).padStart(6, "0")}`}{showCustomer && p.customerName ? ` · ${p.customerName}` : ""}{p.equipment ? ` · ${p.equipment.name}` : ""}</span>
                 <Link href={`/pmoc/${p.pmocId}`} className="shrink-0 text-xs text-[var(--color-primary)] hover:underline">execução {String(p.executionNumber).padStart(3, "0")}</Link>
                 <span className="shrink-0 font-mono text-xs text-[var(--color-muted-foreground)]">{formatDate(p.scheduledFor)}</span>
               </li>
             ))}
           </ul>
-        )}
-      </section>
+          <Pager page={current} totalPages={totalPages} onPage={onPage} />
+        </>
+      )}
+    </section>
+  );
+}
+
+function Pager({ page, totalPages, onPage }: { page: number; totalPages: number; onPage: (p: number) => void }) {
+  if (totalPages <= 1) return null;
+  return (
+    <div className="flex items-center justify-end gap-2">
+      <button type="button" disabled={page <= 1} onClick={() => onPage(page - 1)} className={smallGhost}><ChevronLeft className="h-3.5 w-3.5" /> Anterior</button>
+      <span className="text-caption tabular-nums">{page} / {totalPages}</span>
+      <button type="button" disabled={page >= totalPages} onClick={() => onPage(page + 1)} className={smallGhost}>Próxima <ChevronRight className="h-3.5 w-3.5" /></button>
     </div>
   );
 }
@@ -405,7 +514,14 @@ function ReminderKpi({ icon: Icon, label, value, tone }: { icon: typeof AlarmClo
   );
 }
 
-function ReminderRow({ reminder, onPatch }: { reminder: MaintenanceReminder; onPatch: (id: string, payload: { dueDate?: string; status?: MaintenanceReminderStatus }) => Promise<void> }) {
+function ReminderRow({ reminder, highlighted, onConclude, onDismiss, onCreateOs, onPatch }: {
+  reminder: MaintenanceReminder;
+  highlighted: boolean;
+  onConclude: (reminder: MaintenanceReminder) => void;
+  onDismiss: (reminder: MaintenanceReminder) => void;
+  onCreateOs: (reminder: MaintenanceReminder) => void;
+  onPatch: (id: string, payload: { dueDate?: string; status?: MaintenanceReminderStatus }) => Promise<void>;
+}) {
   const [date, setDate] = useState(reminder.dueDate.slice(0, 10));
   const [busy, setBusy] = useState(false);
   const overdue = reminder.status === "PENDING" && new Date(reminder.dueDate) < new Date();
@@ -417,19 +533,20 @@ function ReminderRow({ reminder, onPatch }: { reminder: MaintenanceReminder; onP
   }
 
   return (
-    <li className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-3">
+    <li className={`rounded-[var(--radius-lg)] border bg-[var(--color-card)] p-3 ${highlighted ? "border-[var(--color-warning)] bg-[var(--color-warning)]/5" : "border-[var(--color-border)]"}`}>
       <div className="flex flex-wrap items-center gap-3">
         <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--color-primary)]/10 text-[var(--color-primary)]"><Wrench className="h-4 w-4" /></span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="truncate text-sm font-medium">{reminder.customer?.tradeName ?? reminder.customer?.name ?? "Cliente"}</span>
             <StatusChip tone={reminder.operationType === "PREVENTIVA" ? "info" : "primary"}>{TYPE_LABEL[reminder.operationType] ?? reminder.operationType}</StatusChip>
+            {highlighted && <StatusChip tone="warning">≤{NEAR_DAYS} dias</StatusChip>}
             {reminder.status === "DONE" && <StatusChip tone="success">Concluído</StatusChip>}
             {reminder.status === "DISMISSED" && <StatusChip tone="neutral">Dispensado</StatusChip>}
           </div>
           <div className="text-caption truncate">{reminder.equipment?.name ?? "Sem equipamento"}{reminder.operation ? ` · OS-${String(reminder.operation.number).padStart(6, "0")}` : ""}</div>
         </div>
-        <div className={`shrink-0 text-right ${overdue ? "text-[var(--color-danger)]" : ""}`}>
+        <div className={`shrink-0 text-right ${overdue ? "text-[var(--color-danger)]" : highlighted ? "text-[var(--color-warning)]" : ""}`}>
           <div className="text-[11px] uppercase tracking-wide text-[var(--color-muted-foreground)]">Próxima prevista</div>
           <div className="text-sm font-semibold tabular-nums">{formatDate(reminder.dueDate)}{overdue ? " · vencido" : ""}</div>
         </div>
@@ -438,10 +555,11 @@ function ReminderRow({ reminder, onPatch }: { reminder: MaintenanceReminder; onP
         <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-[var(--color-border)] pt-3">
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-8 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-2 text-sm outline-none focus:border-[var(--color-primary)]" />
           <button type="button" disabled={!changed || busy} onClick={() => run(() => onPatch(reminder.id, { dueDate: new Date(`${date}T12:00:00`).toISOString() }))} className={smallBtn}>Salvar data</button>
-          {reminder.operationId && <Link href={`/operacoes?operationId=${reminder.operationId}`} className={smallGhost}>Abrir OS</Link>}
+          <button type="button" disabled={busy} onClick={() => onCreateOs(reminder)} className={smallGhost}><Plus className="h-3.5 w-3.5" /> Criar OS</button>
+          {reminder.operationId && <Link href={`/operacoes?operationId=${reminder.operationId}`} className={smallGhost}>Abrir OS de origem</Link>}
           <span className="ml-auto flex gap-1.5">
-            <button type="button" disabled={busy} onClick={() => run(() => onPatch(reminder.id, { status: "DONE" }))} className={`${smallGhost} text-[var(--color-success)]`}><Check className="h-3.5 w-3.5" /> Concluir</button>
-            <button type="button" disabled={busy} onClick={() => run(() => onPatch(reminder.id, { status: "DISMISSED" }))} className={`${smallGhost} text-[var(--color-muted-foreground)]`}><X className="h-3.5 w-3.5" /> Dispensar</button>
+            <button type="button" disabled={busy} onClick={() => onConclude(reminder)} className={`${smallGhost} text-[var(--color-success)]`}><Check className="h-3.5 w-3.5" /> Concluir</button>
+            <button type="button" disabled={busy} onClick={() => onDismiss(reminder)} className={`${smallGhost} text-[var(--color-muted-foreground)]`}><X className="h-3.5 w-3.5" /> Dispensar</button>
           </span>
         </div>
       ) : (

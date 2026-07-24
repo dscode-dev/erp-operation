@@ -1792,7 +1792,8 @@ describe('DocumentEngine foundation', () => {
     expect(services?.kind === 'table' ? services.rows : []).toHaveLength(1);
     expect(materials?.kind === 'table' ? materials.rows : []).toHaveLength(1);
     const signature = built.sections.find((section) => section.id === 'signature')?.components[0];
-    expect(signature?.kind === 'signature' ? signature.signatures.map((item) => item.role) : []).toEqual(['collected', 'fixed']);
+    // Orçamento não coleta assinatura do cliente — apenas o responsável técnico.
+    expect(signature?.kind === 'signature' ? signature.signatures.map((item) => item.role) : []).toEqual(['fixed']);
     const rendered = renderer().render(built);
     const pdf = await new PdfEngineService().create(rendered);
     expect(rendered.blueprint).toBe(built);

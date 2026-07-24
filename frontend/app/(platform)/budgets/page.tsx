@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { BadgeCheck, Ban, Download, FileText, History, Plus, ReceiptText, RefreshCw, ShoppingCart, XCircle } from "lucide-react";
+import { BadgeCheck, Ban, Download, FileText, History, Loader2, Plus, ReceiptText, RefreshCw, ShoppingCart, XCircle } from "lucide-react";
 import { PageHeader } from "@platform/components/page-header";
 import { BudgetWizardDrawer } from "@platform/components/budget-wizard-drawer";
 import { DataTable, type Column } from "@platform/components/data-table";
@@ -67,6 +67,7 @@ export default function BudgetsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<Budget | null>(null);
   const [feedback, setFeedback] = useState<Feedback>(null);
+  const [pdfBusyId, setPdfBusyId] = useState<string | null>(null);
 
   const budgets = useQuery(
     (signal) =>
@@ -115,7 +116,40 @@ export default function BudgetsPage() {
     { key: "expiration", header: "Vencimento", className: "w-[140px]", sortAccessor: (b) => b.expirationDate, cell: (b) => <span className={isExpired(b) ? "text-[var(--color-danger)]" : ""}>{dateOnly(b.expirationDate)}</span> },
     { key: "owner", header: "Responsável", className: "w-[150px]", cell: (b) => <span className="text-sm">{b.creator?.name ?? "—"}</span> },
     { key: "updated", header: "Atualizado", className: "w-[150px]", sortAccessor: (b) => b.updatedAt, cell: (b) => <span className="text-xs">{formatDateTime(b.updatedAt)}</span> },
+    {
+      key: "actions",
+      header: "",
+      className: "w-[140px]",
+      cell: (b) =>
+        b.status === "APPROVED" ? (
+          <button
+            type="button"
+            onClick={(event) => { event.stopPropagation(); void generatePdf(b); }}
+            disabled={pdfBusyId === b.id}
+            className="inline-flex items-center gap-1.5 rounded-[var(--radius-md)] border border-[var(--color-border)] px-2.5 h-8 text-xs font-medium hover:bg-[var(--color-muted)] disabled:opacity-50"
+          >
+            {pdfBusyId === b.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />} Gerar PDF
+          </button>
+        ) : null,
+    },
   ];
+
+  async function generatePdf(budget: Budget) {
+    setPdfBusyId(budget.id);
+    setFeedback(null);
+    try {
+      // Emite o PDF oficial (se ainda não houver ou estiver desatualizado) e baixa.
+      if (!budget.document?.renderedAt || budget.document?.editorialStatus === "STALE") {
+        await budgetsApi.renderBudget(budget.id);
+      }
+      downloadDocumentFile(await budgetsApi.downloadBudget(budget.id));
+      budgets.refetch();
+    } catch (err) {
+      setFeedback({ tone: "danger", message: err instanceof Error ? err.message : "Não foi possível gerar o PDF." });
+    } finally {
+      setPdfBusyId(null);
+    }
+  }
 
   function refresh(message?: string) {
     budgets.refetch();

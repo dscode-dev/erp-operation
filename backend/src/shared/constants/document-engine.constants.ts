@@ -46,10 +46,10 @@ export const DOCUMENT_ONLY_DOCUMENT_TYPES = ['RECEIPT'] as const;
  */
 export const SKIP_AUTO_WORK_ORDER_DOCUMENT_TYPES = ['RECEIPT', 'TECHNICAL_REPORT'] as const;
 
+// Orçamento (BUDGET) não coleta assinatura do cliente — é apenas uma proposta.
 export const CUSTOMER_SIGNATURE_REQUIRED_DOCUMENT_TYPES = [
   'WORK_ORDER',
   'TECHNICAL_REPORT',
-  'BUDGET',
   'PMOC',
 ] as const;
 

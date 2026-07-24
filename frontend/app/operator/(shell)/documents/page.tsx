@@ -22,10 +22,11 @@ import { formatDateTime } from "@erp/utils";
 import { CustomerPicker } from "@operator/components/customer-picker";
 import { useSelectedCustomer } from "@operator/lib/selected-customer";
 
-type Availability = "AVAILABLE" | "IN_REVIEW" | "AWAITING_PDF";
+type Availability = "AVAILABLE" | "STALE" | "IN_REVIEW" | "AWAITING_PDF";
 
 const AVAILABILITY: Record<Availability, { tone: ChipTone; label: string }> = {
   AVAILABLE: { tone: "success", label: "PDF disponível" },
+  STALE: { tone: "warning", label: "PDF desatualizado" },
   IN_REVIEW: { tone: "warning", label: "Em revisão" },
   AWAITING_PDF: { tone: "neutral", label: "Aguardando geração do PDF" },
 };
@@ -42,6 +43,9 @@ type Row = {
 };
 
 function availability(document: OperationDocument): Availability {
+  // Um PDF desatualizado ainda tem renderedAt/storageKey antigos: o download
+  // falha (DOCUMENT_STALE). Tratamos como estado próprio para permitir regerar.
+  if (document.editorialStatus === "STALE") return "STALE";
   if (document.renderedAt && document.storageKey) return "AVAILABLE";
   if (document.editorialStatus && document.editorialStatus !== "READY") return "IN_REVIEW";
   return "AWAITING_PDF";
@@ -72,7 +76,7 @@ function OperatorDocumentsInner() {
 
   function mapActionError(err: unknown): string {
     if (err instanceof ApiClientError && err.code === "DOCUMENT_STALE") {
-      return "O PDF ficou desatualizado após alterações. Peça à gestão para gerar novamente na plataforma.";
+      return "O PDF ficou desatualizado. Toque em “Gerar PDF novamente” (atendimentos concluídos) ou peça à gestão.";
     }
     if (err instanceof ApiClientError && err.code === "DOCUMENT_DOWNLOAD_NOT_READY") {
       return "O PDF ainda não foi gerado pela plataforma.";
@@ -188,7 +192,7 @@ function OperatorDocumentsInner() {
                 )}
                 {canEmit && (
                   <div className="border-t border-[var(--color-border)] px-3.5 py-2">
-                    <ActionButton icon={FileText} label="Gerar PDF" busy={busy === `emit:${d.id}`} onClick={() => void emit(d)} primary />
+                    <ActionButton icon={FileText} label={d.availability === "STALE" ? "Gerar PDF novamente" : "Gerar PDF"} busy={busy === `emit:${d.id}`} onClick={() => void emit(d)} primary />
                   </div>
                 )}
               </li>
@@ -212,14 +216,18 @@ function OperatorDocumentsInner() {
               <div className="flex items-start gap-2 rounded-[var(--radius-md)] border border-[var(--color-warning)]/30 bg-[var(--color-warning)]/10 px-3 py-2 text-sm text-[var(--color-warning)]">
                 <ShieldAlert className="h-4 w-4 mt-0.5 shrink-0" />
                 <span>
-                  {detail.availability === "IN_REVIEW"
+                  {detail.availability === "STALE"
+                    ? detail.operation.status === "COMPLETED"
+                      ? "O PDF ficou desatualizado após alterações no atendimento. Toque em Gerar PDF novamente para atualizar e depois baixar/compartilhar."
+                      : "O PDF ficou desatualizado após alterações. Conclua o atendimento para gerar novamente ou peça à gestão."
+                    : detail.availability === "IN_REVIEW"
                     ? "Este documento está em revisão. O download e o compartilhamento ficam disponíveis após a aprovação e a geração do PDF na plataforma."
                     : "A revisão foi concluída, mas o PDF ainda não foi gerado pela plataforma. Você poderá baixar e compartilhar assim que for emitido."}
                 </span>
               </div>
             )}
             {detail.availability !== "AVAILABLE" && detail.operation.status === "COMPLETED" && (detail.type === "WORK_ORDER" || detail.type === "TECHNICAL_REPORT") && (
-              <ActionButton icon={FileText} label="Gerar PDF oficial" busy={busy === `emit:${detail.id}`} onClick={() => void emit(detail)} primary />
+              <ActionButton icon={FileText} label={detail.availability === "STALE" ? "Gerar PDF novamente" : "Gerar PDF oficial"} busy={busy === `emit:${detail.id}`} onClick={() => void emit(detail)} primary />
             )}
             <DocumentViewer
               source={{ documentId: detail.id, operationId: detail.operation.id, type: detail.type }}

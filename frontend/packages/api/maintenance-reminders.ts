@@ -38,6 +38,7 @@ export type PmocUpcomingItem = {
   pmocNumber: number;
   periodicity: string;
   planName: string | null;
+  customerName: string | null;
   equipment: { name: string; tag: string | null } | null;
 };
 
@@ -66,11 +67,11 @@ export function updateReminder(
 }
 
 export function listPmocUpcoming(
-  customerId: string,
+  customerId?: string,
   opts?: { signal?: AbortSignal },
 ): Promise<PmocUpcomingItem[]> {
   return api.get<PmocUpcomingItem[]>("/maintenance-reminders/pmoc-upcoming", {
-    query: { customerId },
+    query: customerId ? { customerId } : {},
     signal: opts?.signal,
   });
 }
