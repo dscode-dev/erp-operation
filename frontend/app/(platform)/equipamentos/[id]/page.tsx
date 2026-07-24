@@ -8,12 +8,15 @@ import { PageHeader } from "@platform/components/page-header";
 import { InfoCard, InfoRow } from "@platform/components/info-card";
 import { QrFoundation } from "@platform/components/qr-foundation";
 import { StatusPill } from "@erp/ui/status-pill";
-import { SkeletonCard } from "@erp/ui/skeletons";
-import { AsyncBoundary } from "@erp/ui/states";
+import { StatusChip } from "@erp/ui/status-chip";
+import { SkeletonCard, SkeletonList } from "@erp/ui/skeletons";
+import { AsyncBoundary, ErrorState } from "@erp/ui/states";
+import { EmptyState } from "@erp/ui/empty-state";
 import { DrawerTabs } from "@erp/ui/drawer-tabs";
 import { AssetTimeline } from "@erp/ui/assets/asset-timeline";
 import { OperationDetailDrawer } from "@platform/components/operation-detail-drawer";
-import { equipmentsApi, assetLifecycleApi, pmocApi, useQuery, type EquipmentDetail, type AssetLifecycleStats } from "@erp/api";
+import { OPERATION_STATUS, OPERATION_TYPE_LABEL, operationCode } from "@erp/ui/operations/operation-shared";
+import { equipmentsApi, assetLifecycleApi, operationApi, pmocApi, useQuery, type EquipmentDetail, type AssetLifecycleStats } from "@erp/api";
 import { formatDate, formatDateTime } from "@erp/utils";
 import {
   EQUIPMENT_STATUS_LABEL,
@@ -21,7 +24,7 @@ import {
   EQUIPMENT_TYPE_LABEL,
 } from "@platform/equipment-display";
 
-const TABS = ["Resumo", "Informações", "Timeline", "Documentos", "Métricas", "Anexos"] as const;
+const TABS = ["Resumo", "Informações", "Operações", "Timeline", "Documentos", "Métricas", "Anexos"] as const;
 type Tab = (typeof TABS)[number];
 
 export default function EquipamentoDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -31,6 +34,7 @@ export default function EquipamentoDetailPage({ params }: { params: Promise<{ id
   const detail = useQuery<EquipmentDetail>((signal) => equipmentsApi.getEquipment(id, { signal }), [id]);
   const lifecycleStats = useQuery<AssetLifecycleStats>((signal) => assetLifecycleApi.getEquipmentLifecycleStats(id, { signal }), [id]);
   const pmocs = useQuery((signal) => pmocApi.listPmoc({ equipmentId: id, page: 1, limit: 5, signal }), [id]);
+  const operations = useQuery((signal) => operationApi.listOperations({ equipmentId: id, limit: 50, signal }), [id]);
 
   return (
     <div className="space-y-6 max-w-[1400px]">
@@ -54,7 +58,7 @@ export default function EquipamentoDetailPage({ params }: { params: Promise<{ id
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
               <div className="lg:col-span-2 space-y-4">
-                <DrawerTabs tabs={TABS} active={tab} onChange={setTab} counts={{ Timeline: lifecycleStats.data?.total, Métricas: e.metrics.length, Anexos: e.attachments.length }} />
+                <DrawerTabs tabs={TABS} active={tab} onChange={setTab} counts={{ "Operações": operations.data?.pagination.total, Timeline: lifecycleStats.data?.total, Métricas: e.metrics.length, Anexos: e.attachments.length }} />
 
                 {tab === "Resumo" && (
                   <>
@@ -82,6 +86,33 @@ export default function EquipamentoDetailPage({ params }: { params: Promise<{ id
                   <InfoRow label="Garantia até" value={formatDate(e.warrantyExpiration)} />
                   <InfoRow label="Local" value={e.address?.name ?? e.address?.city ?? "—"} />
                   {e.observations && <InfoRow label="Observações" value={e.observations} />}
+                  </InfoCard>
+                )}
+
+                {tab === "Operações" && (
+                  <InfoCard title={`Histórico de operações${operations.data ? ` (${operations.data.pagination.total})` : ""}`}>
+                    {operations.loading && !operations.data ? (
+                      <SkeletonList rows={5} />
+                    ) : operations.error && !operations.data ? (
+                      <ErrorState error={operations.error} onRetry={operations.refetch} />
+                    ) : (operations.data?.items.length ?? 0) === 0 ? (
+                      <EmptyState icon={Activity} title="Nenhuma operação" description="Ainda não há atendimentos registrados para este equipamento." />
+                    ) : (
+                      <ul className="divide-y divide-[var(--color-border)]">
+                        {(operations.data?.items ?? []).map((op) => (
+                          <li key={op.id}>
+                            <button type="button" onClick={() => setOperationId(op.id)} className="-mx-2 flex w-full items-center gap-3 rounded-[var(--radius-md)] px-2 py-2.5 text-left hover:bg-[var(--color-muted)]/40">
+                              <span className="w-24 shrink-0 font-mono text-xs text-[var(--color-muted-foreground)]">{operationCode(op.number)}</span>
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate text-sm font-medium">{OPERATION_TYPE_LABEL[op.type]}{op.customer ? ` · ${op.customer.name}` : ""}</span>
+                                <span className="block text-caption">{op.scheduledFor ? formatDateTime(op.scheduledFor) : formatDateTime(op.createdAt)}</span>
+                              </span>
+                              <StatusChip tone={OPERATION_STATUS[op.status].tone} dot>{OPERATION_STATUS[op.status].label}</StatusChip>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </InfoCard>
                 )}
 

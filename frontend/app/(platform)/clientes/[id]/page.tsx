@@ -28,6 +28,7 @@ import { SaleFormDrawer } from '@platform/components/sale-form-drawer';
 import { OperationDetailDrawer } from '@platform/components/operation-detail-drawer';
 import { OperationCreationDrawer } from '@platform/components/operation-creation-drawer';
 import { CustomerContactFormDrawer } from '@platform/components/customer-contact-form-drawer';
+import { AddressFormDrawer } from '@platform/components/address-form-drawer';
 import { AsyncBoundary, ErrorState } from '@erp/ui/states';
 import { EmptyState } from '@erp/ui/empty-state';
 import { SkeletonCard, SkeletonList } from '@erp/ui/skeletons';
@@ -43,6 +44,7 @@ import {
   salesApi,
   useQuery,
   type CustomerDetail,
+  type CustomerAddress,
   type CustomerContact,
   type CreateOperationPayload,
   type EquipmentDetail,
@@ -142,6 +144,7 @@ function Overview({
   const { hasRole } = useAuth();
   const canManage = hasRole('OWNER', 'MANAGER');
   const [contactOpen, setContactOpen] = useState(false);
+  const [addressDrawer, setAddressDrawer] = useState<{ address: CustomerAddress | null } | null>(null);
   const [editingContact, setEditingContact] = useState<CustomerContact | null>(null);
   const [deletingContact, setDeletingContact] = useState<CustomerContact | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -239,12 +242,28 @@ function Overview({
             {customer.notes && <InfoRow label="Observações" value={customer.notes} />}
           </InfoCard>
 
-          <InfoCard title={`Endereços (${customer.addresses.length})`}>
+          <InfoCard
+            title={`Endereços (${customer.addresses.length})`}
+            action={
+              canManage ? (
+                <button
+                  type="button"
+                  onClick={() => setAddressDrawer({ address: null })}
+                  className="inline-flex items-center gap-1.5 rounded-[var(--radius-md)] border border-[var(--color-border)] px-2.5 h-8 text-xs font-medium hover:bg-[var(--color-muted)]"
+                >
+                  <Plus className="h-3.5 w-3.5" /> Adicionar endereço
+                </button>
+              ) : undefined
+            }
+          >
             <div className="grid gap-3 md:grid-cols-2">
               {customer.addresses.map((address) => (
-                <div
+                <button
                   key={address.id}
-                  className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-muted)]/25 p-3"
+                  type="button"
+                  onClick={() => canManage && setAddressDrawer({ address })}
+                  disabled={!canManage}
+                  className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-muted)]/25 p-3 text-left transition enabled:hover:border-[var(--color-primary)]/40 enabled:hover:bg-[var(--color-muted)]/40 disabled:cursor-default"
                 >
                   <div className="flex items-center gap-2 font-medium">
                     <MapPin className="h-4 w-4 text-[var(--color-primary)]" />
@@ -254,6 +273,7 @@ function Overview({
                         PRINCIPAL
                       </span>
                     )}
+                    {canManage && <span className="ml-auto text-[11px] text-[var(--color-primary)]">editar</span>}
                   </div>
                   <p className="mt-2 text-caption">
                     {[
@@ -265,13 +285,13 @@ function Overview({
                       .filter(Boolean)
                       .join(' · ') || 'Dados de endereço incompletos'}
                   </p>
-                </div>
+                </button>
               ))}
               {!customer.addresses.length && (
                 <EmptyState
                   icon={MapPin}
                   title="Nenhum endereço"
-                  description="Edite o cliente para cadastrar o primeiro endereço."
+                  description="Use “Adicionar endereço” para cadastrar o primeiro."
                 />
               )}
             </div>
@@ -436,6 +456,13 @@ function Overview({
         customerId={customer.id}
         contact={editingContact}
         onClose={() => setContactOpen(false)}
+        onSaved={onRefresh}
+      />
+      <AddressFormDrawer
+        open={addressDrawer !== null}
+        customerId={customer.id}
+        address={addressDrawer?.address ?? null}
+        onClose={() => setAddressDrawer(null)}
         onSaved={onRefresh}
       />
       <ConfirmDialog

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CalendarClock, Check, ChevronLeft, ChevronRight, ClipboardList, Loader2, ShieldCheck } from "lucide-react";
+import { CalendarClock, Check, ChevronLeft, ChevronRight, ClipboardList, FileText, Loader2, ShieldCheck } from "lucide-react";
 import { Drawer } from "@erp/ui/drawer";
 import { MultiSelect } from "@erp/ui/multi-select";
 import { SkeletonList } from "@erp/ui/skeletons";
@@ -11,12 +11,14 @@ import { TechnicalCatalogSelector } from "@erp/ui/technical-catalog/technical-ca
 import {
   ApiClientError,
   customersApi,
+  documentsApi,
   equipmentsApi,
   operationApi,
   pmocApi,
   technicalCatalogsApi,
   useQuery,
   type CreateOperationPayload,
+  type DocumentCatalogItem,
   type DocumentKind,
   type OperationDetail,
   type OperationType,
@@ -24,6 +26,7 @@ import {
   type PmocPlan,
 } from "@erp/api";
 import { DOCUMENT_KIND_LABEL } from "@erp/types";
+import { useDebounce } from "@erp/utils";
 import {
   CustomerAddressSelect,
   CustomerSelect,
@@ -117,10 +120,11 @@ export function OperationCreationDrawer({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<OperationDetail | null>(null);
-  // Origem da operação: avulsa (fluxo manual) ou a partir de um PMOC existente.
-  const [source, setSource] = useState<"manual" | "pmoc">("manual");
+  // Origem da operação: avulsa (manual), a partir de um PMOC ou de um RVT.
+  const [source, setSource] = useState<"manual" | "pmoc" | "rvt">("manual");
   const [pmocDraft, setPmocDraft] = useState<PmocOperationDraft | null>(null);
-  const activeInitialValues = pmocDraft?.prefill ?? initialValues;
+  const [rvtPrefill, setRvtPrefill] = useState<Partial<CreateOperationPayload> | null>(null);
+  const activeInitialValues = pmocDraft?.prefill ?? rvtPrefill ?? initialValues;
   const customer = useQuery(
     (signal) =>
       customerId ? customersApi.getCustomer(customerId, { signal }) : Promise.resolve(null),
@@ -136,6 +140,7 @@ export function OperationCreationDrawer({
   useEffect(() => {
     if (!open) {
       setPmocDraft(null);
+      setRvtPrefill(null);
       setSource("manual");
       return;
     }
@@ -279,12 +284,14 @@ export function OperationCreationDrawer({
       <div className="space-y-5">
         <p className="text-sm text-[var(--color-muted-foreground)]">{copy.description}</p>
         {!created && canChooseSource && (
-          <div className="grid grid-cols-2 gap-2">
-            <SourceCard active={source === "pmoc"} onClick={() => setSource("pmoc")} icon={ShieldCheck} title="A partir de um PMOC" description="Revise os dados do plano antes de criar e atribuir a OS." />
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <SourceCard active={source === "pmoc"} onClick={() => { setRvtPrefill(null); setSource("pmoc"); }} icon={ShieldCheck} title="A partir de um PMOC" description="Revise os dados do plano antes de criar a OS." />
+            <SourceCard active={source === "rvt"} onClick={() => { setPmocDraft(null); setSource("rvt"); }} icon={FileText} title="A partir de um RVT" description="Reaproveite os dados de um Relatório de Visita Técnica." />
             <SourceCard
               active={source === "manual"}
               onClick={() => {
                 setPmocDraft(null);
+                setRvtPrefill(null);
                 setSource("manual");
               }}
               icon={ClipboardList}
@@ -316,6 +323,14 @@ export function OperationCreationDrawer({
               setError(null);
             }}
           />
+        ) : source === "rvt" && !rvtPrefill ? (
+          <RvtOperationSource
+            customerId={initialValues?.customerId}
+            onReview={(prefill) => {
+              setRvtPrefill(prefill);
+              setError(null);
+            }}
+          />
         ) : (
           <>
             {pmocDraft && (
@@ -327,6 +342,12 @@ export function OperationCreationDrawer({
                   .map((item) => item.name)}
                 onChange={() => setPmocDraft(null)}
               />
+            )}
+            {rvtPrefill && (
+              <div className="flex items-center justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--color-primary)]/25 bg-[var(--color-primary)]/5 px-3 py-2 text-sm">
+                <span className="inline-flex items-center gap-2"><FileText className="h-4 w-4 text-[var(--color-primary)]" /> Dados pré-preenchidos a partir de um RVT.</span>
+                <button type="button" onClick={() => { setRvtPrefill(null); setSource("rvt"); }} className="text-xs font-medium text-[var(--color-primary)] hover:underline">Trocar</button>
+              </div>
             )}
             <Stepper step={step} />
             {step === 0 && (
@@ -589,6 +610,84 @@ function daysUntil(iso: string): number {
  * Seleciona uma execução programada e carrega o prefill oficial. A OS somente é
  * gerada depois da revisão no wizard principal.
  */
+/** Monta o prefill de uma nova OS a partir da operação que originou um RVT. */
+function buildRvtPrefillFromOperation(op: OperationDetail): Partial<CreateOperationPayload> {
+  const inspected = (op.inspectedEquipments ?? []).map((item) => ({ equipmentId: item.equipmentId, sector: item.sector }));
+  return {
+    customerId: op.customer?.id,
+    addressId: op.address?.id ?? undefined,
+    equipmentId: op.equipment?.id ?? op.inspectedEquipments?.[0]?.equipmentId,
+    inspectedEquipments: inspected.length > 0 ? inspected : undefined,
+    type: op.type,
+    reportedIssue: op.reportedIssue ?? undefined,
+    serviceDescription: op.serviceDescription ?? undefined,
+    observations: op.observations ?? undefined,
+    documentType: "WORK_ORDER",
+  };
+}
+
+function RvtOperationSource({
+  onReview,
+  customerId,
+}: {
+  onReview: (prefill: Partial<CreateOperationPayload>) => void;
+  customerId?: string;
+}) {
+  const [search, setSearch] = useState("");
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const debounced = useDebounce(search, 300);
+  const rvts = useQuery(
+    (signal) =>
+      documentsApi.listDocuments({ type: "TECHNICAL_REPORT", customerId, search: debounced || undefined, limit: 30, signal }),
+    [customerId, debounced],
+  );
+
+  async function review(item: DocumentCatalogItem) {
+    if (!item.originId) {
+      setError("Este RVT não possui uma operação de origem para reaproveitar.");
+      return;
+    }
+    setBusy(item.id);
+    setError(null);
+    try {
+      const op = await operationApi.getOperation(item.originId);
+      onReview(buildRvtPrefillFromOperation(op));
+    } catch (cause) {
+      setError(cause instanceof ApiClientError ? cause.message : "Não foi possível carregar os dados do RVT.");
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      {error && <div className="rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 px-3 py-2 text-sm text-[var(--color-danger)]">{error}</div>}
+      <Field label="Buscar RVT">
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Cliente, equipamento, número…" className={inputCls} />
+      </Field>
+      {rvts.loading && !rvts.data ? (
+        <SkeletonList rows={4} />
+      ) : (rvts.data?.items.length ?? 0) === 0 ? (
+        <EmptyState icon={FileText} title="Nenhum RVT" description="Nenhum Relatório de Visita Técnica encontrado para reaproveitar." />
+      ) : (
+        <ul className="space-y-2">
+          {(rvts.data?.items ?? []).map((item) => (
+            <li key={item.id}>
+              <button type="button" disabled={Boolean(busy)} onClick={() => void review(item)} className="flex w-full items-center justify-between gap-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-3 text-left transition hover:bg-[var(--color-muted)] disabled:opacity-60">
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold">{item.number}</span>
+                  <span className="block truncate text-xs text-[var(--color-muted-foreground)]">{item.customer?.name ?? "Cliente"}{item.equipment ? ` · ${item.equipment.name}` : ""} · {new Date(item.createdAt).toLocaleDateString("pt-BR")}</span>
+                </span>
+                {busy === item.id ? <Loader2 className="h-5 w-5 animate-spin" /> : <ChevronRight className="h-5 w-5 shrink-0 text-[var(--color-muted-foreground)]" />}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function PmocOperationSource({
   onReview,
 }: {

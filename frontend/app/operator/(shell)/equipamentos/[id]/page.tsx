@@ -6,10 +6,12 @@ import { ArrowLeft, Activity, Plus } from "lucide-react";
 import { SkeletonCard } from "@erp/ui/skeletons";
 import { AsyncBoundary } from "@erp/ui/states";
 import { StatusPill } from "@erp/ui/status-pill";
+import { StatusChip } from "@erp/ui/status-chip";
 import { QrFoundation } from "@platform/components/qr-foundation";
 import { AssetTimeline } from "@erp/ui/assets/asset-timeline";
 import { OperationDetailDrawer } from "@platform/components/operation-detail-drawer";
-import { equipmentsApi, useQuery, type EquipmentDetail } from "@erp/api";
+import { OPERATION_STATUS, OPERATION_TYPE_LABEL, operationCode } from "@erp/ui/operations/operation-shared";
+import { equipmentsApi, operationApi, useQuery, type EquipmentDetail } from "@erp/api";
 import { formatDate, formatDateTime } from "@erp/utils";
 import { EQUIPMENT_STATUS_LABEL, EQUIPMENT_STATUS_PILL, EQUIPMENT_TYPE_LABEL } from "@platform/equipment-display";
 
@@ -17,6 +19,7 @@ export default function OperatorEquipamentoConsult({ params }: { params: Promise
   const { id } = use(params);
   const [operationId, setOperationId] = useState<string | null>(null);
   const detail = useQuery<EquipmentDetail>((signal) => equipmentsApi.getEquipment(id, { signal }), [id]);
+  const operations = useQuery((signal) => operationApi.listOperations({ equipmentId: id, limit: 30, signal }), [id]);
 
   return (
     <div className="px-4 pt-4 pb-24 space-y-4">
@@ -68,6 +71,28 @@ export default function OperatorEquipamentoConsult({ params }: { params: Promise
                 <p className="text-sm text-[var(--color-muted-foreground)]">{e.observations}</p>
               </Card>
             )}
+
+            <Card title={`Operações${operations.data ? ` (${operations.data.pagination.total})` : ""}`}>
+              {operations.loading && !operations.data ? (
+                <p className="text-sm text-[var(--color-muted-foreground)]">Carregando…</p>
+              ) : (operations.data?.items.length ?? 0) === 0 ? (
+                <p className="text-sm text-[var(--color-muted-foreground)]">Nenhuma operação registrada para este equipamento.</p>
+              ) : (
+                <ul className="divide-y divide-[var(--color-border)]/60">
+                  {(operations.data?.items ?? []).map((op) => (
+                    <li key={op.id}>
+                      <button type="button" onClick={() => setOperationId(op.id)} className="flex w-full items-center gap-3 py-2 text-left">
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-medium">{OPERATION_TYPE_LABEL[op.type]}</span>
+                          <span className="block text-caption">{operationCode(op.number)} · {op.scheduledFor ? formatDate(op.scheduledFor) : formatDate(op.createdAt)}</span>
+                        </span>
+                        <StatusChip tone={OPERATION_STATUS[op.status].tone} dot>{OPERATION_STATUS[op.status].label}</StatusChip>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Card>
 
             <Card title="Timeline">
               <AssetTimeline equipmentId={e.id} compact onOpenOperation={setOperationId} />

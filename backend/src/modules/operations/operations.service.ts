@@ -153,7 +153,20 @@ export class OperationsService {
         ? {}
         : { requestedDocumentType: { notIn: [...DOCUMENT_ONLY_DOCUMENT_TYPES] as DocumentTemplateType[] } }),
       ...(query.customerId ? { customerId: query.customerId } : {}),
-      ...(query.equipmentId ? { equipmentId: query.equipmentId } : {}),
+      // Filtro por equipamento inclui o equipamento principal E os inspecionados,
+      // para o histórico de operações do equipamento ser completo.
+      ...(query.equipmentId
+        ? {
+            AND: [
+              {
+                OR: [
+                  { equipmentId: query.equipmentId },
+                  { inspectedEquipments: { some: { equipmentId: query.equipmentId } } },
+                ],
+              },
+            ],
+          }
+        : {}),
       ...(query.operatorId ? { operatorId: query.operatorId } : {}),
       ...(query.type ? { type: query.type } : {}),
       ...(query.status ? { status: query.status } : {}),

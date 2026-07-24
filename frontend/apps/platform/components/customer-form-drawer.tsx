@@ -5,11 +5,12 @@
  * PERSON shows CPF; COMPANY shows tradeName + CNPJ. Documents stay optional.
  */
 import { useEffect, useState } from "react";
-import { Building2, Loader2, User } from "lucide-react";
+import { Building2, Loader2, MapPin, Plus, User } from "lucide-react";
 import { Drawer } from "@erp/ui/drawer";
 import { customersApi, cepApi, ApiClientError } from "@erp/api";
-import type { Customer, CustomerType, CreateCustomerPayload } from "@erp/api";
-import { maskCpf, maskCnpj } from "@erp/utils";
+import type { Customer, CustomerAddress, CustomerType, CreateCustomerPayload } from "@erp/api";
+import { maskCpf, maskCnpj, maskCep } from "@erp/utils";
+import { AddressFormDrawer } from "./address-form-drawer";
 
 type FormState = {
   type: CustomerType;
@@ -82,6 +83,14 @@ export function CustomerFormDrawer({
   const [address, setAddress] = useState<AddressState>(blankAddress);
   const [createdCustomerId, setCreatedCustomerId] = useState<string | null>(null);
   const [cepLoading, setCepLoading] = useState(false);
+  // Endereços cadastrados (modo edição): permite escolher um para editar/adicionar.
+  const [addresses, setAddresses] = useState<CustomerAddress[]>([]);
+  const [addrDrawer, setAddrDrawer] = useState<{ address: CustomerAddress | null } | null>(null);
+
+  const refreshAddresses = () => {
+    if (!customer) return;
+    customersApi.getCustomer(customer.id).then((c) => setAddresses(c.addresses ?? [])).catch(() => undefined);
+  };
 
   useEffect(() => {
     if (open) {
@@ -91,6 +100,9 @@ export function CustomerFormDrawer({
       setAddress(blankAddress);
       setCreatedCustomerId(null);
       setCepLoading(false);
+      setAddrDrawer(null);
+      setAddresses([]);
+      if (customer) customersApi.getCustomer(customer.id).then((c) => setAddresses(c.addresses ?? [])).catch(() => undefined);
     }
   }, [open, customer]);
 
@@ -278,6 +290,35 @@ export function CustomerFormDrawer({
           <textarea value={form.notes} onChange={(e) => set("notes", e.target.value)} rows={3} className={`${inputCls} h-auto py-2 resize-none`} />
         </Field>
 
+        {isEdit && customer && (
+          <section className="space-y-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold">Endereços cadastrados ({addresses.length})</h3>
+              <button type="button" onClick={() => setAddrDrawer({ address: null })} className="inline-flex items-center gap-1.5 rounded-[var(--radius-md)] border border-[var(--color-border)] px-2.5 h-8 text-xs font-medium hover:bg-[var(--color-muted)]">
+                <Plus className="h-3.5 w-3.5" /> Adicionar
+              </button>
+            </div>
+            {addresses.length === 0 ? (
+              <p className="text-xs text-[var(--color-muted-foreground)]">Nenhum endereço cadastrado. Use “Adicionar” para incluir (matriz, filial, obra…).</p>
+            ) : (
+              <ul className="space-y-2">
+                {addresses.map((a) => (
+                  <li key={a.id}>
+                    <button type="button" onClick={() => setAddrDrawer({ address: a })} className="flex w-full items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] p-2.5 text-left transition hover:border-[var(--color-primary)]/40 hover:bg-[var(--color-muted)]/40">
+                      <MapPin className="h-4 w-4 shrink-0 text-[var(--color-primary)]" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium">{a.name || "Endereço"}{a.isPrimary ? " · principal" : ""}</span>
+                        <span className="block truncate text-[11px] text-[var(--color-muted-foreground)]">{[[a.street, a.number].filter(Boolean).join(", "), a.city ? `${a.city}/${a.state}` : null, a.zipCode ? maskCep(a.zipCode) : null].filter(Boolean).join(" · ")}</span>
+                      </span>
+                      <span className="text-[11px] text-[var(--color-primary)]">editar</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        )}
+
         {!isEdit && (
           <section className="space-y-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
             <div className="flex items-start justify-between gap-3">
@@ -350,6 +391,16 @@ export function CustomerFormDrawer({
           </section>
         )}
       </div>
+
+      {customer && (
+        <AddressFormDrawer
+          open={addrDrawer !== null}
+          customerId={customer.id}
+          address={addrDrawer?.address ?? null}
+          onClose={() => setAddrDrawer(null)}
+          onSaved={() => { refreshAddresses(); onSaved(); }}
+        />
+      )}
     </Drawer>
   );
 }

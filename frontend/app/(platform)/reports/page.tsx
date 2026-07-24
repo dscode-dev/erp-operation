@@ -617,6 +617,11 @@ function ReportWorkflowDrawer({
     (signal) => pmocApi.listPmoc({ page: 1, limit: 100, active: true, signal }),
     [],
   );
+  // RVTs disponíveis para reaproveitar os dados ao criar uma OS.
+  const rvts = useQuery(
+    (signal) => documentsApi.listDocuments({ type: 'TECHNICAL_REPORT', limit: 40, signal }),
+    [],
+  );
   const configuration = useQuery<DocumentConfiguration>(
     (signal) => documentsApi.getConfigurationByType(type, { signal }),
     [type],
@@ -763,6 +768,54 @@ function ReportWorkflowDrawer({
     setOperation(null);
     setError(null);
     setForm({ ...emptyForm, workOrderSource: source });
+  }
+
+  // Cria uma OS nova pré-preenchida a partir de um RVT (usa a operação de origem).
+  async function prefillWorkOrderFromRvt(operationId: string) {
+    setOperation(null);
+    setError(null);
+    try {
+      const detail = await operationApi.getOperation(operationId);
+      setForm({
+        ...emptyForm,
+        workOrderSource: 'NEW',
+        customerId: detail.customer?.id ?? '',
+        addressId: detail.address?.id ?? '',
+        operatorId: detail.operator?.id ?? '',
+        equipmentId: detail.equipment?.id ?? detail.inspectedEquipments?.[0]?.equipmentId ?? '',
+        observations: detail.observations ?? '',
+      });
+    } catch (cause) {
+      setError(message(cause));
+    }
+  }
+
+  // Cria uma OS nova pré-preenchida a partir de um plano de PMOC.
+  // Resolve (ou cria) a execução pendente do plano e usa seu prefill.
+  async function prefillWorkOrderFromPmoc(planId: string) {
+    setOperation(null);
+    setError(null);
+    try {
+      const plan = await pmocApi.getPmoc(planId);
+      let request = plan.executionRequests?.find(
+        (item) => item.status === 'PENDING' || item.status === 'FAILED',
+      );
+      request ??= await pmocApi.createExecutionRequest(planId, {
+        notes: 'Solicitação manual criada pela Central de Relatórios.',
+      });
+      const prefill = await pmocApi.getExecutionRequestPrefill(request.id);
+      setForm({
+        ...emptyForm,
+        workOrderSource: 'NEW',
+        customerId: prefill.customerId ?? '',
+        addressId: prefill.addressId ?? '',
+        operatorId: prefill.operatorId ?? '',
+        equipmentId: prefill.equipmentId ?? prefill.inspectedEquipments?.[0]?.equipmentId ?? '',
+        observations: prefill.observations ?? '',
+      });
+    } catch (cause) {
+      setError(message(cause));
+    }
   }
 
   function selectReceiptSource(source: 'MANUAL' | 'OPERATION' | 'SALE') {
@@ -1391,6 +1444,9 @@ function ReportWorkflowDrawer({
             equipments={equipments}
             selectedCustomer={selectedCustomer}
             onSet={set}
+            rvts={rvts.data?.items ?? []}
+            onPrefillWorkOrderFromRvt={prefillWorkOrderFromRvt}
+            onPrefillWorkOrderFromPmoc={prefillWorkOrderFromPmoc}
             onWorkOrderSource={selectWorkOrderSource}
             onReceiptSource={selectReceiptSource}
             onOperation={selectOperation}
@@ -1531,6 +1587,9 @@ function OriginStep({
   equipments,
   selectedCustomer,
   onSet,
+  rvts,
+  onPrefillWorkOrderFromRvt,
+  onPrefillWorkOrderFromPmoc,
   onWorkOrderSource,
   onReceiptSource,
   onOperation,
@@ -1556,6 +1615,9 @@ function OriginStep({
   equipments: EquipmentSummary[];
   selectedCustomer: CustomerDetail | null;
   onSet: <K extends keyof WorkflowForm>(key: K, value: WorkflowForm[K]) => void;
+  rvts: DocumentCatalogItem[];
+  onPrefillWorkOrderFromRvt: (operationId: string) => void;
+  onPrefillWorkOrderFromPmoc: (planId: string) => void;
   onWorkOrderSource: (source: 'EXISTING' | 'NEW') => void;
   onReceiptSource: (source: 'MANUAL' | 'OPERATION' | 'SALE') => void;
   onOperation: (id: string) => void;
@@ -1569,6 +1631,12 @@ function OriginStep({
   onGeneratePmocWorkOrder: () => void;
   pmocOperation: OperationDetail | null;
 }) {
+  // Origem "extra" da OS: preencher a partir de um RVT ou de um PMOC.
+  // Ambos convertem o formulário para o modo NEW já pré-preenchido.
+  const [woMode, setWoMode] = useState<'' | 'RVT' | 'PMOC'>('');
+  const [woRvtId, setWoRvtId] = useState('');
+  const [woPmocId, setWoPmocId] = useState('');
+
   if (type === 'RECEIPT') {
     const completedWorkOrders = operations.filter(
       (item) => item.status === 'COMPLETED' && item.requestedDocumentType === 'WORK_ORDER',
@@ -1660,8 +1728,11 @@ function OriginStep({
         <div className="grid gap-3 md:grid-cols-2">
           <button
             type="button"
-            onClick={() => onWorkOrderSource('EXISTING')}
-            className={`rounded-[var(--radius-lg)] border p-4 text-left transition ${form.workOrderSource === 'EXISTING' ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5' : 'border-[var(--color-border)] hover:bg-[var(--color-muted)]'}`}
+            onClick={() => {
+              setWoMode('');
+              onWorkOrderSource('EXISTING');
+            }}
+            className={`rounded-[var(--radius-lg)] border p-4 text-left transition ${form.workOrderSource === 'EXISTING' && !woMode ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5' : 'border-[var(--color-border)] hover:bg-[var(--color-muted)]'}`}
           >
             <strong className="block text-sm">Usar Operation existente</strong>
             <span className="mt-1 block text-caption">
@@ -1670,16 +1741,98 @@ function OriginStep({
           </button>
           <button
             type="button"
-            onClick={() => onWorkOrderSource('NEW')}
-            className={`rounded-[var(--radius-lg)] border p-4 text-left transition ${form.workOrderSource === 'NEW' ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5' : 'border-[var(--color-border)] hover:bg-[var(--color-muted)]'}`}
+            onClick={() => {
+              setWoMode('');
+              onWorkOrderSource('NEW');
+            }}
+            className={`rounded-[var(--radius-lg)] border p-4 text-left transition ${form.workOrderSource === 'NEW' && !woMode ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5' : 'border-[var(--color-border)] hover:bg-[var(--color-muted)]'}`}
           >
             <strong className="block text-sm">Criar ordem do zero</strong>
             <span className="mt-1 block text-caption">
               Cria uma Operation rascunho oficial e permite preencher todos os dados da OS.
             </span>
           </button>
+          <button
+            type="button"
+            onClick={() => setWoMode('RVT')}
+            className={`rounded-[var(--radius-lg)] border p-4 text-left transition ${woMode === 'RVT' ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5' : 'border-[var(--color-border)] hover:bg-[var(--color-muted)]'}`}
+          >
+            <strong className="block text-sm">A partir de um RVT</strong>
+            <span className="mt-1 block text-caption">
+              Extrai cliente, endereço e equipamentos do Relatório de Visita Técnica; tudo permanece
+              editável.
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setWoMode('PMOC')}
+            className={`rounded-[var(--radius-lg)] border p-4 text-left transition ${woMode === 'PMOC' ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5' : 'border-[var(--color-border)] hover:bg-[var(--color-muted)]'}`}
+          >
+            <strong className="block text-sm">A partir de um PMOC</strong>
+            <span className="mt-1 block text-caption">
+              Usa a próxima execução pendente do plano para pré-preencher a OS; tudo permanece
+              editável.
+            </span>
+          </button>
         </div>
-        {form.workOrderSource === 'EXISTING' && (
+        {woMode === 'RVT' && (
+          <Field label="RVT registrado">
+            <select
+              value={woRvtId}
+              onChange={(event) => {
+                const value = event.target.value;
+                setWoRvtId(value);
+                const item = rvts.find((doc) => doc.id === value);
+                if (item?.originId) onPrefillWorkOrderFromRvt(item.originId);
+              }}
+            >
+              <option value="">Selecione…</option>
+              {rvts.map((item) => (
+                <option key={item.id} value={item.id} disabled={!item.originId}>
+                  {item.number} · {item.customer?.name ?? 'Cliente'}
+                  {item.equipment?.name ? ` · ${item.equipment.name}` : ''}
+                </option>
+              ))}
+            </select>
+            {rvts.length === 0 && (
+              <span className="text-caption">Nenhum RVT registrado foi encontrado.</span>
+            )}
+            {woRvtId && (
+              <span className="text-caption">
+                Dados do RVT aplicados na OS abaixo. Revise e complete antes de continuar.
+              </span>
+            )}
+          </Field>
+        )}
+        {woMode === 'PMOC' && (
+          <Field label="Plano PMOC">
+            <select
+              value={woPmocId}
+              onChange={(event) => {
+                const value = event.target.value;
+                setWoPmocId(value);
+                if (value) onPrefillWorkOrderFromPmoc(value);
+              }}
+            >
+              <option value="">Selecione…</option>
+              {pmocs.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.maintenancePlan?.name ??
+                    `PMOC-${String(item.number).padStart(6, '0')}`}
+                </option>
+              ))}
+            </select>
+            {pmocs.length === 0 && (
+              <span className="text-caption">Nenhum plano PMOC ativo foi encontrado.</span>
+            )}
+            {woPmocId && (
+              <span className="text-caption">
+                Execução do PMOC aplicada na OS abaixo. Revise e complete antes de continuar.
+              </span>
+            )}
+          </Field>
+        )}
+        {form.workOrderSource === 'EXISTING' && !woMode && (
           <Field label="Operation oficial">
             <select
               value={form.operationId}

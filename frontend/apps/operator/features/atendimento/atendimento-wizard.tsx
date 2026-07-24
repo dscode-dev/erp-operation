@@ -46,6 +46,7 @@ import { SignaturePad } from '@erp/ui/documents/signature-pad';
 import { TechnicalCatalogSelector } from '@erp/ui/technical-catalog/technical-catalog-selector';
 import { QrScanner } from '@erp/ui/qr-scanner';
 import {
+  cepApi,
   customersApi,
   assignmentsApi,
   documentsApi,
@@ -908,6 +909,32 @@ function WalkInStep({
   onCancel: () => void;
 }) {
   const setField = (key: keyof Omit<WalkInForm, 'personType'>, v: string) => onChange({ ...value, [key]: v });
+  const [cepBusy, setCepBusy] = useState(false);
+  const [cepError, setCepError] = useState<string | null>(null);
+
+  async function lookupCep() {
+    const digits = value.zipCode.replace(/\D/g, '');
+    if (digits.length !== 8) return;
+    setCepBusy(true);
+    setCepError(null);
+    try {
+      const result = await cepApi.lookupCep(digits);
+      // Preenche automaticamente o que veio do CEP, preservando o que já existir.
+      onChange({
+        ...value,
+        zipCode: result.zipCode,
+        street: result.street || value.street,
+        district: result.district || value.district,
+        city: result.city || value.city,
+        state: result.state || value.state,
+      });
+    } catch (cause) {
+      setCepError(cause instanceof Error ? cause.message : 'Não foi possível consultar o CEP.');
+    } finally {
+      setCepBusy(false);
+    }
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex items-start justify-between gap-3">
@@ -933,9 +960,17 @@ function WalkInStep({
       <section className="space-y-3 border-t border-[var(--color-border)] pt-4">
         <h3 className="text-sm font-semibold">Endereço</h3>
         <div className="grid grid-cols-3 gap-2">
-          <WalkField label="CEP *" value={value.zipCode} onChange={(v) => setField('zipCode', v)} />
+          <WalkField
+            label="CEP *"
+            value={value.zipCode}
+            onChange={(v) => setField('zipCode', v)}
+            onBlur={() => void lookupCep()}
+            placeholder="00000-000"
+            hint={cepBusy ? <span className="text-[11px] text-[var(--color-muted-foreground)]">Buscando endereço…</span> : cepError ? <span className="text-[11px] text-[var(--color-warning)]">{cepError}</span> : undefined}
+          />
           <WalkField className="col-span-2" label="Cidade *" value={value.city} onChange={(v) => setField('city', v)} />
         </div>
+        <p className="text-[11px] text-[var(--color-muted-foreground)]">Digite o CEP para preencher o endereço automaticamente.</p>
         <WalkField label="Logradouro *" value={value.street} onChange={(v) => setField('street', v)} />
         <div className="grid grid-cols-3 gap-2">
           <WalkField label="Número *" value={value.number} onChange={(v) => setField('number', v)} />
@@ -965,19 +1000,24 @@ function WalkField({
   label,
   value,
   onChange,
+  onBlur,
   placeholder,
   className,
+  hint,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
+  onBlur?: () => void;
   placeholder?: string;
   className?: string;
+  hint?: React.ReactNode;
 }) {
   return (
     <label className={`block space-y-1 ${className ?? ''}`}>
       <span className="text-xs font-medium text-[var(--color-muted-foreground)]">{label}</span>
-      <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-3 h-11 text-sm outline-none focus:border-[var(--color-primary)]" />
+      <input value={value} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} placeholder={placeholder} className="w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-3 h-11 text-sm outline-none focus:border-[var(--color-primary)]" />
+      {hint}
     </label>
   );
 }
