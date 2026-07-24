@@ -31,6 +31,21 @@ export const OPERATOR_DIRECT_COMPLETION_DOCUMENT_TYPES = [
   'TECHNICAL_REPORT',
 ] as const;
 
+/**
+ * Documentos que NÃO representam um atendimento/operação com operador: são
+ * apenas relatórios. Ao criar, não geram Assignment nem ficam nas visões
+ * operacionais (Operações, Dashboard, Lembretes). O Recibo é emitido só na
+ * plataforma e nunca indica um operador executor.
+ */
+export const DOCUMENT_ONLY_DOCUMENT_TYPES = ['RECEIPT'] as const;
+
+/**
+ * Documentos que nunca criam a OS (documento WORK_ORDER) automaticamente junto.
+ * O RVT é um atendimento de campo legítimo (mantém operador/assignment), mas a
+ * OS deve ser criada depois, manualmente, a partir dele — nunca em conjunto.
+ */
+export const SKIP_AUTO_WORK_ORDER_DOCUMENT_TYPES = ['RECEIPT', 'TECHNICAL_REPORT'] as const;
+
 export const CUSTOMER_SIGNATURE_REQUIRED_DOCUMENT_TYPES = [
   'WORK_ORDER',
   'TECHNICAL_REPORT',

@@ -6,7 +6,7 @@ import {
   type StorageProviderContract,
 } from '../../infra/storage/storage-provider.type';
 import { ERROR_CODES } from '../../shared/constants/error-codes.constants';
-import { OPERATOR_DIRECT_COMPLETION_DOCUMENT_TYPES } from '../../shared/constants/document-engine.constants';
+import { DOCUMENT_ONLY_DOCUMENT_TYPES, OPERATOR_DIRECT_COMPLETION_DOCUMENT_TYPES, SKIP_AUTO_WORK_ORDER_DOCUMENT_TYPES } from '../../shared/constants/document-engine.constants';
 import { PMOC_MIN_PROCEDURE_IMAGES } from '../../shared/constants/pmoc.constants';
 import {
   MAX_OPERATION_PHOTOS,
@@ -146,6 +146,8 @@ export class OperationsService {
   async list(query: ListOperationsQueryDto, actor: AuthenticatedUser): Promise<unknown> {
     const where: Prisma.OperationWhereInput = {
       ...this.access.operationScope(actor),
+      // Recibo/RVT são apenas relatórios — nunca aparecem na lista de Operações.
+      requestedDocumentType: { notIn: [...DOCUMENT_ONLY_DOCUMENT_TYPES] as DocumentTemplateType[] },
       ...(query.customerId ? { customerId: query.customerId } : {}),
       ...(query.equipmentId ? { equipmentId: query.equipmentId } : {}),
       ...(query.operatorId ? { operatorId: query.operatorId } : {}),
@@ -180,6 +182,7 @@ export class OperationsService {
   ): Promise<Record<string, unknown>> {
     const where: Prisma.OperationWhereInput = {
       ...this.access.operationScope(actor),
+      requestedDocumentType: { notIn: [...DOCUMENT_ONLY_DOCUMENT_TYPES] as DocumentTemplateType[] },
       ...(query.customerId ? { customerId: query.customerId } : {}),
     };
     const [total, draft, pending, inProgress, review, completed, canceled] = await this.prisma.$transaction([
@@ -221,6 +224,15 @@ export class OperationsService {
     transactionHook?: OperationCreationTransactionHook,
   ): Promise<unknown> {
     const requestedDocumentType = dto.documentType ?? DocumentTemplateType.WORK_ORDER;
+    // Recibo é apenas relatório: sem atendimento (Assignment) e oculto das
+    // visões operacionais. O RVT mantém seu atendimento, mas nenhum dos dois
+    // cria a OS (WORK_ORDER) automaticamente.
+    const isDocumentOnly = DOCUMENT_ONLY_DOCUMENT_TYPES.includes(
+      requestedDocumentType as (typeof DOCUMENT_ONLY_DOCUMENT_TYPES)[number],
+    );
+    const skipAutoWorkOrder = SKIP_AUTO_WORK_ORDER_DOCUMENT_TYPES.includes(
+      requestedDocumentType as (typeof SKIP_AUTO_WORK_ORDER_DOCUMENT_TYPES)[number],
+    );
     if (
       actor.role === Role.OPERATOR &&
       !OPERATOR_DIRECT_COMPLETION_DOCUMENT_TYPES.includes(
@@ -353,7 +365,9 @@ export class OperationsService {
           },
         });
       }
-      if (dto.documentType !== DocumentTemplateType.RECEIPT) {
+      // A OS (documento WORK_ORDER) nunca é criada junto com Recibo ou RVT — pode
+      // ser gerada depois, manualmente, a partir do relatório.
+      if (!skipAutoWorkOrder) {
         await tx.operationDocument.create({
           data: {
             operationId: operation.id,
@@ -412,20 +426,24 @@ export class OperationsService {
           ),
         });
       }
-      await this.assignments.createForOperationTx(
-        tx,
-        {
-          operationId: operation.id,
-          assignedBy: actor.id,
-          assignedTo: operation.operatorId,
-          notes: dto.observations ?? null,
-        },
-        actor.id,
-        context,
-      );
-      // Lembrete de manutenção: registra a previsão da próxima execução para OS
-      // Preventiva/Instalação (exceto origem PMOC, que tem agenda própria).
-      await this.reminders.syncFromOperationTx(tx, operation.id);
+      // Relatórios document-only (Recibo/RVT) não geram atendimento nem lembrete:
+      // não têm operador executor e ficam fora do fluxo operacional.
+      if (!isDocumentOnly) {
+        await this.assignments.createForOperationTx(
+          tx,
+          {
+            operationId: operation.id,
+            assignedBy: actor.id,
+            assignedTo: operation.operatorId,
+            notes: dto.observations ?? null,
+          },
+          actor.id,
+          context,
+        );
+        // Lembrete de manutenção: registra a previsão da próxima execução para OS
+        // Preventiva/Instalação (exceto origem PMOC, que tem agenda própria).
+        await this.reminders.syncFromOperationTx(tx, operation.id);
+      }
       if (operation.status === 'COMPLETED') {
         await this.lifecycle.publishOperationCompletedTx(tx, operation.id, actor.id, context);
         await this.maintenance.syncOperationCompletedTx(tx, operation.id, actor.id, context);
