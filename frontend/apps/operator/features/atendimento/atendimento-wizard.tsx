@@ -27,6 +27,8 @@ import {
   QrCode,
   X,
   FileSearch,
+  ShieldCheck,
+  FilePlus2,
 } from 'lucide-react';
 import { WizardProgressHeader } from '@erp/ui/wizard/progress-header';
 import { WizardFooter } from '@erp/ui/wizard/step-footer';
@@ -44,13 +46,17 @@ import { QrScanner } from '@erp/ui/qr-scanner';
 import {
   customersApi,
   assignmentsApi,
+  documentsApi,
   equipmentsApi,
+  operationApi,
   pmocApi,
   technicalCatalogsApi,
   useQuery,
   ApiClientError,
   type Customer,
+  type CustomerAddress,
   type CustomerDetail,
+  type DocumentCatalogItem,
   type EquipmentSummary,
   type EquipmentDetail,
   type TechnicalCatalog,
@@ -85,6 +91,15 @@ const FIELD_DOCUMENT_TYPES: DocumentKind[] = [
   'TECHNICAL_REPORT',
 ];
 type ChecklistItem = { catalogId: string; label: string; done: boolean; note?: string };
+type OsOrigin = 'scratch' | 'rvt' | 'pmoc';
+type OsPrefill = {
+  address: { id: string; label: string } | null;
+  serviceType: ServiceTypeKey | null;
+  reportedIssue?: string;
+  serviceDescription?: string;
+  observations?: string;
+  equipments: EquipmentSummary[];
+};
 const RVT_MAINTENANCE_TYPES: Array<{ value: OperationMaintenanceType; label: string }> = [
   { value: 'WEEKLY', label: 'Semanal' },
   { value: 'SEMIANNUAL', label: 'Semestral' },
@@ -121,6 +136,9 @@ export function AtendimentoWizard({
   const [signerRole, setSignerRole] = useState('');
   const [signedAt, setSignedAt] = useState<string | null>(null);
   const [technicalSignatureId, setTechnicalSignatureId] = useState<string | null>(null);
+  // OS a partir de RVT/PMOC: origem escolhida logo após selecionar o cliente.
+  const [osOrigin, setOsOrigin] = useState<OsOrigin | null>(null);
+  const [originOpen, setOriginOpen] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -234,7 +252,21 @@ export function AtendimentoWizard({
     else setStep((s) => s - 1);
   }
 
+  function applyPrefill(data: OsPrefill) {
+    if (data.address) setAddress(data.address);
+    if (data.serviceType) setServiceType(data.serviceType);
+    if (data.reportedIssue) setReportedIssue(data.reportedIssue);
+    if (data.serviceDescription) setServiceDescription(data.serviceDescription);
+    if (data.observations) setObservations(data.observations);
+    if (data.equipments.length) setEquipments(data.equipments);
+  }
+
   async function next() {
+    // OS: após escolher a empresa, oferece criar do zero ou a partir de RVT/PMOC.
+    if (step === 0 && documentType === 'WORK_ORDER' && customer && osOrigin === null) {
+      setOriginOpen(true);
+      return;
+    }
     if (step < STEPS.length - 1) {
       setStep((s) => s + 1);
       return;
@@ -310,6 +342,27 @@ export function AtendimentoWizard({
     return <PmocStartStep onBack={() => setDocumentType(null)} />;
   }
 
+  // OS: escolha da origem (do zero / a partir de RVT / a partir de PMOC).
+  if (originOpen && customer && documentType === 'WORK_ORDER') {
+    return (
+      <OSOriginStep
+        customer={customer}
+        onBack={() => setOriginOpen(false)}
+        onScratch={() => {
+          setOsOrigin('scratch');
+          setOriginOpen(false);
+          setStep(1);
+        }}
+        onPrefill={(origin, data) => {
+          applyPrefill(data);
+          setOsOrigin(origin);
+          setOriginOpen(false);
+          setStep(1);
+        }}
+      />
+    );
+  }
+
   const isLast = step === STEPS.length - 1;
 
   return (
@@ -331,6 +384,7 @@ export function AtendimentoWizard({
                 setCustomer(c);
                 setAddress(null);
                 setEquipments([]);
+                setOsOrigin(null);
               }}
             />
             {customer && (
@@ -554,6 +608,189 @@ function PmocStartStep({ onBack }: { onBack: () => void }) {
         {planId && (requests.loading && !requests.data ? <SkeletonList rows={3} /> : eligible.length === 0 ? <EmptyState icon={FileSearch} title="Nenhuma execução disponível" description="As próximas atividades aparecerão aqui conforme a programação do PMOC." /> : <div className="space-y-2">{eligible.map((request) => <button key={request.id} type="button" disabled={Boolean(busy)} onClick={() => void claim(request)} className="flex w-full items-center justify-between gap-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 text-left disabled:opacity-60"><span><span className="block font-semibold">Execução {String(request.executionNumber).padStart(3, '0')}</span><span className="block text-xs text-[var(--color-muted-foreground)]">Prevista para {new Date(request.scheduledFor).toLocaleDateString('pt-BR')}</span></span>{busy === request.id ? <Loader2 className="h-5 w-5 animate-spin" /> : <ChevronRight className="h-5 w-5" />}</button>)}</div>)}
       </div>
     </div>
+  );
+}
+
+/* ---------- OS a partir de RVT / PMOC ---------- */
+
+function addressLabelOf(a: CustomerAddress): string {
+  return (
+    [a.street, a.number, a.district, a.city].filter(Boolean).join(', ') || a.name || 'Endereço'
+  );
+}
+
+async function fetchEquipmentSummaries(ids: string[]): Promise<EquipmentSummary[]> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  const results = await Promise.all(
+    unique.map((id) => equipmentsApi.getEquipment(id).catch(() => null)),
+  );
+  return results.filter((equipment): equipment is EquipmentDetail => Boolean(equipment));
+}
+
+async function buildRvtPrefill(item: DocumentCatalogItem): Promise<OsPrefill> {
+  if (!item.originId) throw new Error('Este RVT não possui uma operação de origem.');
+  const operation = await operationApi.getOperation(item.originId);
+  const equipmentIds = [
+    ...operation.inspectedEquipments.map((equipment) => equipment.equipmentId),
+    ...(operation.equipment ? [operation.equipment.id] : []),
+  ];
+  return {
+    address: operation.address
+      ? { id: operation.address.id, label: addressLabelOf(operation.address) }
+      : null,
+    serviceType: operation.type as ServiceTypeKey,
+    reportedIssue: operation.reportedIssue ?? undefined,
+    serviceDescription: operation.serviceDescription ?? undefined,
+    observations: operation.observations ?? undefined,
+    equipments: await fetchEquipmentSummaries(equipmentIds),
+  };
+}
+
+async function buildPmocPrefill(planId: string): Promise<OsPrefill> {
+  const plan = await pmocApi.getPmoc(planId);
+  const equipments = plan.equipments?.map((item) => item.equipment) ?? (plan.equipment ? [plan.equipment] : []);
+  return {
+    address: plan.defaultAddress
+      ? { id: plan.defaultAddress.id, label: addressLabelOf(plan.defaultAddress) }
+      : null,
+    serviceType: plan.defaultOperationType as ServiceTypeKey,
+    serviceDescription: plan.coverage ?? undefined,
+    observations: plan.defaultOperationObservations ?? undefined,
+    equipments: await fetchEquipmentSummaries(equipments.map((equipment) => equipment.id)),
+  };
+}
+
+function OSOriginStep({
+  customer,
+  onBack,
+  onScratch,
+  onPrefill,
+}: {
+  customer: Customer;
+  onBack: () => void;
+  onScratch: () => void;
+  onPrefill: (origin: OsOrigin, data: OsPrefill) => void;
+}) {
+  const [mode, setMode] = useState<'choose' | 'rvt' | 'pmoc'>('choose');
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const rvts = useQuery(
+    (signal) =>
+      mode === 'rvt'
+        ? documentsApi.listDocuments({ type: 'TECHNICAL_REPORT', customerId: customer.id, limit: 20, signal })
+        : Promise.resolve(null),
+    [mode, customer.id],
+  );
+  const pmocs = useQuery(
+    (signal) =>
+      mode === 'pmoc'
+        ? pmocApi.listPmoc({ customerId: customer.id, active: true, limit: 20, signal })
+        : Promise.resolve(null),
+    [mode, customer.id],
+  );
+
+  async function pick(id: string, build: () => Promise<OsPrefill>, origin: OsOrigin) {
+    setBusyId(id);
+    setError(null);
+    try {
+      onPrefill(origin, await build());
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível carregar os dados do documento.');
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <div className="min-h-dvh px-4 py-5">
+      <div className="mx-auto max-w-lg space-y-5">
+        <header className="flex items-start gap-3">
+          <button
+            type="button"
+            onClick={() => (mode === 'choose' ? onBack() : setMode('choose'))}
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-[var(--color-border)]"
+          >
+            <ChevronRight className="h-4 w-4 rotate-180" />
+          </button>
+          <div>
+            <p className="text-caption uppercase tracking-wider">Nova Ordem de Serviço</p>
+            <h1 className="text-[22px] font-semibold">
+              {mode === 'choose' ? 'Como criar esta OS?' : mode === 'rvt' ? 'Escolha um RVT' : 'Escolha um PMOC'}
+            </h1>
+            <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">
+              {mode === 'choose'
+                ? `Cliente: ${customer.name}. Você pode reaproveitar os dados de um RVT ou PMOC deste cliente.`
+                : 'Os dados do documento serão pré-preenchidos no atendimento. Você poderá ajustar em seguida.'}
+            </p>
+          </div>
+        </header>
+
+        {error && (
+          <p className="rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 p-3 text-sm text-[var(--color-danger)]">
+            {error}
+          </p>
+        )}
+
+        {mode === 'choose' && (
+          <div className="space-y-2">
+            <OriginCard icon={<FilePlus2 className="h-5 w-5" />} title="Criar do zero" subtitle="Preencha o atendimento manualmente" onClick={onScratch} />
+            <OriginCard icon={<FileText className="h-5 w-5" />} title="A partir de um RVT" subtitle="Reaproveitar um Relatório de Visita Técnica" onClick={() => setMode('rvt')} />
+            <OriginCard icon={<ShieldCheck className="h-5 w-5" />} title="A partir de um PMOC" subtitle="Reaproveitar um plano PMOC ativo" onClick={() => setMode('pmoc')} />
+          </div>
+        )}
+
+        {mode === 'rvt' && (
+          rvts.loading && !rvts.data ? <SkeletonList rows={4} />
+            : rvts.error && !rvts.data ? <ErrorState error={rvts.error} onRetry={rvts.refetch} />
+            : (rvts.data?.items.length ?? 0) === 0 ? <EmptyState icon={FileSearch} title="Nenhum RVT" description="Este cliente ainda não possui Relatórios de Visita Técnica." />
+            : <div className="space-y-2">{(rvts.data?.items ?? []).map((item) => (
+                <OriginPick
+                  key={item.id}
+                  busy={busyId === item.id}
+                  disabled={Boolean(busyId)}
+                  title={item.number}
+                  subtitle={`${item.equipment?.name ?? 'Sem equipamento'} · ${new Date(item.createdAt).toLocaleDateString('pt-BR')}`}
+                  onClick={() => void pick(item.id, () => buildRvtPrefill(item), 'rvt')}
+                />
+              ))}</div>
+        )}
+
+        {mode === 'pmoc' && (
+          pmocs.loading && !pmocs.data ? <SkeletonList rows={4} />
+            : pmocs.error && !pmocs.data ? <ErrorState error={pmocs.error} onRetry={pmocs.refetch} />
+            : (pmocs.data?.items.length ?? 0) === 0 ? <EmptyState icon={FileSearch} title="Nenhum PMOC ativo" description="Este cliente não possui planos PMOC ativos." />
+            : <div className="space-y-2">{(pmocs.data?.items ?? []).map((plan) => (
+                <OriginPick
+                  key={plan.id}
+                  busy={busyId === plan.id}
+                  disabled={Boolean(busyId)}
+                  title={`PMOC-${String(plan.number).padStart(6, '0')}`}
+                  subtitle={plan.maintenancePlan?.name ?? plan.customer?.name ?? 'Plano PMOC'}
+                  onClick={() => void pick(plan.id, () => buildPmocPrefill(plan.id), 'pmoc')}
+                />
+              ))}</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function OriginCard({ icon, title, subtitle, onClick }: { icon: React.ReactNode; title: string; subtitle: string; onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} className="flex w-full items-center gap-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 text-left active:scale-[0.99]">
+      <span className="grid h-11 w-11 place-items-center rounded-[var(--radius-md)] bg-[var(--color-primary)]/10 text-[var(--color-primary)]">{icon}</span>
+      <span className="min-w-0 flex-1"><span className="block font-semibold">{title}</span><span className="block text-xs text-[var(--color-muted-foreground)]">{subtitle}</span></span>
+      <ChevronRight className="h-5 w-5 text-[var(--color-muted-foreground)]" />
+    </button>
+  );
+}
+
+function OriginPick({ title, subtitle, busy, disabled, onClick }: { title: string; subtitle: string; busy: boolean; disabled: boolean; onClick: () => void }) {
+  return (
+    <button type="button" disabled={disabled} onClick={onClick} className="flex w-full items-center justify-between gap-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 text-left disabled:opacity-60">
+      <span className="min-w-0 flex-1"><span className="block font-semibold">{title}</span><span className="block truncate text-xs text-[var(--color-muted-foreground)]">{subtitle}</span></span>
+      {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : <ChevronRight className="h-5 w-5" />}
+    </button>
   );
 }
 
