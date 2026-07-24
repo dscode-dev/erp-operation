@@ -22,6 +22,33 @@ const accountTypes: FinancialAccountType[] = ["CASH", "BANK", "CREDIT_CARD", "DI
 const categoryTypes: FinancialCategoryType[] = ["INCOME", "EXPENSE", "TRANSFER"];
 const entryTypes: FinancialEntryType[] = ["RECEIVABLE", "PAYABLE", "TRANSFER"];
 
+// Rótulos pt-BR para os enums financeiros exibidos na UI.
+export const ACCOUNT_TYPE_LABEL: Record<FinancialAccountType, string> = {
+  CASH: "Dinheiro",
+  BANK: "Conta bancária",
+  CREDIT_CARD: "Cartão de crédito",
+  DIGITAL_WALLET: "Carteira digital",
+  OTHER: "Outro",
+};
+export const CATEGORY_TYPE_LABEL: Record<FinancialCategoryType, string> = {
+  INCOME: "Receita",
+  EXPENSE: "Despesa",
+  TRANSFER: "Transferência",
+};
+const ENTRY_TYPE_LABEL: Record<FinancialEntryType, string> = {
+  RECEIVABLE: "A receber",
+  PAYABLE: "A pagar",
+  TRANSFER: "Transferência",
+};
+const ORIGIN_LABEL: Record<FinancialEntryOrigin, string> = {
+  MANUAL: "Manual",
+  BUDGET: "Orçamento",
+  PURCHASE: "Compra",
+  OPERATION: "Operação",
+  PMOC: "PMOC",
+  OTHER: "Outro",
+};
+
 /** Backend rule (assertAccountCategory): each entry type accepts one category type. */
 const ENTRY_CATEGORY_TYPE: Record<FinancialEntryType, FinancialCategoryType> = {
   RECEIVABLE: "INCOME",
@@ -189,12 +216,12 @@ export function FinancialEntryDrawer({
               }}
               className="input"
             >
-              {entryTypes.map((type) => <option key={type} value={type}>{type}</option>)}
+              {entryTypes.map((type) => <option key={type} value={type}>{ENTRY_TYPE_LABEL[type]}</option>)}
             </select>
           </Field>
           <Field label="Origem">
             <select value={form.origin} onChange={(e) => setForm((s) => ({ ...s, origin: e.target.value as FinancialEntryOrigin }))} className="input">
-              {origins.map((origin) => <option key={origin} value={origin}>{origin}</option>)}
+              {origins.map((origin) => <option key={origin} value={origin}>{ORIGIN_LABEL[origin]}</option>)}
             </select>
           </Field>
           <Field label="Valor">
@@ -277,7 +304,7 @@ export function FinancialAccountDrawer({
       <div className="space-y-4">
         {state.error ? <ErrorState error={state.error} /> : null}
         <Field label="Nome"><input className="input" value={form.name} onChange={(e) => setForm((s) => ({ ...s, name: e.target.value }))} /></Field>
-        <Field label="Tipo"><select className="input" value={form.type} onChange={(e) => setForm((s) => ({ ...s, type: e.target.value as FinancialAccountType }))}>{accountTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></Field>
+        <Field label="Tipo"><select className="input" value={form.type} onChange={(e) => setForm((s) => ({ ...s, type: e.target.value as FinancialAccountType }))}>{accountTypes.map((type) => <option key={type} value={type}>{ACCOUNT_TYPE_LABEL[type]}</option>)}</select></Field>
         {!account && <Field label="Saldo inicial"><input className="input" type="number" step="0.01" value={form.openingBalance} onChange={(e) => setForm((s) => ({ ...s, openingBalance: e.target.value }))} /></Field>}
         <Field label="Descrição"><textarea className="input min-h-24" value={form.description} onChange={(e) => setForm((s) => ({ ...s, description: e.target.value }))} /></Field>
         {account && <p className="text-caption">Saldo atual: {formatCurrencyBRL(Number(account.currentBalance))}</p>}
@@ -342,7 +369,7 @@ export function FinancialCategoryDrawer({
       <div className="space-y-4">
         {state.error ? <ErrorState error={state.error} /> : null}
         <Field label="Nome"><input className="input" value={form.name} onChange={(e) => setForm((s) => ({ ...s, name: e.target.value }))} /></Field>
-        <Field label="Tipo"><select className="input" value={form.type} onChange={(e) => setForm((s) => ({ ...s, type: e.target.value as FinancialCategoryType }))}>{categoryTypes.map((type) => <option key={type} value={type}>{type}</option>)}</select></Field>
+        <Field label="Tipo"><select className="input" value={form.type} onChange={(e) => setForm((s) => ({ ...s, type: e.target.value as FinancialCategoryType }))}>{categoryTypes.map((type) => <option key={type} value={type}>{CATEGORY_TYPE_LABEL[type]}</option>)}</select></Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Cor"><input className="input" value={form.color} onChange={(e) => setForm((s) => ({ ...s, color: e.target.value }))} /></Field>
           <Field label="Ícone"><input className="input" value={form.icon} onChange={(e) => setForm((s) => ({ ...s, icon: e.target.value }))} /></Field>

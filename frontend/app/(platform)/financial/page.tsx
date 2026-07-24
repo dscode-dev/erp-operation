@@ -25,6 +25,8 @@ import {
 } from "@erp/api";
 import { formatCurrencyBRL, formatDate } from "@erp/utils";
 import {
+  ACCOUNT_TYPE_LABEL,
+  CATEGORY_TYPE_LABEL,
   FinancialAccountDrawer,
   FinancialCategoryDrawer,
   FinancialEntryDrawer,
@@ -138,7 +140,7 @@ export default function FinancialPage() {
               onRetry={accounts.refetch}
               render={(account) => (
                 <button key={account.id} onClick={() => setAccountDrawer({ open: true, account })} className="flex w-full items-center justify-between gap-3 p-3 text-left hover:bg-[var(--color-muted)]/50">
-                  <span><span className="font-medium">{account.name}</span><span className="text-caption ml-2">{account.type}</span></span>
+                  <span><span className="font-medium">{account.name}</span><span className="text-caption ml-2">{ACCOUNT_TYPE_LABEL[account.type]}</span></span>
                   <span className="font-mono text-sm">{formatCurrencyBRL(Number(account.currentBalance))}</span>
                 </button>
               )}
@@ -154,7 +156,7 @@ export default function FinancialPage() {
               render={(category) => (
                 <button key={category.id} onClick={() => setCategoryDrawer({ open: true, category })} className="flex w-full items-center justify-between gap-3 p-3 text-left hover:bg-[var(--color-muted)]/50">
                   <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: category.color ?? "var(--color-primary)" }} /> <span className="font-medium">{category.name}</span></span>
-                  <span className="text-caption">{category.type}</span>
+                  <span className="text-caption">{CATEGORY_TYPE_LABEL[category.type]}</span>
                 </button>
               )}
             />
