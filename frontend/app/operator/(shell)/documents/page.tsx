@@ -56,7 +56,31 @@ function OperatorDocumentsInner() {
   const [detail, setDetail] = useState<Row | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  // Documentos cujo download falhou por estarem desatualizados (DOCUMENT_STALE).
+  // O backend só detecta isso ao montar o PDF, então marcamos aqui para revelar
+  // o botão "Gerar PDF novamente" mesmo quando o estado editorial ainda é READY.
+  const [staleIds, setStaleIds] = useState<Set<string>>(() => new Set());
   const ops = useQuery((s) => operationApi.listOperations({ limit: 100, customerId: customer?.id, signal: s }), [customer?.id]);
+
+  // Estado efetivo: um PDF marcado como desatualizado no download vira STALE.
+  function effectiveAvailability(row: Row): Availability {
+    return staleIds.has(row.id) ? "STALE" : row.availability;
+  }
+
+  function markStaleFromError(err: unknown, id: string) {
+    if (err instanceof ApiClientError && err.code === "DOCUMENT_STALE") {
+      setStaleIds((prev) => new Set(prev).add(id));
+    }
+  }
+
+  function clearStale(id: string) {
+    setStaleIds((prev) => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  }
 
   const items = useMemo<Row[]>(() => {
     if (!customer) return [];
@@ -110,6 +134,7 @@ function OperatorDocumentsInner() {
     } catch (err) {
       // Cancelamento do share sheet não é erro.
       if (err instanceof DOMException && err.name === "AbortError") return;
+      markStaleFromError(err, row.id);
       setActionError(mapActionError(err));
     } finally {
       setBusy(null);
@@ -122,6 +147,7 @@ function OperatorDocumentsInner() {
     try {
       triggerDownload(await fetchPdf(row));
     } catch (err) {
+      markStaleFromError(err, row.id);
       setActionError(mapActionError(err));
     } finally {
       setBusy(null);
@@ -136,6 +162,7 @@ function OperatorDocumentsInner() {
       await documentsApi.submitHandoff(handoff.id);
       await documentsApi.finalizeHandoffReview(handoff.id);
       await documentsApi.renderDocument(handoff.id);
+      clearStale(row.id);
       await ops.refetch();
       setDetail(null);
     } catch (err) {
@@ -171,8 +198,9 @@ function OperatorDocumentsInner() {
       ) : (
         <ul className="space-y-2">
           {items.map((d) => {
-            const av = AVAILABILITY[d.availability];
-            const canGet = d.availability === "AVAILABLE";
+            const avail = effectiveAvailability(d);
+            const av = AVAILABILITY[avail];
+            const canGet = avail === "AVAILABLE";
             const canEmit = !canGet && d.operation.status === "COMPLETED" && (d.type === "WORK_ORDER" || d.type === "TECHNICAL_REPORT");
             return (
               <li key={d.id} className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)]">
@@ -192,7 +220,7 @@ function OperatorDocumentsInner() {
                 )}
                 {canEmit && (
                   <div className="border-t border-[var(--color-border)] px-3.5 py-2">
-                    <ActionButton icon={FileText} label={d.availability === "STALE" ? "Gerar PDF novamente" : "Gerar PDF"} busy={busy === `emit:${d.id}`} onClick={() => void emit(d)} primary />
+                    <ActionButton icon={FileText} label={avail === "STALE" ? "Gerar PDF novamente" : "Gerar PDF"} busy={busy === `emit:${d.id}`} onClick={() => void emit(d)} primary />
                   </div>
                 )}
               </li>
@@ -202,9 +230,13 @@ function OperatorDocumentsInner() {
       )}
 
       <Drawer open={detail !== null} onClose={() => setDetail(null)} eyebrow="Documento" title={detail?.number ?? ""} width="max-w-[1280px]">
-        {detail && (
+        {detail && (() => {
+          const detailAvail = effectiveAvailability(detail);
+          const detailCompleted = detail.operation.status === "COMPLETED";
+          const detailDirect = detail.type === "WORK_ORDER" || detail.type === "TECHNICAL_REPORT";
+          return (
           <div className="space-y-3">
-            {detail.availability === "AVAILABLE" ? (
+            {detailAvail === "AVAILABLE" ? (
               <div className="flex flex-wrap items-center gap-2">
                 <StatusChip tone="success" dot>PDF disponível</StatusChip>
                 <div className="ml-auto flex gap-2">
@@ -216,18 +248,18 @@ function OperatorDocumentsInner() {
               <div className="flex items-start gap-2 rounded-[var(--radius-md)] border border-[var(--color-warning)]/30 bg-[var(--color-warning)]/10 px-3 py-2 text-sm text-[var(--color-warning)]">
                 <ShieldAlert className="h-4 w-4 mt-0.5 shrink-0" />
                 <span>
-                  {detail.availability === "STALE"
-                    ? detail.operation.status === "COMPLETED"
+                  {detailAvail === "STALE"
+                    ? detailCompleted && detailDirect
                       ? "O PDF ficou desatualizado após alterações no atendimento. Toque em Gerar PDF novamente para atualizar e depois baixar/compartilhar."
                       : "O PDF ficou desatualizado após alterações. Conclua o atendimento para gerar novamente ou peça à gestão."
-                    : detail.availability === "IN_REVIEW"
+                    : detailAvail === "IN_REVIEW"
                     ? "Este documento está em revisão. O download e o compartilhamento ficam disponíveis após a aprovação e a geração do PDF na plataforma."
                     : "A revisão foi concluída, mas o PDF ainda não foi gerado pela plataforma. Você poderá baixar e compartilhar assim que for emitido."}
                 </span>
               </div>
             )}
-            {detail.availability !== "AVAILABLE" && detail.operation.status === "COMPLETED" && (detail.type === "WORK_ORDER" || detail.type === "TECHNICAL_REPORT") && (
-              <ActionButton icon={FileText} label={detail.availability === "STALE" ? "Gerar PDF novamente" : "Gerar PDF oficial"} busy={busy === `emit:${detail.id}`} onClick={() => void emit(detail)} primary />
+            {detailAvail !== "AVAILABLE" && detailCompleted && detailDirect && (
+              <ActionButton icon={FileText} label={detailAvail === "STALE" ? "Gerar PDF novamente" : "Gerar PDF oficial"} busy={busy === `emit:${detail.id}`} onClick={() => void emit(detail)} primary />
             )}
             <DocumentViewer
               source={{ documentId: detail.id, operationId: detail.operation.id, type: detail.type }}
@@ -235,7 +267,8 @@ function OperatorDocumentsInner() {
               onRendered={ops.refetch}
             />
           </div>
-        )}
+          );
+        })()}
       </Drawer>
     </div>
   );
