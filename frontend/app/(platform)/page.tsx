@@ -47,8 +47,10 @@ type TimelineRange = "today" | "7d";
 type Coverage = { scheduled: number; attended: number };
 type CoverageRow = Coverage & { label: string; short: string };
 
-const SCHEDULED_COLOR = "var(--color-primary)";
-const ATTENDED_COLOR = "var(--color-success)";
+// Cores da marca definidas em Configurações (primária + secundária/accent),
+// aplicadas via applyBranding. Evita o verde fixo e segue a identidade do cliente.
+const ATTENDED_COLOR = "var(--color-primary)";
+const SCHEDULED_COLOR = "var(--color-accent)";
 
 export default function PlatformHome() {
   const { session, can, hasRole } = useAuth();
@@ -231,7 +233,7 @@ function CoverageComparison({ loading, rows }: { loading: boolean; rows: Coverag
               </div>
               <div className="flex h-2.5 overflow-hidden rounded-full bg-[var(--color-muted)]">
                 <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: ATTENDED_COLOR }} />
-                <div className="h-full flex-1" style={{ background: total > 0 ? "color-mix(in srgb, var(--color-primary) 28%, transparent)" : "transparent" }} />
+                <div className="h-full flex-1" style={{ background: total > 0 ? `color-mix(in srgb, ${SCHEDULED_COLOR} 28%, transparent)` : "transparent" }} />
               </div>
             </div>
           );
@@ -263,7 +265,7 @@ function CoverageRadar({ loading, rows }: { loading: boolean; rows: CoverageRow[
         <RadarChart rows={rows} />
       </div>
       <div className="mt-2 flex items-center justify-center gap-2 border-t border-[var(--color-border)] pt-3 text-caption">
-        <TrendingUp className="h-3.5 w-3.5 text-[var(--color-success)]" />
+        <TrendingUp className="h-3.5 w-3.5 text-[var(--color-primary)]" />
         <span>Cobertura geral do mês</span>
         <span className="font-semibold text-[var(--color-foreground)] tabular-nums">{overall}%</span>
       </div>
