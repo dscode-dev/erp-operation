@@ -481,32 +481,21 @@ export function PmocPlanWizard({ open, onClose, onCreated, pmoc = null, onUpdate
       draftPhotos.forEach((photo) => URL.revokeObjectURL(photo.url));
       setDraftPhotos([]);
     }
-    // Prepara o documento PMOC: assinatura técnica (sempre) + assinatura do cliente
-    // (quando coletada). A técnica não pode depender da presença da do cliente.
-    let document = await documentsApi.saveHandoffDraft(operationId, "PMOC");
+    // Prepara o documento PMOC com a assinatura técnica (sempre).
+    const document = await documentsApi.saveHandoffDraft(operationId, "PMOC");
     if (form.overrideSignature && form.signatureOverrideId) {
-      document = await documentsApi.selectHandoffTechnicalSignature(document.id, form.signatureOverrideId);
+      await documentsApi.selectHandoffTechnicalSignature(document.id, form.signatureOverrideId);
     }
-    if (signatureData && signerName.trim()) {
-      document = await documentsApi.collectCustomerSignature(document.id, {
-        signerName: signerName.trim(),
-        signerRole: signerRole.trim() || undefined,
-        signatureData,
-        collectedAt: new Date().toISOString(),
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      });
-      setSignatureData(null);
-    }
-    // Tenta finalizar e renderizar o PMOC para não ficar como rascunho e permitir
-    // o download do PDF. Se faltarem evidências/assinaturas obrigatórias, o
-    // documento permanece em revisão para finalização posterior na tela do PMOC —
-    // sem interromper a criação da Ordem de Serviço.
+    // Gera o PDF renderizando o rascunho **diretamente** (sem enviar para revisão).
+    // Enviar sem finalizar deixaria o documento "enviado sem finalizar", o que
+    // bloqueia qualquer geração posterior de PDF (REVIEW_INCOMPLETE). Renderizando
+    // o rascunho, o PDF fica disponível para download; se faltar evidência (mín. de
+    // fotos), o PDF pode ser gerado depois em "Gerar PDF" na página do PMOC, que
+    // mostra o motivo. Não interrompe a criação da Ordem de Serviço.
     try {
-      await documentsApi.submitHandoff(document.id);
-      await documentsApi.finalizeHandoffReview(document.id);
       await documentsApi.renderDocument(document.id);
     } catch {
-      // Requisitos incompletos: mantém o fluxo, PMOC segue para revisão/finalização.
+      // Requisitos incompletos (ex.: menos imagens que o mínimo) — segue sem bloquear.
     }
     return operationApi.getOperation(operationId);
   }

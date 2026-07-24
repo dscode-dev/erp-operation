@@ -324,7 +324,11 @@ export class DocumentEngineService {
     this.assertTypeAccess(document.type, actor);
     await this.assertDocumentAccess(document, actor, context);
     await this.assertRenderer(document, actor);
-    if (document.submittedAt && document.editorialStatus !== 'READY') {
+    const isManagement = actor.role === Role.OWNER || actor.role === Role.MANAGER;
+    // Operador só gera após a revisão finalizar (READY). Owner/Manager é a própria
+    // revisão: gerar o PDF equivale a finalizar, então pode renderizar mesmo um
+    // documento enviado que ainda não foi finalizado (recupera estados travados).
+    if (document.submittedAt && document.editorialStatus !== 'READY' && !isManagement) {
       throw new ApplicationException(
         ERROR_CODES.DOCUMENT_REVIEW_INCOMPLETE,
         'Finalize a revisão antes de gerar o PDF oficial',
@@ -360,6 +364,10 @@ export class DocumentEngineService {
             fileSize: pdf.buffer.length,
             renderedAt: new Date(),
             status: 'READY',
+            // Gerar o PDF finaliza o documento: sai de "Rascunho" para pronto.
+            // Idempotente no fluxo do operador (que só renderiza documentos já READY).
+            editorialStatus: 'READY',
+            ...(document.finalizedAt ? {} : { finalizedAt: new Date(), finalizedById: actor.id }),
             renderMetadata: {
               engine: 'direct-pdf-v1',
               blueprintVersion: blueprint.version,
