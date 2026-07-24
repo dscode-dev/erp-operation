@@ -1,4 +1,4 @@
-import { CustomerType } from '@prisma/client';
+import { CustomerType, EquipmentType } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
@@ -13,6 +13,7 @@ import {
   MaxLength,
   Min,
   MinLength,
+  ValidateNested,
 } from 'class-validator';
 
 const trim = (value: unknown): unknown => (typeof value === 'string' ? value.trim() : value);
@@ -179,4 +180,35 @@ export class UploadCustomerAttachmentDto {
   @MinLength(2)
   @MaxLength(80)
   category!: string;
+}
+
+/* ---------- OS avulso: cadastro de cliente novo em campo ---------- */
+
+class WalkInAddressDto {
+  @Transform(({ value }) => trim(value)) @IsString() @MaxLength(9) zipCode!: string;
+  @Transform(({ value }) => trim(value)) @IsString() @MinLength(2) @MaxLength(180) street!: string;
+  @Transform(({ value }) => trim(value)) @IsString() @MaxLength(20) number!: string;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(120) complement?: string;
+  @Transform(({ value }) => trim(value)) @IsString() @MinLength(2) @MaxLength(100) district!: string;
+  @Transform(({ value }) => trim(value)) @IsString() @MinLength(2) @MaxLength(100) city!: string;
+  @Transform(({ value }) => upper(value)) @IsString() @Length(2, 2) state!: string;
+}
+
+class WalkInContactDto {
+  @Transform(({ value }) => trim(value)) @IsString() @MinLength(2) @MaxLength(150) name!: string;
+  @Transform(({ value }) => trim(value)) @IsString() @MinLength(8) @MaxLength(30) phone!: string;
+}
+
+class WalkInEquipmentDto {
+  @Transform(({ value }) => trim(value)) @IsString() @MinLength(2) @MaxLength(180) name!: string;
+  @IsOptional() @IsEnum(EquipmentType) type?: EquipmentType;
+}
+
+export class CreateWalkInCustomerDto {
+  @IsEnum(CustomerType) type!: CustomerType;
+  @Transform(({ value }) => trim(value)) @IsString() @MinLength(2) @MaxLength(180) name!: string;
+  @Transform(({ value }) => trim(value)) @IsString() @MinLength(11) @MaxLength(18) document!: string;
+  @ValidateNested() @Type(() => WalkInAddressDto) address!: WalkInAddressDto;
+  @ValidateNested() @Type(() => WalkInContactDto) contact!: WalkInContactDto;
+  @ValidateNested() @Type(() => WalkInEquipmentDto) equipment!: WalkInEquipmentDto;
 }

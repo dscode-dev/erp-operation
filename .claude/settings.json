@@ -21,10 +21,14 @@
       "Bash(grep -viE \"node_modules|dashboard|page.tsx$\")",
       "Bash(npx jest *)",
       "Bash(cd /Users/ds_/Documents/Devs/AllBlueLabs/Applications/ERP_Operation/backend; find src/modules/maintenance-planning -name \"*.ts\"; echo \"=== syncOperationCompletedTx signature ===\"; grep -rn \"syncOperationCompletedTx\" src/modules/maintenance-planning/ ; echo \"=== service head ===\"; sed -n '1,45p' src/modules/maintenance-planning/*.service.ts 2>/dev/null | head -55)",
-      "Bash(npx nest *)"
+      "Bash(npx nest *)",
+      "Bash(sed -n '/enum EquipmentType/,/}/p' backend/prisma/schema.prisma)",
+      "Bash(sed -n '/^model Equipment {/,/customer /p' backend/prisma/schema.prisma)",
+      "Bash(cd /Users/ds_/Documents/Devs/AllBlueLabs/Applications/ERP_Operation/backend; ls src/modules/customers/dto/; echo \"=== CreateCustomerDto head ===\"; sed -n '1,40p' src/modules/customers/dto/*customer*.ts | head -50)"
     ],
     "additionalDirectories": [
-      "/Users/ds_/Documents/Devs/AllBlueLabs/Applications/ERP_Operation/backend/src/modules/maintenance-planning"
+      "/Users/ds_/Documents/Devs/AllBlueLabs/Applications/ERP_Operation/backend/src/modules/maintenance-planning",
+      "/Users/ds_/Documents/Devs/AllBlueLabs/Applications/ERP_Operation/backend/src/modules/customers/dto"
     ]
   }
 }

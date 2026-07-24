@@ -7,6 +7,7 @@ import { PageHeader } from '@platform/components/page-header';
 import { DataTable, type Column } from '@platform/components/data-table';
 import { Pagination } from '@platform/components/pagination';
 import { StatusPill } from '@erp/ui/status-pill';
+import { StatusChip } from '@erp/ui/status-chip';
 import { SkeletonList } from '@erp/ui/skeletons';
 import { EmptyState } from '@erp/ui/empty-state';
 import { ErrorState } from '@erp/ui/states';
@@ -38,7 +39,10 @@ export default function ClientesPage() {
         header: 'Cliente',
         cell: (c) => (
           <div className="min-w-0">
-            <div className="font-medium truncate">{c.name}</div>
+            <div className="flex items-center gap-2">
+              <span className="font-medium truncate">{c.name}</span>
+              {c.pendingReview && <StatusChip tone="warning">Revisão</StatusChip>}
+            </div>
             <div className="text-caption truncate">{c.tradeName ?? c.email ?? c.phone ?? '—'}</div>
           </div>
         ),

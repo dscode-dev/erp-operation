@@ -782,6 +782,8 @@ model Customer {
   secondaryPhone String?              @map("secondary_phone") @db.VarChar(30)
   notes          String?              @db.Text
   isActive       Boolean              @default(true) @map("is_active")
+  // Cadastro criado em campo (OS avulso) aguardando conclusão pelo owner.
+  pendingReview  Boolean              @default(false) @map("pending_review")
   disabledAt     DateTime?            @map("disabled_at") @db.Timestamptz(3)
   createdAt      DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt      DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)

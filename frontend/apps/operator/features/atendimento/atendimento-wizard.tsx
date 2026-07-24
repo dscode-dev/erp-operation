@@ -66,6 +66,7 @@ import {
   type OperationMaintenanceType,
   type PmocPlan,
   type PmocExecutionRequest,
+  type WalkInCustomerResult,
 } from '@erp/api';
 import { DOCUMENT_KIND_LABEL } from '@erp/types';
 import { useAuth } from '@erp/ui/auth/auth-provider';
@@ -92,6 +93,35 @@ const FIELD_DOCUMENT_TYPES: DocumentKind[] = [
 ];
 type ChecklistItem = { catalogId: string; label: string; done: boolean; note?: string };
 type OsOrigin = 'scratch' | 'rvt' | 'pmoc';
+type WalkInForm = {
+  personType: 'PERSON' | 'COMPANY';
+  name: string;
+  document: string;
+  zipCode: string;
+  street: string;
+  number: string;
+  complement: string;
+  district: string;
+  city: string;
+  state: string;
+  contactName: string;
+  contactPhone: string;
+  equipmentName: string;
+};
+const EMPTY_WALK_IN: WalkInForm = {
+  personType: 'COMPANY', name: '', document: '', zipCode: '', street: '', number: '',
+  complement: '', district: '', city: '', state: '', contactName: '', contactPhone: '', equipmentName: '',
+};
+function walkInValid(w: WalkInForm): boolean {
+  return Boolean(
+    w.name.trim() && w.document.trim() && w.zipCode.trim() && w.street.trim() && w.number.trim() &&
+    w.district.trim() && w.city.trim() && w.state.trim().length === 2 &&
+    w.contactName.trim() && w.contactPhone.trim() && w.equipmentName.trim(),
+  );
+}
+function walkInAddressLabel(w: WalkInForm): string {
+  return [w.street, w.number, w.district, w.city].filter((part) => part.trim()).join(', ') || 'Endereço do atendimento';
+}
 type OsPrefill = {
   address: { id: string; label: string } | null;
   serviceType: ServiceTypeKey | null;
@@ -139,6 +169,11 @@ export function AtendimentoWizard({
   // OS a partir de RVT/PMOC: origem escolhida logo após selecionar o cliente.
   const [osOrigin, setOsOrigin] = useState<OsOrigin | null>(null);
   const [originOpen, setOriginOpen] = useState(false);
+  // OS avulso: cadastro de cliente novo direto em campo (fica em Revisão).
+  const [walkInMode, setWalkInMode] = useState(false);
+  const [walk, setWalk] = useState<WalkInForm>(EMPTY_WALK_IN);
+  // Guarda o cadastro já criado para um retry não recriar o cliente (CNPJ/CPF único).
+  const [walkInCreated, setWalkInCreated] = useState<WalkInCustomerResult | null>(null);
 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -227,7 +262,7 @@ export function AtendimentoWizard({
   const canNext = useMemo(() => {
     switch (step) {
       case 0:
-        return !!customer;
+        return walkInMode ? walkInValid(walk) : !!customer;
       case 1:
         return true; // equipamento opcional
       case 2:
@@ -245,10 +280,12 @@ export function AtendimentoWizard({
       default:
         return false;
     }
-  }, [step, customer, serviceType, signature, signerName, technicalSignatureId]);
+  }, [step, customer, serviceType, signature, signerName, technicalSignatureId, walkInMode, walk]);
 
   function back() {
     if (step === 0) router.push('/operator');
+    // OS avulso pula o passo de Equipamento (equipamento é informado por texto).
+    else if (step === 2 && walkInMode) setStep(0);
     else setStep((s) => s - 1);
   }
 
@@ -263,8 +300,13 @@ export function AtendimentoWizard({
 
   async function next() {
     // OS: após escolher a empresa, oferece criar do zero ou a partir de RVT/PMOC.
-    if (step === 0 && documentType === 'WORK_ORDER' && customer && osOrigin === null) {
+    if (step === 0 && documentType === 'WORK_ORDER' && !walkInMode && customer && osOrigin === null) {
       setOriginOpen(true);
+      return;
+    }
+    // OS avulso: do cadastro do cliente vai direto para o Tipo (pula Equipamento).
+    if (step === 0 && walkInMode) {
+      setStep(2);
       return;
     }
     if (step < STEPS.length - 1) {
@@ -276,15 +318,45 @@ export function AtendimentoWizard({
     setSubmitError(null);
     try {
       if (!documentType) return;
+      // OS avulso: registra cliente novo (Revisão) + endereço + contato + equipamento.
+      let customerId = customer?.id ?? null;
+      let addressId = address?.id ?? null;
+      let inspectedEquipments = equipments.map((item) => ({
+        equipmentId: item.id,
+        sector: item.address?.name ?? address?.label ?? item.name,
+      }));
+      let equipmentId = equipments[0]?.id ?? null;
+      if (walkInMode) {
+        const created =
+          walkInCreated ??
+          (await customersApi.createWalkInCustomer({
+            type: walk.personType,
+            name: walk.name.trim(),
+            document: walk.document.trim(),
+            address: {
+              zipCode: walk.zipCode.trim(),
+              street: walk.street.trim(),
+              number: walk.number.trim(),
+              complement: walk.complement.trim() || undefined,
+              district: walk.district.trim(),
+              city: walk.city.trim(),
+              state: walk.state.trim().toUpperCase(),
+            },
+            contact: { name: walk.contactName.trim(), phone: walk.contactPhone.trim() },
+            equipment: { name: walk.equipmentName.trim() },
+          }));
+        setWalkInCreated(created);
+        customerId = created.customerId;
+        addressId = created.addressId;
+        equipmentId = created.equipmentId;
+        inspectedEquipments = [{ equipmentId: created.equipmentId, sector: created.addressLabel || created.equipmentName }];
+      }
       const submission = await createOperationFromDraft({
         documentType,
-        customerId: customer?.id ?? null,
-        addressId: address?.id ?? null,
-        equipmentId: equipments[0]?.id ?? null,
-        inspectedEquipments: equipments.map((item) => ({
-          equipmentId: item.id,
-          sector: item.address?.name ?? address?.label ?? item.name,
-        })),
+        customerId,
+        addressId,
+        equipmentId,
+        inspectedEquipments,
         serviceType,
         checklist,
         maintenanceType,
@@ -365,6 +437,15 @@ export function AtendimentoWizard({
 
   const isLast = step === STEPS.length - 1;
 
+  // Para o resumo/confirmação: OS avulso ainda não tem cliente/equipamento reais.
+  const displayCustomer = walkInMode
+    ? ({ id: '', name: walk.name || 'Cliente novo' } as unknown as Customer)
+    : customer;
+  const displayAddress = walkInMode ? { id: '', label: walkInAddressLabel(walk) } : address;
+  const displayEquipments = walkInMode
+    ? ([{ id: '', name: walk.equipmentName || 'Equipamento' } as unknown as EquipmentSummary])
+    : equipments;
+
   return (
     <div className="flex flex-col min-h-dvh">
       <WizardProgressHeader
@@ -377,23 +458,42 @@ export function AtendimentoWizard({
 
       <div className="flex-1 overflow-y-auto p-4">
         {step === 0 && (
-          <div className="space-y-5">
-            <ClienteStep
-              selected={customer}
-              onSelect={(c) => {
-                setCustomer(c);
-                setAddress(null);
-                setEquipments([]);
-                setOsOrigin(null);
-              }}
-            />
-            {customer && (
-              <section className="space-y-2 border-t border-[var(--color-border)] pt-4">
-                <h2 className="text-sm font-semibold">Local do atendimento</h2>
-                <EnderecoStep customerId={customer.id} selected={address} onSelect={setAddress} />
-              </section>
-            )}
-          </div>
+          walkInMode ? (
+            <WalkInStep value={walk} onChange={setWalk} onCancel={() => setWalkInMode(false)} />
+          ) : (
+            <div className="space-y-5">
+              <ClienteStep
+                selected={customer}
+                onSelect={(c) => {
+                  setCustomer(c);
+                  setAddress(null);
+                  setEquipments([]);
+                  setOsOrigin(null);
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  setWalkInMode(true);
+                  setCustomer(null);
+                  setAddress(null);
+                  setEquipments([]);
+                  setOsOrigin('scratch');
+                }}
+                className="flex w-full items-center gap-3 rounded-[var(--radius-md)] border border-dashed border-[var(--color-primary)]/40 bg-[var(--color-primary)]/5 p-3.5 text-left active:scale-[0.99]"
+              >
+                <span className="grid h-9 w-9 place-items-center rounded-[var(--radius-md)] bg-[var(--color-primary)]/10 text-[var(--color-primary)]"><Building2 className="h-4 w-4" /></span>
+                <span className="min-w-0 flex-1"><span className="block font-semibold">OS avulso — cliente novo</span><span className="block text-caption">Cadastre o cliente em campo (fica em Revisão)</span></span>
+                <ChevronRight className="h-4 w-4 text-[var(--color-muted-foreground)]" />
+              </button>
+              {customer && (
+                <section className="space-y-2 border-t border-[var(--color-border)] pt-4">
+                  <h2 className="text-sm font-semibold">Local do atendimento</h2>
+                  <EnderecoStep customerId={customer.id} selected={address} onSelect={setAddress} />
+                </section>
+              )}
+            </div>
+          )
         )}
         {step === 1 && customer && (
           <EquipamentoStep
@@ -461,9 +561,9 @@ export function AtendimentoWizard({
           <div className="space-y-5">
             <OperatorSignatureChoice selectedId={technicalSignatureId} onSelect={setTechnicalSignatureId} />
             <ResumoStep
-              customer={customer}
-              address={address}
-              equipments={equipments}
+              customer={displayCustomer}
+              address={displayAddress}
+              equipments={displayEquipments}
               serviceType={serviceType}
               checklist={checklist}
               maintenanceType={maintenanceType}
@@ -482,9 +582,9 @@ export function AtendimentoWizard({
         )}
         {step === 7 && (
           <ResumoStep
-            customer={customer}
-            address={address}
-            equipments={equipments}
+            customer={displayCustomer}
+            address={displayAddress}
+            equipments={displayEquipments}
             serviceType={serviceType}
             checklist={checklist}
             maintenanceType={maintenanceType}
@@ -791,6 +891,90 @@ function OriginPick({ title, subtitle, busy, disabled, onClick }: { title: strin
       <span className="min-w-0 flex-1"><span className="block font-semibold">{title}</span><span className="block truncate text-xs text-[var(--color-muted-foreground)]">{subtitle}</span></span>
       {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : <ChevronRight className="h-5 w-5" />}
     </button>
+  );
+}
+
+function WalkInStep({
+  value,
+  onChange,
+  onCancel,
+}: {
+  value: WalkInForm;
+  onChange: (v: WalkInForm) => void;
+  onCancel: () => void;
+}) {
+  const setField = (key: keyof Omit<WalkInForm, 'personType'>, v: string) => onChange({ ...value, [key]: v });
+  return (
+    <div className="space-y-5">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="font-semibold">Cliente novo (OS avulso)</h2>
+          <p className="text-caption">O cadastro fica em <strong>Revisão</strong> para a gestão concluir depois — não bloqueia o atendimento, a OS nem o relatório.</p>
+        </div>
+        <button type="button" onClick={onCancel} className="shrink-0 text-xs font-medium text-[var(--color-primary)]">Usar existente</button>
+      </div>
+
+      <section className="space-y-3">
+        <div className="grid grid-cols-2 gap-2">
+          {(['COMPANY', 'PERSON'] as const).map((t) => (
+            <button key={t} type="button" onClick={() => onChange({ ...value, personType: t })} className={`rounded-[var(--radius-md)] border p-2.5 text-sm font-medium ${value.personType === t ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5' : 'border-[var(--color-border)]'}`}>
+              {t === 'COMPANY' ? 'Empresa (CNPJ)' : 'Pessoa (CPF)'}
+            </button>
+          ))}
+        </div>
+        <WalkField label="Nome / Razão social *" value={value.name} onChange={(v) => setField('name', v)} />
+        <WalkField label={value.personType === 'COMPANY' ? 'CNPJ *' : 'CPF *'} value={value.document} onChange={(v) => setField('document', v)} />
+      </section>
+
+      <section className="space-y-3 border-t border-[var(--color-border)] pt-4">
+        <h3 className="text-sm font-semibold">Endereço</h3>
+        <div className="grid grid-cols-3 gap-2">
+          <WalkField label="CEP *" value={value.zipCode} onChange={(v) => setField('zipCode', v)} />
+          <WalkField className="col-span-2" label="Cidade *" value={value.city} onChange={(v) => setField('city', v)} />
+        </div>
+        <WalkField label="Logradouro *" value={value.street} onChange={(v) => setField('street', v)} />
+        <div className="grid grid-cols-3 gap-2">
+          <WalkField label="Número *" value={value.number} onChange={(v) => setField('number', v)} />
+          <WalkField className="col-span-2" label="Bairro *" value={value.district} onChange={(v) => setField('district', v)} />
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          <WalkField className="col-span-2" label="Complemento" value={value.complement} onChange={(v) => setField('complement', v)} />
+          <WalkField label="UF *" value={value.state} onChange={(v) => setField('state', v.toUpperCase().slice(0, 2))} />
+        </div>
+      </section>
+
+      <section className="space-y-3 border-t border-[var(--color-border)] pt-4">
+        <h3 className="text-sm font-semibold">Contato</h3>
+        <WalkField label="Nome do contato *" value={value.contactName} onChange={(v) => setField('contactName', v)} />
+        <WalkField label="Telefone *" value={value.contactPhone} onChange={(v) => setField('contactPhone', v)} />
+      </section>
+
+      <section className="space-y-3 border-t border-[var(--color-border)] pt-4">
+        <h3 className="text-sm font-semibold">Equipamento</h3>
+        <WalkField label="Descrição do equipamento *" value={value.equipmentName} onChange={(v) => setField('equipmentName', v)} placeholder="Ex.: Split Midea 12.000 BTUs — Recepção" />
+      </section>
+    </div>
+  );
+}
+
+function WalkField({
+  label,
+  value,
+  onChange,
+  placeholder,
+  className,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  className?: string;
+}) {
+  return (
+    <label className={`block space-y-1 ${className ?? ''}`}>
+      <span className="text-xs font-medium text-[var(--color-muted-foreground)]">{label}</span>
+      <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-3 h-11 text-sm outline-none focus:border-[var(--color-primary)]" />
+    </label>
   );
 }
 

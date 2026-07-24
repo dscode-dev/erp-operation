@@ -24,6 +24,7 @@ import type { AuthenticatedUser } from '../../shared/types/authenticated-user.ty
 import type { RequestWithId } from '../../shared/types/request-with-id.type';
 import {
   CreateCustomerDto,
+  CreateWalkInCustomerDto,
   CustomerAddressDto,
   CustomerContactDto,
   ListCustomersQueryDto,
@@ -59,6 +60,17 @@ export class CustomersController {
     @Req() request: RequestWithId,
   ): Promise<unknown> {
     return this.customers.create(body, actor, this.context(request));
+  }
+
+  // OS avulso: operador registra um cliente novo em campo (fica em Revisão).
+  @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR)
+  @Post('walk-in')
+  createWalkIn(
+    @Body() body: CreateWalkInCustomerDto,
+    @CurrentUser() actor: AuthenticatedUser,
+    @Req() request: RequestWithId,
+  ): Promise<unknown> {
+    return this.customers.createWalkIn(body, actor, this.context(request));
   }
 
   @Roles(Role.OWNER, Role.MANAGER)

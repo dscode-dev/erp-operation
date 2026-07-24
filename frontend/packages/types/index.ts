@@ -400,6 +400,7 @@ export type Customer = {
   secondaryPhone: string | null;
   notes: string | null;
   isActive: boolean;
+  pendingReview: boolean;
   disabledAt: string | null;
   createdAt: string;
   updatedAt: string;

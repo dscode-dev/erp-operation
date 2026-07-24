@@ -33,6 +33,36 @@ export function createCustomer(payload: CreateCustomerPayload): Promise<Customer
   return api.post<Customer>("/customers", payload);
 }
 
+export type WalkInCustomerPayload = {
+  type: "PERSON" | "COMPANY";
+  name: string;
+  document: string;
+  address: {
+    zipCode: string;
+    street: string;
+    number: string;
+    complement?: string;
+    district: string;
+    city: string;
+    state: string;
+  };
+  contact: { name: string; phone: string };
+  equipment: { name: string; type?: string };
+};
+
+export type WalkInCustomerResult = {
+  customerId: string;
+  addressId: string;
+  addressLabel: string;
+  equipmentId: string;
+  equipmentName: string;
+};
+
+/** OS avulso: registra um cliente novo em campo (fica em Revisão). */
+export function createWalkInCustomer(payload: WalkInCustomerPayload): Promise<WalkInCustomerResult> {
+  return api.post<WalkInCustomerResult>("/customers/walk-in", payload);
+}
+
 export function updateCustomer(
   id: string,
   payload: Partial<CreateCustomerPayload>,

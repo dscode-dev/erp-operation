@@ -1,5 +1,5 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import { CustomerType, Prisma } from '@prisma/client';
+import { CustomerType, EquipmentType, Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { extname } from 'node:path';
 import {
@@ -23,6 +23,7 @@ import { buildPaginatedResponse } from '../../shared/types/pagination.types';
 import { PrismaService } from '../database/prisma.service';
 import type {
   CreateCustomerDto,
+  CreateWalkInCustomerDto,
   CustomerAddressDto,
   CustomerContactDto,
   ListCustomersQueryDto,
@@ -121,6 +122,92 @@ export class CustomersService {
     }
   }
 
+  /**
+   * OS avulso: cadastro criado pelo operador em campo (cliente novo). Cria em uma
+   * transação o cliente (pendingReview=true, sem bloquear atendimento) + endereço
+   * + contato + equipamento vinculado. O owner conclui o cadastro depois.
+   */
+  async createWalkIn(
+    dto: CreateWalkInCustomerDto,
+    actor: AuthenticatedUser,
+    context: CustomerAuditContext,
+  ): Promise<{
+    customerId: string;
+    addressId: string;
+    addressLabel: string;
+    equipmentId: string;
+    equipmentName: string;
+  }> {
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const customer = await tx.customer.create({
+          data: {
+            type: dto.type,
+            name: dto.name,
+            ...(dto.type === CustomerType.COMPANY
+              ? { cnpj: dto.document }
+              : { cpf: dto.document }),
+            pendingReview: true,
+          },
+        });
+        const address = await tx.customerAddress.create({
+          data: {
+            customerId: customer.id,
+            name: 'Local do atendimento',
+            zipCode: dto.address.zipCode,
+            street: dto.address.street,
+            number: dto.address.number,
+            complement: dto.address.complement ?? null,
+            district: dto.address.district,
+            city: dto.address.city,
+            state: dto.address.state,
+            isPrimary: true,
+          },
+        });
+        await tx.customerContact.create({
+          data: {
+            customerId: customer.id,
+            name: dto.contact.name,
+            phone: dto.contact.phone,
+            isPrimary: true,
+          },
+        });
+        const qrToken = randomUUID();
+        const equipment = await tx.equipment.create({
+          data: {
+            customerId: customer.id,
+            addressId: address.id,
+            type: dto.equipment.type ?? EquipmentType.OTHER,
+            name: dto.equipment.name,
+            qrToken,
+            qrCode: `equipment:${qrToken}`,
+          },
+        });
+        await tx.auditLog.create({
+          data: this.audit(CUSTOMER_AUDIT_ACTIONS.CUSTOMER_CREATED, CUSTOMER_RESOURCE, actor, context, {
+            customerId: customer.id,
+            type: customer.type,
+            pendingReview: true,
+            origin: 'WALK_IN',
+            equipmentId: equipment.id,
+          }),
+        });
+        return {
+          customerId: customer.id,
+          addressId: address.id,
+          addressLabel: [dto.address.street, dto.address.number, dto.address.district, dto.address.city]
+            .filter(Boolean)
+            .join(', '),
+          equipmentId: equipment.id,
+          equipmentName: equipment.name,
+        };
+      });
+    } catch (error: unknown) {
+      this.handleConflict(error);
+      throw error;
+    }
+  }
+
   async update(
     id: string,
     dto: UpdateCustomerDto,
@@ -132,7 +219,8 @@ export class CustomersService {
       return await this.prisma.$transaction(async (tx) => {
         const customer = await tx.customer.update({
           where: { id },
-          data: dto,
+          // Editar o cliente conclui a revisão do cadastro criado em campo.
+          data: { ...dto, pendingReview: false },
           include: CUSTOMER_INCLUDE,
         });
         await tx.auditLog.create({
