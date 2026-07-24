@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CalendarClock, Check, ChevronLeft, ChevronRight, ClipboardList, FileText, Loader2, ShieldCheck } from "lucide-react";
+import { CalendarClock, Check, ChevronLeft, ChevronRight, ClipboardList, FileText, Loader2, ShieldCheck, X } from "lucide-react";
 import { Drawer } from "@erp/ui/drawer";
 import { MultiSelect } from "@erp/ui/multi-select";
 import { SkeletonList } from "@erp/ui/skeletons";
@@ -26,7 +26,7 @@ import {
   type PmocPlan,
 } from "@erp/api";
 import { DOCUMENT_KIND_LABEL } from "@erp/types";
-import { useDebounce } from "@erp/utils";
+import { useDebounce, useLocalDraft } from "@erp/utils";
 import {
   CustomerAddressSelect,
   CustomerSelect,
@@ -39,6 +39,23 @@ import {
 
 type Mode = "operation" | "schedule" | "service" | "work-order";
 type Step = 0 | 1 | 2 | 3 | 4;
+// Snapshot serializável do formulário para o rascunho local (OS avulsa).
+type OperationDraftSnapshot = {
+  step: Step;
+  customerId: string;
+  addressId: string;
+  equipmentId: string;
+  equipmentIds: string[];
+  operatorId: string;
+  type: OperationType;
+  documentType: DocumentKind;
+  date: string;
+  time: string;
+  checklist: string[];
+  observations: string;
+  reportedIssue: string;
+  serviceDescription: string;
+};
 type PmocOperationDraft = {
   plan: PmocPlan;
   request: PmocExecutionRequest;
@@ -137,11 +154,75 @@ export function OperationCreationDrawer({
     [customerId],
   );
 
+  // Rascunho local: só na criação de OS avulsa do zero (mode operation, sem prefill).
+  const draftEnabled = mode === "operation" && !initialValues;
+  const draft = useLocalDraft<OperationDraftSnapshot>("operation-avulsa", draftEnabled);
+  const [recoveredAt, setRecoveredAt] = useState<string | null>(null);
+
+  // Memoizado para manter a referência estável enquanto os campos não mudam
+  // (evita reiniciar o debounce do autosave a cada render).
+  const snapshot = useMemo<OperationDraftSnapshot>(
+    () => ({
+      step,
+      customerId,
+      addressId,
+      equipmentId,
+      equipmentIds,
+      operatorId,
+      type,
+      documentType,
+      date,
+      time,
+      checklist,
+      observations,
+      reportedIssue,
+      serviceDescription,
+    }),
+    [
+      step,
+      customerId,
+      addressId,
+      equipmentId,
+      equipmentIds,
+      operatorId,
+      type,
+      documentType,
+      date,
+      time,
+      checklist,
+      observations,
+      reportedIssue,
+      serviceDescription,
+    ],
+  );
+  const draftDirty =
+    Boolean(customerId || observations.trim() || reportedIssue.trim() || serviceDescription.trim()) ||
+    equipmentIds.length > 0 ||
+    checklist.length > 0;
+
+  function applySnapshot(value: OperationDraftSnapshot) {
+    setStep(value.step);
+    setCustomerId(value.customerId);
+    setAddressId(value.addressId);
+    setEquipmentId(value.equipmentId);
+    setEquipmentIds(value.equipmentIds);
+    setOperatorId(value.operatorId);
+    setType(value.type);
+    setDocumentType(value.documentType);
+    setDate(value.date);
+    setTime(value.time);
+    setChecklist(value.checklist);
+    setObservations(value.observations);
+    setReportedIssue(value.reportedIssue);
+    setServiceDescription(value.serviceDescription);
+  }
+
   useEffect(() => {
     if (!open) {
       setPmocDraft(null);
       setRvtPrefill(null);
       setSource("manual");
+      setRecoveredAt(null);
       return;
     }
     setStep(0);
@@ -166,6 +247,27 @@ export function OperationCreationDrawer({
     setError(null);
     setCreated(null);
   }, [activeInitialValues, open, pmocDraft]);
+
+  // Restaura o rascunho local ao abrir (roda após o reset acima, sobrescrevendo-o).
+  useEffect(() => {
+    if (!open || !draftEnabled) return;
+    const stored = draft.read();
+    if (stored?.value) {
+      applySnapshot(stored.value);
+      setRecoveredAt(stored.savedAt);
+      draft.markSavedAt(stored.savedAt);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  // Autosave (debounced) enquanto a OS avulsa tem conteúdo e não foi criada.
+  const debouncedSnapshot = useDebounce(snapshot, 800);
+  useEffect(() => {
+    if (!open || !draftEnabled || source !== "manual" || created) return;
+    if (!draftDirty) return;
+    draft.save(debouncedSnapshot);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSnapshot, open, draftEnabled, source, created]);
 
   const scheduledFor = useMemo(() => {
     if (!date || !time) return null;
@@ -243,6 +345,9 @@ export function OperationCreationDrawer({
           : await operationApi.createOperation(payload);
       }
       setCreated(operation);
+      // A operação foi criada no backend — o rascunho local não é mais necessário.
+      draft.clear();
+      setRecoveredAt(null);
       onCreated?.(operation);
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Não foi possível criar a operação.");
@@ -268,6 +373,24 @@ export function OperationCreationDrawer({
             <button onClick={step === 0 ? onClose : () => setStep((s) => Math.max(0, s - 1) as Step)} className={secondaryBtn}>
               {step === 0 ? "Cancelar" : <><ChevronLeft className="h-4 w-4" /> Voltar</>}
             </button>
+            {draftEnabled && source === "manual" && (
+              <button
+                type="button"
+                onClick={() => {
+                  draft.save(snapshot);
+                  onClose();
+                }}
+                className={`${secondaryBtn} mr-auto`}
+                title="Salva o que já foi preenchido para continuar depois neste dispositivo."
+              >
+                Salvar rascunho
+                {draft.savedAt && (
+                  <span className="text-caption">
+                    · {new Date(draft.savedAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                )}
+              </button>
+            )}
             {step < 4 ? (
               <button onClick={() => setStep((s) => Math.min(4, s + 1) as Step)} disabled={!canNext} className={primaryBtn}>
                 Avançar <ChevronRight className="h-4 w-4" />
@@ -283,6 +406,50 @@ export function OperationCreationDrawer({
     >
       <div className="space-y-5">
         <p className="text-sm text-[var(--color-muted-foreground)]">{copy.description}</p>
+        {recoveredAt && !created && source === "manual" && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-md)] border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm">
+            <span>
+              Rascunho recuperado — salvo em{" "}
+              {new Date(recoveredAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}.
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  applySnapshot({
+                    step: 0,
+                    customerId: "",
+                    addressId: "",
+                    equipmentId: "",
+                    equipmentIds: [],
+                    operatorId: "",
+                    type: "PREVENTIVA",
+                    documentType: "WORK_ORDER",
+                    date: "",
+                    time: "",
+                    checklist: [],
+                    observations: "",
+                    reportedIssue: "",
+                    serviceDescription: "",
+                  });
+                  draft.clear();
+                  setRecoveredAt(null);
+                }}
+                className="h-8 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-background)] px-3 text-xs"
+              >
+                Descartar rascunho
+              </button>
+              <button
+                type="button"
+                onClick={() => setRecoveredAt(null)}
+                className="rounded-[var(--radius-md)] p-1 hover:bg-black/5"
+                aria-label="Ocultar aviso"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        )}
         {!created && canChooseSource && (
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             <SourceCard active={source === "pmoc"} onClick={() => { setRvtPrefill(null); setSource("pmoc"); }} icon={ShieldCheck} title="A partir de um PMOC" description="Revise os dados do plano antes de criar a OS." />

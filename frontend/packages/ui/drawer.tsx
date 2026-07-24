@@ -18,6 +18,7 @@ export function Drawer({
   children,
   footer,
   width = "max-w-xl",
+  dismissOnOverlayClick = false,
 }: {
   open: boolean;
   onClose: () => void;
@@ -26,6 +27,12 @@ export function Drawer({
   children: ReactNode;
   footer?: ReactNode;
   width?: string;
+  /**
+   * Fechar ao clicar no overlay. Desligado por padrão para evitar que um clique
+   * acidental fora do drawer descarte um formulário preenchido — o usuário fecha
+   * pelo X, pelo botão de cancelar ou por Escape.
+   */
+  dismissOnOverlayClick?: boolean;
 }) {
   useEffect(() => {
     if (!open) return;
@@ -44,7 +51,10 @@ export function Drawer({
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-fade-in" onClick={onClose} />
+      <div
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-fade-in"
+        onClick={dismissOnOverlayClick ? onClose : undefined}
+      />
       <aside
         role="dialog"
         aria-modal="true"

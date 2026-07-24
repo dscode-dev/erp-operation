@@ -61,7 +61,14 @@ import { SignaturePad } from '@erp/ui/documents/signature-pad';
 import { MultiSelect } from '@erp/ui/multi-select';
 import { TechnicalCatalogSelector } from '@erp/ui/technical-catalog/technical-catalog-selector';
 import { DOCUMENT_KIND_LABEL } from '@erp/types';
-import { brlAmountInWords, formatBrl, formatDate, parseBrl } from '@erp/utils';
+import {
+  brlAmountInWords,
+  formatBrl,
+  formatDate,
+  parseBrl,
+  useDebounce,
+  useLocalDraft,
+} from '@erp/utils';
 
 const REPORT_TYPES: Array<{
   type: DocumentKind;
@@ -597,6 +604,11 @@ function ReportWorkflowDrawer({
     null,
   );
   const [error, setError] = useState<string | null>(null);
+  // Rascunho local: protege o formulário de perdas por fechamento acidental.
+  // Desligado quando o fluxo já nasce vinculado a uma OS/venda (pré-preenchido).
+  const draftEnabled = !initialOperationId && !initialSaleId;
+  const draft = useLocalDraft<WorkflowForm>(`reports:new:${type}`, draftEnabled);
+  const [recoveredAt, setRecoveredAt] = useState<string | null>(null);
   const customers = useQuery<Paginated<Customer>>(
     (signal) => customersApi.listCustomers({ page: 1, limit: 100, signal }),
     [],
@@ -721,6 +733,27 @@ function ReportWorkflowDrawer({
     form.customerId,
     selectedCustomer,
   ]);
+
+  // Restaura o rascunho local uma vez, ao abrir o fluxo em branco.
+  useEffect(() => {
+    if (!draftEnabled) return;
+    const stored = draft.read();
+    if (stored) {
+      setForm(stored.value);
+      setRecoveredAt(stored.savedAt);
+      draft.markSavedAt(stored.savedAt);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Autosave: persiste o formulário (debounced) enquanto houver conteúdo.
+  const debouncedForm = useDebounce(form, 800);
+  useEffect(() => {
+    if (!draftEnabled) return;
+    if (JSON.stringify(debouncedForm) === JSON.stringify(emptyForm)) return;
+    draft.save(debouncedForm);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedForm, draftEnabled]);
 
   useEffect(() => {
     if (initialOperationId) void selectOperation(initialOperationId);
@@ -1338,6 +1371,9 @@ function ReportWorkflowDrawer({
       }
       setHandoff(documentDraft);
       setStep(type === 'RECEIPT' ? 4 : 3);
+      // O registro já existe no backend — o rascunho local não é mais necessário.
+      draft.clear();
+      setRecoveredAt(null);
     } catch (cause) {
       setError(message(cause));
     } finally {
@@ -1372,6 +1408,28 @@ function ReportWorkflowDrawer({
             >
               {step > 0 ? 'Voltar' : 'Cancelar'}
             </button>
+            {draftEnabled && step < previewStep && (
+              <button
+                type="button"
+                onClick={() => {
+                  draft.save(form);
+                  onClose();
+                }}
+                className="mr-auto inline-flex h-9 items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] px-4 text-sm hover:bg-[var(--color-muted)]"
+                title="Salva o que já foi preenchido para continuar depois neste dispositivo."
+              >
+                Salvar rascunho
+                {draft.savedAt && (
+                  <span className="text-caption">
+                    salvo{' '}
+                    {new Date(draft.savedAt).toLocaleTimeString('pt-BR', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </span>
+                )}
+              </button>
+            )}
             {step < previewStep - 1 && (
               <button
                 type="button"
@@ -1414,6 +1472,42 @@ function ReportWorkflowDrawer({
         {error && (
           <div className="mb-4 rounded-[var(--radius-md)] border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-700">
             {error}
+          </div>
+        )}
+        {recoveredAt && step < previewStep && (
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-md)] border border-amber-500/30 bg-amber-500/10 p-3 text-sm">
+            <span>
+              Rascunho recuperado — salvo em{' '}
+              {new Date(recoveredAt).toLocaleString('pt-BR', {
+                day: '2-digit',
+                month: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
+              .
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setForm(emptyForm);
+                  setStep(0);
+                  draft.clear();
+                  setRecoveredAt(null);
+                }}
+                className="h-8 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-background)] px-3 text-xs"
+              >
+                Descartar rascunho
+              </button>
+              <button
+                type="button"
+                onClick={() => setRecoveredAt(null)}
+                className="rounded-[var(--radius-md)] p-1 hover:bg-black/5"
+                aria-label="Ocultar aviso"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
           </div>
         )}
         {configuration.loading ? (
