@@ -58,6 +58,8 @@ export function OperatorHome() {
   const ongoing = items.filter((item) => item.status === "STARTED");
   const upcoming = items.filter((item) => Boolean(item.operation.scheduledFor) && !isSameDay(item.operation.scheduledFor) && !isPast(item)).slice(0, 4);
   const overdue = items.filter(isPast);
+  // Dashboard: acesso rápido só aos atendimentos já concluídos (mais recentes).
+  const recentCompleted = items.filter((item) => item.status === "COMPLETED").slice(-8).reverse();
 
   return (
     <div className="px-4 pt-4 pb-24 space-y-6">
@@ -89,23 +91,12 @@ export function OperatorHome() {
         <SkeletonList rows={4} />
       ) : assignments.error && !assignments.data ? (
         <ErrorState error={assignments.error} onRetry={assignments.refetch} />
-      ) : items.length === 0 ? (
-        <EmptyState icon={Wrench} title="Sem atividades atribuídas" description="Você pode iniciar um atendimento agora ou aguardar uma atividade enviada pela gestão." />
+      ) : recentCompleted.length === 0 ? (
+        <EmptyState icon={Wrench} title="Nenhum atendimento concluído" description="Seus atendimentos concluídos aparecerão aqui para acesso rápido às informações." />
       ) : (
-        <>
-          {ongoing.length > 0 && (
-            <Section title="Em andamento">
-              {ongoing.map((assignment) => <AssignmentCard key={assignment.id} assignment={assignment} />)}
-            </Section>
-          )}
-          {today.length > 0 && <Section title="Hoje">{today.map((assignment) => <AssignmentCard key={assignment.id} assignment={assignment} />)}</Section>}
-          {today.length === 0 && <Section title="Minhas atividades">{items.slice(0, 3).map((assignment) => <AssignmentCard key={assignment.id} assignment={assignment} />)}</Section>}
-          {overdue.length > 0 && (
-            <Section title="Atrasadas">
-              {overdue.map((assignment) => <AssignmentCard key={assignment.id} assignment={assignment} />)}
-            </Section>
-          )}
-        </>
+        <Section title="Concluídos recentes">
+          {recentCompleted.map((assignment) => <AssignmentCard key={assignment.id} assignment={assignment} compact />)}
+        </Section>
       )}
 
       <Link href="/operator/sync" className="inline-flex items-center gap-2 text-sm text-[var(--color-muted-foreground)]">

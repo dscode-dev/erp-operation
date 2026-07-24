@@ -1132,6 +1132,11 @@ model Assignment {
   assignedBy      String              @map("assigned_by") @db.Uuid
   assignedTo      String              @map("assigned_to") @db.Uuid
   status          AssignmentStatus    @default(ASSIGNED)
+  // Visibilidade no app do operador: demandas criadas pela gestão só aparecem
+  // após o owner autorizar. Auto-liberado quando o próprio operador se atribui.
+  operatorVisible Boolean             @default(false) @map("operator_visible")
+  authorizedAt    DateTime?           @map("authorized_at") @db.Timestamptz(3)
+  authorizedBy    String?             @map("authorized_by") @db.Uuid
   assignedAt      DateTime            @default(now()) @map("assigned_at") @db.Timestamptz(3)
   acceptedAt      DateTime?           @map("accepted_at") @db.Timestamptz(3)
   startedAt       DateTime?           @map("started_at") @db.Timestamptz(3)

@@ -45,6 +45,34 @@ export function reassignAssignment(id: string, payload: ReassignAssignmentPayloa
   return api.patch<Assignment>(`/assignments/${id}/reassign`, payload);
 }
 
+export type PendingDemandItem = {
+  assignmentId: string;
+  operationId: string;
+  number: number;
+  type: string;
+  scheduledFor: string | null;
+  customerName: string | null;
+};
+export type PendingDemandGroup = {
+  operator: { id: string; name: string; username: string };
+  total: number;
+  items: PendingDemandItem[];
+};
+
+/** Demandas (ASSIGNED) aguardando autorização de exibição no app do operador. */
+export function listPendingDemands(opts?: { signal?: AbortSignal }): Promise<PendingDemandGroup[]> {
+  return api.get<PendingDemandGroup[]>("/assignments/pending-authorization", opts);
+}
+
+/** Autoriza a exibição no app do operador (por técnico, por dia e/ou ids). */
+export function authorizeDemands(payload: {
+  operatorId?: string;
+  date?: string;
+  assignmentIds?: string[];
+}): Promise<{ authorized: number }> {
+  return api.post<{ authorized: number }>("/assignments/authorize", payload);
+}
+
 export function acceptAssignment(id: string): Promise<Assignment> {
   return api.patch<Assignment>(`/assignments/${id}/accept`, {});
 }

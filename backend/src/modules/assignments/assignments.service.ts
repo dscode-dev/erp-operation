@@ -21,6 +21,7 @@ import { MaintenancePlanningService } from '../maintenance-planning/maintenance-
 import { NotificationsService } from '../notifications/notifications.service';
 import type {
   AssignmentNotesDto,
+  AuthorizeDemandsDto,
   CreateAssignmentDto,
   ListAssignmentsQueryDto,
   ReassignAssignmentDto,
@@ -98,7 +99,8 @@ export class AssignmentsService {
   ) {}
 
   async list(query: ListAssignmentsQueryDto, actor: AuthenticatedUser): Promise<unknown> {
-    const where = this.listWhere(query, actor.role === Role.OPERATOR ? actor.id : undefined);
+    const isOperator = actor.role === Role.OPERATOR;
+    const where = this.listWhere(query, isOperator ? actor.id : undefined, isOperator);
     const [items, total] = await this.prisma.$transaction([
       this.prisma.assignment.findMany({
         where,
@@ -113,7 +115,7 @@ export class AssignmentsService {
   }
 
   async my(query: ListAssignmentsQueryDto, actor: AuthenticatedUser): Promise<unknown> {
-    const where = this.listWhere(query, actor.id);
+    const where = this.listWhere(query, actor.id, actor.role === Role.OPERATOR);
     const [items, total] = await this.prisma.$transaction([
       this.prisma.assignment.findMany({
         where,
@@ -125,6 +127,84 @@ export class AssignmentsService {
       this.prisma.assignment.count({ where }),
     ]);
     return buildPaginatedResponse(items, total, query.page, query.limit);
+  }
+
+  /** Demandas (ASSIGNED) ainda não autorizadas, agrupadas por técnico. */
+  async pendingAuthorization(): Promise<unknown> {
+    const pending = await this.prisma.assignment.findMany({
+      where: { status: AssignmentStatus.ASSIGNED, operatorVisible: false },
+      orderBy: [{ assignedTo: 'asc' }, { operation: { scheduledFor: 'asc' } }],
+      select: {
+        id: true,
+        assignedTo: true,
+        assignee: { select: { id: true, name: true, username: true } },
+        operation: {
+          select: {
+            id: true,
+            number: true,
+            type: true,
+            scheduledFor: true,
+            customer: { select: { name: true, tradeName: true } },
+          },
+        },
+      },
+    });
+    const groups = new Map<
+      string,
+      {
+        operator: { id: string; name: string; username: string };
+        total: number;
+        items: Array<{
+          assignmentId: string;
+          operationId: string;
+          number: number;
+          type: string;
+          scheduledFor: string | null;
+          customerName: string | null;
+        }>;
+      }
+    >();
+    for (const item of pending) {
+      let group = groups.get(item.assignedTo);
+      if (!group) {
+        group = { operator: item.assignee, total: 0, items: [] };
+        groups.set(item.assignedTo, group);
+      }
+      group.total += 1;
+      group.items.push({
+        assignmentId: item.id,
+        operationId: item.operation.id,
+        number: item.operation.number,
+        type: item.operation.type,
+        scheduledFor: item.operation.scheduledFor ? item.operation.scheduledFor.toISOString() : null,
+        customerName: item.operation.customer?.tradeName ?? item.operation.customer?.name ?? null,
+      });
+    }
+    return [...groups.values()];
+  }
+
+  /** Libera a exibição no app do operador (por técnico, por dia e/ou ids). */
+  async authorize(dto: AuthorizeDemandsDto, actor: AuthenticatedUser): Promise<{ authorized: number }> {
+    const where: Prisma.AssignmentWhereInput = {
+      status: AssignmentStatus.ASSIGNED,
+      operatorVisible: false,
+      ...(dto.assignmentIds?.length ? { id: { in: dto.assignmentIds } } : {}),
+      ...(dto.operatorId ? { assignedTo: dto.operatorId } : {}),
+    };
+    if (dto.date) {
+      const day = dto.date.slice(0, 10);
+      where.operation = {
+        scheduledFor: {
+          gte: new Date(`${day}T00:00:00.000Z`),
+          lte: new Date(`${day}T23:59:59.999Z`),
+        },
+      };
+    }
+    const result = await this.prisma.assignment.updateMany({
+      where,
+      data: { operatorVisible: true, authorizedAt: new Date(), authorizedBy: actor.id },
+    });
+    return { authorized: result.count };
   }
 
   async get(id: string, actor: AuthenticatedUser): Promise<AssignmentPayload> {
@@ -206,6 +286,10 @@ export class AssignmentsService {
           assignedTo: dto.assignedTo,
           assignedAt: now,
           status: AssignmentStatus.ASSIGNED,
+          // Reatribuição volta a exigir autorização, salvo auto-atribuição.
+          operatorVisible: actor.id === dto.assignedTo,
+          authorizedAt: actor.id === dto.assignedTo ? now : null,
+          authorizedBy: actor.id === dto.assignedTo ? actor.id : null,
           acceptedAt: null,
           startedAt: null,
           completedAt: null,
@@ -408,12 +492,18 @@ export class AssignmentsService {
     context?: Partial<AssignmentAuditContext>,
   ): Promise<{ id: string }> {
     await this.operationalUserOrThrowTx(tx, input.assignedTo);
+    // Auto-atribuição (o operador iniciou o próprio atendimento) já nasce visível;
+    // demanda criada pela gestão fica oculta até o owner autorizar a exibição.
+    const selfAssigned = input.assignedBy === input.assignedTo;
     const assignment = await tx.assignment.create({
       data: {
         operationId: input.operationId,
         assignedBy: input.assignedBy,
         assignedTo: input.assignedTo,
         notes: input.notes ?? null,
+        operatorVisible: selfAssigned,
+        authorizedAt: selfAssigned ? new Date() : null,
+        authorizedBy: selfAssigned ? input.assignedBy : null,
       },
     });
     // An assigned operation becomes PENDING until the operator starts it.
@@ -536,13 +626,22 @@ export class AssignmentsService {
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
-  private listWhere(query: ListAssignmentsQueryDto, forcedAssignee?: string): Prisma.AssignmentWhereInput {
+  private listWhere(
+    query: ListAssignmentsQueryDto,
+    forcedAssignee?: string,
+    gateVisibility = false,
+  ): Prisma.AssignmentWhereInput {
     return {
       ...(query.operationId ? { operationId: query.operationId } : {}),
       ...(query.status ? { status: query.status } : {}),
       ...(forcedAssignee ? { assignedTo: forcedAssignee } : query.assignedTo ? { assignedTo: query.assignedTo } : {}),
       ...(query.customerId ? { operation: { customerId: query.customerId } } : {}),
       ...(query.equipmentId ? { operation: { equipmentId: query.equipmentId } } : {}),
+      // App do operador: só demandas autorizadas pela gestão. Itens já aceitos/
+      // em andamento/concluídos permanecem visíveis (histórico e execução).
+      ...(gateVisibility
+        ? { OR: [{ operatorVisible: true }, { status: { not: AssignmentStatus.ASSIGNED } }] }
+        : {}),
     };
   }
 

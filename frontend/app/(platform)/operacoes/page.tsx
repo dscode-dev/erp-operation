@@ -7,7 +7,7 @@
  */
 import { Suspense, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { ClipboardList, Plus } from "lucide-react";
+import { CalendarClock, Check, ClipboardList, Loader2, Plus, ShieldCheck, Users } from "lucide-react";
 import { PageHeader } from "@platform/components/page-header";
 import { DataTable, type Column } from "@platform/components/data-table";
 import { Pagination } from "@platform/components/pagination";
@@ -20,9 +20,12 @@ import { ErrorState } from "@erp/ui/states";
 import { OperationDetailDrawer } from "@platform/components/operation-detail-drawer";
 import { OperationCreationDrawer } from "@platform/components/operation-creation-drawer";
 import { Gate } from "@erp/ui/auth/gate";
+import { useAuth } from "@erp/ui/auth/auth-provider";
 import { OPERATION_STATUS, OPERATION_TYPE_LABEL, operationCode } from "@erp/ui/operations/operation-shared";
-import { operationApi, useQuery, type OperationSummary, type OperationStatus } from "@erp/api";
+import { assignmentsApi, operationApi, useQuery, type OperationSummary, type OperationStatus, type PendingDemandGroup } from "@erp/api";
 import { useDebounce, formatDateTime } from "@erp/utils";
+
+type OpsTab = "overview" | "authorize";
 
 const STATUS_FILTERS: Array<{ key: "all" | OperationStatus; label: string }> = [
   { key: "all", label: "Todas" },
@@ -40,6 +43,9 @@ function OperacoesInner() {
   const equipmentId = params.get("equipmentId") ?? undefined;
   const initialStatus = parseStatus(params.get("status"));
 
+  const { hasRole } = useAuth();
+  const canAuthorize = hasRole("OWNER", "MANAGER");
+  const [tab, setTab] = useState<OpsTab>("overview");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<"all" | OperationStatus>(initialStatus);
   const [page, setPage] = useState(1);
@@ -120,6 +126,24 @@ function OperacoesInner() {
         }
       />
 
+      {canAuthorize && (
+        <nav className="flex gap-1 border-b border-[var(--color-border)]">
+          {([["overview", "Visão geral"], ["authorize", "Autorizar demandas"]] as const).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setTab(value)}
+              className={`px-4 py-2.5 text-sm font-medium ${tab === value ? "border-b-2 border-[var(--color-primary)] text-[var(--color-primary)]" : "text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]"}`}
+            >
+              {label}
+            </button>
+          ))}
+        </nav>
+      )}
+
+      {canAuthorize && tab === "authorize" && <AuthorizeDemands />}
+
+      {(!canAuthorize || tab === "overview") && <>
       <FilterBar search={search} onSearch={(v) => { setSearch(v); setPage(1); }} searchPlaceholder="Buscar por cliente, equipamento, operador…">
         {STATUS_FILTERS.map((f) => (
           <FilterChip key={f.key} active={status === f.key} onClick={() => { setStatus(f.key); setPage(1); }}>{f.label}</FilterChip>
@@ -149,6 +173,7 @@ function OperacoesInner() {
           />
         </div>
       ) : null}
+      </>}
 
       <OperationDetailDrawer operationId={detailId} open={detailId !== null} onClose={() => { setDetailId(null); list.refetch(); }} />
       <OperationCreationDrawer open={createOpen} mode="operation" onClose={() => setCreateOpen(false)} onCreated={(op) => { setDetailId(op.id); list.refetch(); }} />
@@ -166,4 +191,124 @@ export default function OperacoesPage() {
 
 function parseStatus(value: string | null): "all" | OperationStatus {
   return value === "DRAFT" || value === "PENDING" || value === "IN_PROGRESS" || value === "REVIEW" || value === "COMPLETED" || value === "CANCELED" ? value : "all";
+}
+
+/* ---------------- Autorizar demandas ---------------- */
+
+const smallPrimary = "inline-flex h-9 items-center gap-1.5 rounded-[var(--radius-md)] bg-[var(--color-primary)] px-3 text-sm font-medium text-[var(--color-primary-foreground)] disabled:opacity-50";
+const smallGhost = "inline-flex h-8 items-center gap-1.5 rounded-[var(--radius-md)] border border-[var(--color-border)] px-2.5 text-xs font-medium hover:bg-[var(--color-muted)] disabled:opacity-50";
+
+function dayKeyOf(iso: string | null): string {
+  return iso ? iso.slice(0, 10) : "none";
+}
+function formatDay(day: string): string {
+  const d = new Date(`${day}T12:00:00`);
+  return Number.isNaN(d.getTime()) ? day : d.toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "short" });
+}
+function bucketByDay(items: PendingDemandGroup["items"]): Array<[string, PendingDemandGroup["items"]]> {
+  const map = new Map<string, PendingDemandGroup["items"]>();
+  for (const item of items) {
+    const key = dayKeyOf(item.scheduledFor);
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(item);
+  }
+  return [...map.entries()].sort((a, b) => (a[0] === "none" ? 1 : b[0] === "none" ? -1 : a[0].localeCompare(b[0])));
+}
+
+function AuthorizeDemands() {
+  const [tick, setTick] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [globalDate, setGlobalDate] = useState("");
+  const [globalOperator, setGlobalOperator] = useState("");
+  const [msg, setMsg] = useState<string | null>(null);
+  const q = useQuery<PendingDemandGroup[]>(
+    (s) => assignmentsApi.listPendingDemands({ signal: s }),
+    [tick],
+    { refetchInterval: 20_000, refetchOnFocus: true },
+  );
+
+  async function authorize(payload: { operatorId?: string; date?: string }) {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const { authorized } = await assignmentsApi.authorizeDemands(payload);
+      setMsg(authorized > 0 ? `${authorized} demanda(s) liberada(s) para o app do operador.` : "Nenhuma demanda correspondente para autorizar.");
+      setTick((v) => v + 1);
+    } catch {
+      setMsg("Não foi possível autorizar. Tente novamente.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const groups = q.data ?? [];
+
+  return (
+    <div className="max-w-[1000px] space-y-5">
+      <p className="text-sm text-[var(--color-muted-foreground)]">
+        As demandas criadas pela gestão ficam <strong>ocultas</strong> no app do operador até você autorizar aqui — evita que o técnico veja a carga futura antecipadamente. Itens já em andamento ou concluídos permanecem visíveis.
+      </p>
+
+      <div className="space-y-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
+        <h3 className="flex items-center gap-2 font-semibold"><CalendarClock className="h-4 w-4 text-[var(--color-primary)]" /> Autorização geral por dia</h3>
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="grid gap-1 text-xs font-medium">Dia
+            <input type="date" value={globalDate} onChange={(e) => setGlobalDate(e.target.value)} className="h-9 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-2 text-sm" />
+          </label>
+          <label className="grid gap-1 text-xs font-medium">Técnico (opcional)
+            <select value={globalOperator} onChange={(e) => setGlobalOperator(e.target.value)} className="h-9 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-2 text-sm">
+              <option value="">Todos os técnicos</option>
+              {groups.map((g) => <option key={g.operator.id} value={g.operator.id}>{g.operator.name}</option>)}
+            </select>
+          </label>
+          <button type="button" disabled={!globalDate || busy} onClick={() => authorize({ date: globalDate, operatorId: globalOperator || undefined })} className={smallPrimary}>
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Autorizar dia
+          </button>
+        </div>
+      </div>
+
+      {msg && <p className="rounded-[var(--radius-md)] border border-[var(--color-primary)]/30 bg-[var(--color-primary)]/5 px-3 py-2 text-sm text-[var(--color-primary)]">{msg}</p>}
+
+      {q.loading && !q.data ? (
+        <SkeletonList rows={4} />
+      ) : q.error && !q.data ? (
+        <ErrorState error={q.error} onRetry={q.refetch} />
+      ) : groups.length === 0 ? (
+        <EmptyState icon={ShieldCheck} title="Nada aguardando autorização" description="Todas as demandas agendadas já estão visíveis para os técnicos." />
+      ) : (
+        <div className="space-y-3">{groups.map((group) => <DemandGroupCard key={group.operator.id} group={group} busy={busy} onAuthorize={authorize} />)}</div>
+      )}
+    </div>
+  );
+}
+
+function DemandGroupCard({ group, busy, onAuthorize }: { group: PendingDemandGroup; busy: boolean; onAuthorize: (payload: { operatorId?: string; date?: string }) => void }) {
+  const days = bucketByDay(group.items);
+  return (
+    <div className="space-y-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className="grid h-8 w-8 place-items-center rounded-full bg-[var(--color-primary)]/10 text-[var(--color-primary)]"><Users className="h-4 w-4" /></span>
+          <strong className="text-sm">{group.operator.name}</strong>
+          <StatusChip tone="warning">{group.total} pendente(s)</StatusChip>
+        </div>
+        <button type="button" disabled={busy} onClick={() => onAuthorize({ operatorId: group.operator.id })} className={smallPrimary}>
+          <Check className="h-4 w-4" /> Autorizar tudo
+        </button>
+      </div>
+      <ul className="divide-y divide-[var(--color-border)]">
+        {days.map(([day, items]) => (
+          <li key={day} className="flex items-center justify-between gap-3 py-2 text-sm">
+            <span className="inline-flex min-w-0 items-center gap-2">
+              <CalendarClock className="h-4 w-4 shrink-0 text-[var(--color-muted-foreground)]" />
+              <span className="truncate">{day === "none" ? "Sem data agendada" : formatDay(day)} · {items.length} operação(ões)</span>
+            </span>
+            {day !== "none" && (
+              <button type="button" disabled={busy} onClick={() => onAuthorize({ operatorId: group.operator.id, date: day })} className={smallGhost}>Autorizar dia</button>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }

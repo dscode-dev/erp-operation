@@ -1,6 +1,6 @@
 import { AssignmentStatus } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
-import { IsEnum, IsInt, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsEnum, IsInt, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min } from 'class-validator';
 
 const trim = (value: unknown): unknown => (typeof value === 'string' ? value.trim() : value);
 
@@ -34,4 +34,11 @@ export class RejectAssignmentDto {
   @IsString()
   @MaxLength(2000)
   rejectionReason!: string;
+}
+
+/** Autorização de exibição de demandas no app do operador (por técnico e/ou dia). */
+export class AuthorizeDemandsDto {
+  @IsOptional() @IsUUID('4') operatorId?: string;
+  @IsOptional() @Matches(/^\d{4}-\d{2}-\d{2}/) date?: string;
+  @IsOptional() @IsArray() @ArrayMaxSize(500) @IsUUID('4', { each: true }) assignmentIds?: string[];
 }

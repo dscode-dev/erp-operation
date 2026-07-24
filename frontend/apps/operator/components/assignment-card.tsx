@@ -9,7 +9,12 @@ import {
   assignmentTime,
 } from "@erp/ui/assignments/assignment-shared";
 
-export function AssignmentCard({ assignment }: { assignment: Assignment }) {
+/**
+ * Card de atendimento. Por padrão exibe o cartão completo (usado na fila/página
+ * de atendimentos). Com `compact`, exibe uma versão enxuta para o Dashboard —
+ * sem endereço, data nem prioridade — apenas acesso rápido às informações.
+ */
+export function AssignmentCard({ assignment, compact = false }: { assignment: Assignment; compact?: boolean }) {
   const op = assignment.operation;
   const pmoc = op.maintenanceExecution?.plan.pmocPlan;
   const execution = op.maintenanceExecution?.pmocExecutionRequest;
@@ -19,7 +24,7 @@ export function AssignmentCard({ assignment }: { assignment: Assignment }) {
   return (
     <Link
       href={`/operator/services/${assignment.id}`}
-      className="block rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 shadow-[var(--shadow-card)] active:scale-[0.99] transition-transform"
+      className={`block rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-card)] shadow-[var(--shadow-card)] active:scale-[0.99] transition-transform ${compact ? "p-3" : "p-4"}`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -31,30 +36,34 @@ export function AssignmentCard({ assignment }: { assignment: Assignment }) {
               PMOC-{String(pmoc.number).padStart(6, "0")} · Execução {String(execution?.executionNumber ?? 0).padStart(3, "0")}
             </div>
           )}
-          <h3 className="mt-1 text-base font-semibold leading-tight truncate">
+          <h3 className={`mt-1 font-semibold leading-tight truncate ${compact ? "text-sm" : "text-base"}`}>
             {op.customer?.name ?? "Cliente não informado"}
           </h3>
-          <p className="mt-1 text-sm text-[var(--color-muted-foreground)] truncate">
+          <p className={`mt-1 text-[var(--color-muted-foreground)] truncate ${compact ? "text-xs" : "text-sm"}`}>
             {op.equipment?.name ?? "Sem equipamento vinculado"}
           </p>
         </div>
         <StatusPill status={ASSIGNMENT_STATUS_PILL[assignment.status]} label={ASSIGNMENT_STATUS_LABEL[assignment.status]} />
       </div>
-      <div className="mt-3 grid gap-2 text-sm text-[var(--color-muted-foreground)]">
-        <span className="inline-flex items-center gap-2">
-          <Clock className="h-4 w-4" /> {op.scheduledFor ? assignmentTime(op.scheduledFor) : "Não agendado"}
-        </span>
-        <span className="inline-flex items-center gap-2 truncate">
-          <MapPin className="h-4 w-4 shrink-0" /> {address}
-        </span>
-        <span className="inline-flex items-center gap-2">
-          <Wrench className="h-4 w-4" /> Prioridade operacional padrão
-        </span>
-      </div>
-      <div className="mt-4 flex items-center justify-between rounded-[var(--radius-lg)] bg-[var(--color-muted)] px-3 py-2 text-sm font-semibold">
-        {assignmentPrimaryAction(assignment.status)}
-        <ChevronRight className="h-4 w-4" />
-      </div>
+      {!compact && (
+        <>
+          <div className="mt-3 grid gap-2 text-sm text-[var(--color-muted-foreground)]">
+            <span className="inline-flex items-center gap-2">
+              <Clock className="h-4 w-4" /> {op.scheduledFor ? assignmentTime(op.scheduledFor) : "Não agendado"}
+            </span>
+            <span className="inline-flex items-center gap-2 truncate">
+              <MapPin className="h-4 w-4 shrink-0" /> {address}
+            </span>
+            <span className="inline-flex items-center gap-2">
+              <Wrench className="h-4 w-4" /> Prioridade operacional padrão
+            </span>
+          </div>
+          <div className="mt-4 flex items-center justify-between rounded-[var(--radius-lg)] bg-[var(--color-muted)] px-3 py-2 text-sm font-semibold">
+            {assignmentPrimaryAction(assignment.status)}
+            <ChevronRight className="h-4 w-4" />
+          </div>
+        </>
+      )}
     </Link>
   );
 }

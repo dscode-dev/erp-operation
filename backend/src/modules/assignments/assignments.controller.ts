@@ -6,6 +6,7 @@ import type { AuthenticatedUser } from '../../shared/types/authenticated-user.ty
 import type { RequestWithId } from '../../shared/types/request-with-id.type';
 import {
   AssignmentNotesDto,
+  AuthorizeDemandsDto,
   CreateAssignmentDto,
   ListAssignmentsQueryDto,
   ReassignAssignmentDto,
@@ -33,6 +34,22 @@ export class AssignmentsController {
     @CurrentUser() actor: AuthenticatedUser,
   ): Promise<unknown> {
     return this.assignments.my(query, actor);
+  }
+
+  // Demandas aguardando o owner autorizar a exibição no app do operador.
+  @Roles(Role.OWNER, Role.MANAGER)
+  @Get('pending-authorization')
+  pendingAuthorization(): Promise<unknown> {
+    return this.assignments.pendingAuthorization();
+  }
+
+  @Roles(Role.OWNER, Role.MANAGER)
+  @Post('authorize')
+  authorize(
+    @Body() body: AuthorizeDemandsDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ): Promise<{ authorized: number }> {
+    return this.assignments.authorize(body, actor);
   }
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR, Role.VIEWER)
