@@ -1219,6 +1219,10 @@ model OperationDocument {
   technicalSignatureId       String?                 @map("technical_signature_id") @db.Uuid
   technicalSignatureSnapshot Json?                   @map("technical_signature_snapshot")
   customerSignatureSnapshot  Json?                   @map("customer_signature_snapshot")
+  /// Owner optou por ocultar a assinatura do cliente neste documento (não exige
+  /// coleta e não renderiza o bloco no PDF). Apenas oculta — outros fluxos (ex.:
+  /// operador em campo) continuam coletando/exibindo normalmente.
+  customerSignatureHidden    Boolean                 @default(false) @map("customer_signature_hidden")
   collectionSnapshot         Json?                   @map("collection_snapshot")
   validationIssues           Json                    @default("[]") @map("validation_issues")
   revision                   Int                     @default(0)

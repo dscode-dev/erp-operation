@@ -11,6 +11,7 @@ import { DocumentHandoffService } from './document-handoff.service';
 import {
   CollectCustomerSignatureDto,
   FinalizeDocumentReviewDto,
+  SetCustomerSignatureVisibilityDto,
   ListDocumentHandoffsQueryDto,
   SaveDocumentHandoffDto,
   SelectTechnicalSignatureDto,
@@ -152,6 +153,12 @@ export class DocumentEngineController {
   @Patch(':documentId/handoff/technical-signature')
   selectTechnicalSignature(@Param('documentId', new ParseUUIDPipe({ version: '4' })) documentId: string, @Body() body: SelectTechnicalSignatureDto, @CurrentUser() actor: AuthenticatedUser, @Req() request: RequestWithId): Promise<unknown> {
     return this.handoffs.selectTechnicalSignature(documentId, body.signatureId, actor, contextFromRequest(request));
+  }
+
+  @Roles(Role.OWNER, Role.MANAGER)
+  @Patch(':documentId/handoff/customer-signature-visibility')
+  setCustomerSignatureVisibility(@Param('documentId', new ParseUUIDPipe({ version: '4' })) documentId: string, @Body() body: SetCustomerSignatureVisibilityDto, @CurrentUser() actor: AuthenticatedUser, @Req() request: RequestWithId): Promise<unknown> {
+    return this.handoffs.setCustomerSignatureVisibility(documentId, body.hidden, actor, contextFromRequest(request));
   }
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR)

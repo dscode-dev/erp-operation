@@ -28,6 +28,10 @@ export class SelectTechnicalSignatureDto {
   @IsUUID('4') signatureId!: string;
 }
 
+export class SetCustomerSignatureVisibilityDto {
+  @IsBoolean() hidden!: boolean;
+}
+
 export class CollectCustomerSignatureDto {
   @Transform(({ value }) => trim(value)) @IsString() @MaxLength(180) signerName!: string;
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(120) signerRole?: string;

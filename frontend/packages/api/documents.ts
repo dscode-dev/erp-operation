@@ -146,6 +146,11 @@ export function selectHandoffTechnicalSignature(documentId: string, signatureId:
   return api.patch<DocumentHandoff>(`/documents/${documentId}/handoff/technical-signature`, { signatureId });
 }
 
+/** Owner/Manager oculta (ou reexibe) a assinatura do cliente neste documento. */
+export function setCustomerSignatureVisibility(documentId: string, hidden: boolean): Promise<DocumentHandoff> {
+  return api.patch<DocumentHandoff>(`/documents/${documentId}/handoff/customer-signature-visibility`, { hidden });
+}
+
 export function finalizeHandoffReview(documentId: string): Promise<DocumentHandoff> {
   return api.post<DocumentHandoff>(`/documents/${documentId}/handoff/finalize`, { confirm: true });
 }

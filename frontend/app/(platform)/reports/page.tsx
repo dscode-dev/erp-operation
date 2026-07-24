@@ -168,6 +168,10 @@ type WorkflowForm = {
   signatureData: string | null;
   customerSignerName: string;
   customerSignerRole: string;
+  // RVT (TECHNICAL_REPORT): política de assinatura do cliente escolhida pelo owner.
+  // COLLECT_LATER = coletar depois (documento fica pendente);
+  // HIDDEN = ocultar a assinatura do cliente (somente responsável técnico).
+  technicalReportCustomerSignature: 'COLLECT_LATER' | 'HIDDEN';
   photos: Array<{ dataUrl: string; caption: string }>;
   referenceMonth: string;
   referenceYear: string;
@@ -247,6 +251,7 @@ const emptyForm: WorkflowForm = {
   signatureData: null,
   customerSignerName: '',
   customerSignerRole: '',
+  technicalReportCustomerSignature: 'COLLECT_LATER',
   photos: [],
   referenceMonth: String(new Date().getMonth() + 1),
   referenceYear: String(new Date().getFullYear()),
@@ -672,7 +677,9 @@ function ReportWorkflowDrawer({
   const isWorkOrder = type === 'WORK_ORDER';
 
   useEffect(() => {
-    if (type !== 'RECEIPT' || form.technicalSignatureId) return;
+    // Recibo e RVT usam a assinatura do responsável técnico institucional — pré-seleciona
+    // a padrão da organização quando ainda não houver escolha manual.
+    if ((type !== 'RECEIPT' && type !== 'TECHNICAL_REPORT') || form.technicalSignatureId) return;
     const available = signatures.data?.items ?? [];
     const selected =
       available.find((item) => item.isDefault && item.active) ??
@@ -680,7 +687,6 @@ function ReportWorkflowDrawer({
         ? available.find((item) => item.active)
         : undefined);
     if (selected) set('technicalSignatureId', selected.id);
-    // Selection only follows the organization default while the receipt has no override.
   }, [type, signatures.data, form.technicalSignatureId]);
 
   useEffect(() => {
@@ -1367,6 +1373,14 @@ function ReportWorkflowDrawer({
         documentDraft = await documentsApi.selectHandoffTechnicalSignature(
           documentDraft.id,
           form.technicalSignatureId,
+        );
+      }
+      // RVT: quando o owner opta por ocultar a assinatura do cliente, o documento
+      // não exige coleta e o bloco do cliente não vai ao PDF (apenas oculta).
+      if (type === 'TECHNICAL_REPORT') {
+        documentDraft = await documentsApi.setCustomerSignatureVisibility(
+          documentDraft.id,
+          form.technicalReportCustomerSignature === 'HIDDEN',
         );
       }
       setHandoff(documentDraft);
@@ -3206,6 +3220,47 @@ function ContentStep({
         <section className="space-y-2">
           <TechnicalCatalogSelector type="RECOMMENDATION" label="Recomendação" areas={contextualAreas} workflow="TECHNICAL_REPORT" values={catalogLines(form.recommendations)} onChange={(values) => onSet('recommendations', values.join('\n'))} />
           <Area label="Recomendações técnicas (opcional)" value={form.recommendations} onChange={(value) => onSet('recommendations', value)} />
+        </section>
+        <section className="space-y-4 rounded-[var(--radius-lg)] border border-[var(--color-border)] p-4">
+          <div>
+            <h3 className="text-sm font-semibold">Assinaturas do relatório</h3>
+            <p className="text-caption">Defina o responsável técnico e como tratar a assinatura do cliente neste RVT.</p>
+          </div>
+          <Field label="Responsável técnico (assinatura)">
+            <select
+              value={form.technicalSignatureId}
+              onChange={(event) => onSet('technicalSignatureId', event.target.value)}
+            >
+              <option value="">Selecione uma assinatura institucional…</option>
+              {signatures.map((signature) => (
+                <option key={signature.id} value={signature.id}>
+                  {[signature.name, signature.title, signature.department].filter(Boolean).join(' · ')}
+                  {signature.isDefault ? ' · padrão' : ''}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <div className="space-y-1.5">
+            <span className="text-sm font-medium">Assinatura do cliente</span>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => onSet('technicalReportCustomerSignature', 'COLLECT_LATER')}
+                className={`rounded-[var(--radius-lg)] border p-3 text-left transition ${form.technicalReportCustomerSignature === 'COLLECT_LATER' ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5' : 'border-[var(--color-border)] hover:bg-[var(--color-muted)]'}`}
+              >
+                <strong className="block text-sm">Coletar depois</strong>
+                <span className="mt-1 block text-caption">O documento fica pendente até a assinatura do cliente ser coletada.</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onSet('technicalReportCustomerSignature', 'HIDDEN')}
+                className={`rounded-[var(--radius-lg)] border p-3 text-left transition ${form.technicalReportCustomerSignature === 'HIDDEN' ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5' : 'border-[var(--color-border)] hover:bg-[var(--color-muted)]'}`}
+              >
+                <strong className="block text-sm">Ocultar assinatura do cliente</strong>
+                <span className="mt-1 block text-caption">Somente o responsável técnico assina. O relatório pode ser finalizado agora.</span>
+              </button>
+            </div>
+          </div>
         </section>
       </div>
     );

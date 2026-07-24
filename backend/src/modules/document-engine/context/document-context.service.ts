@@ -762,14 +762,18 @@ export class DocumentContextService {
     // Todos os modelos exibem cliente (esq.) + responsável técnico (dir.) ao
     // final, exceto Recibo (RECEIPT) e Laudo Técnico (TECHNICAL_OPINION), que
     // permanecem apenas com a assinatura institucional.
-    const customerRequired = ([
-      DocumentTemplateType.WORK_ORDER,
-      DocumentTemplateType.TECHNICAL_REPORT,
-      DocumentTemplateType.BUDGET,
-      DocumentTemplateType.PMOC,
-      DocumentTemplateType.REPORT,
-      DocumentTemplateType.QUOTE,
-    ] as DocumentTemplateType[]).includes(handoff.type);
+    // Quando o owner opta por ocultar a assinatura do cliente neste documento,
+    // apenas a assinatura do responsável técnico é exibida (bloco do cliente some).
+    const customerRequired =
+      !handoff.customerSignatureHidden &&
+      ([
+        DocumentTemplateType.WORK_ORDER,
+        DocumentTemplateType.TECHNICAL_REPORT,
+        DocumentTemplateType.BUDGET,
+        DocumentTemplateType.PMOC,
+        DocumentTemplateType.REPORT,
+        DocumentTemplateType.QUOTE,
+      ] as DocumentTemplateType[]).includes(handoff.type);
     const customer = this.signatureSnapshot(handoff.customerSignatureSnapshot);
     const technical = this.signatureSnapshot(handoff.technicalSignatureSnapshot);
     const collectedImage = customer

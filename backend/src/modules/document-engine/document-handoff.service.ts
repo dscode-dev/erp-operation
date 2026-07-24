@@ -297,6 +297,7 @@ export class DocumentHandoffService {
     if (!document.operation) throw this.invalid('Document has no Operation');
     if (
       CUSTOMER_SIGNATURE_TYPES.has(document.type) &&
+      !document.customerSignatureHidden &&
       !document.customerSignatureSnapshot &&
       document.operation.signatureData
     ) {
@@ -415,6 +416,38 @@ export class DocumentHandoffService {
       });
       await this.appendRevisionTx(tx, saved.id, DocumentRevisionAction.TECHNICAL_SIGNATURE_SELECTED, origin, actor.id, ['technicalSignatureId']);
       await tx.auditLog.create({ data: this.audit(DOCUMENT_ENGINE_AUDIT_ACTIONS.DOCUMENT_TECHNICAL_SIGNATURE_SELECTED, actor, context, saved.id, document.operationId, { signatureId, ownSignature: operatorSelection }) });
+      return tx.operationDocument.findUniqueOrThrow({ where: { id: saved.id }, include: DOCUMENT_HANDOFF_INCLUDE });
+    });
+    return this.response(updated, true);
+  }
+
+  /**
+   * Owner/Manager escolhe ocultar (ou reexibir) a assinatura do cliente neste
+   * documento. Apenas oculta — não apaga nenhuma coleta existente; o bloco do
+   * cliente deixa de ser exigido e não é renderizado no PDF. Outros fluxos (ex.:
+   * operador em campo) continuam coletando/exibindo normalmente.
+   */
+  async setCustomerSignatureVisibility(documentId: string, hidden: boolean, actor: AuthenticatedUser, context: DocumentAuditContext): Promise<unknown> {
+    const document = await this.documentOrThrow(documentId);
+    this.assertReviewer(actor);
+    if (!CUSTOMER_SIGNATURE_TYPES.has(document.type)) {
+      throw new ApplicationException(
+        ERROR_CODES.DOCUMENT_HANDOFF_NOT_ALLOWED,
+        'Este tipo de documento não possui assinatura do cliente para ocultar',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const saved = await tx.operationDocument.update({
+        where: { id: documentId },
+        data: {
+          customerSignatureHidden: hidden,
+          // Alterar a visibilidade muda o documento: se já havia PDF, fica desatualizado.
+          ...(document.renderedAt ? { editorialStatus: DocumentEditorialStatus.STALE } : {}),
+        },
+      });
+      await this.appendRevisionTx(tx, saved.id, DocumentRevisionAction.REVIEW_UPDATED, DocumentHandoffOrigin.PLATFORM, actor.id, ['customerSignatureHidden']);
+      await tx.auditLog.create({ data: this.audit(DOCUMENT_ENGINE_AUDIT_ACTIONS.DOCUMENT_REVIEW_UPDATED, actor, context, saved.id, document.operationId, { customerSignatureHidden: hidden }) });
       return tx.operationDocument.findUniqueOrThrow({ where: { id: saved.id }, include: DOCUMENT_HANDOFF_INCLUDE });
     });
     return this.response(updated, true);
@@ -602,7 +635,7 @@ export class DocumentHandoffService {
 
   private validationIssues(document: HandoffDocument, final: boolean): string[] {
     const issues: string[] = [];
-    if (CUSTOMER_SIGNATURE_TYPES.has(document.type) && !document.customerSignatureSnapshot) issues.push('CUSTOMER_SIGNATURE_REQUIRED');
+    if (CUSTOMER_SIGNATURE_TYPES.has(document.type) && !document.customerSignatureHidden && !document.customerSignatureSnapshot) issues.push('CUSTOMER_SIGNATURE_REQUIRED');
     if (final && !document.technicalSignatureId) issues.push('TECHNICAL_SIGNATURE_REQUIRED');
     if (document.type === DocumentTemplateType.PMOC && (document.operation?.photos.length ?? 0) < PMOC_MIN_PROCEDURE_IMAGES) issues.push('PMOC_EVIDENCE_REQUIRED');
     if (!document.operation && !document.budget) issues.push('DOCUMENT_SOURCE_REQUIRED');
@@ -655,7 +688,8 @@ export class DocumentHandoffService {
         ? { id: document.budget.id, number: document.budget.number, status: document.budget.status, customer: document.budget.customer }
         : null,
       revisionCount: document._count?.revisions ?? 0,
-      ...(detail ? { customerSignatureRequired: CUSTOMER_SIGNATURE_TYPES.has(document.type), technicalSignatureRequired: true } : {}),
+      customerSignatureHidden: document.customerSignatureHidden,
+      ...(detail ? { customerSignatureRequired: CUSTOMER_SIGNATURE_TYPES.has(document.type) && !document.customerSignatureHidden, technicalSignatureRequired: true } : {}),
       createdAt: document.createdAt,
       updatedAt: document.updatedAt,
     };
