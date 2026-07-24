@@ -27,6 +27,7 @@ import { LifecyclePublisher } from '../asset-lifecycle/lifecycle-publisher.servi
 import { AssignmentsService } from '../assignments/assignments.service';
 import { PrismaService } from '../database/prisma.service';
 import { MaintenancePlanningService } from '../maintenance-planning/maintenance-planning.service';
+import { MaintenanceRemindersService } from '../maintenance-reminders/maintenance-reminders.service';
 import { OperationAccessService } from '../operation-access/operation-access.service';
 import type {
   CreateOperationDto,
@@ -137,6 +138,7 @@ export class OperationsService {
     @Inject(STORAGE_PROVIDER_TOKEN) private readonly storage: StorageProviderContract,
     private readonly lifecycle: LifecyclePublisher,
     private readonly maintenance: MaintenancePlanningService,
+    private readonly reminders: MaintenanceRemindersService,
     private readonly assignments: AssignmentsService,
     private readonly access: OperationAccessService,
   ) {}
@@ -421,6 +423,9 @@ export class OperationsService {
         actor.id,
         context,
       );
+      // Lembrete de manutenção: registra a previsão da próxima execução para OS
+      // Preventiva/Instalação (exceto origem PMOC, que tem agenda própria).
+      await this.reminders.syncFromOperationTx(tx, operation.id);
       if (operation.status === 'COMPLETED') {
         await this.lifecycle.publishOperationCompletedTx(tx, operation.id, actor.id, context);
         await this.maintenance.syncOperationCompletedTx(tx, operation.id, actor.id, context);
@@ -639,6 +644,7 @@ export class OperationsService {
       if (dto.status === 'COMPLETED' && existing.status !== 'COMPLETED') {
         await this.lifecycle.publishOperationCompletedTx(tx, id, actor.id, context);
         await this.maintenance.syncOperationCompletedTx(tx, id, actor.id, context);
+        await this.reminders.syncFromOperationTx(tx, id);
       }
     });
     for (const photo of photos) {
@@ -707,6 +713,7 @@ export class OperationsService {
       });
       await this.lifecycle.publishOperationCompletedTx(tx, id, actor.id, context);
       await this.maintenance.syncOperationCompletedTx(tx, id, actor.id, context);
+      await this.reminders.syncFromOperationTx(tx, id);
     });
     return this.operationOrThrow(id);
   }

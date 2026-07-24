@@ -76,17 +76,17 @@ const groups: NavGroup[] = [
       //{ label: "Fornecedores", href: "/produtos?tab=suppliers", icon: Briefcase, roles: ["OWNER", "MANAGER"] },
     ],
   },
-  {
-    label: 'Compras',
-    items: [
-      {
-        label: 'Pedidos de Compra',
-        href: '/purchase-orders',
-        icon: ShoppingCart,
-        roles: ['OWNER', 'MANAGER'],
-      },
-    ],
-  },
+  // {
+  //   label: 'Compras',
+  //   items: [
+  //     {
+  //       label: 'Pedidos de Compra',
+  //       href: '/purchase-orders',
+  //       icon: ShoppingCart,
+  //       roles: ['OWNER', 'MANAGER'],
+  //     },
+  //   ],
+  // },
   {
     label: 'Gestão',
     items: [

@@ -107,7 +107,7 @@ export function PlatformTopbar() {
     document.addEventListener("visibilitychange", onVisibility);
     const interval = window.setInterval(() => {
       if (document.visibilityState === "visible") void loadUnread();
-    }, 60_000);
+    }, 15_000);
     return () => {
       controller.abort();
       window.removeEventListener("focus", onFocus);
@@ -117,7 +117,13 @@ export function PlatformTopbar() {
   }, [loadUnread, userId]);
 
   useEffect(() => {
-    if (notificationsOpen) void loadNotifications();
+    if (!notificationsOpen) return;
+    void loadNotifications();
+    // Painel aberto atualiza sozinho (near-realtime) enquanto a aba estiver visível.
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") void loadNotifications();
+    }, 15_000);
+    return () => window.clearInterval(interval);
   }, [loadNotifications, notificationsOpen]);
 
   return (

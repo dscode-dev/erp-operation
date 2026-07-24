@@ -27,6 +27,7 @@ describe('Operations customer stats', () => {
       {} as never,
       {} as never,
       {} as never,
+      {} as never,
       access as never,
     );
     const customerId = '22222222-2222-4222-8222-222222222222';

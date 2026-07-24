@@ -61,6 +61,8 @@ function OperacoesInner() {
         signal,
       }),
     [page, limit, debounced, status, customerId, equipmentId],
+    // "Como se fosse em tempo real": poll silencioso + refresh ao focar a aba.
+    { refetchInterval: 10_000, refetchOnFocus: true },
   );
 
   const columns = useMemo<Column<OperationSummary>[]>(
@@ -132,6 +134,13 @@ function OperacoesInner() {
         <EmptyState icon={ClipboardList} title="Nenhuma operação" description={debounced || status !== "all" ? "Ajuste os filtros." : "As operações criadas pelos operadores aparecerão aqui."} />
       ) : list.data ? (
         <div className="space-y-3">
+          <div className="flex h-4 items-center justify-end">
+            {list.refreshing && (
+              <span className="inline-flex items-center gap-1.5 text-[11px] text-[var(--color-muted-foreground)]">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--color-primary)]" /> Atualizando…
+              </span>
+            )}
+          </div>
           <DataTable columns={columns} rows={list.data.items} onRowClick={(o) => setDetailId(o.id)} />
           <Pagination
             pagination={list.data.pagination}
@@ -141,7 +150,7 @@ function OperacoesInner() {
         </div>
       ) : null}
 
-      <OperationDetailDrawer operationId={detailId} open={detailId !== null} onClose={() => setDetailId(null)} />
+      <OperationDetailDrawer operationId={detailId} open={detailId !== null} onClose={() => { setDetailId(null); list.refetch(); }} />
       <OperationCreationDrawer open={createOpen} mode="operation" onClose={() => setCreateOpen(false)} onCreated={(op) => { setDetailId(op.id); list.refetch(); }} />
     </div>
   );

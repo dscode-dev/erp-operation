@@ -19,7 +19,12 @@
       "Skill(dataviz)",
       "Skill(dataviz:*)",
       "Bash(grep -viE \"node_modules|dashboard|page.tsx$\")",
-      "Bash(npx jest *)"
+      "Bash(npx jest *)",
+      "Bash(cd /Users/ds_/Documents/Devs/AllBlueLabs/Applications/ERP_Operation/backend; find src/modules/maintenance-planning -name \"*.ts\"; echo \"=== syncOperationCompletedTx signature ===\"; grep -rn \"syncOperationCompletedTx\" src/modules/maintenance-planning/ ; echo \"=== service head ===\"; sed -n '1,45p' src/modules/maintenance-planning/*.service.ts 2>/dev/null | head -55)",
+      "Bash(npx nest *)"
+    ],
+    "additionalDirectories": [
+      "/Users/ds_/Documents/Devs/AllBlueLabs/Applications/ERP_Operation/backend/src/modules/maintenance-planning"
     ]
   }
 }

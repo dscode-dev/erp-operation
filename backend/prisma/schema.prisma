@@ -592,6 +592,7 @@ model Organization {
   technicalCatalogs   TechnicalCatalog[]
   signatures          Signature[]
   sales               Sale[]
+  maintenanceReminders MaintenanceReminder[]
 
   @@map("organizations")
 }
@@ -792,6 +793,7 @@ model Customer {
   pmocPlans      PmocPlan[]
   budgets        Budget[]
   sales          Sale[]
+  maintenanceReminders MaintenanceReminder[]
 
   @@index([name])
   @@index([email])
@@ -895,6 +897,7 @@ model Equipment {
   operationInspections      OperationInspectedEquipment[]
   maintenanceChecklistItems OperationMaintenanceChecklistItem[]
   budgets                   Budget[]
+  maintenanceReminders      MaintenanceReminder[]
 
   @@index([customerId, status])
   @@index([addressId])
@@ -1002,6 +1005,7 @@ model Operation {
   budgets                         Budget[]
   maintenanceChecklistItems       OperationMaintenanceChecklistItem[]
   inspectedEquipments             OperationInspectedEquipment[]
+  maintenanceReminder             MaintenanceReminder?
   sourceSaleId                    String?                             @map("source_sale_id") @db.Uuid
   sourceSale                      Sale?                               @relation(fields: [sourceSaleId], references: [id], onDelete: SetNull)
 
@@ -1013,6 +1017,40 @@ model Operation {
   @@index([scheduledFor, status], map: "operations_schedule_status_idx")
   @@index([sourceSaleId])
   @@map("operations")
+}
+
+enum MaintenanceReminderStatus {
+  PENDING
+  DONE
+  DISMISSED
+}
+
+/// Lembretes de manutenção preventiva/instalação gerados a partir de OS (exceto
+/// OS originadas de PMOC, que têm agenda própria). Previsão padrão de +6 meses a
+/// partir da data de execução/agendamento da OS de origem.
+model MaintenanceReminder {
+  id             String                    @id @default(uuid()) @db.Uuid
+  organizationId String                    @map("organization_id") @db.Uuid
+  customerId     String                    @map("customer_id") @db.Uuid
+  equipmentId    String?                   @map("equipment_id") @db.Uuid
+  operationId    String?                   @unique @map("operation_id") @db.Uuid
+  operationType  OperationType             @map("operation_type")
+  baseDate       DateTime                  @map("base_date") @db.Timestamptz(3)
+  dueDate        DateTime                  @map("due_date") @db.Timestamptz(3)
+  intervalMonths Int                       @default(6) @map("interval_months")
+  status         MaintenanceReminderStatus @default(PENDING)
+  dateOverridden Boolean                   @default(false) @map("date_overridden")
+  notes          String?                   @db.Text
+  createdAt      DateTime                  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  organization   Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer       Customer                  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  equipment      Equipment?                @relation(fields: [equipmentId], references: [id], onDelete: SetNull)
+  operation      Operation?                @relation(fields: [operationId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status, dueDate])
+  @@index([customerId, status, dueDate])
+  @@map("maintenance_reminders")
 }
 
 model OperationMaintenanceChecklistItem {

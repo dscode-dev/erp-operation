@@ -13,7 +13,7 @@ export {
   onSessionInvalid,
   ensureFreshSession,
 } from './client';
-export { useQuery, errorMessage, type QueryState } from './use-query';
+export { useQuery, errorMessage, type QueryState, type QueryOptions } from './use-query';
 export {
   getAccessToken,
   getRefreshToken,
@@ -48,6 +48,13 @@ export * as pricingApi from './pricing';
 export * as budgetsApi from './budgets';
 export * as cepApi from './cep';
 export * as notificationsApi from './notifications';
+export * as maintenanceRemindersApi from './maintenance-reminders';
+export type {
+  MaintenanceReminder,
+  MaintenanceReminderStatus,
+  MaintenanceReminderStats,
+  PmocUpcomingItem,
+} from './maintenance-reminders';
 export * as salesApi from './sales';
 
 export type {

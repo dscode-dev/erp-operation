@@ -1515,6 +1515,7 @@ describe('DocumentEngine foundation', () => {
       {} as never,
       {} as never,
       {} as never,
+      {} as never,
     );
     const normalize = (
       service as unknown as { normalizeSignatureData: (value?: string) => string | null }
@@ -1555,6 +1556,7 @@ describe('DocumentEngine foundation', () => {
       { save: storageSave, delete: jest.fn() } as never,
       { publishOperationCompletedTx: jest.fn() } as never,
       { syncOperationCompletedTx: jest.fn() } as never,
+      {} as never,
       {} as never,
       {
         assertOperationAccess: jest.fn(),
