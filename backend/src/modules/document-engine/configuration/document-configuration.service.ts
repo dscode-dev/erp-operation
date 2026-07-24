@@ -116,10 +116,13 @@ export class DocumentConfigurationService implements OnModuleInit {
   }
 
   /**
-   * Cria (uma única vez) o modelo PMOC padrão do sistema, ativo por padrão.
-   * O PMOC usa política HYBRID: assinatura técnica institucional + assinatura do
-   * cliente coletada em campo. A assinatura institucional efetiva é escolhida por
-   * PMOC (signatureOverrideId); o modelo apenas define a política. Idempotente.
+   * Garante o modelo PMOC padrão do sistema, ativo por padrão. O PMOC usa política
+   * FIXED: somente o responsável técnico institucional assina — **sem** assinatura
+   * do cliente (assim o PMOC pode ser finalizado sem essa coleta). A assinatura
+   * institucional efetiva é escolhida por PMOC (signatureOverrideId); o modelo só
+   * define a política. Idempotente: cria se não existir e reconcilia o modelo de
+   * sistema caso ainda esteja com política antiga (HYBRID/COLLECTED). Não altera
+   * modelos criados manualmente pela gestão.
    */
   private async ensureSystemPmocTemplate(): Promise<void> {
     const organization = await this.prisma.organization.findFirst({
@@ -127,7 +130,39 @@ export class DocumentConfigurationService implements OnModuleInit {
       select: { id: true },
     });
     if (!organization) return;
-    const existing = await this.prisma.documentTemplate.findFirst({
+
+    const systemTemplate = await this.prisma.documentTemplate.findFirst({
+      where: {
+        organizationId: organization.id,
+        type: DocumentTemplateType.PMOC,
+        isSystem: true,
+      },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, isActive: true, signatureMode: true, executionSignatureClient: true },
+    });
+    if (systemTemplate) {
+      if (
+        !systemTemplate.isActive ||
+        systemTemplate.signatureMode !== SignatureMode.FIXED ||
+        systemTemplate.executionSignatureClient
+      ) {
+        await this.prisma.documentTemplate.update({
+          where: { id: systemTemplate.id },
+          data: {
+            isActive: true,
+            requiresSignature: true,
+            signatureMode: SignatureMode.FIXED,
+            executionSignatureClient: false,
+            executionSignatureTechnician: true,
+          },
+        });
+        this.logger.log('Default PMOC document template reconciled to FIXED (technical-only) policy.');
+      }
+      return;
+    }
+
+    // Respeita um modelo PMOC ativo criado manualmente pela gestão.
+    const anyActive = await this.prisma.documentTemplate.findFirst({
       where: {
         organizationId: organization.id,
         type: DocumentTemplateType.PMOC,
@@ -135,7 +170,8 @@ export class DocumentConfigurationService implements OnModuleInit {
       },
       select: { id: true },
     });
-    if (existing) return;
+    if (anyActive) return;
+
     await this.prisma.documentTemplate.create({
       data: {
         organizationId: organization.id,
@@ -148,12 +184,12 @@ export class DocumentConfigurationService implements OnModuleInit {
         isSystem: true,
         isActive: true,
         requiresSignature: true,
-        signatureMode: SignatureMode.HYBRID,
-        executionSignatureClient: true,
+        signatureMode: SignatureMode.FIXED,
+        executionSignatureClient: false,
         executionSignatureTechnician: true,
       },
     });
-    this.logger.log('Default active PMOC document template created.');
+    this.logger.log('Default active PMOC document template created (technical-only signature).');
   }
 
   async listConfigurations(): Promise<DocumentConfiguration[]> {

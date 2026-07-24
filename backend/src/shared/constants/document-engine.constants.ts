@@ -47,10 +47,11 @@ export const DOCUMENT_ONLY_DOCUMENT_TYPES = ['RECEIPT'] as const;
 export const SKIP_AUTO_WORK_ORDER_DOCUMENT_TYPES = ['RECEIPT', 'TECHNICAL_REPORT'] as const;
 
 // Orçamento (BUDGET) não coleta assinatura do cliente — é apenas uma proposta.
+// PMOC também não coleta assinatura do cliente: usa somente o responsável técnico
+// (política FIXED), permitindo finalizar sem a assinatura do cliente.
 export const CUSTOMER_SIGNATURE_REQUIRED_DOCUMENT_TYPES = [
   'WORK_ORDER',
   'TECHNICAL_REPORT',
-  'PMOC',
 ] as const;
 
 export const DOCUMENT_MIME_TYPE = 'application/pdf';
