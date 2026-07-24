@@ -392,7 +392,7 @@ export function PmocPlanWizard({ open, onClose, onCreated, pmoc = null, onUpdate
         defaultTechnicianId: form.defaultTechnicianId,
         signatureOverrideId: form.overrideSignature ? form.signatureOverrideId || undefined : undefined,
         responsibleTechnician: userName(users.data?.items, form.defaultTechnicianId),
-        startDate: form.firstExecution === "NOW" ? today() : form.startDate,
+        startDate: form.startDate,
         endDate: form.endDate,
         priority: form.priority,
         defaultOperationType: form.serviceTypes[0],
@@ -470,8 +470,9 @@ export function PmocPlanWizard({ open, onClose, onCreated, pmoc = null, onUpdate
     if (!executionRequestId) throw new Error("A execução programada não foi encontrada.");
     const request = await pmocApi.generateWorkOrder(executionRequestId, payload);
     if (!request.operationId) throw new Error("A OS não foi vinculada à execução.");
+    const operationId = request.operationId;
     if (draftPhotos.length) {
-      await operationApi.updateOperation(request.operationId, {
+      await operationApi.updateOperation(operationId, {
         photos: await Promise.all(draftPhotos.map(async (photo) => ({
           dataUrl: await evidenceFileDataUrl(photo.file),
           caption: photo.caption?.trim() || null,
@@ -480,8 +481,13 @@ export function PmocPlanWizard({ open, onClose, onCreated, pmoc = null, onUpdate
       draftPhotos.forEach((photo) => URL.revokeObjectURL(photo.url));
       setDraftPhotos([]);
     }
+    // Prepara o documento PMOC: assinatura técnica (sempre) + assinatura do cliente
+    // (quando coletada). A técnica não pode depender da presença da do cliente.
+    let document = await documentsApi.saveHandoffDraft(operationId, "PMOC");
+    if (form.overrideSignature && form.signatureOverrideId) {
+      document = await documentsApi.selectHandoffTechnicalSignature(document.id, form.signatureOverrideId);
+    }
     if (signatureData && signerName.trim()) {
-      let document = await documentsApi.saveHandoffDraft(request.operationId, "PMOC");
       document = await documentsApi.collectCustomerSignature(document.id, {
         signerName: signerName.trim(),
         signerRole: signerRole.trim() || undefined,
@@ -489,12 +495,20 @@ export function PmocPlanWizard({ open, onClose, onCreated, pmoc = null, onUpdate
         collectedAt: new Date().toISOString(),
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       });
-      if (form.signatureOverrideId) {
-        await documentsApi.selectHandoffTechnicalSignature(document.id, form.signatureOverrideId);
-      }
       setSignatureData(null);
     }
-    return operationApi.getOperation(request.operationId);
+    // Tenta finalizar e renderizar o PMOC para não ficar como rascunho e permitir
+    // o download do PDF. Se faltarem evidências/assinaturas obrigatórias, o
+    // documento permanece em revisão para finalização posterior na tela do PMOC —
+    // sem interromper a criação da Ordem de Serviço.
+    try {
+      await documentsApi.submitHandoff(document.id);
+      await documentsApi.finalizeHandoffReview(document.id);
+      await documentsApi.renderDocument(document.id);
+    } catch {
+      // Requisitos incompletos: mantém o fluxo, PMOC segue para revisão/finalização.
+    }
+    return operationApi.getOperation(operationId);
   }
 
   const selectedCustomer = customers.data?.items.find((item) => item.id === form.customerId);
@@ -927,7 +941,7 @@ function SummaryCard({ title, rows, onEdit }: { title: string; rows: Array<[stri
 function SignatureCard({ signature }: { signature: Signature }) { const image = useQuery((signal) => signaturesApi.downloadSignatureImage(signature.id, { signal }), [signature.id]); return <div className="mt-3 grid gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-muted)]/40 p-3 sm:grid-cols-[120px_1fr] sm:items-center"><div className="grid h-20 place-items-center rounded-md bg-white p-2">{image.data ? <span role="img" aria-label={`Assinatura de ${signature.name}`} className="h-16 w-full bg-contain bg-center bg-no-repeat" style={{ backgroundImage: `url(${JSON.stringify(`data:${image.data.mimeType};base64,${image.data.contentBase64}`)})` }} /> : <span className="text-xs text-[var(--color-muted-foreground)]">Carregando imagem…</span>}</div><div><p className="font-semibold">{signature.name}</p><p className="text-sm text-[var(--color-muted-foreground)]">{signature.title}</p>{signature.professionalCouncil && <p className="text-xs text-[var(--color-muted-foreground)]">{signature.professionalCouncil}</p>}{signature.department && <p className="text-xs text-[var(--color-muted-foreground)]">{signature.department}</p>}<span className="mt-2 inline-flex rounded-full bg-[var(--color-primary)]/10 px-2 py-1 text-xs font-medium text-[var(--color-primary)]">Somente leitura</span></div></div>; }
 function Stepper({ step, onStep }: { step: number; onStep: (step: number) => void }) { return <div className="grid grid-cols-3 gap-2 lg:grid-cols-6">{STEPS.map((label, index) => <button type="button" key={label} disabled={index > step} onClick={() => onStep(index)} className={`rounded-lg px-2 py-2 text-center text-xs font-medium transition ${index <= step ? "bg-[var(--color-primary)] text-[var(--color-primary-foreground)]" : "bg-[var(--color-muted)] text-[var(--color-muted-foreground)]"} disabled:cursor-not-allowed`}>{index < step ? <span className="inline-flex items-center gap-1"><Check className="h-3.5 w-3.5" />{label}</span> : label}</button>)}</div>; }
 
-function project(form: Form) { const start = new Date(`${form.startDate}T12:00:00`); const end = new Date(`${form.endDate}T12:00:00`); if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) return { months: 0, count: 0, next: "", dates: [] as string[] }; const months = Math.max(0, (end.getFullYear() - start.getFullYear()) * 12 + end.getMonth() - start.getMonth()); const cadence = PERIODICITIES.find((item) => item.value === form.periodicity)?.months ?? 1; const dates: string[] = []; for (let value = form.firstExecution === "NOW" ? today() : form.startDate, guard = 0; value <= form.endDate && guard < 240; value = addMonths(value, cadence), guard += 1) dates.push(value); return { months, count: dates.length, next: dates[0] ?? form.startDate, dates }; }
+function project(form: Form) { const start = new Date(`${form.startDate}T12:00:00`); const end = new Date(`${form.endDate}T12:00:00`); if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) return { months: 0, count: 0, next: "", dates: [] as string[] }; const months = Math.max(0, (end.getFullYear() - start.getFullYear()) * 12 + end.getMonth() - start.getMonth()); const cadence = PERIODICITIES.find((item) => item.value === form.periodicity)?.months ?? 1; const dates: string[] = []; for (let value = form.startDate, guard = 0; value <= form.endDate && guard < 240; value = addMonths(value, cadence), guard += 1) dates.push(value); return { months, count: dates.length, next: dates[0] ?? form.startDate, dates }; }
 function today() { return new Date().toISOString().slice(0, 10); }
 function addMonths(value: string, months: number) { const date = new Date(`${value}T12:00:00`); date.setMonth(date.getMonth() + months); return date.toISOString().slice(0, 10); }
 function formatDate(value: string) { return value ? new Date(`${value}T12:00:00`).toLocaleDateString("pt-BR") : "—"; }

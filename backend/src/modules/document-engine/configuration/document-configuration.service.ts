@@ -1,5 +1,5 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
-import { DocumentTemplateType, Prisma } from '@prisma/client';
+import { HttpStatus, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
+import { DocumentTemplateType, Prisma, SignatureMode } from '@prisma/client';
 import { ERROR_CODES } from '../../../shared/constants/error-codes.constants';
 import { ApplicationException } from '../../../shared/exceptions/application.exception';
 import { PrismaService } from '../../database/prisma.service';
@@ -100,8 +100,61 @@ export type DocumentConfiguration = {
 };
 
 @Injectable()
-export class DocumentConfigurationService {
+export class DocumentConfigurationService implements OnModuleInit {
+  private readonly logger = new Logger(DocumentConfigurationService.name);
+
   constructor(private readonly prisma: PrismaService) {}
+
+  async onModuleInit(): Promise<void> {
+    // Garante que exista um modelo PMOC ativo assim que a aplicação inicia, para
+    // que o wizard de PMOC nunca reporte "Nenhum modelo PMOC ativo".
+    await this.ensureSystemPmocTemplate().catch((error: unknown) => {
+      this.logger.warn(
+        `Could not ensure default PMOC template: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    });
+  }
+
+  /**
+   * Cria (uma única vez) o modelo PMOC padrão do sistema, ativo por padrão.
+   * O PMOC usa política HYBRID: assinatura técnica institucional + assinatura do
+   * cliente coletada em campo. A assinatura institucional efetiva é escolhida por
+   * PMOC (signatureOverrideId); o modelo apenas define a política. Idempotente.
+   */
+  private async ensureSystemPmocTemplate(): Promise<void> {
+    const organization = await this.prisma.organization.findFirst({
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    });
+    if (!organization) return;
+    const existing = await this.prisma.documentTemplate.findFirst({
+      where: {
+        organizationId: organization.id,
+        type: DocumentTemplateType.PMOC,
+        isActive: true,
+      },
+      select: { id: true },
+    });
+    if (existing) return;
+    await this.prisma.documentTemplate.create({
+      data: {
+        organizationId: organization.id,
+        type: DocumentTemplateType.PMOC,
+        name: 'PMOC — Modelo padrão',
+        headerContent: '',
+        footerContent: '',
+        observations: '',
+        isDefault: true,
+        isSystem: true,
+        isActive: true,
+        requiresSignature: true,
+        signatureMode: SignatureMode.HYBRID,
+        executionSignatureClient: true,
+        executionSignatureTechnician: true,
+      },
+    });
+    this.logger.log('Default active PMOC document template created.');
+  }
 
   async listConfigurations(): Promise<DocumentConfiguration[]> {
     const types = Object.values(DocumentTemplateType);
