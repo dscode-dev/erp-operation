@@ -146,8 +146,12 @@ export class OperationsService {
   async list(query: ListOperationsQueryDto, actor: AuthenticatedUser): Promise<unknown> {
     const where: Prisma.OperationWhereInput = {
       ...this.access.operationScope(actor),
-      // Recibo/RVT são apenas relatórios — nunca aparecem na lista de Operações.
-      requestedDocumentType: { notIn: [...DOCUMENT_ONLY_DOCUMENT_TYPES] as DocumentTemplateType[] },
+      // Recibo/RVT são apenas relatórios — não poluem a lista de Operações da
+      // gestão. Mas o operador precisa ver os próprios RVTs (na tela de
+      // Documentos do app), então a exclusão não se aplica ao papel OPERATOR.
+      ...(actor.role === Role.OPERATOR
+        ? {}
+        : { requestedDocumentType: { notIn: [...DOCUMENT_ONLY_DOCUMENT_TYPES] as DocumentTemplateType[] } }),
       ...(query.customerId ? { customerId: query.customerId } : {}),
       ...(query.equipmentId ? { equipmentId: query.equipmentId } : {}),
       ...(query.operatorId ? { operatorId: query.operatorId } : {}),

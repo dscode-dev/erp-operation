@@ -29,6 +29,8 @@ import {
   FileSearch,
   ShieldCheck,
   FilePlus2,
+  Download,
+  Share2,
 } from 'lucide-react';
 import { WizardProgressHeader } from '@erp/ui/wizard/progress-header';
 import { WizardFooter } from '@erp/ui/wizard/step-footer';
@@ -177,7 +179,7 @@ export function AtendimentoWizard({
 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [result, setResult] = useState<{ operationId: string; documentNumber: string; documentType: DocumentKind } | null>(
+  const [result, setResult] = useState<{ operationId: string; documentId: string; documentNumber: string; documentType: DocumentKind } | null>(
     null,
   );
   const [startedAt] = useState(() => new Date().toISOString());
@@ -378,6 +380,7 @@ export function AtendimentoWizard({
       });
       setResult({
         operationId: submission.operation.id,
+        documentId: submission.handoff.id,
         documentNumber: submission.handoff.number ?? workOrderNumber(submission.operation) ?? `OP-${submission.operation.number}`,
         documentType,
       });
@@ -395,6 +398,7 @@ export function AtendimentoWizard({
   if (result) {
     return (
       <SuccessView
+        documentId={result.documentId}
         documentNumber={result.documentNumber}
         documentType={result.documentType}
         onDone={() => router.push('/operator')}
@@ -1676,19 +1680,72 @@ function ResumoStep({
   );
 }
 
+function triggerDownload(file: File) {
+  const url = URL.createObjectURL(file);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = file.name;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
 function SuccessView({
+  documentId,
   documentNumber,
   documentType,
   onDone,
   onDocuments,
   onNew,
 }: {
+  documentId: string;
   documentNumber: string;
   documentType: DocumentKind;
   onDone: () => void;
   onDocuments: () => void;
   onNew: () => void;
 }) {
+  const [busy, setBusy] = useState<'share' | 'download' | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function fetchPdf(): Promise<File> {
+    const { blob, filename } = await documentsApi.downloadDocument(documentId);
+    return new File([blob], filename ?? `${documentNumber}.pdf`, { type: 'application/pdf' });
+  }
+
+  async function share() {
+    setBusy('share');
+    setError(null);
+    try {
+      const file = await fetchPdf();
+      const nav = navigator as Navigator & { canShare?: (data: ShareData) => boolean };
+      if (typeof nav.share === 'function' && (!nav.canShare || nav.canShare({ files: [file] }))) {
+        await nav.share({ files: [file], title: documentNumber, text: `${DOCUMENT_KIND_LABEL[documentType]} ${documentNumber}` });
+      } else {
+        triggerDownload(file);
+        setError('Este navegador não abre o compartilhamento nativo; o PDF foi baixado para compartilhar manualmente.');
+      }
+    } catch (cause) {
+      if (cause instanceof DOMException && cause.name === 'AbortError') return;
+      setError(cause instanceof ApiClientError ? cause.message : 'Não foi possível obter o PDF. Tente novamente ou abra em Documentos.');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function download() {
+    setBusy('download');
+    setError(null);
+    try {
+      triggerDownload(await fetchPdf());
+    } catch (cause) {
+      setError(cause instanceof ApiClientError ? cause.message : 'Não foi possível baixar o PDF. Tente novamente ou abra em Documentos.');
+    } finally {
+      setBusy(null);
+    }
+  }
+
   return (
     <div className="min-h-dvh grid place-items-center p-6 text-center">
       <div className="max-w-xs">
@@ -1700,15 +1757,36 @@ function SuccessView({
           <FileText className="h-4 w-4" /> {documentNumber}
         </p>
         <p className="text-sm text-[var(--color-muted-foreground)] mt-2">
-          {DOCUMENT_KIND_LABEL[documentType]} concluído e PDF oficial gerado. A gestão foi notificada e o documento já pode ser baixado ou compartilhado.
+          {DOCUMENT_KIND_LABEL[documentType]} concluído e PDF oficial gerado. Compartilhe ou baixe agora mesmo com o cliente.
         </p>
+        {error && (
+          <p className="mt-3 rounded-[var(--radius-md)] border border-[var(--color-warning)]/30 bg-[var(--color-warning)]/10 px-3 py-2 text-left text-xs text-[var(--color-warning)]">{error}</p>
+        )}
         <div className="mt-6 space-y-2">
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => void share()}
+              disabled={busy !== null}
+              className="flex-1 inline-flex items-center justify-center gap-2 rounded-[var(--radius-md)] bg-[var(--color-primary)] text-[var(--color-primary-foreground)] h-12 text-sm font-semibold active:scale-[0.99] disabled:opacity-60"
+            >
+              {busy === 'share' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Share2 className="h-4 w-4" />} Compartilhar
+            </button>
+            <button
+              type="button"
+              onClick={() => void download()}
+              disabled={busy !== null}
+              className="inline-flex items-center justify-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] px-4 h-12 text-sm font-medium hover:bg-[var(--color-muted)] disabled:opacity-60"
+            >
+              {busy === 'download' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />} Baixar
+            </button>
+          </div>
           <button
             type="button"
             onClick={onDocuments}
-            className="w-full rounded-[var(--radius-md)] bg-[var(--color-primary)] text-[var(--color-primary-foreground)] h-12 text-sm font-semibold active:scale-[0.99]"
+            className="w-full rounded-[var(--radius-md)] border border-[var(--color-border)] h-12 text-sm font-medium hover:bg-[var(--color-muted)]"
           >
-            Baixar ou compartilhar PDF
+            Ver em Documentos
           </button>
           <button
             type="button"
