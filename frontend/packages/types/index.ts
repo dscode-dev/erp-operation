@@ -2130,7 +2130,22 @@ export type Budget = {
   creator?: Pick<TeamUser, 'id' | 'name' | 'email' | 'username' | 'role'>;
   document?: OperationDocument | null;
   items: BudgetItem[];
+  equipments?: BudgetEquipment[];
   approvals: BudgetApproval[];
+};
+
+export type BudgetEquipment = {
+  id: string;
+  budgetId: string;
+  equipmentId: string;
+  position: number;
+  sector: string;
+  brandSnapshot: string | null;
+  modelSnapshot: string | null;
+  capacitySnapshot: string | null;
+  tagSnapshot: string | null;
+  serialSnapshot: string | null;
+  equipment?: Pick<EquipmentSummary, 'id' | 'name' | 'tag' | 'type' | 'status'>;
 };
 
 export type BudgetHistory = {
@@ -2169,6 +2184,7 @@ export type BudgetPayload = {
   customerId: string;
   customerAddressId?: string | null;
   equipmentId?: string | null;
+  equipmentIds?: string[];
   title: string;
   description?: string | null;
   issuedAt?: string;

@@ -172,6 +172,14 @@ const DOCUMENT_CONTEXT_BUDGET_INCLUDE = {
       attachments: { orderBy: { createdAt: 'desc' as const }, take: 12 },
     },
   },
+  equipments: {
+    include: {
+      equipment: {
+        select: { id: true, name: true, tag: true, type: true, manufacturer: true, model: true, capacity: true, serialNumber: true, qrCode: true },
+      },
+    },
+    orderBy: { position: 'asc' as const },
+  },
   operation: { select: { id: true, number: true, type: true, status: true, equipmentId: true } },
   creator: { select: { id: true, name: true, email: true, username: true, jobTitle: true } },
   items: {

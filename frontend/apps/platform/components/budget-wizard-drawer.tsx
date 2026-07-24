@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Plus, ShoppingCart, Trash2 } from "lucide-react";
 import { Drawer } from "@erp/ui/drawer";
 import { EmptyState } from "@erp/ui/empty-state";
+import { MultiSelect } from "@erp/ui/multi-select";
 import {
   budgetsApi,
   customersApi,
@@ -45,7 +46,7 @@ export function BudgetWizardDrawer({
   const [operationId, setOperationId] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [addressId, setAddressId] = useState("");
-  const [equipmentId, setEquipmentId] = useState("");
+  const [equipmentIds, setEquipmentIds] = useState<string[]>([]);
   const [title, setTitle] = useState("Orçamento de manutenção");
   const [description, setDescription] = useState("");
   const [issuedAt, setIssuedAt] = useState(today());
@@ -70,7 +71,7 @@ export function BudgetWizardDrawer({
   useEffect(() => {
     if (!open) return;
     setStep(0); setOrigin(budget?.operationId || initialOperationId ? "WORK_ORDER" : "MANUAL"); setOperationId(budget?.operationId ?? initialOperationId ?? "");
-    setCustomerId(budget?.customerId ?? ""); setAddressId(budget?.customerAddressId ?? ""); setEquipmentId(budget?.equipmentId ?? "");
+    setCustomerId(budget?.customerId ?? ""); setAddressId(budget?.customerAddressId ?? ""); setEquipmentIds(budget?.equipments?.map((item) => item.equipmentId) ?? (budget?.equipmentId ? [budget.equipmentId] : []));
     setTitle(budget?.title ?? "Orçamento de manutenção"); setDescription(budget?.description ?? ""); setIssuedAt(budget?.issuedAt?.slice(0, 10) ?? today());
     setIntroduction(budget?.introduction ?? "Atendendo à honrosa solicitação de V.Sa., apresentamos nosso orçamento conforme solicitado.");
     setItems(budget?.items.map((item) => ({ productId: item.productId, type: item.type, description: item.description, quantity: Number(item.quantity), unit: item.unit, unitPrice: Number(item.unitPrice), sortOrder: item.sortOrder })) ?? []);
@@ -96,7 +97,10 @@ export function BudgetWizardDrawer({
       if (!active) return;
       setCustomerId(operation.customer?.id ?? "");
       setAddressId(operation.address?.id ?? "");
-      setEquipmentId(operation.equipment?.id ?? "");
+      // Reflete todos os equipamentos da OS (principal + inspecionados) no orçamento.
+      const inspected = operation.inspectedEquipments?.map((item) => item.equipmentId) ?? [];
+      const combined = [operation.equipment?.id, ...inspected].filter((value): value is string => Boolean(value));
+      setEquipmentIds([...new Set(combined)]);
       setTitle(`Orçamento referente à OS-${String(operation.number).padStart(6, "0")}`);
       setDescription(operation.serviceDescription || operation.observations || operation.reportedIssue || "");
     }).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Não foi possível carregar a Ordem de Serviço."));
@@ -129,7 +133,7 @@ export function BudgetWizardDrawer({
         operationId: origin === "WORK_ORDER" ? operationId : undefined,
         customerId,
         customerAddressId: addressId || undefined,
-        equipmentId: equipmentId || undefined,
+        equipmentIds,
         title,
         description: description || undefined,
         issuedAt: new Date(`${issuedAt}T12:00:00`).toISOString(),
@@ -164,7 +168,7 @@ export function BudgetWizardDrawer({
       <div className="flex gap-2 overflow-x-auto pb-1">{STEPS.map((label, index) => <span key={label} className={`whitespace-nowrap rounded-full border px-3 py-1.5 text-xs ${index === step ? "border-[var(--color-primary)] bg-[var(--color-primary)]/10 text-[var(--color-primary)]" : index < step ? "border-[var(--color-success)]/40 text-[var(--color-success)]" : "border-[var(--color-border)] text-[var(--color-muted-foreground)]"}`}>{index + 1}. {label}</span>)}</div>
 
       {step === 0 && <OriginStep origin={origin} setOrigin={setOrigin} operationId={operationId} setOperationId={setOperationId} operations={operations.data?.items ?? []} />}
-      {step === 1 && <div className="grid gap-3 sm:grid-cols-2"><Field label="Cliente"><select value={customerId} onChange={(event) => { setCustomerId(event.target.value); setAddressId(""); setEquipmentId(""); }} className={inputCls}><option value="">Selecione</option>{customers.data?.items.map((row: Customer) => <option key={row.id} value={row.id}>{row.tradeName || row.name}</option>)}</select></Field><Field label="Endereço"><select value={addressId} onChange={(event) => setAddressId(event.target.value)} className={inputCls}><option value="">Selecione</option>{customer.data?.addresses?.map((address) => <option key={address.id} value={address.id}>{address.street}, {address.number} · {address.city}/{address.state}</option>)}</select></Field><Field label="Equipamento (opcional)"><select value={equipmentId} onChange={(event) => setEquipmentId(event.target.value)} className={inputCls}><option value="">Nenhum</option>{equipments.data?.items.map((equipment: EquipmentSummary) => <option key={equipment.id} value={equipment.id}>{equipment.name}</option>)}</select></Field><Field label="Data"><input type="date" value={issuedAt} onChange={(event) => setIssuedAt(event.target.value)} className={inputCls} /></Field><Field label="Título"><input value={title} onChange={(event) => setTitle(event.target.value)} className={inputCls} /></Field><Field label="Descrição"><textarea value={description} onChange={(event) => setDescription(event.target.value)} className={`${inputCls} min-h-20 py-2`} /></Field><div className="sm:col-span-2"><Field label="Texto introdutório"><textarea value={introduction} onChange={(event) => setIntroduction(event.target.value)} className={`${inputCls} min-h-24 py-2`} /></Field></div></div>}
+      {step === 1 && <div className="grid gap-3 sm:grid-cols-2"><Field label="Cliente"><select value={customerId} onChange={(event) => { setCustomerId(event.target.value); setAddressId(""); setEquipmentIds([]); }} className={inputCls}><option value="">Selecione</option>{customers.data?.items.map((row: Customer) => <option key={row.id} value={row.id}>{row.tradeName || row.name}</option>)}</select></Field><Field label="Endereço"><select value={addressId} onChange={(event) => setAddressId(event.target.value)} className={inputCls}><option value="">Selecione</option>{customer.data?.addresses?.map((address) => <option key={address.id} value={address.id}>{address.street}, {address.number} · {address.city}/{address.state}</option>)}</select></Field><div className="sm:col-span-2"><MultiSelect label="Equipamentos (opcional)" placeholder="Selecione um ou mais equipamentos" emptyMessage={customerId ? "Nenhum equipamento para este cliente." : "Selecione um cliente primeiro."} value={equipmentIds} onChange={setEquipmentIds} options={(equipments.data?.items ?? []).map((equipment: EquipmentSummary) => ({ value: equipment.id, label: equipment.name, description: equipment.tag ?? undefined }))} /></div><Field label="Data"><input type="date" value={issuedAt} onChange={(event) => setIssuedAt(event.target.value)} className={inputCls} /></Field><Field label="Título"><input value={title} onChange={(event) => setTitle(event.target.value)} className={inputCls} /></Field><Field label="Descrição"><textarea value={description} onChange={(event) => setDescription(event.target.value)} className={`${inputCls} min-h-20 py-2`} /></Field><div className="sm:col-span-2"><Field label="Texto introdutório"><textarea value={introduction} onChange={(event) => setIntroduction(event.target.value)} className={`${inputCls} min-h-24 py-2`} /></Field></div></div>}
       {step === 2 && <BudgetItemsEditor type="SERVICE" items={items} onChange={setItems} />}
       {step === 3 && <BudgetItemsEditor type="MATERIAL" items={items} onChange={setItems} />}
       {step === 4 && <div className="grid gap-4 md:grid-cols-2"><Summary services={services} materials={materials} total={total} /><Field label="Valor por extenso"><textarea value={amountInWords} onChange={(event) => { setAmountInWords(event.target.value); setAmountEdited(true); }} className={`${inputCls} min-h-28 py-2`} /><span className="text-caption">Gerado automaticamente e editável.</span></Field></div>}

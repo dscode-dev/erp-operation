@@ -897,6 +897,7 @@ model Equipment {
   pmocLinks                 PmocPlanEquipment[]
   pmocEnvironments          PmocEnvironmentEquipment[]
   operationInspections      OperationInspectedEquipment[]
+  budgetInspections         BudgetEquipment[]
   maintenanceChecklistItems OperationMaintenanceChecklistItem[]
   budgets                   Budget[]
   maintenanceReminders      MaintenanceReminder[]
@@ -1830,6 +1831,7 @@ model Budget {
   equipment         Equipment?            @relation(fields: [equipmentId], references: [id], onDelete: SetNull)
   creator           User                  @relation("BudgetCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
   items             BudgetItem[]
+  equipments        BudgetEquipment[]
   approvals         BudgetApproval[]
   history           BudgetHistory[]
   document          OperationDocument?
@@ -1840,6 +1842,30 @@ model Budget {
   @@index([equipmentId, createdAt])
   @@index([expirationDate])
   @@map("budgets")
+}
+
+/// Equipments covered by a budget (mirrors OperationInspectedEquipment).
+/// Enables the budget document to list one or many equipments in a table,
+/// like the Work Order, instead of a single equipment section.
+model BudgetEquipment {
+  id               String    @id @default(uuid()) @db.Uuid
+  budgetId         String    @map("budget_id") @db.Uuid
+  equipmentId      String    @map("equipment_id") @db.Uuid
+  position         Int
+  sector           String    @db.VarChar(160)
+  brandSnapshot    String?   @map("brand_snapshot") @db.VarChar(120)
+  modelSnapshot    String?   @map("model_snapshot") @db.VarChar(120)
+  capacitySnapshot String?   @map("capacity_snapshot") @db.VarChar(80)
+  tagSnapshot      String?   @map("tag_snapshot") @db.VarChar(80)
+  serialSnapshot   String?   @map("serial_snapshot") @db.VarChar(120)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  budget           Budget    @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  equipment        Equipment @relation(fields: [equipmentId], references: [id], onDelete: Restrict)
+
+  @@unique([budgetId, equipmentId], map: "budget_equipment_budget_equipment_uq")
+  @@unique([budgetId, position], map: "budget_equipment_budget_position_uq")
+  @@index([equipmentId], map: "budget_equipment_equipment_idx")
+  @@map("budget_equipments")
 }
 
 model BudgetItem {

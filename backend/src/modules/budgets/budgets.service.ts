@@ -22,6 +22,10 @@ const BUDGET_INCLUDE = {
   customer: { select: { id: true, name: true, tradeName: true, email: true, phone: true } },
   customerAddress: true,
   equipment: { select: { id: true, name: true, tag: true, type: true, status: true } },
+  equipments: {
+    include: { equipment: { select: { id: true, name: true, tag: true, type: true, status: true } } },
+    orderBy: { position: 'asc' as const },
+  },
   creator: { select: { id: true, name: true, email: true, username: true, role: true } },
   items: { include: { product: true }, orderBy: [{ type: 'asc' as const }, { sortOrder: 'asc' as const }, { createdAt: 'asc' as const }] },
   document: {
@@ -112,6 +116,9 @@ export class BudgetsService {
   async create(dto: CreateBudgetDto, actor: AuthenticatedUser, context: BudgetAuditContext): Promise<BudgetWithRelations> {
     this.assertCreateStatus(dto.status);
     const relations = await this.resolveRelations(dto);
+    const equipmentIds = await this.resolveBudgetEquipmentIds(dto, relations.equipmentId);
+    const equipmentRows = await this.resolveEquipmentRows(relations.customerId, equipmentIds);
+    const primaryEquipmentId = equipmentIds[0] ?? relations.equipmentId ?? null;
     const items = await this.resolveSnapshotItems(dto.items);
     const totals = this.calculateTotals(items, dto.discount, dto.additional);
     const issuedAt = dto.issuedAt ? new Date(dto.issuedAt) : new Date();
@@ -126,6 +133,8 @@ export class BudgetsService {
       const budget = await tx.budget.create({
         data: {
           ...relations,
+          equipmentId: primaryEquipmentId,
+          equipments: { createMany: { data: equipmentRows } },
           status: dto.status ?? BudgetStatus.DRAFT,
           title: this.clean(dto.title),
           description: this.optionalClean(dto.description),
@@ -180,7 +189,7 @@ export class BudgetsService {
     this.assertUpdateStatus(dto.status);
 
     const relations =
-      dto.customerId || dto.customerAddressId !== undefined || dto.equipmentId !== undefined || dto.operationId !== undefined
+      dto.customerId || dto.customerAddressId !== undefined || dto.equipmentId !== undefined || dto.equipmentIds !== undefined || dto.operationId !== undefined
         ? await this.resolveRelations({
             operationId: dto.operationId ?? current.operationId ?? undefined,
             customerId: dto.customerId ?? current.customerId,
@@ -188,6 +197,15 @@ export class BudgetsService {
             equipmentId: dto.equipmentId ?? current.equipmentId ?? undefined,
           })
         : undefined;
+    // Substitui a lista de equipamentos quando explicitamente informada.
+    const customerId = dto.customerId ?? current.customerId;
+    let equipmentRows: Prisma.BudgetEquipmentCreateManyBudgetInput[] | undefined;
+    let primaryEquipmentId: string | null | undefined;
+    if (dto.equipmentIds !== undefined) {
+      const equipmentIds = [...new Set(dto.equipmentIds)];
+      equipmentRows = await this.resolveEquipmentRows(customerId, equipmentIds);
+      primaryEquipmentId = equipmentIds[0] ?? null;
+    }
     const items = dto.items ? await this.resolveSnapshotItems(dto.items) : undefined;
     const totals = items
       ? this.calculateTotals(items, dto.discount ?? Number(current.discount), dto.additional ?? Number(current.additional))
@@ -221,11 +239,16 @@ export class BudgetsService {
       if (items) {
         await tx.budgetItem.deleteMany({ where: { budgetId: id } });
       }
+      if (equipmentRows) {
+        await tx.budgetEquipment.deleteMany({ where: { budgetId: id } });
+      }
       const nextStatus = dto.status ?? current.status;
       const budget = await tx.budget.update({
         where: { id },
         data: {
           ...(relations ?? {}),
+          ...(primaryEquipmentId !== undefined ? { equipmentId: primaryEquipmentId } : {}),
+          ...(equipmentRows ? { equipments: { createMany: { data: equipmentRows } } } : {}),
           ...(dto.title !== undefined ? { title: this.clean(dto.title) } : {}),
           ...(dto.description !== undefined ? { description: this.optionalClean(dto.description) } : {}),
           ...(dto.issuedAt !== undefined ? { issuedAt } : {}),
@@ -497,6 +520,71 @@ export class BudgetsService {
       }
     }
     return { organizationId: organization.id, customerId: dto.customerId, customerAddressId, equipmentId, operationId };
+  }
+
+  /**
+   * Resolve a lista de equipamentos do orçamento (um ou vários). Ordem de
+   * prioridade: `equipmentIds` explícitos → equipamentos inspecionados da OS de
+   * origem → `equipmentId` único (retrocompatibilidade).
+   */
+  private async resolveBudgetEquipmentIds(
+    dto: { equipmentIds?: string[]; equipmentId?: string; operationId?: string },
+    fallbackEquipmentId: string | null,
+  ): Promise<string[]> {
+    if (dto.equipmentIds !== undefined) return [...new Set(dto.equipmentIds)];
+    if (dto.operationId) {
+      const inspected = await this.prisma.operationInspectedEquipment.findMany({
+        where: { operationId: dto.operationId },
+        orderBy: { position: 'asc' },
+        select: { equipmentId: true },
+      });
+      if (inspected.length) return [...new Set(inspected.map((item) => item.equipmentId))];
+    }
+    return fallbackEquipmentId ? [fallbackEquipmentId] : [];
+  }
+
+  /** Valida a posse dos equipamentos e monta as linhas com snapshots (setor/marca/modelo/capacidade). */
+  private async resolveEquipmentRows(
+    customerId: string,
+    equipmentIds: string[],
+  ): Promise<Prisma.BudgetEquipmentCreateManyBudgetInput[]> {
+    if (equipmentIds.length === 0) return [];
+    const equipments = await this.prisma.equipment.findMany({
+      where: { id: { in: equipmentIds } },
+      select: {
+        id: true,
+        name: true,
+        tag: true,
+        manufacturer: true,
+        model: true,
+        capacity: true,
+        serialNumber: true,
+        isActive: true,
+        customerId: true,
+        address: { select: { name: true } },
+      },
+    });
+    const byId = new Map(equipments.map((equipment) => [equipment.id, equipment]));
+    return equipmentIds.map((id, index) => {
+      const equipment = byId.get(id);
+      if (!equipment?.isActive || equipment.customerId !== customerId) {
+        throw new ApplicationException(
+          ERROR_CODES.BUDGET_INVALID_RELATIONSHIP,
+          'Equipment belongs to another customer',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      return {
+        equipmentId: id,
+        position: index,
+        sector: (equipment.address?.name ?? equipment.name).slice(0, 160),
+        brandSnapshot: equipment.manufacturer ?? null,
+        modelSnapshot: equipment.model ?? null,
+        capacitySnapshot: equipment.capacity ?? null,
+        tagSnapshot: equipment.tag ?? null,
+        serialSnapshot: equipment.serialNumber ?? null,
+      };
+    });
   }
 
   private async resolveSnapshotItems(dtoItems: BudgetItemInputDto[]): Promise<SnapshotItem[]> {

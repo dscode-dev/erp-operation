@@ -53,6 +53,7 @@ export class CreateBudgetDto {
   @IsUUID('4') customerId!: string;
   @IsOptional() @IsUUID('4') customerAddressId?: string;
   @IsOptional() @IsUUID('4') equipmentId?: string;
+  @IsOptional() @IsArray() @ArrayUnique() @IsUUID('4', { each: true }) equipmentIds?: string[];
   @Transform(({ value }) => trim(value)) @IsString() @MinLength(2) @MaxLength(180) title!: string;
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(5000) description?: string;
   @IsOptional() @IsDateString() issuedAt?: string;
@@ -74,6 +75,7 @@ export class UpdateBudgetDto {
   @IsOptional() @IsUUID('4') customerId?: string;
   @IsOptional() @IsUUID('4') customerAddressId?: string;
   @IsOptional() @IsUUID('4') equipmentId?: string;
+  @IsOptional() @IsArray() @ArrayUnique() @IsUUID('4', { each: true }) equipmentIds?: string[];
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MinLength(2) @MaxLength(180) title?: string;
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(5000) description?: string;
   @IsOptional() @IsDateString() issuedAt?: string;

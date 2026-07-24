@@ -1653,21 +1653,46 @@ export class DocumentBuilderService {
       },
     ];
 
-    if (budget.equipment) {
+    const budgetEquipments = budget.equipments ?? [];
+    const budgetEquipmentRows =
+      budgetEquipments.length > 0
+        ? budgetEquipments.map((item, index) => ({
+            item: String(index + 1).padStart(2, '0'),
+            sector: this.clean(item.sector),
+            brand: this.clean(item.brandSnapshot ?? item.equipment.manufacturer ?? '—'),
+            model: this.clean(item.modelSnapshot ?? item.equipment.model ?? '—'),
+            capacity: this.clean(item.capacitySnapshot ?? item.equipment.capacity ?? '—'),
+          }))
+        : budget.equipment
+          ? [
+              {
+                item: '01',
+                sector: this.clean(budget.equipment.name),
+                brand: this.clean(budget.equipment.manufacturer ?? '—'),
+                model: this.clean(budget.equipment.model ?? '—'),
+                capacity: this.clean(budget.equipment.capacity ?? '—'),
+              },
+            ]
+          : [];
+
+    if (budgetEquipmentRows.length > 0) {
       sections.push({
-        id: 'budget-equipment',
-        title: 'Equipamento',
+        id: 'budget-equipments',
+        title: 'Equipamentos',
         critical: true,
         components: [
-          this.metadata('budget-equipment-metadata', [
-            ['Nome', budget.equipment.name],
-            ['Tag', budget.equipment.tag ?? '—'],
-            ['Tipo', budget.equipment.type],
-            ['Fabricante', budget.equipment.manufacturer ?? '—'],
-            ['Modelo', budget.equipment.model ?? '—'],
-            ['Nº de série', budget.equipment.serialNumber ?? '—'],
-            ['QR Code', budget.equipment.qrCode],
-          ]),
+          {
+            id: 'budget-equipments-table',
+            kind: 'table',
+            columns: [
+              { key: 'item', label: 'ITEM', width: 0.1 },
+              { key: 'sector', label: 'SETOR', width: 0.34 },
+              { key: 'brand', label: 'MARCA', width: 0.19 },
+              { key: 'model', label: 'MODELO', width: 0.19 },
+              { key: 'capacity', label: 'CAPACIDADE', width: 0.18 },
+            ],
+            rows: budgetEquipmentRows,
+          },
         ],
       });
     }
