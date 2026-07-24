@@ -495,18 +495,20 @@ const EMPTY_COVERAGE: Coverage = { scheduled: 0, attended: 0 };
 
 /**
  * Cobertura por relatório: conta documentos do tipo no período e separa
- * atendido (VALIDATED + SENT) de agendado (o restante — DRAFT + READY).
+ * atendido (PDF pronto — status READY em diante) de agendado (ainda em DRAFT).
+ *
+ * O status do documento só assume DRAFT (criado) e READY (renderizado); por isso
+ * "atendido" = total − DRAFT, contabilizando os relatórios efetivamente prontos.
  */
 function useCoverage(type: DocumentKind, bounds: { from: string; to: string }) {
   const q = useQuery<Coverage>(
     (s) =>
       Promise.all([
         documentsApi.listDocuments({ type, from: bounds.from, to: bounds.to, limit: 1, signal: s }).then((r) => r.pagination.total),
-        documentsApi.listDocuments({ type, status: "VALIDATED", from: bounds.from, to: bounds.to, limit: 1, signal: s }).then((r) => r.pagination.total),
-        documentsApi.listDocuments({ type, status: "SENT", from: bounds.from, to: bounds.to, limit: 1, signal: s }).then((r) => r.pagination.total),
-      ]).then(([total, validated, sent]) => {
-        const attended = validated + sent;
-        return { attended, scheduled: Math.max(0, total - attended) };
+        documentsApi.listDocuments({ type, status: "DRAFT", from: bounds.from, to: bounds.to, limit: 1, signal: s }).then((r) => r.pagination.total),
+      ]).then(([total, draft]) => {
+        const scheduled = Math.min(draft, total);
+        return { attended: Math.max(0, total - scheduled), scheduled };
       }),
     [],
   );
