@@ -4,6 +4,7 @@ import {
   OperationMaintenanceType,
   OperationStatus,
   OperationType,
+  PmocChecklistUnit,
 } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
 import {
@@ -67,6 +68,7 @@ export class UpdateOperationPhotoDto {
 
 export class OperationMaintenanceChecklistItemDto {
   @IsOptional() @IsUUID('4') equipmentId?: string;
+  @IsOptional() @IsEnum(PmocChecklistUnit) pmocUnit?: PmocChecklistUnit;
   @IsEnum(OperationMaintenanceType) maintenanceType!: OperationMaintenanceType;
   @Transform(({ value }) => trim(value)) @IsString() @MaxLength(500) description!: string;
   @IsBoolean() executed!: boolean;

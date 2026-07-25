@@ -834,6 +834,8 @@ export type TechnicalCatalogWorkflow =
   | 'PMOC'
   | 'MAINTENANCE';
 
+export type PmocChecklistUnit = 'EVAPORATOR' | 'CONDENSER';
+
 export type TechnicalCatalog = {
   id: string;
   organizationId: string;
@@ -844,6 +846,7 @@ export type TechnicalCatalog = {
   areas: TechnicalCatalogArea[];
   workflows: TechnicalCatalogWorkflow[];
   maintenanceType: OperationMaintenanceType | null;
+  pmocUnit: PmocChecklistUnit | null;
   sortOrder: number;
   active: boolean;
   createdAt: string;

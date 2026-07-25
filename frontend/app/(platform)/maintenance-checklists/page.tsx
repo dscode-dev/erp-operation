@@ -18,6 +18,7 @@ import {
   useQuery,
   type OperationMaintenanceType,
   type Paginated,
+  type PmocChecklistUnit,
   type TechnicalCatalog,
   type TechnicalCatalogArea,
   type TechnicalCatalogTaxonomy,
@@ -44,7 +45,11 @@ const MAINTENANCE_TYPES: Array<{ value: OperationMaintenanceType; label: string 
 const RVT_MAINTENANCE_TYPES = MAINTENANCE_TYPES.filter(
   (item) => item.value === 'WEEKLY' || item.value === 'SEMIANNUAL',
 );
-type CatalogTab = TechnicalCatalogType | 'RVT_CHECKLIST';
+const PMOC_UNITS: Array<{ value: PmocChecklistUnit; label: string }> = [
+  { value: 'EVAPORATOR', label: 'Unidade Evaporadora' },
+  { value: 'CONDENSER', label: 'Unidade Condensadora' },
+];
+type CatalogTab = TechnicalCatalogType | 'RVT_CHECKLIST' | 'PMOC_CHECKLIST';
 
 export default function TechnicalCatalogsPage() {
   const { hasRole } = useAuth();
@@ -54,6 +59,7 @@ export default function TechnicalCatalogsPage() {
   const [limit, setLimit] = useState(20);
   const [search, setSearch] = useState('');
   const [maintenanceType, setMaintenanceType] = useState<OperationMaintenanceType | ''>('');
+  const [pmocUnit, setPmocUnit] = useState<PmocChecklistUnit>('EVAPORATOR');
   const [area, setArea] = useState<TechnicalCatalogArea | ''>('');
   const [workflow, setWorkflow] = useState<TechnicalCatalogWorkflow | ''>('');
   const [active, setActive] = useState<'' | 'true' | 'false'>('');
@@ -76,11 +82,14 @@ export default function TechnicalCatalogsPage() {
     const matched =
       requested === 'RVT_CHECKLIST'
         ? 'RVT_CHECKLIST'
-        : types.data.find((item) => item.value === requested)?.value;
+        : requested === 'PMOC_CHECKLIST'
+          ? 'PMOC_CHECKLIST'
+          : types.data.find((item) => item.value === requested)?.value;
     setSelectedType(matched ?? types.data[0].value);
   }, [selectedType, types.data]);
   const isRvtChecklist = selectedType === 'RVT_CHECKLIST';
-  const effectiveType = isRvtChecklist ? 'CHECKLIST' : selectedType;
+  const isPmocChecklist = selectedType === 'PMOC_CHECKLIST';
+  const effectiveType = isRvtChecklist || isPmocChecklist ? 'CHECKLIST' : selectedType;
   const catalogs = useQuery<Paginated<TechnicalCatalog>>(
     (signal) =>
       technicalCatalogsApi.list({
@@ -89,14 +98,19 @@ export default function TechnicalCatalogsPage() {
         search: search || undefined,
         type: effectiveType ?? undefined,
         maintenanceType:
-          effectiveType === 'CHECKLIST' && maintenanceType ? maintenanceType : undefined,
+          effectiveType === 'CHECKLIST' && !isPmocChecklist && maintenanceType
+            ? maintenanceType
+            : undefined,
+        pmocUnit: isPmocChecklist ? pmocUnit : undefined,
         areas: area ? [area] : undefined,
         workflow:
           isRvtChecklist
             ? 'TECHNICAL_REPORT'
-            : selectedType === 'CHECKLIST'
-              ? undefined
-              : workflow || undefined,
+            : isPmocChecklist
+              ? 'PMOC'
+              : selectedType === 'CHECKLIST'
+                ? undefined
+                : workflow || undefined,
         workflowsAny:
           selectedType === 'CHECKLIST' && !workflow ? ['WORK_ORDER', 'PMOC'] : undefined,
         includeGeneral: selectedType === 'CHECKLIST' && !workflow,
@@ -112,7 +126,9 @@ export default function TechnicalCatalogsPage() {
       selectedType,
       effectiveType,
       isRvtChecklist,
+      isPmocChecklist,
       maintenanceType,
+      pmocUnit,
       area,
       workflow,
       active,
@@ -195,6 +211,19 @@ export default function TechnicalCatalogsPage() {
                   >
                     Checklist do RVT
                   </button>,
+                  <button
+                    key="PMOC_CHECKLIST"
+                    type="button"
+                    onClick={() => {
+                      setSelectedType('PMOC_CHECKLIST');
+                      setPage(1);
+                      setMaintenanceType('');
+                      setWorkflow('');
+                    }}
+                    className={`whitespace-nowrap rounded-[var(--radius-md)] px-3 py-2 text-sm ${isPmocChecklist ? 'bg-[var(--color-primary)] text-[var(--color-primary-foreground)]' : 'hover:bg-[var(--color-muted)]'}`}
+                  >
+                    Checklist PMOC
+                  </button>,
                 ]
               : []),
           ])}
@@ -221,6 +250,16 @@ export default function TechnicalCatalogsPage() {
             </p>
           </div>
         )}
+        {isPmocChecklist && (
+          <div className="rounded-[var(--radius-lg)] border border-amber-500/25 bg-amber-500/5 p-4 text-sm">
+            <strong>Checklist do Procedimento do PMOC (Lei nº 13.589/2018)</strong>
+            <p className="mt-1 text-[var(--color-muted-foreground)]">
+              Procedimentos fixos por unidade (Evaporadora e Condensadora). Ao criar um PMOC, o
+              owner marca no wizard os itens executados, que preenchem a coluna “Executado” do
+              relatório.
+            </p>
+          </div>
+        )}
         <div className="grid gap-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 md:grid-cols-3 xl:grid-cols-[minmax(220px,1fr)_170px_190px_190px_160px_170px]">
           <label className="flex h-10 items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] px-3">
             <Search className="h-4 w-4 text-[var(--color-muted-foreground)]" />
@@ -234,7 +273,22 @@ export default function TechnicalCatalogsPage() {
               className="min-w-0 flex-1 bg-transparent text-sm outline-none"
             />
           </label>
-          {effectiveType === 'CHECKLIST' ? (
+          {isPmocChecklist ? (
+            <select
+              value={pmocUnit}
+              onChange={(event) => {
+                setPmocUnit(event.target.value as PmocChecklistUnit);
+                setPage(1);
+              }}
+              className="h-10 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm"
+            >
+              {PMOC_UNITS.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          ) : effectiveType === 'CHECKLIST' ? (
             <select
               value={maintenanceType}
               onChange={(event) => {
@@ -266,9 +320,13 @@ export default function TechnicalCatalogsPage() {
               <option key={item.value} value={item.value}>{item.label}</option>
             ))}
           </select>
-          {isRvtChecklist || selectedType === 'CHECKLIST' ? (
+          {isRvtChecklist || isPmocChecklist || selectedType === 'CHECKLIST' ? (
             <div className="flex h-10 items-center rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-muted)] px-3 text-sm">
-              {isRvtChecklist ? 'Relatório de Visita Técnica' : 'Ordem de Serviço e PMOC'}
+              {isRvtChecklist
+                ? 'Relatório de Visita Técnica'
+                : isPmocChecklist
+                  ? 'Checklist do Procedimento (PMOC)'
+                  : 'Ordem de Serviço e PMOC'}
             </div>
           ) : (
             <select
@@ -337,7 +395,9 @@ export default function TechnicalCatalogsPage() {
                 <tr>
                   <th className="px-4 py-3">Ordem</th>
                   <th className="px-4 py-3">Título</th>
-                  {effectiveType === 'CHECKLIST' && <th className="px-4 py-3">Periodicidade</th>}
+                  {effectiveType === 'CHECKLIST' && !isPmocChecklist && (
+                    <th className="px-4 py-3">Periodicidade</th>
+                  )}
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3 text-right">Ações</th>
                 </tr>
@@ -359,7 +419,7 @@ export default function TechnicalCatalogsPage() {
                         </div>
                       )}
                     </td>
-                    {effectiveType === 'CHECKLIST' && (
+                    {effectiveType === 'CHECKLIST' && !isPmocChecklist && (
                       <td className="px-4 py-3">
                         {MAINTENANCE_TYPES.find((type) => type.value === item.maintenanceType)
                           ?.label ?? '—'}
@@ -453,8 +513,16 @@ export default function TechnicalCatalogsPage() {
             item={editor === 'create' ? null : editor}
             type={effectiveType}
             fixedWorkflows={
-              isRvtChecklist ? ['TECHNICAL_REPORT'] : selectedType === 'CHECKLIST' ? ['WORK_ORDER', 'PMOC'] : undefined
+              isRvtChecklist
+                ? ['TECHNICAL_REPORT']
+                : isPmocChecklist
+                  ? ['PMOC']
+                  : selectedType === 'CHECKLIST'
+                    ? ['WORK_ORDER', 'PMOC']
+                    : undefined
             }
+            pmocUnits={isPmocChecklist ? PMOC_UNITS : undefined}
+            defaultPmocUnit={isPmocChecklist ? pmocUnit : undefined}
             maintenanceTypes={isRvtChecklist ? RVT_MAINTENANCE_TYPES : MAINTENANCE_TYPES}
             taxonomy={taxonomy.data ?? undefined}
             onClose={() => setEditor(null)}
@@ -489,6 +557,8 @@ function TechnicalCatalogDrawer({
   type,
   taxonomy,
   fixedWorkflows,
+  pmocUnits,
+  defaultPmocUnit,
   maintenanceTypes,
   onClose,
   onSaved,
@@ -497,6 +567,8 @@ function TechnicalCatalogDrawer({
   type: TechnicalCatalogType;
   taxonomy?: TechnicalCatalogTaxonomy;
   fixedWorkflows?: TechnicalCatalogWorkflow[];
+  pmocUnits?: Array<{ value: PmocChecklistUnit; label: string }>;
+  defaultPmocUnit?: PmocChecklistUnit;
   maintenanceTypes: Array<{ value: OperationMaintenanceType; label: string }>;
   onClose: () => void;
   onSaved: (message: string) => void;
@@ -510,6 +582,9 @@ function TechnicalCatalogDrawer({
   );
   const [maintenanceType, setMaintenanceType] = useState<OperationMaintenanceType>(
     item?.maintenanceType ?? maintenanceTypes[0]?.value ?? 'SEMIANNUAL',
+  );
+  const [pmocUnit, setPmocUnit] = useState<PmocChecklistUnit>(
+    item?.pmocUnit ?? defaultPmocUnit ?? 'EVAPORATOR',
   );
   const [active, setActive] = useState(item?.active ?? true);
   const [saving, setSaving] = useState(false);
@@ -538,6 +613,7 @@ function TechnicalCatalogDrawer({
                   areas,
                   workflows,
                   maintenanceType: type === 'CHECKLIST' ? maintenanceType : null,
+                  pmocUnit: pmocUnits ? pmocUnit : null,
                   active,
                 };
                 if (item) await technicalCatalogsApi.update(item.id, payload);
@@ -611,23 +687,40 @@ function TechnicalCatalogDrawer({
             onChange={setWorkflows}
           />
         )}
-        {type === 'CHECKLIST' && (
+        {pmocUnits ? (
           <label className="grid gap-1 text-sm font-medium">
-            Periodicidade
+            Unidade
             <select
-              value={maintenanceType}
-              onChange={(event) =>
-                setMaintenanceType(event.target.value as OperationMaintenanceType)
-              }
+              value={pmocUnit}
+              onChange={(event) => setPmocUnit(event.target.value as PmocChecklistUnit)}
               className="h-10 rounded border border-[var(--color-border)] bg-[var(--color-card)] px-3"
             >
-              {maintenanceTypes.map((option) => (
+              {pmocUnits.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
                 </option>
               ))}
             </select>
           </label>
+        ) : (
+          type === 'CHECKLIST' && (
+            <label className="grid gap-1 text-sm font-medium">
+              Periodicidade
+              <select
+                value={maintenanceType}
+                onChange={(event) =>
+                  setMaintenanceType(event.target.value as OperationMaintenanceType)
+                }
+                className="h-10 rounded border border-[var(--color-border)] bg-[var(--color-card)] px-3"
+              >
+                {maintenanceTypes.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )
         )}
         <label className="flex items-center gap-2 text-sm">
           <input

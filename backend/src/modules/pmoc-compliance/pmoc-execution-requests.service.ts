@@ -11,10 +11,13 @@ import {
   PmocGenerationMode,
   PmocHistoryAction,
   PmocOperationalStatus,
+  PmocChecklistUnit,
   PmocPeriodicity,
   PmocSchedulerStatus,
   Prisma,
   Role,
+  TechnicalCatalogType,
+  TechnicalCatalogWorkflow,
 } from '@prisma/client';
 import { ERROR_CODES } from '../../shared/constants/error-codes.constants';
 import {
@@ -115,6 +118,12 @@ type PlanForExecution = Prisma.PmocPlanGetPayload<{
 type RequestWithPlan = Prisma.PmocExecutionRequestGetPayload<{
   include: typeof REQUEST_WITH_PLAN_INCLUDE;
 }>;
+type PmocUnitChecklistItem = {
+  id: string;
+  title: string;
+  pmocUnit: PmocChecklistUnit;
+  maintenanceType: OperationMaintenanceType | null;
+};
 
 @Injectable()
 export class PmocExecutionRequestsService {
@@ -408,7 +417,15 @@ export class PmocExecutionRequestsService {
     const request = await this.requestWithPlanOrThrow(id);
     this.assertRequestCanGenerate(request.status);
     this.assertOperatorCanClaim(request, actor);
-    return this.buildOperationPayload(request.pmocPlan, request.scheduledFor, actor, undefined, request);
+    const unitChecklist = await this.loadPmocUnitChecklist(request.pmocPlan.organizationId);
+    return this.buildOperationPayload(
+      request.pmocPlan,
+      request.scheduledFor,
+      actor,
+      unitChecklist,
+      undefined,
+      request,
+    );
   }
 
   async generate(
@@ -520,10 +537,12 @@ export class PmocExecutionRequestsService {
     }
 
     try {
+      const unitChecklist = await this.loadPmocUnitChecklist(request.pmocPlan.organizationId);
       const authoritative = this.buildOperationPayload(
         request.pmocPlan,
         request.scheduledFor,
         actor,
+        unitChecklist,
         dto.operation,
         request,
       );
@@ -1064,10 +1083,34 @@ export class PmocExecutionRequestsService {
     });
   }
 
+  /**
+   * Itens do "Checklist PMOC" cadastrados no Catálogo Técnico (workflow PMOC),
+   * agrupados por unidade fixa (Evaporadora/Condensadora). São globais por
+   * organização e alimentam a tabela do Checklist do Procedimento no relatório.
+   */
+  private async loadPmocUnitChecklist(organizationId: string): Promise<PmocUnitChecklistItem[]> {
+    const items = await this.prisma.technicalCatalog.findMany({
+      where: {
+        organizationId,
+        type: TechnicalCatalogType.CHECKLIST,
+        active: true,
+        deletedAt: null,
+        pmocUnit: { not: null },
+        workflows: { has: TechnicalCatalogWorkflow.PMOC },
+      },
+      select: { id: true, title: true, pmocUnit: true, maintenanceType: true },
+      orderBy: [{ pmocUnit: 'asc' as const }, { sortOrder: 'asc' as const }, { title: 'asc' as const }],
+    });
+    return items.filter(
+      (item): item is PmocUnitChecklistItem => item.pmocUnit !== null,
+    );
+  }
+
   private buildOperationPayload(
     plan: PlanForExecution,
     scheduledFor: Date,
     actor: AuthenticatedUser,
+    unitChecklist: PmocUnitChecklistItem[],
     reviewed?: CreateOperationDto,
     responsibility?: Pick<RequestWithPlan, 'plannedOperator' | 'plannedTechnician'>,
   ): CreateOperationDto {
@@ -1089,18 +1132,29 @@ export class PmocExecutionRequestsService {
       plan.customer.addresses[0]?.id ??
       undefined;
     const maintenanceType = this.maintenanceType(plan.periodicity);
-    const activeChecklist = plan.includeChecklistInOperations
-      ? plan.checklists.filter((item) => item.technicalCatalog.active)
-      : [];
+    const includeChecklist = plan.includeChecklistInOperations;
+    // Itens do Checklist PMOC que o owner marcou como executados no plano.
+    const executedIds = new Set(plan.checklists.map((item) => item.technicalCatalogId));
     const operationChecklist =
       reviewed?.checklist ??
-      activeChecklist.map((item) => ({ label: item.technicalCatalog.title, done: false }));
-    const checklistMaintenanceTypes = new Map(
-      activeChecklist.map((item) => [
-        item.technicalCatalog.title,
-        item.technicalCatalog.maintenanceType,
-      ]),
-    );
+      (includeChecklist
+        ? plan.checklists
+            .filter((item) => item.technicalCatalog.active)
+            .map((item) => ({ label: item.technicalCatalog.title, done: true }))
+        : []);
+    // Todos os procedimentos cadastrados por unidade (Evaporadora/Condensadora)
+    // entram na tabela do relatório; "Executado" reflete a marcação do owner.
+    const unitMaintenanceChecklist = includeChecklist
+      ? unitChecklist.map((item) => ({
+          pmocUnit: item.pmocUnit,
+          maintenanceType: item.maintenanceType ?? maintenanceType,
+          description: item.title,
+          executed: executedIds.has(item.id),
+          result: executedIds.has(item.id)
+            ? MaintenanceChecklistResult.YES
+            : MaintenanceChecklistResult.NO,
+        }))
+      : [];
     return {
       ...reviewed,
       customerId: plan.customerId,
@@ -1116,19 +1170,11 @@ export class PmocExecutionRequestsService {
       observations:
         reviewed?.observations ??
         plan.defaultOperationObservations ??
-        `Execução preventiva vinculada ao PMOC-${String(plan.number).padStart(6, '0')}.${plan.defaultEstimatedDurationMinutes ? ` Duração estimada: ${plan.defaultEstimatedDurationMinutes} minutos.` : ''}`,
+        `Execução preventiva vinculada ao PMOC-${String(plan.number).padStart(6, '0')}.`,
       reportedIssue: reviewed?.reportedIssue ?? `Execução programada do ${plan.maintenancePlan.name}.`,
       serviceDescription: reviewed?.serviceDescription ?? plan.coverage ?? plan.observations ?? undefined,
       maintenanceType,
-      maintenanceChecklist: operationChecklist.flatMap((item) =>
-        equipments.map((equipment) => ({
-          equipmentId: equipment.id,
-          maintenanceType: checklistMaintenanceTypes.get(item.label) ?? maintenanceType,
-          description: item.label,
-          executed: false,
-          result: MaintenanceChecklistResult.NO,
-        })),
-      ),
+      maintenanceChecklist: reviewed?.maintenanceChecklist ?? unitMaintenanceChecklist,
       // A cobertura da execução pertence ao PMOC. O frontend pode revisar os
       // textos e o responsável, mas não retirar equipamentos do plano ao gerar
       // uma OS.

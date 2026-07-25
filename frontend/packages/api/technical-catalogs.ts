@@ -3,6 +3,7 @@ import type {
   DocumentTemplateType,
   OperationMaintenanceType,
   Paginated,
+  PmocChecklistUnit,
   TechnicalCatalog,
   TechnicalCatalogArea,
   TechnicalCatalogTaxonomy,
@@ -17,6 +18,7 @@ export type ListTechnicalCatalogsParams = {
   search?: string;
   type?: TechnicalCatalogType;
   maintenanceType?: OperationMaintenanceType;
+  pmocUnit?: PmocChecklistUnit;
   areas?: TechnicalCatalogArea[];
   workflow?: TechnicalCatalogWorkflow;
   workflowsAny?: TechnicalCatalogWorkflow[];
@@ -35,6 +37,7 @@ export type TechnicalCatalogPayload = {
   areas: TechnicalCatalogArea[];
   workflows: TechnicalCatalogWorkflow[];
   maintenanceType?: OperationMaintenanceType | null;
+  pmocUnit?: PmocChecklistUnit | null;
   sortOrder?: number;
   active?: boolean;
 };
@@ -123,4 +126,26 @@ export function listChecklistItems(
     limit: 100,
     signal: opts?.signal,
   }).then((page) => page.items);
+}
+
+/**
+ * Itens ATIVOS do "Checklist PMOC" (workflow PMOC) já classificados por unidade
+ * (Evaporadora/Condensadora). Fonte dos procedimentos fixos exibidos na etapa
+ * Execução do wizard do PMOC.
+ */
+export function listPmocChecklistItems(opts?: {
+  pmocUnit?: PmocChecklistUnit;
+  signal?: AbortSignal;
+}): Promise<TechnicalCatalog[]> {
+  return list({
+    type: 'CHECKLIST',
+    workflow: 'PMOC',
+    pmocUnit: opts?.pmocUnit,
+    includeGeneral: false,
+    active: true,
+    sortBy: 'sortOrder',
+    order: 'asc',
+    limit: 100,
+    signal: opts?.signal,
+  }).then((page) => page.items.filter((item) => item.pmocUnit));
 }

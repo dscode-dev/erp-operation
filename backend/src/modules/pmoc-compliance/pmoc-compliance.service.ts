@@ -1601,7 +1601,10 @@ export class PmocComplianceService implements ComplianceEvaluator<{
         type: TechnicalCatalogType.CHECKLIST,
         active: true,
         deletedAt: null,
+        // Aceita itens do Checklist PMOC (workflow PMOC, cadastrados por unidade)
+        // e, por compatibilidade, os checklists gerais/de OS.
         OR: [
+          { workflows: { has: TechnicalCatalogWorkflow.PMOC } },
           { workflows: { has: TechnicalCatalogWorkflow.WORK_ORDER } },
           { workflows: { has: TechnicalCatalogWorkflow.GENERAL } },
         ],
@@ -1611,7 +1614,7 @@ export class PmocComplianceService implements ComplianceEvaluator<{
     if (checklists.length !== uniqueIds.length) {
       throw new ApplicationException(
         ERROR_CODES.TECHNICAL_CATALOG_NOT_FOUND,
-        'Every PMOC checklist must be an active Work Order checklist from this organization',
+        'Every PMOC checklist must be an active checklist from this organization',
         HttpStatus.BAD_REQUEST,
       );
     }

@@ -207,7 +207,7 @@ class WalkInEquipmentDto {
 export class CreateWalkInCustomerDto {
   @IsEnum(CustomerType) type!: CustomerType;
   @Transform(({ value }) => trim(value)) @IsString() @MinLength(2) @MaxLength(180) name!: string;
-  @Transform(({ value }) => trim(value)) @IsString() @MinLength(11) @MaxLength(18) document!: string;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MinLength(11) @MaxLength(18) document?: string;
   @ValidateNested() @Type(() => WalkInAddressDto) address!: WalkInAddressDto;
   @ValidateNested() @Type(() => WalkInContactDto) contact!: WalkInContactDto;
   @ValidateNested() @Type(() => WalkInEquipmentDto) equipment!: WalkInEquipmentDto;

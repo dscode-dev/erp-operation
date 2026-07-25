@@ -116,8 +116,9 @@ const EMPTY_WALK_IN: WalkInForm = {
   complement: '', district: '', city: '', state: '', contactName: '', contactPhone: '', equipmentName: '',
 };
 function walkInValid(w: WalkInForm): boolean {
+  // CPF/CNPJ é opcional no atendimento avulso do operador.
   return Boolean(
-    w.name.trim() && w.document.trim() && w.zipCode.trim() && w.street.trim() && w.number.trim() &&
+    w.name.trim() && w.zipCode.trim() && w.street.trim() && w.number.trim() &&
     w.district.trim() && w.city.trim() && w.state.trim().length === 2 &&
     w.contactName.trim() && w.contactPhone.trim() && w.equipmentName.trim(),
   );
@@ -336,7 +337,7 @@ export function AtendimentoWizard({
           (await customersApi.createWalkInCustomer({
             type: walk.personType,
             name: walk.name.trim(),
-            document: walk.document.trim(),
+            document: walk.document.trim() || undefined,
             address: {
               zipCode: walk.zipCode.trim(),
               street: walk.street.trim(),
@@ -979,7 +980,7 @@ function WalkInStep({
           ))}
         </div>
         <WalkField label="Nome / Razão social *" value={value.name} onChange={(v) => setField('name', v)} />
-        <WalkField label={value.personType === 'COMPANY' ? 'CNPJ *' : 'CPF *'} value={value.document} onChange={(v) => setField('document', v)} />
+        <WalkField label={value.personType === 'COMPANY' ? 'CNPJ *' : 'CPF'} value={value.document} onChange={(v) => setField('document', v)} />
       </section>
 
       <section className="space-y-3 border-t border-[var(--color-border)] pt-4">

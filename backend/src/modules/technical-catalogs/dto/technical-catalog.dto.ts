@@ -1,5 +1,6 @@
 import {
   OperationMaintenanceType,
+  PmocChecklistUnit,
   TechnicalCatalogArea,
   TechnicalCatalogType,
   TechnicalCatalogWorkflow,
@@ -57,6 +58,7 @@ export class ListTechnicalCatalogsQueryDto {
   @ArrayUnique()
   @IsEnum(TechnicalCatalogWorkflow, { each: true })
   workflowsAny?: TechnicalCatalogWorkflow[];
+  @IsOptional() @IsEnum(PmocChecklistUnit) pmocUnit?: PmocChecklistUnit;
   @IsOptional() @Transform(({ value }) => boolean(value)) @IsBoolean() includeGeneral?: boolean;
   @IsOptional() @Transform(({ value }) => boolean(value)) @IsBoolean() active?: boolean;
   @IsOptional() @IsIn(['sortOrder', 'title', 'updatedAt']) sortBy = 'sortOrder';
@@ -93,6 +95,7 @@ export class CreateTechnicalCatalogDto {
   @IsEnum(TechnicalCatalogWorkflow, { each: true })
   workflows?: TechnicalCatalogWorkflow[];
   @IsOptional() @IsEnum(OperationMaintenanceType) maintenanceType?: OperationMaintenanceType;
+  @IsOptional() @IsEnum(PmocChecklistUnit) pmocUnit?: PmocChecklistUnit;
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(100000) sortOrder?: number;
   @IsOptional() @IsBoolean() active?: boolean;
 }
@@ -131,6 +134,7 @@ export class UpdateTechnicalCatalogDto {
   @IsEnum(TechnicalCatalogWorkflow, { each: true })
   workflows?: TechnicalCatalogWorkflow[];
   @IsOptional() @IsEnum(OperationMaintenanceType) maintenanceType?: OperationMaintenanceType;
+  @IsOptional() @IsEnum(PmocChecklistUnit) pmocUnit?: PmocChecklistUnit;
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(100000) sortOrder?: number;
   @IsOptional() @IsBoolean() active?: boolean;
 }

@@ -820,13 +820,6 @@ export class DocumentBuilderService {
     const collectsClientSignature =
       context.signature.signatureMode === SignatureMode.COLLECTED ||
       context.signature.signatureMode === SignatureMode.HYBRID;
-    const signatureStatus = collectsClientSignature
-      ? operation.signatureData
-        ? 'ASSINADO'
-        : 'NÃO ASSINADO — AGUARDANDO ASSINATURA DO CLIENTE'
-      : context.signature.signatureMode === SignatureMode.FIXED
-        ? 'ASSINADO INSTITUCIONALMENTE'
-        : 'SEM ASSINATURA EXIGIDA';
     const sections: DocumentSection[] = [
       {
         id: 'pmoc-identification',
@@ -837,7 +830,6 @@ export class DocumentBuilderService {
             ['Título', `PMOC — ${operation.customer.tradeName ?? operation.customer.name}`],
             ['Número', documentNumber],
             ['Emissão', this.date(generatedAt)],
-            ['Situação', signatureStatus],
             ['Responsável técnico', this.technicalResponsibleName(context) ?? pmoc.responsibleTechnician],
             ['ART/registro', pmoc.artNumber ?? '—'],
             ['Contrato', pmoc.contractNumber ?? '—'],
@@ -895,34 +887,53 @@ export class DocumentBuilderService {
   }
 
   private pmocChecklistSections(operation: DocumentContextOperation): DocumentSection[] {
-    const groups = new Map<string, typeof operation.maintenanceChecklistItems>();
-    for (const item of operation.maintenanceChecklistItems) {
-      const key = item.equipmentId ?? 'general';
-      groups.set(key, [...(groups.get(key) ?? []), item]);
-    }
-    if (groups.size === 0) {
-      return [{ id: 'pmoc-checklist-empty', title: 'Checklist PMOC', components: [{ id: 'pmoc-checklist-empty-text', kind: 'paragraph', text: 'Nenhum procedimento foi registrado para esta execução.', keepTogether: true }] }];
-    }
-    return [...groups.entries()].map(([equipmentId, items], groupIndex) => ({
-      id: `pmoc-checklist-${groupIndex}`,
-      title: `Checklist PMOC — ${items[0]?.equipment?.name ?? (equipmentId === 'general' ? 'Procedimentos gerais' : 'Equipamento')}`,
-      components: [{
-        id: `pmoc-checklist-table-${groupIndex}`,
+    // Seção única "CheckList do Procedimento - Lei nº 13.589/2018"; o conteúdo é
+    // uma tabela para cada unidade fixa (Evaporadora/Condensadora), listando
+    // todos os procedimentos cadastrados com "Executado" em Sim/Não.
+    const UNIT_ORDER: Array<{ unit: 'EVAPORATOR' | 'CONDENSER'; label: string }> = [
+      { unit: 'EVAPORATOR', label: 'Unidade Evaporadora' },
+      { unit: 'CONDENSER', label: 'Unidade Condensadora' },
+    ];
+    const components: DocumentBlueprintComponent[] = [];
+    for (const { unit, label } of UNIT_ORDER) {
+      const items = operation.maintenanceChecklistItems.filter((item) => item.pmocUnit === unit);
+      if (items.length === 0) continue;
+      components.push({
+        id: `pmoc-checklist-heading-${unit.toLowerCase()}`,
+        kind: 'paragraph',
+        text: label,
+        keepTogether: true,
+      });
+      components.push({
+        id: `pmoc-checklist-table-${unit.toLowerCase()}`,
         kind: 'table',
         columns: [
-          { key: 'component', label: 'COMPONENTE / UNIDADE', width: 0.24 },
-          { key: 'procedure', label: 'PROCEDIMENTO', width: 0.42 },
-          { key: 'executed', label: 'EXECUTADO', width: 0.14 },
-          { key: 'observation', label: 'OBSERVAÇÃO', width: 0.2 },
+          { key: 'procedure', label: 'PROCEDIMENTO', width: 0.6 },
+          { key: 'executed', label: 'EXECUTADO', width: 0.15 },
+          { key: 'observation', label: 'OBSERVAÇÃO', width: 0.25 },
         ],
         rows: items.map((item) => ({
-          component: this.clean(item.equipment?.tag ?? item.equipment?.name ?? 'Geral'),
           procedure: this.clean(item.description),
           executed: item.result === 'YES' ? 'Sim' : item.result === 'NOT_APPLICABLE' ? 'N.A.' : 'Não',
           observation: this.clean(item.observations ?? '—'),
         })),
-      }],
-    }));
+      });
+    }
+    if (components.length === 0) {
+      components.push({
+        id: 'pmoc-checklist-empty-text',
+        kind: 'paragraph',
+        text: 'Nenhum procedimento foi registrado para esta execução.',
+        keepTogether: true,
+      });
+    }
+    return [
+      {
+        id: 'pmoc-checklist',
+        title: 'CheckList do Procedimento - Lei nº 13.589/2018',
+        components,
+      },
+    ];
   }
 
   private receiptSections(

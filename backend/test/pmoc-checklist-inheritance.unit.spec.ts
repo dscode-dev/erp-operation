@@ -2,6 +2,7 @@ import {
   MaintenanceChecklistResult,
   OperationMaintenanceType,
   OperationType,
+  PmocChecklistUnit,
   Role,
 } from '@prisma/client';
 import { PmocExecutionRequestsService } from '../src/modules/pmoc-compliance/pmoc-execution-requests.service';
@@ -16,6 +17,28 @@ const actor = {
   isActive: true,
   mustChangePassword: false,
 };
+
+// Catálogo global do "Checklist PMOC" (workflow PMOC), classificado por unidade.
+const unitChecklist = [
+  {
+    id: 'cat-evap-1',
+    title: 'Limpar filtros da evaporadora',
+    pmocUnit: PmocChecklistUnit.EVAPORATOR,
+    maintenanceType: OperationMaintenanceType.MONTHLY,
+  },
+  {
+    id: 'cat-evap-2',
+    title: 'Higienizar serpentina da evaporadora',
+    pmocUnit: PmocChecklistUnit.EVAPORATOR,
+    maintenanceType: null,
+  },
+  {
+    id: 'cat-cond-1',
+    title: 'Medir pressão da condensadora',
+    pmocUnit: PmocChecklistUnit.CONDENSER,
+    maintenanceType: OperationMaintenanceType.MONTHLY,
+  },
+];
 
 function plan(includeChecklistInOperations: boolean): Record<string, unknown> {
   const equipment = {
@@ -52,30 +75,18 @@ function plan(includeChecklistInOperations: boolean): Record<string, unknown> {
     observations: null,
     periodicity: 'MONTHLY',
     includeChecklistInOperations,
+    // Itens que o owner marcou como executados no wizard (subconjunto do catálogo).
     checklists: [
       {
+        technicalCatalogId: 'cat-evap-1',
         position: 0,
-        technicalCatalog: {
-          id: 'catalog-1',
-          title: 'Inspecionar filtros',
-          active: true,
-          maintenanceType: OperationMaintenanceType.MONTHLY,
-        },
-      },
-      {
-        position: 1,
-        technicalCatalog: {
-          id: 'catalog-2',
-          title: 'Item desativado',
-          active: false,
-          maintenanceType: null,
-        },
+        technicalCatalog: { id: 'cat-evap-1', title: 'Limpar filtros da evaporadora', active: true },
       },
     ],
   };
 }
 
-describe('PMOC checklist inheritance', () => {
+describe('PMOC checklist per unit', () => {
   const service = new PmocExecutionRequestsService(
     {} as never,
     {} as never,
@@ -88,14 +99,16 @@ describe('PMOC checklist inheritance', () => {
         plan: unknown,
         scheduledFor: Date,
         actor: AuthenticatedUser,
+        unitChecklist: unknown,
         reviewed?: {
-          checklist: Array<{ label: string; done: boolean }>;
-          inspectedEquipments: Array<{ equipmentId: string; sector: string }>;
+          checklist?: Array<{ label: string; done: boolean }>;
+          maintenanceChecklist?: unknown;
+          inspectedEquipments?: Array<{ equipmentId: string; sector: string }>;
         },
       ) => {
         checklist?: Array<{ label: string; done: boolean }>;
         maintenanceChecklist?: Array<{
-          equipmentId: string;
+          pmocUnit: PmocChecklistUnit;
           maintenanceType: OperationMaintenanceType;
           description: string;
           executed: boolean;
@@ -106,23 +119,32 @@ describe('PMOC checklist inheritance', () => {
     }
   ).buildOperationPayload.bind(service);
 
-  it('snapshots only active selected items when PMOC sends its checklist', () => {
-    const payload = build(plan(true), new Date('2026-08-01T12:00:00.000Z'), actor);
+  it('lists every unit procedure and marks the executed ones as Sim', () => {
+    const payload = build(plan(true), new Date('2026-08-01T12:00:00.000Z'), actor, unitChecklist);
+    // Campo checklist da OS reflete os itens marcados como executados.
     expect(payload.checklist).toEqual([
-      { label: 'Inspecionar filtros', done: false },
+      { label: 'Limpar filtros da evaporadora', done: true },
     ]);
+    // Todos os procedimentos do catálogo entram na tabela; executed = marcação.
     expect(payload.maintenanceChecklist).toEqual([
       {
-        equipmentId: '22222222-2222-4222-8222-222222222222',
+        pmocUnit: PmocChecklistUnit.EVAPORATOR,
         maintenanceType: OperationMaintenanceType.MONTHLY,
-        description: 'Inspecionar filtros',
+        description: 'Limpar filtros da evaporadora',
+        executed: true,
+        result: MaintenanceChecklistResult.YES,
+      },
+      {
+        pmocUnit: PmocChecklistUnit.EVAPORATOR,
+        maintenanceType: OperationMaintenanceType.MONTHLY,
+        description: 'Higienizar serpentina da evaporadora',
         executed: false,
         result: MaintenanceChecklistResult.NO,
       },
       {
-        equipmentId: '66666666-6666-4666-8666-666666666666',
+        pmocUnit: PmocChecklistUnit.CONDENSER,
         maintenanceType: OperationMaintenanceType.MONTHLY,
-        description: 'Inspecionar filtros',
+        description: 'Medir pressão da condensadora',
         executed: false,
         result: MaintenanceChecklistResult.NO,
       },
@@ -140,38 +162,21 @@ describe('PMOC checklist inheritance', () => {
   });
 
   it('generates the Work Order without checklist when the owner opts out', () => {
-    const payload = build(plan(false), new Date('2026-08-01T12:00:00.000Z'), actor);
+    const payload = build(plan(false), new Date('2026-08-01T12:00:00.000Z'), actor, unitChecklist);
     expect(payload.checklist).toEqual([]);
     expect(payload.maintenanceChecklist).toEqual([]);
   });
 
-  it('expands the reviewed checklist into the field checklist without changing PMOC coverage', () => {
-    const payload = build(
-      plan(true),
-      new Date('2026-08-01T12:00:00.000Z'),
-      actor,
-      {
-        checklist: [{ label: 'Procedimento adicional', done: false }],
-        inspectedEquipments: [],
-      },
-    );
-
-    expect(payload.maintenanceChecklist).toEqual([
-      {
-        equipmentId: '22222222-2222-4222-8222-222222222222',
-        maintenanceType: OperationMaintenanceType.MONTHLY,
-        description: 'Procedimento adicional',
-        executed: false,
-        result: MaintenanceChecklistResult.NO,
-      },
-      {
-        equipmentId: '66666666-6666-4666-8666-666666666666',
-        maintenanceType: OperationMaintenanceType.MONTHLY,
-        description: 'Procedimento adicional',
-        executed: false,
-        result: MaintenanceChecklistResult.NO,
-      },
-    ]);
+  it('keeps the unit procedures even when a reviewed general checklist differs', () => {
+    const payload = build(plan(true), new Date('2026-08-01T12:00:00.000Z'), actor, unitChecklist, {
+      checklist: [{ label: 'Procedimento adicional', done: false }],
+      inspectedEquipments: [],
+    });
+    // O checklist geral revisado alimenta apenas o campo `checklist`.
+    expect(payload.checklist).toEqual([{ label: 'Procedimento adicional', done: false }]);
+    // A tabela do PMOC continua vindo do catálogo por unidade.
+    expect(payload.maintenanceChecklist).toHaveLength(3);
+    expect(payload.maintenanceChecklist?.map((item) => item.executed)).toEqual([true, false, false]);
     expect(payload.inspectedEquipments).toHaveLength(2);
   });
 });

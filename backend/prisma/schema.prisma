@@ -93,6 +93,12 @@ enum MaintenanceChecklistResult {
   NOT_APPLICABLE
 }
 
+/// Unidades fixas do Checklist do Procedimento do PMOC (Lei nº 13.589/2018).
+enum PmocChecklistUnit {
+  EVAPORATOR
+  CONDENSER
+}
+
 enum TechnicalCatalogType {
   CHECKLIST
   OBJECTIVE
@@ -1061,6 +1067,8 @@ model OperationMaintenanceChecklistItem {
   operationId     String                     @map("operation_id") @db.Uuid
   equipmentId     String?                    @map("equipment_id") @db.Uuid
   maintenanceType OperationMaintenanceType   @map("maintenance_type")
+  /// Unidade do Checklist do Procedimento do PMOC (quando aplicável).
+  pmocUnit        PmocChecklistUnit?         @map("pmoc_unit")
   description     String                     @db.VarChar(500)
   executed        Boolean                    @default(false)
   result          MaintenanceChecklistResult @default(NO)
@@ -1086,6 +1094,9 @@ model TechnicalCatalog {
   areas              TechnicalCatalogArea[]     @default([GENERAL])
   workflows          TechnicalCatalogWorkflow[] @default([GENERAL])
   maintenanceType    OperationMaintenanceType?  @map("maintenance_type")
+  /// Preenchido apenas nos itens do "Checklist PMOC": indica a unidade
+  /// (Evaporadora/Condensadora) a que o procedimento pertence.
+  pmocUnit           PmocChecklistUnit?         @map("pmoc_unit")
   sortOrder          Int                        @default(0) @map("sort_order")
   active             Boolean                    @default(true)
   deletedAt          DateTime?                  @map("deleted_at") @db.Timestamptz(3)
@@ -1097,6 +1108,7 @@ model TechnicalCatalog {
 
   @@index([organizationId, type, active, sortOrder], map: "technical_catalog_lookup_idx")
   @@index([organizationId, maintenanceType, active], map: "technical_catalog_maintenance_idx")
+  @@index([organizationId, pmocUnit, active], map: "technical_catalog_pmoc_unit_idx")
   @@index([organizationId, deletedAt], map: "technical_catalog_deleted_idx")
   @@index([tags], type: Gin, map: "technical_catalog_tags_gin_idx")
   @@index([areas], type: Gin, map: "technical_catalog_areas_gin_idx")

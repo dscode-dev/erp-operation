@@ -28,6 +28,7 @@ const CATALOG_SELECT = {
   areas: true,
   workflows: true,
   maintenanceType: true,
+  pmocUnit: true,
   sortOrder: true,
   active: true,
   createdAt: true,
@@ -126,6 +127,7 @@ export class TechnicalCatalogsService {
       AND: [areaCompatibility, workflowCompatibility],
       ...(query.type ? { type: query.type } : {}),
       ...(query.maintenanceType ? { maintenanceType: query.maintenanceType } : {}),
+      ...(query.pmocUnit ? { pmocUnit: query.pmocUnit } : {}),
       ...(query.active !== undefined ? { active: query.active } : {}),
       ...(query.search
         ? {
@@ -193,6 +195,8 @@ export class TechnicalCatalogsService {
             workflows: dto.workflows ?? [TechnicalCatalogWorkflow.GENERAL],
             maintenanceType:
               dto.type === TechnicalCatalogType.CHECKLIST ? dto.maintenanceType : null,
+            pmocUnit:
+              dto.type === TechnicalCatalogType.CHECKLIST ? (dto.pmocUnit ?? null) : null,
             sortOrder: dto.sortOrder ?? (max._max.sortOrder ?? -1) + 1,
             active: dto.active ?? true,
           },
@@ -236,6 +240,7 @@ export class TechnicalCatalogsService {
             ...(dto.areas !== undefined ? { areas: dto.areas } : {}),
             ...(dto.workflows !== undefined ? { workflows: dto.workflows } : {}),
             ...(dto.maintenanceType !== undefined ? { maintenanceType: dto.maintenanceType } : {}),
+            ...(dto.pmocUnit !== undefined ? { pmocUnit: dto.pmocUnit } : {}),
             ...(dto.sortOrder !== undefined ? { sortOrder: dto.sortOrder } : {}),
             ...(dto.active !== undefined ? { active: dto.active } : {}),
           },

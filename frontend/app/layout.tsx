@@ -4,7 +4,7 @@ import { AppProviders } from "./app-providers";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "ERP Operation ",
+  title: "Climatize - ERP",
   description: "Plataforma de gestão e operação de campo.",
 };
 

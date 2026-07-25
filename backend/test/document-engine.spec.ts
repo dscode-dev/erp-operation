@@ -830,8 +830,8 @@ describe('DocumentEngine foundation', () => {
       modelSnapshot: 'XPower', capacitySnapshot: '36.000 BTU/h', equipment: { id: 'equipment-1', name: 'Split 01', type: 'SPLIT' },
     }];
     operation.maintenanceChecklistItems = [
-      { id: 'check-1', equipmentId: 'equipment-1', maintenanceType: 'MONTHLY', description: 'Limpar filtros de ar', executed: true, result: 'YES', observations: 'Sem avarias', position: 0, equipment: { id: 'equipment-1', name: 'Split 01', tag: 'AC-01' } },
-      { id: 'check-2', equipmentId: 'equipment-1', maintenanceType: 'MONTHLY', description: 'Verificar dreno', executed: false, result: 'NOT_APPLICABLE', observations: null, position: 1, equipment: { id: 'equipment-1', name: 'Split 01', tag: 'AC-01' } },
+      { id: 'check-1', equipmentId: null, pmocUnit: 'EVAPORATOR', maintenanceType: 'MONTHLY', description: 'Limpar filtros de ar', executed: true, result: 'YES', observations: 'Sem avarias', position: 0, equipment: null },
+      { id: 'check-2', equipmentId: null, pmocUnit: 'EVAPORATOR', maintenanceType: 'MONTHLY', description: 'Verificar dreno', executed: false, result: 'NOT_APPLICABLE', observations: null, position: 1, equipment: null },
     ];
     context.signature = {
       requiresSignature: true,
@@ -844,8 +844,9 @@ describe('DocumentEngine foundation', () => {
     };
     const built = (new DocumentBuilderService({} as never) as unknown as { buildFromContext: (ctx: unknown) => DocumentBlueprint }).buildFromContext(context);
     const ids = built.sections.map((section) => section.id);
-    expect(ids).toEqual(expect.arrayContaining(['pmoc-identification', 'pmoc-operational-data', 'pmoc-inspected-equipments', 'pmoc-legal-reference', 'pmoc-checklist-0', 'signature']));
-    const table = built.sections.find((section) => section.id === 'pmoc-checklist-0')?.components[0];
+    expect(ids).toEqual(expect.arrayContaining(['pmoc-identification', 'pmoc-operational-data', 'pmoc-inspected-equipments', 'pmoc-legal-reference', 'pmoc-checklist', 'signature']));
+    const checklistSection = built.sections.find((section) => section.id === 'pmoc-checklist');
+    const table = checklistSection?.components.find((component) => component.kind === 'table');
     expect(table?.kind === 'table' ? table.rows.map((row) => row.executed) : []).toEqual(['Sim', 'N.A.']);
     const signatures = built.sections.find((section) => section.id === 'signature')?.components[0];
     expect(signatures?.kind === 'signature' ? signatures.signatures : []).toHaveLength(2);
@@ -886,7 +887,9 @@ describe('DocumentEngine foundation', () => {
     const unsigned = builder.buildFromContext(context);
     const identification = unsigned.sections.find((section) => section.id === 'pmoc-identification')?.components[0];
     const gallery = unsigned.sections.find((section) => section.id === 'photos-evidencias-fotograficas')?.components[0];
-    expect(identification?.kind === 'metadata' ? identification.items.find((item) => item.label === 'Situação')?.value : null).toContain('NÃO ASSINADO');
+    // "Situação" foi removido da identificação; o estado não assinado continua
+    // sinalizado pela seção dedicada abaixo.
+    expect(identification?.kind === 'metadata' ? identification.items.find((item) => item.label === 'Situação') : undefined).toBeUndefined();
     expect(unsigned.sections.map((section) => section.id)).toContain('pmoc-signature-pending');
     expect(gallery?.kind === 'imageGallery' ? gallery.columns : null).toBe(4);
     expect(gallery?.kind === 'imageGallery' ? gallery.images : []).toHaveLength(4);
@@ -895,7 +898,8 @@ describe('DocumentEngine foundation', () => {
     const signed = builder.buildFromContext(context);
     expect(signed.sections.map((section) => section.id)).not.toContain('pmoc-signature-pending');
     const signedIdentification = signed.sections.find((section) => section.id === 'pmoc-identification')?.components[0];
-    expect(signedIdentification?.kind === 'metadata' ? signedIdentification.items.find((item) => item.label === 'Situação')?.value : null).toBe('ASSINADO');
+    // "Situação" não aparece mais na identificação, mesmo após assinar.
+    expect(signedIdentification?.kind === 'metadata' ? signedIdentification.items.find((item) => item.label === 'Situação') : undefined).toBeUndefined();
   });
 
   it('certifies the Technical Visit Report structure and Preview/PDF blueprint parity', async () => {
