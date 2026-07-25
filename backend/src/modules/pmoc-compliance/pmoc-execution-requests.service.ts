@@ -1095,12 +1095,6 @@ export class PmocExecutionRequestsService {
     const operationChecklist =
       reviewed?.checklist ??
       activeChecklist.map((item) => ({ label: item.technicalCatalog.title, done: false }));
-    const checklistMaintenanceTypes = new Map(
-      activeChecklist.map((item) => [
-        item.technicalCatalog.title,
-        item.technicalCatalog.maintenanceType,
-      ]),
-    );
     return {
       ...reviewed,
       customerId: plan.customerId,
@@ -1116,19 +1110,37 @@ export class PmocExecutionRequestsService {
       observations:
         reviewed?.observations ??
         plan.defaultOperationObservations ??
-        `Execução preventiva vinculada ao PMOC-${String(plan.number).padStart(6, '0')}.${plan.defaultEstimatedDurationMinutes ? ` Duração estimada: ${plan.defaultEstimatedDurationMinutes} minutos.` : ''}`,
+        `Execução preventiva vinculada ao PMOC-${String(plan.number).padStart(6, '0')}.`,
       reportedIssue: reviewed?.reportedIssue ?? `Execução programada do ${plan.maintenancePlan.name}.`,
       serviceDescription: reviewed?.serviceDescription ?? plan.coverage ?? plan.observations ?? undefined,
       maintenanceType,
-      maintenanceChecklist: operationChecklist.flatMap((item) =>
-        equipments.map((equipment) => ({
-          equipmentId: equipment.id,
-          maintenanceType: checklistMaintenanceTypes.get(item.label) ?? maintenanceType,
-          description: item.label,
-          executed: false,
-          result: MaintenanceChecklistResult.NO,
-        })),
-      ),
+      // Cada equipamento recebe o SEU checklist específico (equipmentId === id)
+      // somado aos itens gerais (equipmentId null, aplicados a todos). Planos
+      // legados guardam tudo como geral, reproduzindo o comportamento anterior.
+      // Ao selecionar o checklist para o equipamento, o item já entra como
+      // executado (Sim) no modelo do PMOC.
+      maintenanceChecklist: equipments.flatMap((equipment) => {
+        const specific = activeChecklist.filter((item) => item.equipmentId === equipment.id);
+        const generalItems = activeChecklist.filter((item) => !item.equipmentId);
+        // Checklist específico do equipamento sobrepõe o geral; sem específico,
+        // usa o checklist padrão (equipmentId null) aplicado a todos.
+        const applicable = specific.length ? specific : generalItems;
+        const seen = new Set<string>();
+        return applicable
+          .filter((item) => {
+            const key = item.technicalCatalog.title;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          })
+          .map((item) => ({
+            equipmentId: equipment.id,
+            maintenanceType: item.technicalCatalog.maintenanceType ?? maintenanceType,
+            description: item.technicalCatalog.title,
+            executed: true,
+            result: MaintenanceChecklistResult.YES,
+          }));
+      }),
       // A cobertura da execução pertence ao PMOC. O frontend pode revisar os
       // textos e o responsável, mas não retirar equipamentos do plano ao gerar
       // uma OS.

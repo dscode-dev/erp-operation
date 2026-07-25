@@ -71,6 +71,8 @@ type Form = {
   equipmentIds: string[];
   scopeCatalogIds: string[];
   checklistCatalogIds: string[];
+  /** equipmentId → catálogos de checklist específicos daquele equipamento. */
+  equipmentChecklists: Record<string, string[]>;
   includeChecklistInOperations: boolean;
   name: string;
   periodicity: PmocPeriodicity;
@@ -95,6 +97,7 @@ const initialForm: Form = {
   equipmentIds: [],
   scopeCatalogIds: [],
   checklistCatalogIds: [],
+  equipmentChecklists: {},
   includeChecklistInOperations: true,
   name: "",
   periodicity: "MONTHLY",
@@ -213,7 +216,12 @@ export function PmocPlanWizard({ open, onClose, onCreated, pmoc = null, onUpdate
       addressId: pmoc.defaultAddressId ?? "",
       equipmentIds: pmoc.equipments?.map((item) => item.equipmentId) ?? [pmoc.equipmentId],
       scopeCatalogIds: pmoc.scopes?.map((item) => item.technicalCatalogId) ?? [],
-      checklistCatalogIds: pmoc.checklists?.map((item) => item.technicalCatalogId) ?? [],
+      checklistCatalogIds:
+        pmoc.checklists?.filter((item) => !item.equipmentId).map((item) => item.technicalCatalogId) ?? [],
+      equipmentChecklists: (pmoc.checklists ?? []).reduce<Record<string, string[]>>((acc, item) => {
+        if (item.equipmentId) (acc[item.equipmentId] = acc[item.equipmentId] ?? []).push(item.technicalCatalogId);
+        return acc;
+      }, {}),
       includeChecklistInOperations: Boolean(
         pmoc.checklists?.length && pmoc.includeChecklistInOperations,
       ),
@@ -357,12 +365,22 @@ export function PmocPlanWizard({ open, onClose, onCreated, pmoc = null, onUpdate
     Boolean(
       form.defaultTechnicianId &&
         Number(form.duration) >= 15 &&
-        (!form.includeChecklistInOperations || form.checklistCatalogIds.length > 0),
+        (!form.includeChecklistInOperations ||
+          form.checklistCatalogIds.length > 0 ||
+          (form.equipmentIds.length > 0 &&
+            form.equipmentIds.every((id) => (form.equipmentChecklists[id]?.length ?? 0) > 0))),
     ),
     true,
     configurationReady && (!(signatureMode === "FIXED" || signatureMode === "HYBRID") || Boolean(form.overrideSignature ? form.signatureOverrideId : configuredSignature)),
     true,
   ];
+
+  const equipmentChecklistsPayload = () =>
+    form.includeChecklistInOperations
+      ? form.equipmentIds
+          .filter((id) => (form.equipmentChecklists[id]?.length ?? 0) > 0)
+          .map((id) => ({ equipmentId: id, catalogIds: form.equipmentChecklists[id] }))
+      : [];
 
   async function submit(confirmActiveCoverage = false) {
     if (!validByStep.every(Boolean) || !form.equipmentIds[0]) return;
@@ -381,6 +399,7 @@ export function PmocPlanWizard({ open, onClose, onCreated, pmoc = null, onUpdate
         equipmentIds: form.equipmentIds,
         scopeCatalogIds: form.scopeCatalogIds,
         checklistCatalogIds: form.checklistCatalogIds,
+        equipmentChecklists: equipmentChecklistsPayload(),
         includeChecklistInOperations: form.includeChecklistInOperations,
         defaultAddressId: form.addressId || undefined,
         periodicity: form.periodicity,
@@ -435,6 +454,7 @@ export function PmocPlanWizard({ open, onClose, onCreated, pmoc = null, onUpdate
         equipmentIds: form.equipmentIds,
         scopeCatalogIds: form.scopeCatalogIds,
         checklistCatalogIds: form.checklistCatalogIds,
+        equipmentChecklists: equipmentChecklistsPayload(),
         includeChecklistInOperations: form.includeChecklistInOperations,
         defaultAddressId: form.addressId || null,
         periodicity: form.periodicity,
@@ -556,6 +576,7 @@ export function PmocPlanWizard({ open, onClose, onCreated, pmoc = null, onUpdate
           form={form}
           set={set}
           users={users.data?.items ?? []}
+          equipments={equipments.data?.items ?? []}
           checklistItems={workOrderChecklists.data ?? []}
           loadingChecklist={workOrderChecklists.loading}
           refreshChecklist={() => setCatalogTick((value) => value + 1)}
@@ -678,15 +699,24 @@ function PlanningStep({ form, set, projection }: { form: Form; set: FormSetter; 
   </Section>;
 }
 
-function ExecutionStep({ form, set, users, checklistItems, loadingChecklist, refreshChecklist }: {
+function ExecutionStep({ form, set, users, equipments, checklistItems, loadingChecklist, refreshChecklist }: {
   form: Form;
   set: FormSetter;
   users: TeamUser[];
+  equipments: Array<{ id: string; name: string; tag?: string | null; type?: string | null }>;
   checklistItems: Array<{ id: string; title: string; description: string | null }>;
   loadingChecklist: boolean;
   refreshChecklist: () => void;
 }) {
   const active = users.filter((item) => item.isActive && item.role !== "VIEWER");
+  const coveredEquipments = equipments.filter((item) => form.equipmentIds.includes(item.id));
+  const checklistOptions = checklistItems.map((item) => ({
+    value: item.id,
+    label: item.title,
+    description: item.description ?? undefined,
+  }));
+  const setEquipmentChecklist = (equipmentId: string, value: string[]) =>
+    set("equipmentChecklists", { ...form.equipmentChecklists, [equipmentId]: value });
   return <Section icon={Settings2} title="Execução" text="Defina os responsáveis e os padrões aplicados às futuras Ordens de Serviço.">
     <div className="grid gap-4 md:grid-cols-2">
       <Field label="Técnico padrão" required><select value={form.defaultTechnicianId} onChange={(event) => set("defaultTechnicianId", event.target.value)}><option value="">Selecione…</option>{active.map((user) => <option key={user.id} value={user.id}>{user.name} · {user.jobTitle ?? user.role}</option>)}</select></Field>
@@ -699,7 +729,7 @@ function ExecutionStep({ form, set, users, checklistItems, loadingChecklist, ref
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h4 className="font-semibold">Checklist das Ordens de Serviço</h4>
-          <p className="text-sm text-[var(--color-muted-foreground)]">Selecione itens do mesmo Catálogo Técnico utilizado pelas Ordens de Serviço.</p>
+          <p className="text-sm text-[var(--color-muted-foreground)]">Defina o checklist específico de cada equipamento coberto pelo PMOC. Ao selecionar, o item entra como executado (Sim) no modelo.</p>
         </div>
         <label className="inline-flex items-center gap-2 text-sm font-medium">
           <input type="checkbox" checked={form.includeChecklistInOperations} onChange={(event) => set("includeChecklistInOperations", event.target.checked)} />
@@ -708,13 +738,28 @@ function ExecutionStep({ form, set, users, checklistItems, loadingChecklist, ref
       </div>
       {form.includeChecklistInOperations && <>
         <MultiSelect
-          label="Itens predefinidos *"
+          label="Checklist padrão (todos os equipamentos)"
           value={form.checklistCatalogIds}
           onChange={(value) => set("checklistCatalogIds", value)}
-          options={checklistItems.map((item) => ({ value: item.id, label: item.title, description: item.description ?? undefined }))}
+          options={checklistOptions}
           placeholder={loadingChecklist ? "Carregando checklist…" : "Selecionar itens"}
           emptyMessage="Nenhum item ativo disponível para Ordem de Serviço."
         />
+        <p className="text-xs text-[var(--color-muted-foreground)]">Aplicado aos equipamentos sem checklist específico definido abaixo.</p>
+        {coveredEquipments.length > 0 && <div className="space-y-3 border-t border-[var(--color-border)] pt-3">
+          <h5 className="text-sm font-semibold">Checklist por equipamento</h5>
+          {coveredEquipments.map((equipment) => (
+            <MultiSelect
+              key={equipment.id}
+              label={equipment.tag ? `${equipment.name} · ${equipment.tag}` : equipment.name}
+              value={form.equipmentChecklists[equipment.id] ?? []}
+              onChange={(value) => setEquipmentChecklist(equipment.id, value)}
+              options={checklistOptions}
+              placeholder="Herda o checklist padrão"
+              emptyMessage="Nenhum item ativo disponível para Ordem de Serviço."
+            />
+          ))}
+        </div>}
         <div className="flex flex-wrap gap-3 text-xs text-[var(--color-muted-foreground)]">
           <span>A OS recebe um snapshot desses itens ao ser gerada.</span>
           <a href="/maintenance-checklists?type=CHECKLIST" target="_blank" rel="noreferrer" className="font-medium text-[var(--color-primary)]">Abrir Catálogo Técnico</a>
@@ -897,7 +942,7 @@ function SummaryStep({ form, customerName, equipments, scopes, users, projection
       <SummaryCard title="Identificação" onEdit={() => onEdit(0)} rows={[['Cliente', customerName], ['Plano', form.name], ['Endereço', form.addressId ? 'Endereço selecionado' : 'Endereço principal']]} />
       <SummaryCard title="Cobertura" onEdit={() => onEdit(1)} rows={[['Equipamentos', `${equipmentNames.length} selecionado(s)`], ['Escopo', scopes.map((item) => item.title).join(', ') || '—'], ['Serviços', form.serviceTypes.map(operationTypeLabel).join(', ')]]} />
       <SummaryCard title="Planejamento" onEdit={() => onEdit(2)} rows={[['Periodicidade', periodicityLabel(form.periodicity)], ['Próxima execução', formatDate(projection.next)], ['Execuções previstas', String(projection.count)], ['Programação', generationModeLabel(form.generationMode)]]} />
-      <SummaryCard title="Execução" onEdit={() => onEdit(3)} rows={[['Operador padrão', userName(users, form.defaultOperatorId, 'Definido ao gerar')], ['Técnico', userName(users, form.defaultTechnicianId)], ['Duração prevista', `${form.duration} minutos`], ['Prioridade', priorityLabel(form.priority)], ['Checklist na OS', form.includeChecklistInOperations ? `${form.checklistCatalogIds.length} item(ns)` : 'Não enviar']]} />
+      <SummaryCard title="Execução" onEdit={() => onEdit(3)} rows={[['Operador padrão', userName(users, form.defaultOperatorId, 'Definido ao gerar')], ['Técnico', userName(users, form.defaultTechnicianId)], ['Duração prevista', `${form.duration} minutos`], ['Prioridade', priorityLabel(form.priority)], ['Checklist na OS', form.includeChecklistInOperations ? `${form.checklistCatalogIds.length} item(ns) padrão${(() => { const overrides = form.equipmentIds.filter((id) => (form.equipmentChecklists[id]?.length ?? 0) > 0).length; return overrides ? ` · ${overrides} equip. específico(s)` : ''; })()}` : 'Não enviar']]} />
       <div className="md:col-span-2"><SummaryCard title="Política documental" onEdit={() => onEdit(5)} rows={[['Modo', signatureModeLabel(signatureMode)], ['Assinatura institucional', signature?.name ?? (signatureMode === 'NONE' || signatureMode === 'COLLECTED' ? 'Não aplicável' : 'Não configurada')], ['Origem', form.overrideSignature ? 'Definida somente para este PMOC' : 'Modelo oficial do documento']]} /></div>
     </div>
   </Section>;

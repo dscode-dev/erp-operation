@@ -895,6 +895,7 @@ model Equipment {
   maintenancePlans          MaintenancePlan[]
   pmocPrimaryPlans          PmocPlan[]
   pmocLinks                 PmocPlanEquipment[]
+  pmocChecklistItems        PmocPlanChecklist[]
   pmocEnvironments          PmocEnvironmentEquipment[]
   operationInspections      OperationInspectedEquipment[]
   budgetInspections         BudgetEquipment[]
@@ -1447,15 +1448,20 @@ model PmocPlanScope {
 model PmocPlanChecklist {
   id                 String           @id @default(uuid()) @db.Uuid
   pmocPlanId         String           @map("pmoc_plan_id") @db.Uuid
+  /// Equipamento ao qual este item de checklist se aplica. NULL = geral (todos os
+  /// equipamentos da cobertura). O modelo do cliente exige checklist por equipamento.
+  equipmentId        String?          @map("equipment_id") @db.Uuid
   technicalCatalogId String           @map("technical_catalog_id") @db.Uuid
   position           Int
   createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
   pmocPlan           PmocPlan         @relation(fields: [pmocPlanId], references: [id], onDelete: Cascade)
+  equipment          Equipment?       @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
   technicalCatalog   TechnicalCatalog @relation(fields: [technicalCatalogId], references: [id], onDelete: Restrict)
 
-  @@unique([pmocPlanId, technicalCatalogId], map: "pmoc_plan_checklist_plan_catalog_uq")
-  @@unique([pmocPlanId, position], map: "pmoc_plan_checklist_plan_position_uq")
+  @@unique([pmocPlanId, equipmentId, technicalCatalogId], map: "pmoc_plan_checklist_plan_equipment_catalog_uq")
+  @@unique([pmocPlanId, equipmentId, position], map: "pmoc_plan_checklist_plan_equipment_position_uq")
   @@index([technicalCatalogId], map: "pmoc_plan_checklist_catalog_idx")
+  @@index([equipmentId], map: "pmoc_plan_checklist_equipment_idx")
   @@map("pmoc_plan_checklists")
 }
 

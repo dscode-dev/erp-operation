@@ -28,7 +28,11 @@
       "Bash(grep -nA30 \"CreateOperationPayload = \" packages/types/index.ts)",
       "Bash(grep -nA25 \"async function ensureRvtChecklistDefaults\" src/seed.ts)",
       "Bash(grep -nA30 \"PMOC_INCLUDE\" backend/src/modules/pmoc-compliance/pmoc-compliance.service.ts)",
-      "Bash(grep -nA6 \"generateWorkOrder\" packages/api/pmoc.ts)"
+      "Bash(grep -nA6 \"generateWorkOrder\" packages/api/pmoc.ts)",
+      "Bash(grep -nA12 \"model PmocPlanChecklist\" prisma/schema.prisma)",
+      "Bash(grep -nA18 \"model OperationMaintenanceChecklistItem\" prisma/schema.prisma)",
+      "Bash(grep -nA20 \"private async planChecklistsOrThrow\" src/modules/pmoc-compliance/pmoc-compliance.service.ts)",
+      "Bash(DATABASE_URL=\"postgresql://u:p@localhost:5432/db\" npx prisma validate)"
     ],
     "additionalDirectories": [
       "/Users/ds_/Documents/Devs/AllBlueLabs/Applications/ERP_Operation/backend/src/modules/maintenance-planning",

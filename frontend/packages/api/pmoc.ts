@@ -21,6 +21,7 @@ export type CreatePmocPayload = {
   equipmentIds?: string[];
   scopeCatalogIds?: string[];
   checklistCatalogIds?: string[];
+  equipmentChecklists?: Array<{ equipmentId: string; catalogIds: string[] }>;
   includeChecklistInOperations?: boolean;
   coverage?: string;
   periodicity?: PmocPeriodicity;
@@ -70,6 +71,7 @@ export type UpdatePmocPayload = Partial<
     | "equipmentIds"
     | "scopeCatalogIds"
     | "checklistCatalogIds"
+    | "equipmentChecklists"
     | "includeChecklistInOperations"
     | "responsibleTechnician"
     | "startDate"

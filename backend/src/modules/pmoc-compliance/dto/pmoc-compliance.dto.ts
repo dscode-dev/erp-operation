@@ -89,6 +89,17 @@ export class PmocDashboardQueryDto {
   to?: string;
 }
 
+export class PmocEquipmentChecklistDto {
+  @IsUUID('4')
+  equipmentId!: string;
+
+  @IsArray()
+  @ArrayUnique()
+  @ArrayMaxSize(100)
+  @IsUUID('4', { each: true })
+  catalogIds!: string[];
+}
+
 export class CreatePmocPlanDto {
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MinLength(2) @MaxLength(140)
   name?: string;
@@ -126,6 +137,13 @@ export class CreatePmocPlanDto {
   @ArrayMaxSize(100)
   @IsUUID('4', { each: true })
   checklistCatalogIds?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50)
+  @ValidateNested({ each: true })
+  @Type(() => PmocEquipmentChecklistDto)
+  equipmentChecklists?: PmocEquipmentChecklistDto[];
 
   @IsOptional()
   @IsBoolean()
@@ -239,6 +257,13 @@ export class UpdatePmocPlanDto {
   @ArrayMaxSize(100)
   @IsUUID('4', { each: true })
   checklistCatalogIds?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50)
+  @ValidateNested({ each: true })
+  @Type(() => PmocEquipmentChecklistDto)
+  equipmentChecklists?: PmocEquipmentChecklistDto[];
 
   @IsOptional()
   @IsBoolean()

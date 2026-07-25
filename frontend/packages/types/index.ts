@@ -1304,6 +1304,7 @@ export type PmocPlan = {
   }>;
   checklists?: Array<{
     technicalCatalogId: string;
+    equipmentId: string | null;
     position: number;
     technicalCatalog: Pick<
       TechnicalCatalog,

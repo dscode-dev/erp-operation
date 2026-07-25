@@ -817,16 +817,6 @@ export class DocumentBuilderService {
     }
     const address = operation.address ?? operation.customer.addresses[0] ?? null;
     const contact = operation.customer.contacts[0] ?? null;
-    const collectsClientSignature =
-      context.signature.signatureMode === SignatureMode.COLLECTED ||
-      context.signature.signatureMode === SignatureMode.HYBRID;
-    const signatureStatus = collectsClientSignature
-      ? operation.signatureData
-        ? 'ASSINADO'
-        : 'NÃO ASSINADO — AGUARDANDO ASSINATURA DO CLIENTE'
-      : context.signature.signatureMode === SignatureMode.FIXED
-        ? 'ASSINADO INSTITUCIONALMENTE'
-        : 'SEM ASSINATURA EXIGIDA';
     const sections: DocumentSection[] = [
       {
         id: 'pmoc-identification',
@@ -837,7 +827,6 @@ export class DocumentBuilderService {
             ['Título', `PMOC — ${operation.customer.tradeName ?? operation.customer.name}`],
             ['Número', documentNumber],
             ['Emissão', this.date(generatedAt)],
-            ['Situação', signatureStatus],
             ['Responsável técnico', this.technicalResponsibleName(context) ?? pmoc.responsibleTechnician],
             ['ART/registro', pmoc.artNumber ?? '—'],
             ['Contrato', pmoc.contractNumber ?? '—'],
@@ -846,19 +835,6 @@ export class DocumentBuilderService {
           ]),
         ],
       },
-      ...(collectsClientSignature && !operation.signatureData
-        ? [{
-            id: 'pmoc-signature-pending',
-            title: 'Situação da assinatura',
-            critical: true,
-            components: [{
-              id: 'pmoc-signature-pending-warning',
-              kind: 'paragraph' as const,
-              text: 'DOCUMENTO NÃO ASSINADO. A assinatura do cliente/responsável ainda precisa ser coletada para concluir a política definida no modelo.',
-              keepTogether: true,
-            }],
-          }]
-        : []),
       {
         id: 'pmoc-operational-data',
         title: 'Dados operacionais',
@@ -880,7 +856,6 @@ export class DocumentBuilderService {
           ],
         ])],
       },
-      this.inspectedEquipmentSection(operation, 'pmoc'),
       this.pmocEnvironmentsSection(operation),
       {
         id: 'pmoc-legal-reference',
@@ -895,34 +870,58 @@ export class DocumentBuilderService {
   }
 
   private pmocChecklistSections(operation: DocumentContextOperation): DocumentSection[] {
+    // Uma única seção "CheckList do Procedimento - Lei nº 13.589/2018"; o que se
+    // repete é o CONTEÚDO (uma tabela por equipamento com o checklist específico).
     const groups = new Map<string, typeof operation.maintenanceChecklistItems>();
     for (const item of operation.maintenanceChecklistItems) {
       const key = item.equipmentId ?? 'general';
       groups.set(key, [...(groups.get(key) ?? []), item]);
     }
-    if (groups.size === 0) {
-      return [{ id: 'pmoc-checklist-empty', title: 'Checklist PMOC', components: [{ id: 'pmoc-checklist-empty-text', kind: 'paragraph', text: 'Nenhum procedimento foi registrado para esta execução.', keepTogether: true }] }];
-    }
-    return [...groups.entries()].map(([equipmentId, items], groupIndex) => ({
-      id: `pmoc-checklist-${groupIndex}`,
-      title: `Checklist PMOC — ${items[0]?.equipment?.name ?? (equipmentId === 'general' ? 'Procedimentos gerais' : 'Equipamento')}`,
-      components: [{
-        id: `pmoc-checklist-table-${groupIndex}`,
-        kind: 'table',
-        columns: [
-          { key: 'component', label: 'COMPONENTE / UNIDADE', width: 0.24 },
-          { key: 'procedure', label: 'PROCEDIMENTO', width: 0.42 },
-          { key: 'executed', label: 'EXECUTADO', width: 0.14 },
-          { key: 'observation', label: 'OBSERVAÇÃO', width: 0.2 },
-        ],
-        rows: items.map((item) => ({
-          component: this.clean(item.equipment?.tag ?? item.equipment?.name ?? 'Geral'),
-          procedure: this.clean(item.description),
-          executed: item.result === 'YES' ? 'Sim' : item.result === 'NOT_APPLICABLE' ? 'N.A.' : 'Não',
-          observation: this.clean(item.observations ?? '—'),
-        })),
-      }],
-    }));
+    const components: DocumentBlueprintComponent[] =
+      groups.size === 0
+        ? [{
+            id: 'pmoc-checklist-empty-text',
+            kind: 'paragraph',
+            text: 'Nenhum procedimento foi registrado para esta execução.',
+            keepTogether: true,
+          }]
+        : [...groups.entries()].flatMap(([equipmentId, items], groupIndex) => {
+            const equipmentName =
+              items[0]?.equipment?.name ??
+              (equipmentId === 'general' ? 'Procedimentos gerais' : 'Equipamento');
+            return [
+              {
+                id: `pmoc-checklist-heading-${groupIndex}`,
+                kind: 'paragraph' as const,
+                text: equipmentName,
+                keepTogether: true,
+              },
+              {
+                id: `pmoc-checklist-table-${groupIndex}`,
+                kind: 'table' as const,
+                columns: [
+                  { key: 'component', label: 'COMPONENTE / UNIDADE', width: 0.24 },
+                  { key: 'procedure', label: 'PROCEDIMENTO', width: 0.42 },
+                  { key: 'executed', label: 'EXECUTADO', width: 0.14 },
+                  { key: 'observation', label: 'OBSERVAÇÃO', width: 0.2 },
+                ],
+                rows: items.map((item) => ({
+                  component: this.clean(item.equipment?.tag ?? item.equipment?.name ?? 'Geral'),
+                  procedure: this.clean(item.description),
+                  executed:
+                    item.result === 'YES' ? 'Sim' : item.result === 'NOT_APPLICABLE' ? 'N.A.' : 'Não',
+                  observation: this.clean(item.observations ?? '—'),
+                })),
+              },
+            ];
+          });
+    return [
+      {
+        id: 'pmoc-checklist',
+        title: 'CheckList do Procedimento - Lei nº 13.589/2018',
+        components,
+      },
+    ];
   }
 
   private receiptSections(

@@ -844,8 +844,10 @@ describe('DocumentEngine foundation', () => {
     };
     const built = (new DocumentBuilderService({} as never) as unknown as { buildFromContext: (ctx: unknown) => DocumentBlueprint }).buildFromContext(context);
     const ids = built.sections.map((section) => section.id);
-    expect(ids).toEqual(expect.arrayContaining(['pmoc-identification', 'pmoc-operational-data', 'pmoc-inspected-equipments', 'pmoc-legal-reference', 'pmoc-checklist-0', 'signature']));
-    const table = built.sections.find((section) => section.id === 'pmoc-checklist-0')?.components[0];
+    expect(ids).toEqual(expect.arrayContaining(['pmoc-identification', 'pmoc-operational-data', 'pmoc-legal-reference', 'pmoc-checklist', 'signature']));
+    // Seção Equipamentos removida (redundante com o checklist por equipamento).
+    expect(ids).not.toContain('pmoc-inspected-equipments');
+    const table = built.sections.find((section) => section.id === 'pmoc-checklist')?.components.find((component) => component.kind === 'table');
     expect(table?.kind === 'table' ? table.rows.map((row) => row.executed) : []).toEqual(['Sim', 'N.A.']);
     const signatures = built.sections.find((section) => section.id === 'signature')?.components[0];
     expect(signatures?.kind === 'signature' ? signatures.signatures : []).toHaveLength(2);
@@ -855,7 +857,7 @@ describe('DocumentEngine foundation', () => {
     expect(pdf.buffer.subarray(0, 5).toString('latin1')).toBe('%PDF-');
   });
 
-  it('marks an unsigned HYBRID PMOC explicitly and keeps four-column image parity', () => {
+  it('renders a PMOC with technical-only signature (no customer) and four-column image parity', () => {
     const context = operationContext(DocumentTemplateType.PMOC);
     const operation = context.operation as Record<string, unknown>;
     operation.photos = [1, 2, 3, 4].map((index) => ({
@@ -872,30 +874,32 @@ describe('DocumentEngine foundation', () => {
       fileSize: 68,
       contentBase64: ONE_PIXEL_PNG,
     }));
+    // PMOC usa política FIXED: só o responsável técnico assina, sem assinatura
+    // do cliente (nem bloco pendente, nem item "Situação").
     context.signature = {
       requiresSignature: true,
-      signatureMode: 'HYBRID',
+      signatureMode: 'FIXED',
       signatureId: 'institutional',
-      fixedSignature: null,
+      fixedSignature: { id: 'institutional', name: 'Marina', title: 'Engenheira', image: { storageKey: 'private', mimeType: 'image/png', fileSize: 68, contentBase64: ONE_PIXEL_PNG } },
       institutionalSignatures: [{ id: 'institutional', name: 'Marina', title: 'Engenheira', professionalCouncil: 'CREA-123', department: 'Técnico', image: { storageKey: 'private', mimeType: 'image/png', fileSize: 68, contentBase64: ONE_PIXEL_PNG } }],
-      collectedSignature: { label: 'Cliente', name: null, title: null, signedAt: null, caption: 'Pendente', image: null },
-      executionSignatures: [{ role: 'client', label: 'Assinatura do cliente/responsável', name: null, title: null, signedAt: null, caption: 'Pendente', image: null }],
+      collectedSignature: null,
+      executionSignatures: [],
     };
 
     const builder = new DocumentBuilderService({} as never) as unknown as { buildFromContext: (ctx: unknown) => DocumentBlueprint };
-    const unsigned = builder.buildFromContext(context);
-    const identification = unsigned.sections.find((section) => section.id === 'pmoc-identification')?.components[0];
-    const gallery = unsigned.sections.find((section) => section.id === 'photos-evidencias-fotograficas')?.components[0];
-    expect(identification?.kind === 'metadata' ? identification.items.find((item) => item.label === 'Situação')?.value : null).toContain('NÃO ASSINADO');
-    expect(unsigned.sections.map((section) => section.id)).toContain('pmoc-signature-pending');
+    const built = builder.buildFromContext(context);
+    const ids = built.sections.map((section) => section.id);
+    const identification = built.sections.find((section) => section.id === 'pmoc-identification')?.components[0];
+    const gallery = built.sections.find((section) => section.id === 'photos-evidencias-fotograficas')?.components[0];
+    // Sem "Situação" na identificação e sem bloco de assinatura pendente do cliente.
+    expect(identification?.kind === 'metadata' ? identification.items.some((item) => item.label === 'Situação') : true).toBe(false);
+    expect(ids).not.toContain('pmoc-signature-pending');
+    // Só a assinatura do responsável técnico (institucional/fixed).
+    const signatures = built.sections.find((section) => section.id === 'signature')?.components[0];
+    expect(signatures?.kind === 'signature' ? signatures.signatures.map((item) => item.role) : []).toEqual(['fixed']);
+    // Paridade de imagens preservada (galeria de 4 colunas).
     expect(gallery?.kind === 'imageGallery' ? gallery.columns : null).toBe(4);
     expect(gallery?.kind === 'imageGallery' ? gallery.images : []).toHaveLength(4);
-
-    operation.signatureData = `data:image/png;base64,${ONE_PIXEL_PNG}`;
-    const signed = builder.buildFromContext(context);
-    expect(signed.sections.map((section) => section.id)).not.toContain('pmoc-signature-pending');
-    const signedIdentification = signed.sections.find((section) => section.id === 'pmoc-identification')?.components[0];
-    expect(signedIdentification?.kind === 'metadata' ? signedIdentification.items.find((item) => item.label === 'Situação')?.value : null).toBe('ASSINADO');
   });
 
   it('certifies the Technical Visit Report structure and Preview/PDF blueprint parity', async () => {

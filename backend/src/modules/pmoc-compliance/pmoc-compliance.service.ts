@@ -46,6 +46,7 @@ import {
   CreatePmocPlanDto,
   ListPmocQueryDto,
   PmocDashboardQueryDto,
+  PmocEquipmentChecklistDto,
   UpdatePmocEnvironmentDto,
   UpdatePmocPlanDto,
 } from './dto/pmoc-compliance.dto';
@@ -394,9 +395,11 @@ export class PmocComplianceService implements ComplianceEvaluator<{
       dto.serviceTypes,
     );
     const scopes = await this.planScopesOrThrow(dto.scopeCatalogIds, organization.id);
-    const checklists = await this.planChecklistsOrThrow(
+    const checklists = await this.resolvePlanChecklistRows(
       dto.checklistCatalogIds,
+      dto.equipmentChecklists,
       organization.id,
+      equipmentIds,
     );
     await this.validateDefaults(
       dto.defaultOperatorId,
@@ -478,9 +481,10 @@ export class PmocComplianceService implements ComplianceEvaluator<{
           ...(checklists.length
             ? {
                 checklists: {
-                  create: checklists.map((item, position) => ({
-                    technicalCatalogId: item.id,
-                    position,
+                  create: checklists.map((item) => ({
+                    equipmentId: item.equipmentId,
+                    technicalCatalogId: item.technicalCatalogId,
+                    position: item.position,
                   })),
                 },
               }
@@ -652,9 +656,16 @@ export class PmocComplianceService implements ComplianceEvaluator<{
       dto.scopeCatalogIds !== undefined
         ? await this.planScopesOrThrow(dto.scopeCatalogIds, existing.organizationId)
         : null;
+    const allowedChecklistEquipmentIds =
+      equipmentIds ?? existing.equipments.map((link) => link.equipment.id);
     const checklists =
-      dto.checklistCatalogIds !== undefined
-        ? await this.planChecklistsOrThrow(dto.checklistCatalogIds, existing.organizationId)
+      dto.checklistCatalogIds !== undefined || dto.equipmentChecklists !== undefined
+        ? await this.resolvePlanChecklistRows(
+            dto.checklistCatalogIds,
+            dto.equipmentChecklists,
+            existing.organizationId,
+            allowedChecklistEquipmentIds,
+          )
         : null;
 
     return this.prisma.$transaction(async (tx) => {
@@ -689,10 +700,11 @@ export class PmocComplianceService implements ComplianceEvaluator<{
         await tx.pmocPlanChecklist.deleteMany({ where: { pmocPlanId: id } });
         if (checklists.length > 0) {
           await tx.pmocPlanChecklist.createMany({
-            data: checklists.map((item, position) => ({
+            data: checklists.map((item) => ({
               pmocPlanId: id,
-              technicalCatalogId: item.id,
-              position,
+              equipmentId: item.equipmentId,
+              technicalCatalogId: item.technicalCatalogId,
+              position: item.position,
             })),
             skipDuplicates: true,
           });
@@ -798,6 +810,7 @@ export class PmocComplianceService implements ComplianceEvaluator<{
         dto.equipmentIds !== undefined ||
         dto.scopeCatalogIds !== undefined ||
         dto.checklistCatalogIds !== undefined ||
+        dto.equipmentChecklists !== undefined ||
         dto.includeChecklistInOperations !== undefined
       ) {
         historyActions.push(PmocHistoryAction.COVERAGE_CHANGED);
@@ -1617,6 +1630,55 @@ export class PmocComplianceService implements ComplianceEvaluator<{
     }
     const byId = new Map(checklists.map((item) => [item.id, item]));
     return uniqueIds.map((id) => byId.get(id)!);
+  }
+
+  /**
+   * Resolve as linhas de checklist do plano PMOC, aceitando itens gerais
+   * (equipmentId = null, aplicados a todos os equipamentos) e itens por
+   * equipamento. Valida os catálogos e garante que cada equipamento pertence à
+   * cobertura do plano. Retorna as linhas já com `position` reiniciada por
+   * grupo (o índice único é [plano, equipamento, posição]).
+   */
+  private async resolvePlanChecklistRows(
+    general: string[] | undefined,
+    perEquipment: PmocEquipmentChecklistDto[] | undefined,
+    organizationId: string,
+    allowedEquipmentIds: string[],
+  ): Promise<Array<{ equipmentId: string | null; technicalCatalogId: string; position: number }>> {
+    const generalIds = this.unique(general ?? []);
+    const allCatalogIds = this.unique([
+      ...generalIds,
+      ...(perEquipment ?? []).flatMap((entry) => entry.catalogIds ?? []),
+    ]);
+    if (!allCatalogIds.length) return [];
+    await this.planChecklistsOrThrow(allCatalogIds, organizationId);
+
+    const allowed = new Set(allowedEquipmentIds);
+    const positions = new Map<string, number>();
+    const seen = new Set<string>();
+    const rows: Array<{ equipmentId: string | null; technicalCatalogId: string; position: number }> = [];
+    const push = (equipmentId: string | null, catalogId: string): void => {
+      const key = `${equipmentId ?? ''}:${catalogId}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      const groupKey = equipmentId ?? '';
+      const position = positions.get(groupKey) ?? 0;
+      positions.set(groupKey, position + 1);
+      rows.push({ equipmentId, technicalCatalogId: catalogId, position });
+    };
+
+    for (const catalogId of generalIds) push(null, catalogId);
+    for (const entry of perEquipment ?? []) {
+      if (!allowed.has(entry.equipmentId)) {
+        throw new ApplicationException(
+          ERROR_CODES.PMOC_INVALID_RELATIONSHIP,
+          'PMOC checklist references an equipment outside the plan coverage',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      for (const catalogId of this.unique(entry.catalogIds ?? [])) push(entry.equipmentId, catalogId);
+    }
+    return rows;
   }
 
   private periodicityFromRule(rule?: RecurrenceRuleDto): PmocPeriodicity {
