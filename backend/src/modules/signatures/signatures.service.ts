@@ -1,5 +1,5 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, Role } from '@prisma/client';
 import { extname } from 'node:path';
 import { DocumentAssetResolver } from '../document-engine/assets/document-asset-resolver.service';
 import { PrismaService } from '../database/prisma.service';
@@ -106,12 +106,33 @@ export class SignaturesService {
     return this.signatureOrThrow(id, { includeDeleted: false });
   }
 
-  async getOwn(userId: string): Promise<SignatureResponse | null> {
-    const signature = await this.prisma.signature.findUnique({
-      where: { userId },
+  /**
+   * "Minha assinatura" no app mobile. Prioriza a assinatura vinculada ao usuário
+   * (userId). Se não houver e o usuário for de plataforma (não-operador — ex.: owner
+   * usando o app com o próprio login), recai na assinatura institucional definida na
+   * plataforma (padrão da organização), para que a mesma assinatura fique disponível
+   * também no mobile. Operadores continuam exigindo a própria assinatura.
+   */
+  async getOwn(actor: AuthenticatedUser): Promise<SignatureResponse | null> {
+    const own = await this.prisma.signature.findUnique({
+      where: { userId: actor.id },
       select: SIGNATURE_INTERNAL_SELECT,
     });
-    return signature && !signature.deletedAt ? this.toResponse(signature) : null;
+    if (own && !own.deletedAt) return this.toResponse(own);
+    const institutional = await this.resolveInstitutionalFallback(actor);
+    return institutional ? this.toResponse(institutional) : null;
+  }
+
+  /** Assinatura institucional usada como "própria" para usuários de plataforma. */
+  private async resolveInstitutionalFallback(
+    actor: AuthenticatedUser,
+  ): Promise<Prisma.SignatureGetPayload<{ select: typeof SIGNATURE_INTERNAL_SELECT }> | null> {
+    if (actor.role === Role.OPERATOR) return null;
+    return this.prisma.signature.findFirst({
+      where: { userId: null, active: true, deletedAt: null, imageStorageKey: { not: null } },
+      orderBy: [{ isDefault: 'desc' }, { position: 'asc' }, { createdAt: 'asc' }],
+      select: SIGNATURE_INTERNAL_SELECT,
+    });
   }
 
   async upsertOwn(
@@ -221,18 +242,22 @@ export class SignaturesService {
     actor: AuthenticatedUser,
     context: SignatureAuditContext,
   ): Promise<SignatureImageResponse> {
-    const signature = await this.prisma.signature.findUnique({
+    const own = await this.prisma.signature.findUnique({
       where: { userId: actor.id },
       select: { id: true, active: true, deletedAt: true },
     });
-    if (!signature || !signature.active || signature.deletedAt) {
+    const resolvedId =
+      own && own.active && !own.deletedAt
+        ? own.id
+        : (await this.resolveInstitutionalFallback(actor))?.id ?? null;
+    if (!resolvedId) {
       throw new ApplicationException(
         ERROR_CODES.SIGNATURE_NOT_FOUND,
         'Sua assinatura técnica ainda não foi configurada',
         HttpStatus.NOT_FOUND,
       );
     }
-    return this.downloadImage(signature.id, actor, context);
+    return this.downloadImage(resolvedId, actor, context);
   }
 
   async create(

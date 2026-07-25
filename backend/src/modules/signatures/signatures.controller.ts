@@ -40,13 +40,15 @@ import type { UploadedSignatureFile } from './types/uploaded-signature-file.type
 export class SignaturesController {
   constructor(private readonly signatures: SignaturesService) {}
 
-  @Roles(Role.OPERATOR)
+  // Usuários de plataforma (owner/manager) também usam o app mobile com o próprio
+  // login — a "minha assinatura" recai na assinatura institucional da plataforma.
+  @Roles(Role.OPERATOR, Role.OWNER, Role.MANAGER)
   @Get('me')
   own(@CurrentUser() actor: AuthenticatedUser): Promise<SignatureResponse | null> {
-    return this.signatures.getOwn(actor.id);
+    return this.signatures.getOwn(actor);
   }
 
-  @Roles(Role.OPERATOR)
+  @Roles(Role.OPERATOR, Role.OWNER, Role.MANAGER)
   @Post('me')
   @UseInterceptors(
     FileInterceptor('file', {
@@ -63,7 +65,7 @@ export class SignaturesController {
     return this.signatures.upsertOwn(body, file, actor, signatureContextFromRequest(request));
   }
 
-  @Roles(Role.OPERATOR)
+  @Roles(Role.OPERATOR, Role.OWNER, Role.MANAGER)
   @Get('me/download')
   downloadOwn(
     @CurrentUser() actor: AuthenticatedUser,
