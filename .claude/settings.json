@@ -24,7 +24,11 @@
       "Bash(npx nest *)",
       "Bash(sed -n '/enum EquipmentType/,/}/p' backend/prisma/schema.prisma)",
       "Bash(sed -n '/^model Equipment {/,/customer /p' backend/prisma/schema.prisma)",
-      "Bash(cd /Users/ds_/Documents/Devs/AllBlueLabs/Applications/ERP_Operation/backend; ls src/modules/customers/dto/; echo \"=== CreateCustomerDto head ===\"; sed -n '1,40p' src/modules/customers/dto/*customer*.ts | head -50)"
+      "Bash(cd /Users/ds_/Documents/Devs/AllBlueLabs/Applications/ERP_Operation/backend; ls src/modules/customers/dto/; echo \"=== CreateCustomerDto head ===\"; sed -n '1,40p' src/modules/customers/dto/*customer*.ts | head -50)",
+      "Bash(grep -nA30 \"CreateOperationPayload = \" packages/types/index.ts)",
+      "Bash(grep -nA25 \"async function ensureRvtChecklistDefaults\" src/seed.ts)",
+      "Bash(grep -nA30 \"PMOC_INCLUDE\" backend/src/modules/pmoc-compliance/pmoc-compliance.service.ts)",
+      "Bash(grep -nA6 \"generateWorkOrder\" packages/api/pmoc.ts)"
     ],
     "additionalDirectories": [
       "/Users/ds_/Documents/Devs/AllBlueLabs/Applications/ERP_Operation/backend/src/modules/maintenance-planning",

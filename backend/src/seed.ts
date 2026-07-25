@@ -1,7 +1,9 @@
 import {
+  DocumentTemplateType,
   OperationMaintenanceType,
   PrismaClient,
   Role,
+  SignatureMode,
   TechnicalCatalogArea,
   TechnicalCatalogType,
   TechnicalCatalogWorkflow,
@@ -66,6 +68,7 @@ async function main(): Promise<void> {
   // The whole application assumes a single Organization exists (profile, settings,
   // templates all resolve `findFirst`). Guarantee one so first login works.
   await ensureDefaultOrganization();
+  await ensureActivePmocTemplate();
   await ensureRvtChecklistDefaults();
   const [emailUser, usernameUser, userCount] = await Promise.all([
     prisma.user.findUnique({ where: { email: input.email } }),
@@ -134,6 +137,12 @@ async function main(): Promise<void> {
   );
 }
 
+/**
+ * Cria APENAS o que faltar para o owner (preferências e permissões) — nunca
+ * sobrescreve dados já existentes. Os blocos `update` são intencionalmente vazios
+ * (no-op): se o registro já existe, é preservado exatamente como está. Assim o
+ * seed é seguro em produção mesmo com owner/org já criados.
+ */
 async function ensureOwnerFoundation(userId: string): Promise<void> {
   await prisma.$transaction([
     prisma.userPreferences.upsert({
@@ -151,13 +160,8 @@ async function ensureOwnerFoundation(userId: string): Promise<void> {
         canSchedules: true,
         canTemplates: true,
       },
-      update: {
-        canFinancial: true,
-        canUsers: true,
-        canReports: true,
-        canSchedules: true,
-        canTemplates: true,
-      },
+      // Não altera permissões já existentes — só cria quando ainda não há registro.
+      update: {},
     }),
   ]);
 }
@@ -252,6 +256,48 @@ function organizationBootstrapInput(): OrganizationBootstrapInput {
  * requires the ORGANIZATION_* variables on subsequent runs) and repairs databases
  * bootstrapped before this step existed.
  */
+/**
+ * Garante um modelo de documento PMOC ativo e padrão. Idempotente: se já existir
+ * um PMOC ativo, não faz nada; senão cria um (política FIXED — somente o
+ * responsável técnico assina, sem assinatura do cliente), marca como padrão,
+ * ativo e de sistema. Roda sempre (mesmo em bases já existentes) para que o
+ * wizard de PMOC nunca reporte "Nenhum modelo PMOC ativo foi encontrado".
+ */
+async function ensureActivePmocTemplate(): Promise<void> {
+  const organization = await prisma.organization.findFirst({
+    orderBy: { createdAt: 'asc' },
+    select: { id: true },
+  });
+  if (!organization) return;
+
+  const active = await prisma.documentTemplate.findFirst({
+    where: { organizationId: organization.id, type: DocumentTemplateType.PMOC, isActive: true },
+    select: { id: true },
+  });
+  if (active) return;
+
+  await prisma.documentTemplate.create({
+    data: {
+      organizationId: organization.id,
+      type: DocumentTemplateType.PMOC,
+      name: 'PMOC — Modelo padrão',
+      headerContent: '',
+      footerContent: '',
+      observations: '',
+      isDefault: true,
+      isSystem: true,
+      isActive: true,
+      requiresSignature: true,
+      signatureMode: SignatureMode.FIXED,
+      executionSignatureClient: false,
+      executionSignatureTechnician: true,
+    },
+  });
+  process.stdout.write(
+    `${JSON.stringify({ event: 'pmoc_default_template_created', organizationId: organization.id })}\n`,
+  );
+}
+
 async function ensureDefaultOrganization(): Promise<void> {
   const existing = await prisma.organization.findFirst({ select: { id: true } });
   if (existing) return;

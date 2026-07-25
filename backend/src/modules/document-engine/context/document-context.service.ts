@@ -759,18 +759,17 @@ export class DocumentContextService {
     operation: DocumentContextOperation,
     handoff: DocumentContextOperation['documents'][number],
   ): Promise<DocumentSignatureContext> {
-    // Todos os modelos exibem cliente (esq.) + responsável técnico (dir.) ao
-    // final, exceto Recibo (RECEIPT) e Laudo Técnico (TECHNICAL_OPINION), que
-    // permanecem apenas com a assinatura institucional.
-    // Quando o owner opta por ocultar a assinatura do cliente neste documento,
-    // apenas a assinatura do responsável técnico é exibida (bloco do cliente some).
+    // Modelos exibem cliente (esq.) + responsável técnico (dir.) ao final, exceto:
+    // Recibo (RECEIPT) e Laudo Técnico (TECHNICAL_OPINION) — só institucional; e
+    // **PMOC** — decisão do owner: só o responsável técnico, sem assinatura do
+    // cliente (nem no preview nem no PDF). Quando o owner oculta a assinatura do
+    // cliente num documento específico, o bloco do cliente também some.
     const customerRequired =
       !handoff.customerSignatureHidden &&
       ([
         DocumentTemplateType.WORK_ORDER,
         DocumentTemplateType.TECHNICAL_REPORT,
         DocumentTemplateType.BUDGET,
-        DocumentTemplateType.PMOC,
         DocumentTemplateType.REPORT,
         DocumentTemplateType.QUOTE,
       ] as DocumentTemplateType[]).includes(handoff.type);

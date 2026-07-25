@@ -26,7 +26,6 @@ import {
   technicalCatalogsApi,
   usersApi,
   useQuery,
-  type CreateOperationPayload,
   type Customer,
   type CustomerAddress,
   type DocumentConfiguration,
@@ -49,7 +48,6 @@ import { SignaturePad } from "@erp/ui/documents/signature-pad";
 import { MultiSelect } from "@erp/ui/multi-select";
 import { PhotoInput, type CapturedPhoto } from "@erp/ui/photo-input";
 import { CustomerSignaturePreview } from "@erp/ui/documents/customer-signature-preview";
-import { OperationCreationDrawer } from "./operation-creation-drawer";
 
 const PERIODICITIES: Array<{ value: PmocPeriodicity; label: string; months: number }> = [
   { value: "MONTHLY", label: "Mensal", months: 1 },
@@ -109,7 +107,9 @@ const initialForm: Form = {
   duration: "120",
   operationObservations: "",
   generationMode: "MANUAL",
-  firstExecution: "NEXT",
+  // Por padrão o wizard já cria a primeira OS/relatório PMOC ao concluir (com
+  // revisão); NEXT apenas cria o plano e agenda a primeira execução.
+  firstExecution: "NOW",
   overrideSignature: false,
   signatureOverrideId: "",
 };
@@ -133,9 +133,6 @@ export function PmocPlanWizard({ open, onClose, onCreated, pmoc = null, onUpdate
   const [catalogTick, setCatalogTick] = useState(0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [operationOpen, setOperationOpen] = useState(false);
-  const [executionRequestId, setExecutionRequestId] = useState<string | null>(null);
-  const [prefill, setPrefill] = useState<CreateOperationPayload | null>(null);
   const [handoff, setHandoff] = useState<DocumentHandoff | null>(null);
   const [signatureData, setSignatureData] = useState<string | null>(null);
   const [signerName, setSignerName] = useState("");
@@ -402,14 +399,11 @@ export function PmocPlanWizard({ open, onClose, onCreated, pmoc = null, onUpdate
       });
       onCreated(pmoc);
       const request = pmoc.executionRequests?.find((item) => item.status === "PENDING");
+      // NOW: cria a 1ª OS + relatório/PDF agora. NEXT: só conclui o plano.
       if (form.firstExecution === "NOW" && request) {
-        const operationPrefill = await pmocApi.getExecutionRequestPrefill(request.id);
-        setExecutionRequestId(request.id);
-        setPrefill(operationPrefill);
-        setOperationOpen(true);
-      } else {
-        onClose();
+        await generateFirstExecution(request.id);
       }
+      onClose();
     } catch (cause) {
       if (
         cause instanceof ApiClientError &&
@@ -466,38 +460,40 @@ export function PmocPlanWizard({ open, onClose, onCreated, pmoc = null, onUpdate
     }
   }
 
-  async function submitOperation(payload: CreateOperationPayload) {
-    if (!executionRequestId) throw new Error("A execução programada não foi encontrada.");
-    const request = await pmocApi.generateWorkOrder(executionRequestId, payload);
-    if (!request.operationId) throw new Error("A OS não foi vinculada à execução.");
-    const operationId = request.operationId;
-    if (draftPhotos.length) {
-      await operationApi.updateOperation(operationId, {
-        photos: await Promise.all(draftPhotos.map(async (photo) => ({
+  // Cria, ao concluir o wizard (opção NOW), a primeira OS/execução do PMOC já com
+  // as fotos e a assinatura do responsável técnico, e renderiza o relatório (PDF)
+  // — diretamente, sem um segundo drawer. Assim a OS/documento sempre existem e a
+  // página de detalhes/Documentos passam a mostrar preview e PDF.
+  async function generateFirstExecution(requestId: string) {
+    const prefill = await pmocApi.getExecutionRequestPrefill(requestId);
+    // Fotos vão no payload de criação (atômico) para garantir a persistência.
+    const photos = draftPhotos.length
+      ? await Promise.all(draftPhotos.map(async (photo) => ({
           dataUrl: await evidenceFileDataUrl(photo.file),
           caption: photo.caption?.trim() || null,
-        }))),
-      });
-      draftPhotos.forEach((photo) => URL.revokeObjectURL(photo.url));
-      setDraftPhotos([]);
-    }
-    // Prepara o documento PMOC com a assinatura técnica (sempre).
+        })))
+      : undefined;
+    const generated = await pmocApi.generateWorkOrder(
+      requestId,
+      { ...prefill, ...(photos ? { photos } : {}) },
+      { allowEarly: true },
+    );
+    const operationId = generated.operationId ?? generated.generatedOperationId;
+    if (!operationId) throw new Error("A OS não foi vinculada à execução.");
+    draftPhotos.forEach((photo) => URL.revokeObjectURL(photo.url));
+    setDraftPhotos([]);
+    // Documento PMOC: só o responsável técnico assina (sem assinatura do cliente).
+    // Renderiza o rascunho diretamente — não marca "enviado", então nunca trava a
+    // geração posterior. Um erro de render não impede a criação da OS/plano.
     const document = await documentsApi.saveHandoffDraft(operationId, "PMOC");
     if (form.overrideSignature && form.signatureOverrideId) {
       await documentsApi.selectHandoffTechnicalSignature(document.id, form.signatureOverrideId);
     }
-    // Gera o PDF renderizando o rascunho **diretamente** (sem enviar para revisão).
-    // Enviar sem finalizar deixaria o documento "enviado sem finalizar", o que
-    // bloqueia qualquer geração posterior de PDF (REVIEW_INCOMPLETE). Renderizando
-    // o rascunho, o PDF fica disponível para download; se faltar evidência (mín. de
-    // fotos), o PDF pode ser gerado depois em "Gerar PDF" na página do PMOC, que
-    // mostra o motivo. Não interrompe a criação da Ordem de Serviço.
     try {
       await documentsApi.renderDocument(document.id);
     } catch {
-      // Requisitos incompletos (ex.: menos imagens que o mínimo) — segue sem bloquear.
+      // O PDF pode ser gerado depois em "Gerar PDF" na página do PMOC.
     }
-    return operationApi.getOperation(operationId);
   }
 
   const selectedCustomer = customers.data?.items.find((item) => item.id === form.customerId);
@@ -506,7 +502,7 @@ export function PmocPlanWizard({ open, onClose, onCreated, pmoc = null, onUpdate
 
   return <>
     <Drawer
-      open={open && !operationOpen}
+      open={open}
       onClose={onClose}
       eyebrow="PMOC operacional"
       title={reviewing ? (initialReviewSection === "evidence" ? "Revisar evidências do PMOC" : "Revisar assinaturas do PMOC") : editing ? "Editar plano PMOC" : "Novo plano PMOC"}
@@ -570,10 +566,7 @@ export function PmocPlanWizard({ open, onClose, onCreated, pmoc = null, onUpdate
           documentId={reviewDocumentId}
           reviewing={reviewing || editing}
           draftPhotos={draftPhotos}
-          onDraftPhotos={(photos) => {
-            setDraftPhotos(photos);
-            if (photos.length) set("firstExecution", "NOW");
-          }}
+          onDraftPhotos={setDraftPhotos}
           previewRevision={previewRevision}
           onChanged={() => { reviewOperation.refetch(); setPreviewRevision((value) => value + 1); }}
         />}
@@ -620,15 +613,6 @@ export function PmocPlanWizard({ open, onClose, onCreated, pmoc = null, onUpdate
         />}
       </div>
     </Drawer>
-    <OperationCreationDrawer
-      open={operationOpen}
-      mode="work-order"
-      initialValues={prefill ?? undefined}
-      submitOperation={submitOperation}
-      submitLabel="Criar primeira Ordem de Serviço"
-      contextNotice="A primeira Ordem de Serviço será criada com os dados deste PMOC e ficará disponível para gerenciamento normalmente."
-      onClose={() => { setOperationOpen(false); onClose(); }}
-    />
     <ConfirmDialog
       open={Boolean(coverageConfirmation)}
       title="Este cliente já possui PMOC ativo"
@@ -823,7 +807,7 @@ function EvidenceStep({ operation, operationId, documentId, reviewing, draftPhot
       <Notice tone="info"><strong>As evidências serão vinculadas à primeira execução.</strong><br />Ao adicionar fotos agora, a primeira Ordem de Serviço será preparada ao concluir o cadastro. O plano PMOC não armazena imagens em paralelo.</Notice>
       <section className="space-y-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4">
         <div><h4 className="font-semibold">Adicionar fotos</h4><p className="text-sm text-[var(--color-muted-foreground)]">Selecione ou arraste imagens PNG/JPEG. Você poderá revisar as miniaturas e legendas antes de criar o plano.</p></div>
-        <PhotoInput photos={draftPhotos} onChange={onDraftPhotos} max={16} existingCount={0} requiredMinimum={4} />
+        <PhotoInput photos={draftPhotos} onChange={onDraftPhotos} max={6} existingCount={0} />
       </section>
     </div>}
     {operationId && <div className="space-y-5">
@@ -834,7 +818,7 @@ function EvidenceStep({ operation, operationId, documentId, reviewing, draftPhot
           {editing === photo.id ? <div className="space-y-2"><input value={captions[photo.id] ?? ""} maxLength={255} onChange={(event) => setCaptions((current) => ({ ...current, [photo.id]: event.target.value }))} className="h-9 w-full rounded-md border border-[var(--color-border)] bg-transparent px-2 text-sm" placeholder="Legenda da evidência" autoFocus /><div className="flex gap-2"><button type="button" className={smallButton} disabled={busy} onClick={() => void saveCaption(photo)}>Salvar</button><button type="button" className={smallButton} onClick={() => { setEditing(null); setCaptions((current) => ({ ...current, [photo.id]: photo.caption ?? "" })); }}>Cancelar</button></div></div> : <><p className="min-h-10 text-sm font-medium">{photo.caption || "Sem legenda"}</p><div className="space-y-1 text-xs text-[var(--color-muted-foreground)]"><p>{photo.createdBy?.name ?? operation.operator?.name ?? "Responsável não identificado"}</p><p>{new Date(photo.createdAt).toLocaleDateString("pt-BR")} · {new Date(photo.createdAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</p></div><div className="flex gap-2"><button type="button" className={smallButton} onClick={() => setEditing(photo.id)}>Editar legenda</button><button type="button" className={`${smallButton} text-red-600`} onClick={() => setRemoving(photo)}>Remover</button></div></>}
         </div>
       </article>)}</div>}
-      {reviewing && <section className="space-y-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4"><div><h4 className="font-semibold">Adicionar fotos</h4><p className="text-sm text-[var(--color-muted-foreground)]">Arraste imagens ou selecione vários arquivos. Revise as miniaturas e legendas antes do envio.</p></div><PhotoInput photos={pending} onChange={setPending} max={16} existingCount={operation?.photos.length ?? 0} requiredMinimum={4} disabled={busy} />{progress > 0 && <div className="space-y-1"><div className="h-2 overflow-hidden rounded-full bg-[var(--color-muted)]"><div className="h-full bg-[var(--color-primary)] transition-all" style={{ width: `${progress}%` }} /></div><p className="text-xs text-[var(--color-muted-foreground)]">Enviando evidências · {progress}%</p></div>}<button type="button" className={primary} disabled={!pending.length || busy} onClick={() => void upload()}>{busy ? "Enviando…" : `Enviar ${pending.length || ""} foto(s)`}</button></section>}
+      {reviewing && <section className="space-y-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4"><div><h4 className="font-semibold">Adicionar fotos</h4><p className="text-sm text-[var(--color-muted-foreground)]">Arraste imagens ou selecione vários arquivos. Revise as miniaturas e legendas antes do envio.</p></div><PhotoInput photos={pending} onChange={setPending} max={6} existingCount={operation?.photos.length ?? 0} disabled={busy} />{progress > 0 && <div className="space-y-1"><div className="h-2 overflow-hidden rounded-full bg-[var(--color-muted)]"><div className="h-full bg-[var(--color-primary)] transition-all" style={{ width: `${progress}%` }} /></div><p className="text-xs text-[var(--color-muted-foreground)]">Enviando evidências · {progress}%</p></div>}<button type="button" className={primary} disabled={!pending.length || busy} onClick={() => void upload()}>{busy ? "Enviando…" : `Enviar ${pending.length || ""} foto(s)`}</button></section>}
       {error && <Notice tone="danger">{error}</Notice>}{feedback && <Notice tone="info">{feedback}</Notice>}
       {reviewing && <section className="space-y-3"><div><h4 className="font-semibold">Preview do documento</h4><p className="text-sm text-[var(--color-muted-foreground)]">Esta é a mesma coleção, ordem e legenda resolvida pelo DocumentContext para Preview e PDF.</p></div><DocumentViewer key={`evidence-${documentId ?? operationId}-${previewRevision}`} source={{ operationId, type: "PMOC", documentId }} canRender={false} canDownload={false} title="Preview das evidências do PMOC" /></section>}
     </div>}
@@ -930,7 +914,7 @@ function SummaryCard({ title, rows, onEdit }: { title: string; rows: Array<[stri
 function SignatureCard({ signature }: { signature: Signature }) { const image = useQuery((signal) => signaturesApi.downloadSignatureImage(signature.id, { signal }), [signature.id]); return <div className="mt-3 grid gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-muted)]/40 p-3 sm:grid-cols-[120px_1fr] sm:items-center"><div className="grid h-20 place-items-center rounded-md bg-white p-2">{image.data ? <span role="img" aria-label={`Assinatura de ${signature.name}`} className="h-16 w-full bg-contain bg-center bg-no-repeat" style={{ backgroundImage: `url(${JSON.stringify(`data:${image.data.mimeType};base64,${image.data.contentBase64}`)})` }} /> : <span className="text-xs text-[var(--color-muted-foreground)]">Carregando imagem…</span>}</div><div><p className="font-semibold">{signature.name}</p><p className="text-sm text-[var(--color-muted-foreground)]">{signature.title}</p>{signature.professionalCouncil && <p className="text-xs text-[var(--color-muted-foreground)]">{signature.professionalCouncil}</p>}{signature.department && <p className="text-xs text-[var(--color-muted-foreground)]">{signature.department}</p>}<span className="mt-2 inline-flex rounded-full bg-[var(--color-primary)]/10 px-2 py-1 text-xs font-medium text-[var(--color-primary)]">Somente leitura</span></div></div>; }
 function Stepper({ step, onStep }: { step: number; onStep: (step: number) => void }) { return <div className="grid grid-cols-3 gap-2 lg:grid-cols-6">{STEPS.map((label, index) => <button type="button" key={label} disabled={index > step} onClick={() => onStep(index)} className={`rounded-lg px-2 py-2 text-center text-xs font-medium transition ${index <= step ? "bg-[var(--color-primary)] text-[var(--color-primary-foreground)]" : "bg-[var(--color-muted)] text-[var(--color-muted-foreground)]"} disabled:cursor-not-allowed`}>{index < step ? <span className="inline-flex items-center gap-1"><Check className="h-3.5 w-3.5" />{label}</span> : label}</button>)}</div>; }
 
-function project(form: Form) { const start = new Date(`${form.startDate}T12:00:00`); const end = new Date(`${form.endDate}T12:00:00`); if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) return { months: 0, count: 0, next: "", dates: [] as string[] }; const months = Math.max(0, (end.getFullYear() - start.getFullYear()) * 12 + end.getMonth() - start.getMonth()); const cadence = PERIODICITIES.find((item) => item.value === form.periodicity)?.months ?? 1; const dates: string[] = []; for (let value = form.startDate, guard = 0; value <= form.endDate && guard < 240; value = addMonths(value, cadence), guard += 1) dates.push(value); return { months, count: dates.length, next: dates[0] ?? form.startDate, dates }; }
+function project(form: Form) { const start = new Date(`${form.startDate}T12:00:00`); const end = new Date(`${form.endDate}T12:00:00`); if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) return { months: 0, count: 0, next: "", dates: [] as string[] }; const months = Math.max(0, (end.getFullYear() - start.getFullYear()) * 12 + end.getMonth() - start.getMonth()); const cadence = PERIODICITIES.find((item) => item.value === form.periodicity)?.months ?? 1; const dates: string[] = []; for (let value = form.startDate, guard = 0; value < form.endDate && guard < 240; value = addMonths(value, cadence), guard += 1) dates.push(value); return { months, count: dates.length, next: dates[0] ?? form.startDate, dates }; }
 function today() { return new Date().toISOString().slice(0, 10); }
 function addMonths(value: string, months: number) { const date = new Date(`${value}T12:00:00`); date.setMonth(date.getMonth() + months); return date.toISOString().slice(0, 10); }
 function formatDate(value: string) { return value ? new Date(`${value}T12:00:00`).toLocaleDateString("pt-BR") : "—"; }

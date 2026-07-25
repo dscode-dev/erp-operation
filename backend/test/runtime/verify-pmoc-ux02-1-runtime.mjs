@@ -65,14 +65,10 @@ try {
   await api(`/assignments/${assignment.id}/accept`, { method: 'PATCH', headers: operatorHeaders, body: '{}' });
   await api(`/assignments/${assignment.id}/start`, { method: 'PATCH', headers: operatorHeaders, body: '{}' });
 
-  const blockedRender = await request(`/documents/operations/${operationId}/PMOC/render`, { method: 'POST', headers: ownerHeaders, body: '{}' });
-  if (blockedRender.response.status !== 409 || blockedRender.body.error?.code !== 'PMOC_EVIDENCE_REQUIRED') throw new Error('PMOC render was not blocked before mandatory images.');
-  const blockedComplete = await request(`/assignments/${assignment.id}/complete`, { method: 'PATCH', headers: operatorHeaders, body: JSON.stringify({ notes: 'Attempt without images' }) });
-  if (blockedComplete.response.status !== 409 || blockedComplete.body.error?.code !== 'PMOC_EVIDENCE_REQUIRED') throw new Error('PMOC completion was not blocked before mandatory images.');
-
+  // PMOC não exige mais mínimo de fotos e não contém assinatura do cliente
+  // (decisão do owner): render/complete não são mais bloqueados por evidência.
   await api(`/operations/${operationId}`, { method: 'PATCH', headers: operatorHeaders, body: JSON.stringify({ photos: Array.from({ length: 4 }, (_, index) => ({ dataUrl: `data:image/png;base64,${png}`, caption: `Procedimento ${index + 1}` })) }) });
   const unsignedPreview = await api(`/documents/operations/${operationId}/PMOC/preview`, { headers: ownerHeaders });
-  if (!JSON.stringify(unsignedPreview).includes('NÃO ASSINADO')) throw new Error('Unsigned warning is missing.');
   const gallery = unsignedPreview.sections.flatMap((section) => section.components).find((component) => component.kind === 'imageGallery');
   if (!gallery || gallery.columns !== 4 || gallery.images.length !== 4 || gallery.images.some((image) => !image.image?.contentBase64)) throw new Error('Preview image parity is invalid.');
   const unsignedRender = await api(`/documents/operations/${operationId}/PMOC/render`, { method: 'POST', headers: ownerHeaders, body: '{}' });

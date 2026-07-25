@@ -402,17 +402,13 @@ describe('AppSec Maintenance Planning and PMOC closure', () => {
     expect(maintenanceExecution.status).toBe(MaintenanceExecutionStatus.LINKED);
     expect((await authPatch(operator, `/api/v1/assignments/${assignment.id}/accept`).send({})).status).toBe(200);
     expect((await authPatch(operator, `/api/v1/assignments/${assignment.id}/start`).send({})).status).toBe(200);
-    const blockedWithoutEvidence = await authPatch(
-      operator,
-      `/api/v1/assignments/${assignment.id}/complete`,
-    ).send({ notes: 'Tentativa sem evidências' });
-    expect(blockedWithoutEvidence.status).toBe(409);
-    expect(errorCode(blockedWithoutEvidence)).toBe(ERROR_CODES.PMOC_EVIDENCE_REQUIRED);
+    // PMOC não exige mais um mínimo de evidências (decisão do owner). As fotos
+    // continuam sendo salvas normalmente (limite de 6 aplicado na captura).
     const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=';
     const evidenceSaved = await authPatch(operator, `/api/v1/operations/${operationId}`).send({
       photos: Array.from({ length: 4 }, (_, index) => ({
         dataUrl: `data:image/png;base64,${png}`,
-        caption: `Evidência obrigatória ${index + 1}`,
+        caption: `Evidência ${index + 1}`,
       })),
     });
     expect(evidenceSaved.status).toBe(200);

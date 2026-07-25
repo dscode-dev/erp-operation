@@ -2,8 +2,14 @@ export const PMOC_RESOURCE = 'PMOC';
 export const PMOC_ENVIRONMENT_RESOURCE = 'PMOC_ENVIRONMENT';
 export const PMOC_EXECUTION_REQUEST_RESOURCE = 'PMOC_EXECUTION_REQUEST';
 
-/** Minimum field evidence required before a PMOC execution can be completed or emitted. */
-export const PMOC_MIN_PROCEDURE_IMAGES = 4;
+/**
+ * Evidência mínima exigida para concluir/emitir um PMOC. Decisão do owner: **sem
+ * mínimo** (0) — o PMOC pode ser gerado sem fotos. O limite máximo (6) é aplicado
+ * na UI de captura. `0` desativa todos os bloqueios `photos < min`.
+ */
+export const PMOC_MIN_PROCEDURE_IMAGES = 0;
+/** Máximo de imagens de procedimento aceitas por execução de PMOC. */
+export const PMOC_MAX_PROCEDURE_IMAGES = 6;
 
 export const PMOC_AUDIT_ACTIONS = {
   CREATED: 'PMOC_CREATED',
