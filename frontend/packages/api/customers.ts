@@ -36,7 +36,7 @@ export function createCustomer(payload: CreateCustomerPayload): Promise<Customer
 export type WalkInCustomerPayload = {
   type: "PERSON" | "COMPANY";
   name: string;
-  document: string | undefined;
+  document?: string;
   address: {
     zipCode: string;
     street: string;

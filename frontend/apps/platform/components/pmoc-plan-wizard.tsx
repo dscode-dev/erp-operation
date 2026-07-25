@@ -116,7 +116,7 @@ const initialForm: Form = {
 
 const STEPS = ["Identificação", "Cobertura", "Planejamento", "Execução", "Evidências", "Documento", "Confirmação"];
 
-export function PmocPlanWizard({ open, onClose, onCreated, pmoc = null, onUpdated, initialReviewSection = "signatures", editMode = false }: {
+export function PmocPlanWizard({ open, onClose, onCreated, pmoc = null, onUpdated, initialReviewSection = "signatures", editMode = false, forceFirstExecutionNow = false, onFirstDocument }: {
   open: boolean;
   onClose: () => void;
   onCreated: (pmoc: PmocPlan) => void;
@@ -124,6 +124,10 @@ export function PmocPlanWizard({ open, onClose, onCreated, pmoc = null, onUpdate
   onUpdated?: (pmoc: PmocPlan) => void;
   initialReviewSection?: "signatures" | "evidence";
   editMode?: boolean;
+  /** Mobile: só oferece "gerar OS automática ao concluir" (esconde a opção NEXT). */
+  forceFirstExecutionNow?: boolean;
+  /** Chamado após gerar a 1ª OS/PDF, com o documento pronto para compartilhar. */
+  onFirstDocument?: (info: { operationId: string; documentId: string; documentNumber: string }) => void;
 }) {
   const editing = Boolean(pmoc) && editMode;
   const reviewing = Boolean(pmoc) && !editing;
@@ -478,6 +482,12 @@ export function PmocPlanWizard({ open, onClose, onCreated, pmoc = null, onUpdate
     } catch {
       // O PDF pode ser gerado depois em "Gerar PDF" na página do PMOC.
     }
+    // Mobile: entrega o documento pronto para a tela de compartilhar/baixar.
+    onFirstDocument?.({
+      operationId,
+      documentId: document.id,
+      documentNumber: document.number ?? `OP-${operationId.slice(0, 8)}`,
+    });
   }
 
   const selectedCustomer = customers.data?.items.find((item) => item.id === form.customerId);
@@ -535,7 +545,7 @@ export function PmocPlanWizard({ open, onClose, onCreated, pmoc = null, onUpdate
           loadingScopes={scopes.loading}
           refreshScopes={() => setCatalogTick((value) => value + 1)}
         />}
-        {step === 2 && <PlanningStep form={form} set={set} projection={projection} />}
+        {step === 2 && <PlanningStep form={form} set={set} projection={projection} forceFirstExecutionNow={forceFirstExecutionNow} />}
         {step === 3 && <ExecutionStep
           form={form}
           set={set}
@@ -643,7 +653,7 @@ function CoverageStep({ form, set, equipments, scopes, loadingScopes, refreshSco
   </Section>;
 }
 
-function PlanningStep({ form, set, projection }: { form: Form; set: FormSetter; projection: ReturnType<typeof project> }) {
+function PlanningStep({ form, set, projection, forceFirstExecutionNow = false }: { form: Form; set: FormSetter; projection: ReturnType<typeof project>; forceFirstExecutionNow?: boolean }) {
   const modes = [
     { value: "AUTO" as const, label: "Geração automática", description: "As Ordens de Serviço serão criadas conforme a programação." },
     { value: "MANUAL" as const, label: "Geração com revisão", description: "A equipe revisará os dados antes de criar cada Ordem de Serviço." },
@@ -656,7 +666,9 @@ function PlanningStep({ form, set, projection }: { form: Form; set: FormSetter; 
       <Field label="Fim da cobertura" required><input type="date" value={form.endDate} min={form.startDate} onChange={(event) => set("endDate", event.target.value)} /></Field>
     </div>
     <div className="grid gap-3 md:grid-cols-3">{modes.map((mode) => <button type="button" key={mode.value} onClick={() => set("generationMode", mode.value)} className={`rounded-[var(--radius-lg)] border p-4 text-left transition ${form.generationMode === mode.value ? "border-[var(--color-primary)] bg-[var(--color-primary)]/5 ring-1 ring-[var(--color-primary)]/20" : "border-[var(--color-border)] hover:bg-[var(--color-muted)]"}`}><strong>{mode.label}</strong><span className="mt-1 block text-xs leading-relaxed text-[var(--color-muted-foreground)]">{mode.description}</span></button>)}</div>
-    {form.generationMode !== "PAUSED" && <div className="grid gap-3 md:grid-cols-2"><Choice checked={form.firstExecution === "NOW"} onChange={() => set("firstExecution", "NOW")} title="Criar a primeira OS ao concluir" text="Você poderá revisar os dados antes de confirmar." /><Choice checked={form.firstExecution === "NEXT"} onChange={() => set("firstExecution", "NEXT")} title="Iniciar na data programada" text={`A primeira execução ficará prevista para ${formatDate(form.startDate)}.`} /></div>}
+    {form.generationMode !== "PAUSED" && (forceFirstExecutionNow
+      ? <Notice tone="neutral">A primeira Ordem de Serviço será criada automaticamente ao concluir, gerando o PDF do PMOC para compartilhar.</Notice>
+      : <div className="grid gap-3 md:grid-cols-2"><Choice checked={form.firstExecution === "NOW"} onChange={() => set("firstExecution", "NOW")} title="Criar a primeira OS ao concluir" text="Você poderá revisar os dados antes de confirmar." /><Choice checked={form.firstExecution === "NEXT"} onChange={() => set("firstExecution", "NEXT")} title="Iniciar na data programada" text={`A primeira execução ficará prevista para ${formatDate(form.startDate)}.`} /></div>)}
     <Projection projection={projection} detailed />
     <Notice tone="neutral">Após criar o plano, cada execução pendente pode ser reagendada individualmente. O número e o histórico permanecem preservados, sem alterar a periodicidade das demais.</Notice>
   </Section>;

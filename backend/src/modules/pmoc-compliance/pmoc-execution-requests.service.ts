@@ -657,7 +657,9 @@ export class PmocExecutionRequestsService {
           id,
           NotificationType.PMOC_OS_GENERATED,
         );
-        if (nextExecution <= request.pmocPlan.endDate) {
+        // Fim da cobertura é exclusivo: não reserva execução que caia exatamente
+        // no endDate (evita a 13ª execução num período de 1 ano).
+        if (nextExecution < request.pmocPlan.endDate) {
           const existingNextRequest = await tx.pmocExecutionRequest.findUnique({
             where: {
               pmocPlanId_scheduledFor: {

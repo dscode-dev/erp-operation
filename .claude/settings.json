@@ -29,7 +29,12 @@
       "Bash(grep -nA25 \"async function ensureRvtChecklistDefaults\" src/seed.ts)",
       "Bash(grep -nA30 \"PMOC_INCLUDE\" backend/src/modules/pmoc-compliance/pmoc-compliance.service.ts)",
       "Bash(grep -nA6 \"generateWorkOrder\" packages/api/pmoc.ts)",
-      "Bash(DATABASE_URL=\"postgresql://u:p@localhost:5432/db\" npx prisma validate)"
+      "Bash(DATABASE_URL=\"postgresql://u:p@localhost:5432/db\" npx prisma validate)",
+      "Bash(echo \"build exit=$?\")",
+      "Bash(docker exec *)",
+      "Bash(export DATABASE_URL=\"postgresql://administrator_clima:!access.climati^e.db@localhost:5432/climatize_db?schema=public\")",
+      "Bash(export DATABASE_URL='postgresql://administrator_clima:!access.climati^e.db@localhost:5432/climatize_db?schema=public')",
+      "Bash(docker exec erp_operation-postgres-1 sh -c 'psql -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\" -v ON_ERROR_STOP=1 -c \" *)"
     ],
     "additionalDirectories": [
       "/Users/ds_/Documents/Devs/AllBlueLabs/Applications/ERP_Operation/backend/src/modules/maintenance-planning",

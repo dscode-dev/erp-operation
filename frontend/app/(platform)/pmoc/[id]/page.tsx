@@ -53,6 +53,10 @@ export default function PmocDetailPage() {
   const [reviewSection, setReviewSection] = useState<"signatures" | "evidence" | null>(null);
   const [documentRequestId, setDocumentRequestId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Adiantamento é apenas um aviso confirmável: quando a execução está muito no
+  // futuro, o backend responde PMOC_EXECUTION_TOO_EARLY; aqui pedimos confirmação
+  // e reenviamos com allowEarly em vez de bloquear.
+  const [earlyConfirm, setEarlyConfirm] = useState<{ message: string; resolve: (ok: boolean) => void } | null>(null);
 
   async function openGeneration(request: PmocExecutionRequest) {
     setError(null);
@@ -61,7 +65,19 @@ export default function PmocDetailPage() {
   }
   async function submitOperation(payload: CreateOperationPayload) {
     if (!generating) throw new Error("Execução não selecionada.");
-    const request = await pmocApi.generateWorkOrder(generating.id, payload);
+    let request;
+    try {
+      request = await pmocApi.generateWorkOrder(generating.id, payload);
+    } catch (cause) {
+      if (cause instanceof ApiClientError && cause.code === "PMOC_EXECUTION_TOO_EARLY") {
+        const confirmed = await new Promise<boolean>((resolve) => setEarlyConfirm({ message: cause.message, resolve }));
+        setEarlyConfirm(null);
+        if (!confirmed) throw cause;
+        request = await pmocApi.generateWorkOrder(generating.id, payload, { allowEarly: true });
+      } else {
+        throw cause;
+      }
+    }
     if (!request.operationId) throw new Error("OS não vinculada.");
     setTick((value) => value + 1);
     return operationApi.getOperation(request.operationId);
@@ -130,6 +146,14 @@ export default function PmocDetailPage() {
       }
       onClose={() => setConcluding(null)}
       onConfirm={async () => { if (concluding) await concludeOnPlatform(concluding); }}
+    />
+    <ConfirmDialog
+      open={Boolean(earlyConfirm)}
+      title="Gerar execução adiantada?"
+      confirmLabel="Gerar mesmo assim"
+      description={earlyConfirm?.message ?? "Esta execução está prevista para uma data futura. Adiantar pode quebrar o cronograma contratado do PMOC."}
+      onClose={() => { earlyConfirm?.resolve(false); }}
+      onConfirm={() => { earlyConfirm?.resolve(true); }}
     />
     <DefaultsDrawer open={settings} plan={plan} onClose={() => setSettings(false)} onSaved={() => { setSettings(false); setTick((value) => value + 1); }} />
     <PmocPlanWizard open={reviewSection !== null} pmoc={plan} initialReviewSection={reviewSection ?? "signatures"} onClose={() => setReviewSection(null)} onCreated={() => undefined} onUpdated={() => setTick((value) => value + 1)} />

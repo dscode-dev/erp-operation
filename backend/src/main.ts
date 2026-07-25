@@ -26,6 +26,14 @@ async function bootstrap(): Promise<void> {
     json({ limit: config.operationJsonBodyLimitBytes }),
     urlencoded({ extended: true, limit: config.operationJsonBodyLimitBytes }),
   );
+  // Endpoints de PMOC também recebem OS com fotos (base64) ao gerar a Ordem de
+  // Serviço da execução — precisam do mesmo limite ampliado das operações.
+  const pmocPath = `/${API_PREFIX}/v${API_VERSION}/pmoc`;
+  app.use(
+    pmocPath,
+    json({ limit: config.operationJsonBodyLimitBytes }),
+    urlencoded({ extended: true, limit: config.operationJsonBodyLimitBytes }),
+  );
   app.use(
     json({ limit: config.httpJsonBodyLimitBytes }),
     urlencoded({ extended: true, limit: config.httpJsonBodyLimitBytes }),

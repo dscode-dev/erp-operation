@@ -1294,7 +1294,10 @@ export class PmocComplianceService implements ComplianceEvaluator<{
     let count = 0;
     try {
       this.recurrence.validate(rule);
-      while (cursor <= plan.endDate && count < 10_000) {
+      // Fim da cobertura é exclusivo: uma ocorrência que caia exatamente no
+      // endDate não conta (alinha com a projeção do wizard). Ex.: 25/07/2026 a
+      // 25/07/2027 mensal = 12 execuções, não 13.
+      while (cursor < plan.endDate && count < 10_000) {
         count += 1;
         cursor = this.recurrence.next(rule, cursor);
       }
@@ -1738,7 +1741,11 @@ export class PmocComplianceService implements ComplianceEvaluator<{
   }
 
   private dateOnly(value: string): Date {
-    return new Date(value);
+    // Datas do PMOC são datas-calendário (sem fuso). Fixamos meio-dia UTC para
+    // que a exibição em qualquer fuso (ex.: BRT UTC-3) mantenha o mesmo dia —
+    // `new Date('2026-07-25')` cairia em meia-noite UTC e voltaria para 24/07.
+    const [year, month, day] = value.slice(0, 10).split('-').map(Number);
+    return new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
   }
 
   private activeCoveragePlans(customerId: string, reference: Date): Promise<ActiveCoveragePlan[]> {

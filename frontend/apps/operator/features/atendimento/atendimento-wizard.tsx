@@ -13,6 +13,7 @@ import { useRouter } from 'next/navigation';
 import {
   Loader2,
   Building2,
+  CalendarClock,
   MapPin,
   Wrench,
   ClipboardList,
@@ -73,6 +74,9 @@ import {
 } from '@erp/api';
 import { DOCUMENT_KIND_LABEL } from '@erp/types';
 import { useAuth } from '@erp/ui/auth/auth-provider';
+// Reaproveita exatamente o mesmo wizard de criação de PMOC da plataforma
+// (só usa pacotes compartilhados @erp/*; no mobile o Drawer abre em tela cheia).
+import { PmocPlanWizard } from '@platform/components/pmoc-plan-wizard';
 import { EQUIPMENT_STATUS_LABEL, EQUIPMENT_STATUS_PILL } from '@platform/equipment-display';
 import { useDebounce } from '@erp/utils';
 import { SERVICE_TYPES, serviceTypeLabel, type ServiceTypeKey } from '../../lib/service-types';
@@ -148,7 +152,10 @@ export function AtendimentoWizard({
 } = {}) {
   const router = useRouter();
   const { session, can } = useAuth();
+  const isOwner = session?.role === 'OWNER';
   const [documentType, setDocumentType] = useState<DocumentKind | null>(null);
+  const [pmocCreateOpen, setPmocCreateOpen] = useState(false);
+  const [pmocDoc, setPmocDoc] = useState<{ documentId: string; documentNumber: string } | null>(null);
   const [step, setStep] = useState(0);
 
   const [customer, setCustomer] = useState<Customer | null>(null);
@@ -435,8 +442,40 @@ export function AtendimentoWizard({
     );
   }
 
+  // PMOC criado no mobile: tela de compartilhar/baixar o PDF gerado.
+  if (pmocDoc) {
+    return (
+      <SuccessView
+        documentId={pmocDoc.documentId}
+        documentNumber={pmocDoc.documentNumber}
+        documentType="PMOC"
+        onDone={() => router.push('/operator')}
+        onDocuments={() => router.push('/operator/documents')}
+        onNew={() => window.location.reload()}
+      />
+    );
+  }
+
   if (!documentType) {
-    return <AttendanceTypeStep onSelect={setDocumentType} onClose={() => router.push('/operator')} />;
+    return (
+      <>
+        <AttendanceTypeStep
+          onSelect={setDocumentType}
+          onClose={() => router.push('/operator')}
+          canCreatePmoc={Boolean(isOwner)}
+          onCreatePmoc={() => setPmocCreateOpen(true)}
+        />
+        {isOwner && (
+          <PmocPlanWizard
+            open={pmocCreateOpen}
+            forceFirstExecutionNow
+            onFirstDocument={(info) => setPmocDoc({ documentId: info.documentId, documentNumber: info.documentNumber })}
+            onClose={() => setPmocCreateOpen(false)}
+            onCreated={() => undefined}
+          />
+        )}
+      </>
+    );
   }
 
   // Compatibilidade de rota/estado antigo: PMOC não é mais oferecido para
@@ -655,7 +694,7 @@ export function AtendimentoWizard({
 
 /* ---------- Steps ---------- */
 
-function AttendanceTypeStep({ onSelect, onClose }: { onSelect: (type: DocumentKind) => void; onClose: () => void }) {
+function AttendanceTypeStep({ onSelect, onClose, canCreatePmoc = false, onCreatePmoc }: { onSelect: (type: DocumentKind) => void; onClose: () => void; canCreatePmoc?: boolean; onCreatePmoc?: () => void }) {
   return (
     <div className="min-h-dvh px-4 py-5">
       <div className="mx-auto max-w-lg space-y-5">
@@ -676,6 +715,13 @@ function AttendanceTypeStep({ onSelect, onClose }: { onSelect: (type: DocumentKi
               <ChevronRight className="h-5 w-5 text-[var(--color-muted-foreground)]" />
             </button>
           ))}
+          {canCreatePmoc && (
+            <button type="button" onClick={onCreatePmoc} className="flex w-full items-center gap-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 text-left active:scale-[0.99]">
+              <span className="grid h-11 w-11 place-items-center rounded-[var(--radius-md)] bg-[var(--color-primary)]/10 text-[var(--color-primary)]"><CalendarClock className="h-5 w-5" /></span>
+              <span className="min-w-0 flex-1"><span className="block font-semibold">Plano PMOC</span><span className="block text-xs text-[var(--color-muted-foreground)]">Criar um novo plano de manutenção (PMOC)</span></span>
+              <ChevronRight className="h-5 w-5 text-[var(--color-muted-foreground)]" />
+            </button>
+          )}
         </div>
       </div>
     </div>
