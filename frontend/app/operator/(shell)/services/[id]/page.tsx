@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, CalendarClock, Camera, CheckCircle2, ClipboardCheck, Clock, FileText, MapPin, Package, PenLine, Play, XCircle } from "lucide-react";
+import { useAuth } from "@erp/ui/auth/auth-provider";
 import { SkeletonCard, SkeletonList } from "@erp/ui/skeletons";
 import { EmptyState } from "@erp/ui/empty-state";
 import { ErrorState } from "@erp/ui/states";
@@ -127,6 +128,11 @@ function AssignmentWorkflow({
   busy: string | null;
   onAction: (action: "accept" | "start" | "complete" | "reject") => void;
 }) {
+  const { role, can } = useAuth();
+  // Sem permissão de Relatórios, o operador só visualiza a OS — não pode
+  // aceitar/iniciar/concluir (ações que geram/avançam o relatório). Só restringe
+  // operadores; owner/manager têm acesso pleno.
+  const canReports = role !== "OPERATOR" || can("canReports");
   const op = assignment.operation;
   const operation = useQuery((signal) => operationApi.getOperation(op.id, { signal }), [op.id]);
   const [document, setDocument] = useState<OperationDocument | null>(null);
@@ -186,24 +192,31 @@ function AssignmentWorkflow({
         </section>
       )}
 
-      <section className="grid gap-2">
-        {assignment.status === "ASSIGNED" && (
-          <>
-            <BigButton icon={CheckCircle2} label="Aceitar ordem" busy={busy === "accept"} onClick={() => onAction("accept")} />
-            <button onClick={() => onAction("reject")} disabled={busy === "reject"} className="inline-flex h-12 items-center justify-center gap-2 rounded-[var(--radius-lg)] border border-[var(--color-danger)]/30 text-sm font-semibold text-[var(--color-danger)] disabled:opacity-50">
-              <XCircle className="h-5 w-5" /> Recusar
-            </button>
-          </>
-        )}
-        {assignment.status === "ACCEPTED" && <BigButton icon={Play} label="Iniciar atendimento" busy={busy === "start"} onClick={() => onAction("start")} />}
-        {assignment.status === "STARTED" && (isPmoc ? (
-          <><BigButton icon={CheckCircle2} label="Concluir atendimento" busy={busy === "complete"} disabled={(operation.data?.photos.length ?? 0) < 4} onClick={() => onAction("complete")} />{(operation.data?.photos.length ?? 0) < 4 && <p className="text-center text-xs text-[var(--color-warning)]">Registre ao menos quatro imagens do procedimento antes de concluir.</p>}</>
-        ) : (
-          <Link href={`/operator/execucao/${assignment.id}`} className="inline-flex h-14 items-center justify-center gap-2 rounded-[var(--radius-xl)] bg-[var(--color-primary)] px-4 text-base font-semibold text-white shadow-[var(--shadow-hover)] active:scale-[0.99]">
-            <Play className="h-5 w-5" /> Continuar atendimento
-          </Link>
-        ))}
-      </section>
+      {!canReports && assignment.status !== "COMPLETED" && (
+        <p className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-muted)] px-3 py-2 text-sm text-[var(--color-muted-foreground)]">
+          Seu perfil tem acesso apenas à agenda. Você pode visualizar esta ordem, mas iniciar o atendimento (que gera relatório) requer a permissão de Relatórios.
+        </p>
+      )}
+      {canReports && (
+        <section className="grid gap-2">
+          {assignment.status === "ASSIGNED" && (
+            <>
+              <BigButton icon={CheckCircle2} label="Aceitar ordem" busy={busy === "accept"} onClick={() => onAction("accept")} />
+              <button onClick={() => onAction("reject")} disabled={busy === "reject"} className="inline-flex h-12 items-center justify-center gap-2 rounded-[var(--radius-lg)] border border-[var(--color-danger)]/30 text-sm font-semibold text-[var(--color-danger)] disabled:opacity-50">
+                <XCircle className="h-5 w-5" /> Recusar
+              </button>
+            </>
+          )}
+          {assignment.status === "ACCEPTED" && <BigButton icon={Play} label="Iniciar atendimento" busy={busy === "start"} onClick={() => onAction("start")} />}
+          {assignment.status === "STARTED" && (isPmoc ? (
+            <><BigButton icon={CheckCircle2} label="Concluir atendimento" busy={busy === "complete"} disabled={(operation.data?.photos.length ?? 0) < 4} onClick={() => onAction("complete")} />{(operation.data?.photos.length ?? 0) < 4 && <p className="text-center text-xs text-[var(--color-warning)]">Registre ao menos quatro imagens do procedimento antes de concluir.</p>}</>
+          ) : (
+            <Link href={`/operator/execucao/${assignment.id}`} className="inline-flex h-14 items-center justify-center gap-2 rounded-[var(--radius-xl)] bg-[var(--color-primary)] px-4 text-base font-semibold text-white shadow-[var(--shadow-hover)] active:scale-[0.99]">
+              <Play className="h-5 w-5" /> Continuar atendimento
+            </Link>
+          ))}
+        </section>
+      )}
 
       <section className="space-y-2">
         <h2 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)]">Checklist do atendimento</h2>

@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query
 import { Role } from '@prisma/client';
 import { CurrentUser } from '../../shared/decorators/current-user.decorator';
 import { Roles } from '../../shared/decorators/roles.decorator';
+import { RequirePermission } from '../../shared/decorators/require-permission.decorator';
 import type { AuthenticatedUser } from '../../shared/types/authenticated-user.type';
 import type { RequestWithId } from '../../shared/types/request-with-id.type';
 import {
@@ -33,6 +34,7 @@ export class OperationsController {
   }
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR)
+  @RequirePermission('canReports')
   @Post()
   create(
     @Body() body: CreateOperationDto,
@@ -94,6 +96,7 @@ export class OperationsController {
   }
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR)
+  @RequirePermission('canReports')
   @Patch(':id')
   update(
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,

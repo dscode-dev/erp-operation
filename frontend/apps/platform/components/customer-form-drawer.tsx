@@ -97,6 +97,7 @@ export function CustomerFormDrawer({
       setForm(fromCustomer(customer));
       setError(null);
       setFieldError(null);
+      setSaving(false);
       setAddress(blankAddress);
       setCreatedCustomerId(null);
       setCepLoading(false);

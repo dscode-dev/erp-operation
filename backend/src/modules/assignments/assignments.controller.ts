@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query, Req } 
 import { Role } from '@prisma/client';
 import { CurrentUser } from '../../shared/decorators/current-user.decorator';
 import { Roles } from '../../shared/decorators/roles.decorator';
+import { RequirePermission } from '../../shared/decorators/require-permission.decorator';
 import type { AuthenticatedUser } from '../../shared/types/authenticated-user.type';
 import type { RequestWithId } from '../../shared/types/request-with-id.type';
 import {
@@ -92,6 +93,7 @@ export class AssignmentsController {
   }
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR)
+  @RequirePermission('canReports')
   @Patch(':id/accept')
   accept(
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
@@ -113,6 +115,7 @@ export class AssignmentsController {
   }
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR)
+  @RequirePermission('canReports')
   @Patch(':id/start')
   start(
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
@@ -123,6 +126,7 @@ export class AssignmentsController {
   }
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR)
+  @RequirePermission('canReports')
   @Patch(':id/complete')
   complete(
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,

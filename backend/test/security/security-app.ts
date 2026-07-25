@@ -74,6 +74,18 @@ export async function createSecurityActor(
       mustChangePassword: false,
     },
   });
+  // Atores de teste nascem com todas as permissões (como o seed) — assim os fluxos
+  // de operador continuam liberados por padrão. Testes de restrição podem revogar.
+  await prisma.userPermission.create({
+    data: {
+      userId: created.id,
+      canFinancial: true,
+      canUsers: true,
+      canReports: true,
+      canSchedules: true,
+      canTemplates: true,
+    },
+  });
   const accessTokenId = randomUUID();
   const refreshTokenId = randomUUID();
   const refreshToken = `security-refresh-${refreshTokenId}`;

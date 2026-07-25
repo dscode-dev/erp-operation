@@ -87,6 +87,7 @@ export function EquipmentFormDrawer({
     if (!open) return;
     setForm(fromEquipment(equipment, presetCustomerId));
     setError(null);
+    setSaving(false);
     const ac = new AbortController();
     customersApi
       .listCustomers({ page: 1, limit: 100, signal: ac.signal })

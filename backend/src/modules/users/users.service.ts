@@ -753,6 +753,10 @@ export class UsersService {
   }
 
   private permissionsForRole(role: Role, input: UserPermissionDto): PermissionResponse {
+    // Proprietário tem acesso pleno, sempre. Os demais papéis (Gestor, Operador,
+    // Visualizador) usam exatamente as permissões concedidas — ex.: operador com
+    // Relatórios/Agendamentos. Antes, apenas Gestor respeitava o input e Operador
+    // ficava sempre com tudo bloqueado.
     if (role === Role.OWNER) {
       return {
         canFinancial: true,
@@ -760,15 +764,6 @@ export class UsersService {
         canReports: true,
         canSchedules: true,
         canTemplates: true,
-      };
-    }
-    if (role !== Role.MANAGER) {
-      return {
-        canFinancial: false,
-        canUsers: false,
-        canReports: false,
-        canSchedules: false,
-        canTemplates: false,
       };
     }
     return {

@@ -31,7 +31,11 @@ function isPast(assignment: Assignment) {
 }
 
 export function OperatorHome() {
-  const { session } = useAuth();
+  const { session, role, can } = useAuth();
+  // Sem permissão de Relatórios, o operador é somente-visualização: pode ver a
+  // agenda/OS mas não inicia atendimentos que geram relatórios. Só restringe
+  // operadores — owner/manager (que podem usar o app) têm acesso pleno.
+  const canReports = role !== "OPERATOR" || can("canReports");
   const assignments = useQuery((signal) => assignmentsApi.listMyAssignments({ limit: 50, signal }), []);
 
   // Auto-atualização: novos atendimentos chegam sem o operador precisar
@@ -76,9 +80,11 @@ export function OperatorHome() {
         <Metric label="Atrasadas" value={overdue.length} tone={overdue.length ? "danger" : "muted"} />
       </div>
 
-      <Link href="/operator/atendimento" className="flex min-h-14 items-center justify-center gap-2 rounded-[var(--radius-xl)] bg-[var(--color-primary)] px-4 text-sm font-semibold text-[var(--color-primary-foreground)] shadow-[var(--shadow-card)] active:scale-[0.99]">
-        <Plus className="h-5 w-5" /> Iniciar atendimento ou relatório
-      </Link>
+      {canReports && (
+        <Link href="/operator/atendimento" className="flex min-h-14 items-center justify-center gap-2 rounded-[var(--radius-xl)] bg-[var(--color-primary)] px-4 text-sm font-semibold text-[var(--color-primary-foreground)] shadow-[var(--shadow-card)] active:scale-[0.99]">
+          <Plus className="h-5 w-5" /> Iniciar atendimento ou relatório
+        </Link>
+      )}
 
       <div className="grid grid-cols-4 gap-2.5">
         <Shortcut href="/operator/services" icon={ClipboardList} label="Ordens" />

@@ -11,6 +11,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { OrganizationModule } from './modules/organization/organization.module';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
 import { RoleGuard } from './modules/auth/guards/role.guard';
+import { PermissionsGuard } from './modules/auth/guards/permissions.guard';
 import { PasswordChangeRequiredGuard } from './modules/auth/guards/password-change-required.guard';
 import { UsersModule } from './modules/users/users.module';
 import { CustomersModule } from './modules/customers/customers.module';
@@ -89,6 +90,10 @@ import { ResponseEnvelopeInterceptor } from './shared/interceptors/response-enve
     {
       provide: APP_GUARD,
       useClass: RoleGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: PermissionsGuard,
     },
     {
       provide: APP_GUARD,

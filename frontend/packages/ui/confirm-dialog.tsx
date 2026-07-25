@@ -7,6 +7,7 @@
  * on success). Use the `danger` variant for destructive actions.
  */
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { AlertTriangle, Loader2 } from "lucide-react";
 
 export function ConfirmDialog({
@@ -41,7 +42,7 @@ export function ConfirmDialog({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, loading, onClose]);
 
-  if (!open) return null;
+  if (!open || typeof document === "undefined") return null;
 
   async function handleConfirm() {
     try {
@@ -53,7 +54,9 @@ export function ConfirmDialog({
     }
   }
 
-  return (
+  // Portaliza para o body (como o Drawer) — evita ficar preso num contexto de
+  // empilhamento abaixo de drawers/modais já abertos.
+  return createPortal(
     <div className="fixed inset-0 z-[60] grid place-items-center p-4">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-fade-in" onClick={() => !loading && onClose()} />
       <div role="alertdialog" aria-modal="true" aria-label={title} className="relative w-full max-w-sm rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] shadow-[var(--shadow-floating)] p-5 animate-slide-up">
@@ -83,6 +86,7 @@ export function ConfirmDialog({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

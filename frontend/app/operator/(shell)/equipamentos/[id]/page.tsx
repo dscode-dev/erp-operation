@@ -12,11 +12,14 @@ import { AssetTimeline } from "@erp/ui/assets/asset-timeline";
 import { OperationDetailDrawer } from "@platform/components/operation-detail-drawer";
 import { OPERATION_STATUS, OPERATION_TYPE_LABEL, operationCode } from "@erp/ui/operations/operation-shared";
 import { equipmentsApi, operationApi, useQuery, type EquipmentDetail } from "@erp/api";
+import { useAuth } from "@erp/ui/auth/auth-provider";
 import { formatDate, formatDateTime } from "@erp/utils";
 import { EQUIPMENT_STATUS_LABEL, EQUIPMENT_STATUS_PILL, EQUIPMENT_TYPE_LABEL } from "@platform/equipment-display";
 
 export default function OperatorEquipamentoConsult({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const { role, can } = useAuth();
+  const canStart = role !== "OPERATOR" || can("canReports");
   const [operationId, setOperationId] = useState<string | null>(null);
   const detail = useQuery<EquipmentDetail>((signal) => equipmentsApi.getEquipment(id, { signal }), [id]);
   const operations = useQuery((signal) => operationApi.listOperations({ equipmentId: id, limit: 30, signal }), [id]);
@@ -36,9 +39,11 @@ export default function OperatorEquipamentoConsult({ params }: { params: Promise
               <p className="text-caption">{EQUIPMENT_TYPE_LABEL[e.type]} · {e.customer?.name ?? "—"}</p>
             </header>
 
-            <Link href={`/operator/atendimento?equipmentId=${e.id}`} className="flex items-center justify-center gap-2 rounded-[var(--radius-md)] bg-[var(--color-primary)] text-white h-12 text-sm font-semibold active:scale-[0.99]">
-              <Plus className="h-4 w-4" /> Iniciar atendimento
-            </Link>
+            {canStart && (
+              <Link href={`/operator/atendimento?equipmentId=${e.id}`} className="flex items-center justify-center gap-2 rounded-[var(--radius-md)] bg-[var(--color-primary)] text-white h-12 text-sm font-semibold active:scale-[0.99]">
+                <Plus className="h-4 w-4" /> Iniciar atendimento
+              </Link>
+            )}
 
             <Card title="Ficha">
               <Row label="Tag" value={e.tag ?? "—"} />

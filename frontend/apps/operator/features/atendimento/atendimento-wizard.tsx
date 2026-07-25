@@ -146,6 +146,7 @@ export function AtendimentoWizard({
   initialEquipmentId?: string;
 } = {}) {
   const router = useRouter();
+  const { session, can } = useAuth();
   const [documentType, setDocumentType] = useState<DocumentKind | null>(null);
   const [step, setStep] = useState(0);
 
@@ -394,6 +395,30 @@ export function AtendimentoWizard({
     } finally {
       setSubmitting(false);
     }
+  }
+
+  // Sem permissão de Relatórios, o operador não inicia atendimentos (que geram
+  // relatórios) — apenas visualiza a agenda. Bloqueio de UI (o backend também exige).
+  // Só restringe operadores; owner/manager (que podem usar o app) têm acesso pleno.
+  if (session && session.role === 'OPERATOR' && !can('canReports')) {
+    return (
+      <div className="grid min-h-dvh place-items-center px-6 text-center">
+        <div className="space-y-3">
+          <h1 className="text-lg font-semibold">Acesso somente à agenda</h1>
+          <p className="text-sm text-[var(--color-muted-foreground)]">
+            Seu perfil não tem a permissão de Relatórios. Você pode visualizar agendamentos e
+            ordens, mas não iniciar atendimentos que geram relatórios (OS, Visita Técnica).
+          </p>
+          <button
+            type="button"
+            onClick={() => router.push('/operator')}
+            className="inline-flex h-11 items-center justify-center rounded-[var(--radius-md)] bg-[var(--color-primary)] px-5 text-sm font-semibold text-[var(--color-primary-foreground)]"
+          >
+            Voltar
+          </button>
+        </div>
+      </div>
+    );
   }
 
   if (result) {

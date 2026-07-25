@@ -68,6 +68,7 @@ export function UserFormDrawer({
       setForm(fromUser(user));
       setError(null);
       setFieldError(null);
+      setSaving(false);
       setTempPassword(null);
       setCopied(false);
     }

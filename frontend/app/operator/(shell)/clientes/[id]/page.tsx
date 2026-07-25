@@ -8,11 +8,14 @@ import { AsyncBoundary } from "@erp/ui/states";
 import { EmptyState } from "@erp/ui/empty-state";
 import { StatusPill } from "@erp/ui/status-pill";
 import { customersApi, equipmentsApi, useQuery, type CustomerDetail } from "@erp/api";
+import { useAuth } from "@erp/ui/auth/auth-provider";
 import { maskCep } from "@erp/utils";
 import { EQUIPMENT_STATUS_LABEL, EQUIPMENT_STATUS_PILL } from "@platform/equipment-display";
 
 export default function OperatorClienteConsult({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const { role, can } = useAuth();
+  const canStart = role !== "OPERATOR" || can("canReports");
   const detail = useQuery<CustomerDetail>((signal) => customersApi.getCustomer(id, { signal }), [id]);
   const equipments = useQuery((signal) => equipmentsApi.listEquipments({ customerId: id, limit: 20, signal }), [id]);
 
@@ -30,9 +33,11 @@ export default function OperatorClienteConsult({ params }: { params: Promise<{ i
               <p className="text-caption">{c.cnpj ?? c.cpf ?? "—"}</p>
             </header>
 
-            <Link href={`/operator/atendimento?customerId=${c.id}`} className="flex items-center justify-center gap-2 rounded-[var(--radius-md)] bg-[var(--color-primary)] text-white h-12 text-sm font-semibold active:scale-[0.99]">
-              <Plus className="h-4 w-4" /> Iniciar atendimento
-            </Link>
+            {canStart && (
+              <Link href={`/operator/atendimento?customerId=${c.id}`} className="flex items-center justify-center gap-2 rounded-[var(--radius-md)] bg-[var(--color-primary)] text-white h-12 text-sm font-semibold active:scale-[0.99]">
+                <Plus className="h-4 w-4" /> Iniciar atendimento
+              </Link>
+            )}
 
             <Card title="Contato">
               {c.phone && <Row icon={<Phone className="h-4 w-4" />} value={c.phone} />}

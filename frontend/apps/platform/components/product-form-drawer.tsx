@@ -101,6 +101,7 @@ export function ProductFormDrawer({
   useEffect(() => {
     if (!open) return;
     setError(null);
+    setSaving(false);
     if (product) {
       setForm(fromProduct(product));
       return;

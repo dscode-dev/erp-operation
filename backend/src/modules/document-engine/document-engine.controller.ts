@@ -4,6 +4,7 @@ import type { Response } from 'express';
 import { CurrentUser } from '../../shared/decorators/current-user.decorator';
 import { RawResponse } from '../../shared/decorators/raw-response.decorator';
 import { Roles } from '../../shared/decorators/roles.decorator';
+import { RequirePermission } from '../../shared/decorators/require-permission.decorator';
 import type { AuthenticatedUser } from '../../shared/types/authenticated-user.type';
 import type { RequestWithId } from '../../shared/types/request-with-id.type';
 import { DocumentEngineService, contextFromRequest } from './document-engine.service';
@@ -37,6 +38,7 @@ export class DocumentEngineController {
   }
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR)
+  @RequirePermission('canReports')
   @Post('handoffs')
   saveHandoffDraft(@Body() body: SaveDocumentHandoffDto, @CurrentUser() actor: AuthenticatedUser, @Req() request: RequestWithId): Promise<unknown> {
     return this.handoffs.saveDraft(body, actor, contextFromRequest(request));
@@ -99,6 +101,7 @@ export class DocumentEngineController {
   }
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR)
+  @RequirePermission('canReports')
   @Post(':documentId/render')
   renderDocument(
     @Param() params: DocumentIdParamsDto,
@@ -115,6 +118,7 @@ export class DocumentEngineController {
   }
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR)
+  @RequirePermission('canReports')
   @Patch(':documentId/handoff/customer-signature')
   collectCustomerSignature(@Param('documentId', new ParseUUIDPipe({ version: '4' })) documentId: string, @Body() body: CollectCustomerSignatureDto, @CurrentUser() actor: AuthenticatedUser, @Req() request: RequestWithId): Promise<unknown> {
     return this.handoffs.collectCustomerSignature(documentId, body, actor, contextFromRequest(request));
@@ -138,6 +142,7 @@ export class DocumentEngineController {
   }
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR)
+  @RequirePermission('canReports')
   @Post(':documentId/handoff/submit')
   submitHandoff(@Param('documentId', new ParseUUIDPipe({ version: '4' })) documentId: string, @CurrentUser() actor: AuthenticatedUser, @Req() request: RequestWithId): Promise<unknown> {
     return this.handoffs.submit(documentId, actor, contextFromRequest(request));
@@ -150,6 +155,7 @@ export class DocumentEngineController {
   }
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR)
+  @RequirePermission('canReports')
   @Patch(':documentId/handoff/technical-signature')
   selectTechnicalSignature(@Param('documentId', new ParseUUIDPipe({ version: '4' })) documentId: string, @Body() body: SelectTechnicalSignatureDto, @CurrentUser() actor: AuthenticatedUser, @Req() request: RequestWithId): Promise<unknown> {
     return this.handoffs.selectTechnicalSignature(documentId, body.signatureId, actor, contextFromRequest(request));
@@ -162,6 +168,7 @@ export class DocumentEngineController {
   }
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR)
+  @RequirePermission('canReports')
   @Post(':documentId/handoff/finalize')
   finalizeReview(@Param('documentId', new ParseUUIDPipe({ version: '4' })) documentId: string, @Body() _body: FinalizeDocumentReviewDto, @CurrentUser() actor: AuthenticatedUser, @Req() request: RequestWithId): Promise<unknown> {
     return this.handoffs.finalize(documentId, actor, contextFromRequest(request));

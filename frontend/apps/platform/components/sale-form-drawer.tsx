@@ -37,6 +37,7 @@ export function SaleFormDrawer({
 
   useEffect(() => {
     if (!open) return;
+    setSaving(false);
     setSoldAt(sale?.soldAt ? sale.soldAt.slice(0, 10) : todayInput());
     setAddressId(sale?.customerAddressId ?? addresses.find((item) => item.isPrimary)?.id ?? '');
     setWarrantyDays(sale?.warrantyDays == null ? '90' : String(sale.warrantyDays));

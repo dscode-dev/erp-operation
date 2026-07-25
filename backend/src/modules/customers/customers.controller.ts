@@ -20,6 +20,7 @@ import { memoryStorage } from 'multer';
 import { MAX_CUSTOMER_ATTACHMENT_SIZE_BYTES } from '../../shared/constants/customers.constants';
 import { CurrentUser } from '../../shared/decorators/current-user.decorator';
 import { Roles } from '../../shared/decorators/roles.decorator';
+import { RequirePermission } from '../../shared/decorators/require-permission.decorator';
 import type { AuthenticatedUser } from '../../shared/types/authenticated-user.type';
 import type { RequestWithId } from '../../shared/types/request-with-id.type';
 import {
@@ -64,6 +65,7 @@ export class CustomersController {
 
   // OS avulso: operador registra um cliente novo em campo (fica em Revisão).
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR)
+  @RequirePermission('canReports')
   @Post('walk-in')
   createWalkIn(
     @Body() body: CreateWalkInCustomerDto,

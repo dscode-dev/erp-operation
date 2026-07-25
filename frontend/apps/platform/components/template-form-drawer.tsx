@@ -50,6 +50,7 @@ export function TemplateFormDrawer({
   useEffect(() => {
     if (!open) return;
     setError(null);
+    setSaving(false);
     setForm(
       template
         ? {
