@@ -7,7 +7,7 @@
  */
 import Link from "next/link";
 import { useEffect } from "react";
-import { Calendar, ClipboardList, FileText, Plus, QrCode, RefreshCw, Wrench } from "lucide-react";
+import { Calendar, ChevronRight, ClipboardList, FileText, Plus, QrCode, RefreshCw, ShieldCheck, Wrench } from "lucide-react";
 import { AssignmentCard } from "@operator/components/assignment-card";
 import { useAuth } from "@erp/ui/auth/auth-provider";
 import { SkeletonList } from "@erp/ui/skeletons";
@@ -92,6 +92,22 @@ export function OperatorHome() {
         <Shortcut href="/operator/agenda" icon={Calendar} label="Agenda" />
         <Shortcut href="/operator/documents" icon={FileText} label="Docs" />
       </div>
+
+      {role === "OWNER" && (
+        <Link
+          href="/operator/autorizar-demandas"
+          className="flex items-center gap-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 active:scale-[0.99] transition-transform"
+        >
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-[var(--radius-md)] bg-[var(--color-primary)]/10 text-[var(--color-primary)]">
+            <ShieldCheck className="h-5 w-5" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block font-semibold">Autorizar demandas</span>
+            <span className="block text-xs text-[var(--color-muted-foreground)]">Liberar demandas da gestão para os técnicos</span>
+          </span>
+          <ChevronRight className="h-5 w-5 text-[var(--color-muted-foreground)]" />
+        </Link>
+      )}
 
       {assignments.loading && !assignments.data ? (
         <SkeletonList rows={4} />
