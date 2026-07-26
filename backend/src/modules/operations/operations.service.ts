@@ -836,7 +836,7 @@ export class OperationsService {
     customerId: string,
     items?: Array<{
       equipmentId: string;
-      sector: string;
+      sector?: string;
       systemType?: string;
       currentSituation?: string;
     }>,
@@ -854,6 +854,7 @@ export class OperationsService {
       where: { id: { in: uniqueIds }, customerId, isActive: true, disabledAt: null },
       select: {
         id: true,
+        sector: true,
         manufacturer: true,
         model: true,
         capacity: true,
@@ -874,7 +875,9 @@ export class OperationsService {
       return {
         equipmentId: item.equipmentId,
         position,
-        sector: item.sector,
+        // O setor do relatório vem do cadastro do equipamento; o valor enviado
+        // (histórico/manual) é apenas fallback quando o equipamento não tem setor.
+        sector: equipment.sector?.trim() || item.sector?.trim() || 'Não informado',
         brandSnapshot: equipment.manufacturer,
         modelSnapshot: equipment.model,
         capacitySnapshot: equipment.capacity,

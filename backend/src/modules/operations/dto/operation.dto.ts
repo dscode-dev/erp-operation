@@ -82,7 +82,8 @@ export class OperationMaintenanceChecklistItemDto {
 
 export class OperationInspectedEquipmentDto {
   @IsUUID('4') equipmentId!: string;
-  @Transform(({ value }) => trim(value)) @IsString() @MaxLength(160) sector!: string;
+  // Setor derivado do cadastro do equipamento no backend; opcional no payload.
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(160) sector?: string;
   @IsOptional()
   @Transform(({ value }) => trim(value))
   @IsString()

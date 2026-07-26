@@ -32,7 +32,10 @@ export class CreateEquipmentDto {
   @IsOptional() @IsUUID('4') parentEquipmentId?: string;
   @IsEnum(EquipmentType) type!: EquipmentType;
   @IsOptional() @IsEnum(EquipmentStatus) status?: EquipmentStatus;
-  @Transform(({ value }) => trim(value)) @IsString() @MinLength(2) @MaxLength(180) name!: string;
+  // Nome é derivado de marca + modelo quando não informado (identificação do
+  // equipamento por marca/modelo). Opcional no formulário.
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(180) name?: string;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(160) sector?: string;
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(80) tag?: string;
   @IsOptional()
   @Transform(({ value }) => trim(value))
@@ -65,9 +68,9 @@ export class UpdateEquipmentDto {
   @IsOptional()
   @Transform(({ value }) => trim(value))
   @IsString()
-  @MinLength(2)
   @MaxLength(180)
   name?: string;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(160) sector?: string;
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(80) tag?: string;
   @IsOptional()
   @Transform(({ value }) => trim(value))

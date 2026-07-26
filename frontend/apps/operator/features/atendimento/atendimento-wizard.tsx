@@ -113,18 +113,22 @@ type WalkInForm = {
   state: string;
   contactName: string;
   contactPhone: string;
-  equipmentName: string;
+  equipmentManufacturer: string;
+  equipmentModel: string;
+  equipmentCapacity: string;
 };
 const EMPTY_WALK_IN: WalkInForm = {
   personType: 'COMPANY', name: '', document: '', zipCode: '', street: '', number: '',
-  complement: '', district: '', city: '', state: '', contactName: '', contactPhone: '', equipmentName: '',
+  complement: '', district: '', city: '', state: '', contactName: '', contactPhone: '',
+  equipmentManufacturer: '', equipmentModel: '', equipmentCapacity: '',
 };
 function walkInValid(w: WalkInForm): boolean {
-  // CPF/CNPJ é opcional no atendimento avulso do operador.
+  // CPF/CNPJ é opcional; o equipamento é identificado por marca/modelo (ao menos um).
   return Boolean(
     w.name.trim() && w.zipCode.trim() && w.street.trim() && w.number.trim() &&
     w.district.trim() && w.city.trim() && w.state.trim().length === 2 &&
-    w.contactName.trim() && w.contactPhone.trim() && w.equipmentName.trim(),
+    w.contactName.trim() && w.contactPhone.trim() &&
+    (w.equipmentManufacturer.trim() || w.equipmentModel.trim()),
   );
 }
 function walkInAddressLabel(w: WalkInForm): string {
@@ -355,7 +359,11 @@ export function AtendimentoWizard({
               state: walk.state.trim().toUpperCase(),
             },
             contact: { name: walk.contactName.trim(), phone: walk.contactPhone.trim() },
-            equipment: { name: walk.equipmentName.trim() },
+            equipment: {
+              manufacturer: walk.equipmentManufacturer.trim() || undefined,
+              model: walk.equipmentModel.trim() || undefined,
+              capacity: walk.equipmentCapacity.trim() || undefined,
+            },
           }));
         setWalkInCreated(created);
         customerId = created.customerId;
@@ -513,7 +521,10 @@ export function AtendimentoWizard({
     : customer;
   const displayAddress = walkInMode ? { id: '', label: walkInAddressLabel(walk) } : address;
   const displayEquipments = walkInMode
-    ? ([{ id: '', name: walk.equipmentName || 'Equipamento' } as unknown as EquipmentSummary])
+    ? ([{
+        id: '',
+        name: [walk.equipmentManufacturer, walk.equipmentModel].map((v) => v.trim()).filter(Boolean).join(' ') || 'Equipamento',
+      } as unknown as EquipmentSummary])
     : equipments;
 
   return (
@@ -1062,7 +1073,12 @@ function WalkInStep({
 
       <section className="space-y-3 border-t border-[var(--color-border)] pt-4">
         <h3 className="text-sm font-semibold">Equipamento</h3>
-        <WalkField label="Descrição do equipamento *" value={value.equipmentName} onChange={(v) => setField('equipmentName', v)} placeholder="Ex.: Split Midea 12.000 BTUs — Recepção" />
+        <p className="text-[11px] text-[var(--color-muted-foreground)]">Identificado por marca e modelo (informe ao menos um).</p>
+        <div className="grid grid-cols-2 gap-2">
+          <WalkField label="Marca" value={value.equipmentManufacturer} onChange={(v) => setField('equipmentManufacturer', v)} placeholder="Ex.: Midea" />
+          <WalkField label="Modelo" value={value.equipmentModel} onChange={(v) => setField('equipmentModel', v)} placeholder="Ex.: Xtreme Save" />
+        </div>
+        <WalkField label="Capacidade" value={value.equipmentCapacity} onChange={(v) => setField('equipmentCapacity', v)} placeholder="Ex.: 12.000 BTU" />
       </section>
     </div>
   );

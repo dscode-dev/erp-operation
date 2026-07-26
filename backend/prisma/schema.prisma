@@ -875,6 +875,9 @@ model Equipment {
   type                      EquipmentType
   status                    EquipmentStatus                     @default(ACTIVE)
   name                      String                              @db.VarChar(180)
+  /// Setor/local onde o equipamento está instalado. Usado nos relatórios
+  /// (tabela de Equipamentos) no lugar do endereço.
+  sector                    String?                             @db.VarChar(160)
   tag                       String?                             @db.VarChar(80)
   manufacturer              String?                             @db.VarChar(120)
   model                     String?                             @db.VarChar(120)

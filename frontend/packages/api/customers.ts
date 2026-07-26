@@ -47,7 +47,7 @@ export type WalkInCustomerPayload = {
     state: string;
   };
   contact: { name: string; phone: string };
-  equipment: { name: string; type?: string };
+  equipment: { name?: string; manufacturer?: string; model?: string; capacity?: string; type?: string };
 };
 
 export type WalkInCustomerResult = {

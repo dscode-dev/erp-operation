@@ -58,8 +58,11 @@ export class DocumentRendererService {
         section.title,
         blueprint.metadata.organization.primaryColor,
       );
+      // Para decidir se a seção começa aqui, basta caber o cabeçalho + o mínimo
+      // do primeiro componente (para tabelas, cabeçalho + 1 linha) — o restante
+      // da tabela flui para as próximas páginas.
       const firstBlockHeight = section.components[0]
-        ? (this.blocks(section.components[0], width)[0]?.height ?? 0)
+        ? this.minFirstBlockHeight(section.components[0], width)
         : 0;
       if (this.layout.shouldBreak(y, sectionHeader.height + firstBlockHeight)) {
         current = this.newPage(blueprint, pages.length + 1);
@@ -70,7 +73,12 @@ export class DocumentRendererService {
       y -= sectionHeader.height;
 
       for (const component of section.components) {
-        const blocks = this.blocks(component, width);
+        // Tabelas fatiam considerando o espaço restante da página atual; os
+        // demais componentes usam blocos atômicos.
+        const blocks =
+          component.kind === 'table'
+            ? this.tableBlocks(component, width, y - this.layout.contentBottom())
+            : this.blocks(component, width);
         for (const block of blocks) {
           if (block.height > this.layout.availableHeight()) {
             throw new ApplicationException(
@@ -134,6 +142,39 @@ export class DocumentRendererService {
       case 'signaturePlaceholder':
         return [this.signatureBlock(component)];
     }
+  }
+
+  /**
+   * Altura mínima que o primeiro componente de uma seção precisa para começar na
+   * página atual. Para tabelas é cabeçalho + 1 linha (o resto pagina depois);
+   * para os demais componentes é o próprio bloco.
+   */
+  private minFirstBlockHeight(component: DocumentBlueprintComponent, width: number): number {
+    if (component.kind === 'table') {
+      const blockPadding = 6;
+      const widths = this.tableColumnWidths(component, width);
+      const headerHeight = Math.max(
+        18,
+        ...component.columns.map(
+          (column, index) =>
+            this.wrap(column.label, Math.max(20, widths[index] - 8), 8).length * 9 + 8,
+        ),
+      );
+      const firstRow = component.rows[0];
+      const firstRowHeight = firstRow
+        ? Math.max(
+            17,
+            ...component.columns.map(
+              (column, index) =>
+                this.wrap(firstRow[column.key] ?? '—', Math.max(20, widths[index] - 8), 8).length *
+                  9 +
+                7,
+            ),
+          )
+        : 17;
+      return headerHeight + firstRowHeight + blockPadding;
+    }
+    return this.blocks(component, width)[0]?.height ?? 0;
   }
 
   private sectionHeader(title: string, primaryColor: string): LayoutBlock {
@@ -436,7 +477,14 @@ export class DocumentRendererService {
     ];
   }
 
-  private tableBlocks(component: TableComponent, width: number): LayoutBlock[] {
+  private tableBlocks(
+    component: TableComponent,
+    width: number,
+    // Espaço vertical disponível para o PRIMEIRO bloco (o restante da página
+    // atual). Os blocos seguintes usam a página inteira. Assim a tabela aproveita
+    // o espaço que sobra numa página com conteúdo antes de continuar na próxima.
+    firstAvailableHeight = this.layout.availableHeight(),
+  ): LayoutBlock[] {
     const blockPadding = 6;
     const widths = this.tableColumnWidths(component, width);
     const headerHeight = Math.max(
@@ -457,14 +505,20 @@ export class DocumentRendererService {
       return { row, lines, height: Math.max(17, ...lines.map((cell) => cell.length * 9 + 7)) };
     });
     const chunks: (typeof measuredRows)[] = [];
-    const maxRowsHeight = this.layout.availableHeight() - headerHeight - blockPadding;
+    const fullBudget = this.layout.availableHeight() - headerHeight - blockPadding;
+    const firstRowHeight = measuredRows[0]?.height ?? 17;
+    const firstBudget = firstAvailableHeight - headerHeight - blockPadding;
+    // O primeiro bloco só aproveita o espaço restante se couber cabeçalho + 1
+    // linha; caso contrário começa numa página nova (orçamento cheio).
+    let budget = firstBudget >= firstRowHeight ? firstBudget : fullBudget;
     let current: typeof measuredRows = [];
     let currentHeight = 0;
     for (const row of measuredRows) {
-      if (current.length > 0 && currentHeight + row.height > maxRowsHeight) {
+      if (current.length > 0 && currentHeight + row.height > budget) {
         chunks.push(current);
         current = [];
         currentHeight = 0;
+        budget = fullBudget;
       }
       current.push(row);
       currentHeight += row.height;

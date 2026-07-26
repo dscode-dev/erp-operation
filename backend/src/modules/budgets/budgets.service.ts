@@ -554,6 +554,7 @@ export class BudgetsService {
       select: {
         id: true,
         name: true,
+        sector: true,
         tag: true,
         manufacturer: true,
         model: true,
@@ -577,7 +578,7 @@ export class BudgetsService {
       return {
         equipmentId: id,
         position: index,
-        sector: (equipment.address?.name ?? equipment.name).slice(0, 160),
+        sector: (equipment.sector ?? equipment.address?.name ?? equipment.name).slice(0, 160),
         brandSnapshot: equipment.manufacturer ?? null,
         modelSnapshot: equipment.model ?? null,
         capacitySnapshot: equipment.capacity ?? null,

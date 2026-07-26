@@ -1222,7 +1222,8 @@ export class DocumentBuilderService {
               {
                 item: '01',
                 sector: this.clean(
-                  operation.equipment.address?.name ??
+                  operation.equipment.sector ??
+                    operation.equipment.address?.name ??
                     operation.address?.name ??
                     operation.equipment.name,
                 ),

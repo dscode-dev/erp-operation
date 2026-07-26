@@ -196,10 +196,20 @@ export class EquipmentsService {
     const addressId = dto.addressId ?? existing.addressId ?? undefined;
     const parentId = dto.parentEquipmentId ?? existing.parentEquipmentId ?? undefined;
     await this.validateRelations(customerId, addressId, parentId, id);
+    const data = this.updateData(dto);
+    // Reidentifica o nome a partir de marca/modelo (mesclando com o existente)
+    // sempre que um desses — ou o próprio nome — for enviado.
+    if (dto.name !== undefined || dto.manufacturer !== undefined || dto.model !== undefined) {
+      data.name = this.deriveName(
+        dto.manufacturer !== undefined ? dto.manufacturer : existing.manufacturer,
+        dto.model !== undefined ? dto.model : existing.model,
+        dto.name,
+      );
+    }
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.equipment.update({
         where: { id },
-        data: this.updateData(dto),
+        data,
         include: EQUIPMENT_INCLUDE,
       });
       await tx.auditLog.create({
@@ -396,7 +406,7 @@ export class EquipmentsService {
       ...(dto.parentEquipmentId ? { parentEquipmentId: dto.parentEquipmentId } : {}),
       ...(dto.type ? { type: dto.type } : {}),
       ...(dto.status ? { status: dto.status } : {}),
-      ...(dto.name ? { name: dto.name } : {}),
+      ...(dto.sector !== undefined ? { sector: dto.sector } : {}),
       tag: dto.tag,
       manufacturer: dto.manufacturer,
       model: dto.model,
@@ -409,6 +419,23 @@ export class EquipmentsService {
     };
   }
 
+  /**
+   * O equipamento é identificado por marca + modelo. Quando o nome não é
+   * informado, derivamos de "marca modelo"; caindo para o rótulo do tipo.
+   */
+  private deriveName(
+    manufacturer?: string | null,
+    model?: string | null,
+    explicit?: string | null,
+  ): string {
+    const brandModel = [manufacturer, model]
+      .map((value) => value?.trim())
+      .filter(Boolean)
+      .join(' ')
+      .trim();
+    return (explicit?.trim() || brandModel || 'Equipamento').slice(0, 180);
+  }
+
   private createData(dto: CreateEquipmentDto): Prisma.EquipmentUncheckedCreateInput {
     return {
       customerId: dto.customerId,
@@ -416,7 +443,8 @@ export class EquipmentsService {
       parentEquipmentId: dto.parentEquipmentId,
       type: dto.type,
       status: dto.status,
-      name: dto.name,
+      name: this.deriveName(dto.manufacturer, dto.model, dto.name),
+      sector: dto.sector,
       tag: dto.tag,
       manufacturer: dto.manufacturer,
       model: dto.model,

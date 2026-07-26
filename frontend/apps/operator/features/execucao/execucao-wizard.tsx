@@ -607,7 +607,9 @@ function RevisaoStep({
             </p>
             <input value={signerName} onChange={(e) => onSignerName(e.target.value)} placeholder="Nome do cliente/responsável" className={inputCls} />
             <input value={signerRole} onChange={(e) => onSignerRole(e.target.value)} placeholder="Função ou vínculo (opcional)" className={inputCls} />
-            <SignaturePad onChange={onSignature} onConfirm={onSignature} />
+            {/* Só coleta ao pressionar "Confirmar assinatura"; o traço em si não
+                salva. onChange apenas limpa a assinatura quando o pad é esvaziado. */}
+            <SignaturePad onChange={(value) => { if (!value) onSignature(null); }} onConfirm={onSignature} />
           </div>
         )}
       </ReviewCard>

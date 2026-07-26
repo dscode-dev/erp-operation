@@ -1182,7 +1182,7 @@ export class PmocExecutionRequestsService {
       // uma OS.
       inspectedEquipments: equipments.map((equipment) => ({
         equipmentId: equipment.id,
-        sector: equipment.address?.name ?? equipment.name,
+        sector: equipment.sector ?? equipment.address?.name ?? equipment.name,
       })),
     };
   }

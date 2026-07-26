@@ -487,6 +487,7 @@ export type EquipmentSummary = {
   type: EquipmentType;
   status: EquipmentStatus;
   name: string;
+  sector: string | null;
   tag: string | null;
   manufacturer: string | null;
   model: string | null;
@@ -668,7 +669,9 @@ export type AssetLifecycleStats = {
 export type CreateEquipmentPayload = {
   customerId: string;
   type: EquipmentType;
-  name: string;
+  /** Derivado de marca + modelo no backend quando omitido. */
+  name?: string;
+  sector?: string | null;
   addressId?: string | null;
   parentEquipmentId?: string | null;
   status?: EquipmentStatus;

@@ -200,7 +200,12 @@ class WalkInContactDto {
 }
 
 class WalkInEquipmentDto {
-  @Transform(({ value }) => trim(value)) @IsString() @MinLength(2) @MaxLength(180) name!: string;
+  // O equipamento é identificado por marca + modelo; o nome é derivado quando
+  // não informado. Marca/modelo/capacidade são opcionais no atendimento avulso.
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(180) name?: string;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(120) manufacturer?: string;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(120) model?: string;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(80) capacity?: string;
   @IsOptional() @IsEnum(EquipmentType) type?: EquipmentType;
 }
 

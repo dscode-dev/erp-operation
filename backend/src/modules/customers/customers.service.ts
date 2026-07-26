@@ -173,12 +173,25 @@ export class CustomersService {
           },
         });
         const qrToken = randomUUID();
+        // O equipamento é identificado por marca + modelo; o nome é derivado
+        // quando não informado.
+        const equipmentName =
+          (dto.equipment.name?.trim() ||
+            [dto.equipment.manufacturer, dto.equipment.model]
+              .map((value) => value?.trim())
+              .filter(Boolean)
+              .join(' ')
+              .trim() ||
+            'Equipamento').slice(0, 180);
         const equipment = await tx.equipment.create({
           data: {
             customerId: customer.id,
             addressId: address.id,
             type: dto.equipment.type ?? EquipmentType.OTHER,
-            name: dto.equipment.name,
+            name: equipmentName,
+            manufacturer: dto.equipment.manufacturer || null,
+            model: dto.equipment.model || null,
+            capacity: dto.equipment.capacity || null,
             qrToken,
             qrCode: `equipment:${qrToken}`,
           },

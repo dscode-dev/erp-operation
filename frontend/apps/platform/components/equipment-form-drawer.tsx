@@ -29,7 +29,7 @@ import {
 type FormState = {
   customerId: string;
   type: EquipmentType;
-  name: string;
+  sector: string;
   addressId: string;
   status: EquipmentStatus;
   tag: string;
@@ -47,7 +47,7 @@ function fromEquipment(e: EquipmentDetail | null, presetCustomerId?: string): Fo
   return {
     customerId: e?.customer?.id ?? presetCustomerId ?? "",
     type: e?.type ?? "SPLIT",
-    name: e?.name ?? "",
+    sector: e?.sector ?? "",
     addressId: e?.address?.id ?? "",
     status: e?.status ?? "ACTIVE",
     tag: e?.tag ?? "",
@@ -116,14 +116,17 @@ export function EquipmentFormDrawer({
 
   async function handleSave() {
     if (!form.customerId) { setError("Selecione o cliente."); return; }
-    if (!form.name.trim()) { setError("Informe o nome do equipamento."); return; }
+    if (!form.manufacturer.trim() && !form.model.trim()) {
+      setError("Informe ao menos a marca ou o modelo do equipamento.");
+      return;
+    }
     setSaving(true);
     setError(null);
 
     const payload: CreateEquipmentPayload = {
       customerId: form.customerId,
       type: form.type,
-      name: form.name.trim(),
+      sector: form.sector.trim() || null,
       addressId: form.addressId || null,
       status: form.status,
       tag: form.tag.trim() || null,
@@ -192,9 +195,9 @@ export function EquipmentFormDrawer({
           </select>
         </Field>
 
-        <Field label="Nome" required>
-          <input value={form.name} onChange={(e) => set("name", e.target.value)} className={inputCls} placeholder="Ex.: Split Sala 01" />
-        </Field>
+        <p className="text-[11px] text-[var(--color-muted-foreground)]">
+          O equipamento é identificado por marca e modelo (preenchidos abaixo).
+        </p>
 
         <div className="grid grid-cols-2 gap-3">
           <Field label="Tipo">
@@ -209,19 +212,24 @@ export function EquipmentFormDrawer({
           </Field>
         </div>
 
-        <Field label="Endereço">
-          <select value={form.addressId} onChange={(e) => set("addressId", e.target.value)} className={inputCls} disabled={!form.customerId}>
-            <option value="">{form.customerId ? "Sem endereço específico" : "Selecione o cliente primeiro"}</option>
-            {addresses.map((a) => (
-              <option key={a.id} value={a.id}>{a.name || [a.street, a.number, a.city].filter(Boolean).join(", ") || "Endereço"}</option>
-            ))}
-          </select>
-          {form.customerId && addresses.length === 0 && (
-            <span className="block text-[11px] text-[var(--color-muted-foreground)]">
-              Este cliente ainda não possui endereço cadastrado. Cadastre o endereço no cliente para selecionar uma instalação específica.
-            </span>
-          )}
-        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Endereço">
+            <select value={form.addressId} onChange={(e) => set("addressId", e.target.value)} className={inputCls} disabled={!form.customerId}>
+              <option value="">{form.customerId ? "Sem endereço específico" : "Selecione o cliente primeiro"}</option>
+              {addresses.map((a) => (
+                <option key={a.id} value={a.id}>{a.name || [a.street, a.number, a.city].filter(Boolean).join(", ") || "Endereço"}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Setor">
+            <input value={form.sector} onChange={(e) => set("sector", e.target.value)} className={inputCls} placeholder="Ex.: Recepção, Sala 01" />
+          </Field>
+        </div>
+        {form.customerId && addresses.length === 0 && (
+          <span className="block text-[11px] text-[var(--color-muted-foreground)]">
+            Este cliente ainda não possui endereço cadastrado. Cadastre o endereço no cliente para selecionar uma instalação específica.
+          </span>
+        )}
 
         <div className="grid grid-cols-2 gap-3">
           <Field label="Tag">
