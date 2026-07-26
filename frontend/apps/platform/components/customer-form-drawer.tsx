@@ -174,7 +174,7 @@ export function CustomerFormDrawer({
           try {
             await customersApi.createAddress(customerId, {
               name: address.name.trim() || "Principal",
-              zipCode: address.zipCode.trim(),
+              zipCode: address.zipCode.trim() || undefined,
               street: address.street.trim(),
               number: address.number.trim(),
               complement: address.complement.trim() || null,
@@ -408,7 +408,6 @@ export function CustomerFormDrawer({
 
 function validateAddress(address: AddressState): string | null {
   const missing = [
-    ["CEP", address.zipCode],
     ["logradouro", address.street],
     ["número", address.number],
     ["bairro", address.district],
@@ -417,7 +416,8 @@ function validateAddress(address: AddressState): string | null {
   ].filter(([, value]) => !String(value).trim()).map(([label]) => label);
 
   if (missing.length > 0) return `Complete o endereço: ${missing.join(", ")}.`;
-  if (!/^\d{5}-?\d{3}$/.test(address.zipCode.trim())) return "Informe um CEP válido.";
+  // CEP é opcional; valida o formato apenas quando informado.
+  if (address.zipCode.trim() && !/^\d{5}-?\d{3}$/.test(address.zipCode.trim())) return "Informe um CEP válido.";
   if (!/^[A-Z]{2}$/.test(address.state.trim().toUpperCase())) return "Informe a UF com 2 letras.";
   return null;
 }

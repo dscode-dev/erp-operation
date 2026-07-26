@@ -91,7 +91,8 @@ export class UpdateCustomerDto {
 
 export class CustomerAddressDto {
   @Transform(({ value }) => trim(value)) @IsString() @MinLength(2) @MaxLength(100) name!: string;
-  @Transform(({ value }) => trim(value)) @Matches(/^\d{5}-?\d{3}$/) zipCode!: string;
+  // CEP é opcional; quando informado, deve ter o formato brasileiro.
+  @IsOptional() @Transform(({ value }) => trim(value) || undefined) @Matches(/^\d{5}-?\d{3}$/) zipCode?: string;
   @Transform(({ value }) => trim(value)) @IsString() @MinLength(2) @MaxLength(180) street!: string;
   @Transform(({ value }) => trim(value)) @IsString() @MaxLength(20) number!: string;
   @IsOptional()
@@ -116,7 +117,7 @@ export class UpdateCustomerAddressDto {
   @MinLength(2)
   @MaxLength(100)
   name?: string;
-  @IsOptional() @Transform(({ value }) => trim(value)) @Matches(/^\d{5}-?\d{3}$/) zipCode?: string;
+  @IsOptional() @Transform(({ value }) => trim(value) || undefined) @Matches(/^\d{5}-?\d{3}$/) zipCode?: string;
   @IsOptional()
   @Transform(({ value }) => trim(value))
   @IsString()
@@ -185,7 +186,7 @@ export class UploadCustomerAttachmentDto {
 /* ---------- OS avulso: cadastro de cliente novo em campo ---------- */
 
 class WalkInAddressDto {
-  @Transform(({ value }) => trim(value)) @IsString() @MaxLength(9) zipCode!: string;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(9) zipCode?: string;
   @Transform(({ value }) => trim(value)) @IsString() @MinLength(2) @MaxLength(180) street!: string;
   @Transform(({ value }) => trim(value)) @IsString() @MaxLength(20) number!: string;
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(120) complement?: string;

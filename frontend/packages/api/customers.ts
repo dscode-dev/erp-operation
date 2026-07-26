@@ -38,7 +38,7 @@ export type WalkInCustomerPayload = {
   name: string;
   document?: string;
   address: {
-    zipCode: string;
+    zipCode?: string;
     street: string;
     number: string;
     complement?: string;

@@ -99,7 +99,7 @@ export function AddressFormDrawer({
     setError(null);
     const payload = {
       name: form.name.trim() || "Endereço",
-      zipCode: form.zipCode.trim(),
+      zipCode: form.zipCode.trim() || undefined,
       street: form.street.trim(),
       number: form.number.trim(),
       complement: form.complement.trim() || null,
@@ -146,7 +146,7 @@ export function AddressFormDrawer({
         )}
 
         <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
-          <Field label="CEP" required>
+          <Field label="CEP">
             <input value={form.zipCode} onChange={(e) => set("zipCode", e.target.value)} className={inputCls} placeholder="00000-000" inputMode="numeric" />
           </Field>
           <button type="button" onClick={lookupCep} disabled={cepLoading || form.zipCode.replace(/\D/g, "").length !== 8} className="mt-6 inline-flex h-9 items-center justify-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 text-sm hover:bg-[var(--color-muted)] disabled:opacity-50">
@@ -196,7 +196,6 @@ export function AddressFormDrawer({
 
 function validate(form: AddressForm): string | null {
   const missing = [
-    ["CEP", form.zipCode],
     ["logradouro", form.street],
     ["número", form.number],
     ["bairro", form.district],
@@ -204,7 +203,8 @@ function validate(form: AddressForm): string | null {
     ["UF", form.state],
   ].filter(([, value]) => !String(value).trim()).map(([label]) => label);
   if (missing.length > 0) return `Complete o endereço: ${missing.join(", ")}.`;
-  if (!/^\d{5}-?\d{3}$/.test(form.zipCode.trim())) return "Informe um CEP válido.";
+  // CEP é opcional; valida o formato apenas quando informado.
+  if (form.zipCode.trim() && !/^\d{5}-?\d{3}$/.test(form.zipCode.trim())) return "Informe um CEP válido.";
   if (!/^[A-Z]{2}$/.test(form.state.trim().toUpperCase())) return "Informe a UF com 2 letras.";
   return null;
 }

@@ -125,7 +125,7 @@ const EMPTY_WALK_IN: WalkInForm = {
 function walkInValid(w: WalkInForm): boolean {
   // CPF/CNPJ é opcional; o equipamento é identificado por marca/modelo (ao menos um).
   return Boolean(
-    w.name.trim() && w.zipCode.trim() && w.street.trim() && w.number.trim() &&
+    w.name.trim() && w.street.trim() && w.number.trim() &&
     w.district.trim() && w.city.trim() && w.state.trim().length === 2 &&
     w.contactName.trim() && w.contactPhone.trim() &&
     (w.equipmentManufacturer.trim() || w.equipmentModel.trim()),
@@ -350,7 +350,7 @@ export function AtendimentoWizard({
             name: walk.name.trim(),
             document: walk.document.trim() || undefined,
             address: {
-              zipCode: walk.zipCode.trim(),
+              zipCode: walk.zipCode.trim() || undefined,
               street: walk.street.trim(),
               number: walk.number.trim(),
               complement: walk.complement.trim() || undefined,
@@ -1044,7 +1044,7 @@ function WalkInStep({
         <h3 className="text-sm font-semibold">Endereço</h3>
         <div className="grid grid-cols-3 gap-2">
           <WalkField
-            label="CEP *"
+            label="CEP"
             value={value.zipCode}
             onChange={(v) => setField('zipCode', v)}
             onBlur={() => void lookupCep()}

@@ -154,7 +154,7 @@ export class CustomersService {
           data: {
             customerId: customer.id,
             name: 'Local do atendimento',
-            zipCode: dto.address.zipCode,
+            zipCode: dto.address.zipCode ?? '',
             street: dto.address.street,
             number: dto.address.number,
             complement: dto.address.complement ?? null,
@@ -281,7 +281,9 @@ export class CustomersService {
           where: { customerId: id },
           data: { isPrimary: false },
         });
-      const address = await tx.customerAddress.create({ data: { customerId: id, ...dto } });
+      const address = await tx.customerAddress.create({
+        data: { customerId: id, ...dto, zipCode: dto.zipCode ?? '' },
+      });
       await tx.auditLog.create({
         data: this.audit(
           CUSTOMER_AUDIT_ACTIONS.CUSTOMER_ADDRESS_CREATED,
