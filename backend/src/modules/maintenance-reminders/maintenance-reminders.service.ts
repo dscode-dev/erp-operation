@@ -103,6 +103,7 @@ export class MaintenanceRemindersService {
   }
 
   async list(query: ListMaintenanceRemindersQueryDto, _actor: AuthenticatedUser): Promise<unknown> {
+    void _actor;
     const organizationId = await this.organizationId();
     const where: Prisma.MaintenanceReminderWhereInput = {
       organizationId,
@@ -129,6 +130,7 @@ export class MaintenanceRemindersService {
     dueSoon: number;
     done: number;
   }> {
+    void _actor;
     const organizationId = await this.organizationId();
     const now = new Date();
     const soon = addMonths(now, 1);
@@ -158,6 +160,7 @@ export class MaintenanceRemindersService {
     dto: UpdateMaintenanceReminderDto,
     _actor: AuthenticatedUser,
   ): Promise<unknown> {
+    void _actor;
     const organizationId = await this.organizationId();
     const existing = await this.prisma.maintenanceReminder.findFirst({
       where: { id, organizationId },
@@ -186,6 +189,7 @@ export class MaintenanceRemindersService {
    * lista de todos; com `customerId`, filtra o cliente. Ordenadas por data.
    */
   async pmocUpcoming(customerId: string | undefined, _actor: AuthenticatedUser): Promise<unknown> {
+    void _actor;
     const requests = await this.prisma.pmocExecutionRequest.findMany({
       where: {
         status: PmocExecutionRequestStatus.PENDING,

@@ -79,7 +79,7 @@ const DOCUMENT_HANDOFF_INCLUDE = {
       equipment: { select: { id: true, name: true, tag: true } },
       inspectedEquipments: { select: { id: true, equipmentId: true } },
       photos: { select: { id: true } },
-      assignment: { select: { id: true, assignedBy: true, assignedTo: true } },
+      assignments: { where: { isPrimary: true }, select: { id: true, assignedBy: true, assignedTo: true } },
       maintenanceExecution: { select: { id: true, plan: { select: { pmocPlan: { select: { id: true } } } } } },
     },
   },
@@ -110,7 +110,7 @@ const COLLECTION_OPERATION_INCLUDE = {
       technicalSignatureId: true,
     },
   },
-  assignment: { select: { assignedBy: true, assignedTo: true } },
+  assignments: { where: { isPrimary: true }, select: { assignedBy: true, assignedTo: true } },
   maintenanceExecution: {
     select: {
       plan: {
@@ -187,7 +187,7 @@ export class DocumentHandoffService {
     if (
       actor.role === Role.OPERATOR &&
       !OPERATOR_DIRECT_COMPLETION_TYPES.has(dto.type) &&
-      operation.assignment?.assignedBy === operation.assignment?.assignedTo
+      operation.assignments?.[0]?.assignedBy === operation.assignments?.[0]?.assignedTo
     ) {
       throw new ApplicationException(
         ERROR_CODES.DOCUMENT_HANDOFF_NOT_ALLOWED,
@@ -701,7 +701,7 @@ export class DocumentHandoffService {
   }
 
   private isManagementAssigned(document: HandoffDocument): boolean {
-    const assignment = document.operation?.assignment;
+    const assignment = document.operation?.assignments?.[0];
     return Boolean(assignment && assignment.assignedBy !== assignment.assignedTo);
   }
 

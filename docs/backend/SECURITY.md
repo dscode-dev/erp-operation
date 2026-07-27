@@ -1,5 +1,15 @@
 # Security
 
+## PMOC configuration-only
+
+- O backend garante que `configurationOnly=true` não produza efeitos operacionais ou documentais.
+- O técnico padrão deve ser `OWNER` ativo, não removido, com assinatura própria ativa e imagem
+  persistida; `Signature.userId` deve corresponder ao usuário selecionado.
+- Assinatura genérica ou pertencente a outro usuário é rejeitada.
+- Endereço e equipamentos permanecem restritos ao cliente; escopos pertencem ao catálogo da
+  instalação.
+- A auditoria de criação registra `configurationOnly`, sem evento falso de execução.
+
 ## Métricas e contatos no contexto do cliente
 
 - `customerId` de stats passa por validação UUID e é acrescentado ao escopo de Operation já autorizado.
@@ -2197,3 +2207,26 @@ The catalog is scoped to the installation Organization in every query. Reads req
 - Defaults não são restaurados após exclusão, evitando contrariar uma decisão administrativa.
 - Operations e documentos persistem snapshots; alterações posteriores no catálogo não reescrevem
   histórico.
+
+## Isolamento da execução PMOC por equipamento
+
+- O backend valida que `equipmentId` pertence à cobertura antes de reservar a execução.
+- Constraint composta evita duplicação concorrente por PMOC/equipamento/instante.
+- A geração sobrescreve `equipmentId/inspectedEquipments` com o ativo oficial, impedindo ampliação
+  da cobertura por mass assignment.
+- Evidências reutilizam validação binária e storage de `OperationPhoto`, com limite adicional de
+  seis por execução PMOC.
+- Numeração, cancelamentos, auditoria e histórico append-only permanecem preservados.
+# Assinatura técnica OWNER e execução PMOC mobile (2026-07-27)
+
+- A associação técnica usa FK/unique existente `Signature.userId`; apenas OWNER pode administrar o
+  CRUD de assinaturas e o backend aceita vínculo somente com usuário `OWNER`, ativo e não removido.
+- Um usuário não pode possuir duas assinaturas vinculadas. Vários OWNER podem ter assinaturas
+  independentes.
+- Soft delete remove o vínculo pessoal, preservando o registro e os snapshots documentais
+  históricos.
+- PMOC mobile continua restrito a OWNER/MANAGER nos endpoints mutáveis. O equipamento enviado é
+  validado contra a cobertura do plano e a Execution Request mantém unicidade e numeração
+  monotônica.
+- Preview, render e download permanecem autenticados; nenhum caminho, chave de Storage, Base64 de
+  PDF ou URL pública é exposto.

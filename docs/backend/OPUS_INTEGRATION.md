@@ -1,5 +1,14 @@
 # OPUS Frontend Integration
 
+## PMOC — cadastro de configuração
+
+Na rota `/pmoc`, o Wizard oficial usa `POST /pmoc` com `configurationOnly: true`. O modo possui
+quatro etapas: identificação/cobertura, planejamento, execuções e confirmação. A resposta não traz
+execuções nem documento; não implemente fallback, criação de OS ou renderização após o sucesso.
+
+Campos obrigatórios: cliente, endereço, equipamentos, escopos, tipos de serviço, periodicidade,
+datas, OWNER técnico e assinatura vinculada ao mesmo OWNER.
+
 ## Cliente 360
 
 Na aba Visão Geral, use `operationApi.getOperationStats({ customerId })` e uma lista limitada de
@@ -1999,3 +2008,21 @@ Use exclusivamente `signaturesApi.getMySignature/saveMySignature/downloadMySigna
 - Periodicidades V1: `WEEKLY` e `SEMIANNUAL`.
 - OS/PMOC utilizam `workflowsAny=WORK_ORDER,PMOC` e permanecem isolados do RVT.
 - Platform e Operator consomem a mesma origem; não manter arrays ou defaults locais.
+
+# PMOC Detail — Passo 2
+
+- `PmocExecutionRequest.equipmentId` identifica o ativo atendido.
+- Resumo: lista paginada dos equipamentos cobertos.
+- Execuções: uma linha por equipamento, último estado, OS, documento e ação `Executar`.
+- O wizard dedicado possui Identificação, Escopo, Evidências e Confirmação.
+- Evidências são opcionais e limitadas a seis.
+- O submit usa PMOC → Operation → Document Engine; Timeline e DocumentViewer são reutilizados.
+# PMOC — fluxo mobile por equipamento (2026-07-27)
+
+No Operator, OWNER seleciona um PMOC ativo, escolhe um equipamento coberto e abre o executor
+reutilizado da Platform. Não existe criação de plano no mobile. O fluxo usa os endpoints PMOC já
+documentados e termina no download/compartilhamento autenticado do Document Engine.
+
+Assinaturas técnicas são elegíveis quando `Signature.userId` referencia um OWNER ativo e a
+assinatura possui imagem. A associação é administrada em Configurações > Assinaturas; não inferir
+responsabilidade técnica pelo nome, cargo ou assinatura padrão.

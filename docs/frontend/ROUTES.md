@@ -1,5 +1,11 @@
 # ROUTES — Frontend
 
+## `/pmoc`
+
+- `Novo PMOC` cria somente a configuração do plano.
+- Não cria execução, OS ou documento ao concluir.
+- `/pmoc/:id` mantém edição das predefinições e os fluxos operacionais existentes.
+
 ## `/clientes/:id`
 
 - Visão Geral: KPIs operacionais, cadastro, endereços, contatos gerenciáveis e atendimentos recentes.
@@ -672,3 +678,18 @@ Em ambas as rotas, `WORK_ORDER` e `TECHNICAL_REPORT` concluem, finalizam o hando
 Abre a aba administrativa exclusiva dos itens Semanais e Semestrais do Relatório de Visita
 Técnica. A rota física permanece única; `RVT_CHECKLIST` é somente uma chave de apresentação para
 o filtro oficial `CHECKLIST + TECHNICAL_REPORT`.
+
+## `/pmoc/:id`
+
+- `Resumo`: dados do plano e equipamentos cobertos com paginação.
+- `Execuções`: uma linha por equipamento, histórico mais recente e ação `Executar`.
+- `Timeline`: conteúdo oficial preservado.
+
+O wizard abre na rota atual. Preview, render e download continuam no drawer com
+`DocumentViewer`.
+# PMOC no Operator
+
+- `/operator/atendimento`: para OWNER, a opção “Executar PMOC” seleciona plano ativo e equipamento
+  coberto. A rota não configura nem cria um plano PMOC.
+- Ao concluir, permanece na mesma rota exibindo ações para compartilhar, baixar ou abrir o
+  Repositório Documental.

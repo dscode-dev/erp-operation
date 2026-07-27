@@ -84,7 +84,20 @@ type ActiveCoverageProjection = {
 const PMOC_INCLUDE = {
   organization: { select: { id: true, legalName: true, tradeName: true } },
   customer: { select: { id: true, name: true, tradeName: true } },
-  equipment: { select: { id: true, name: true, tag: true, type: true, status: true } },
+  equipment: {
+    select: {
+      id: true,
+      name: true,
+      tag: true,
+      type: true,
+      status: true,
+      sector: true,
+      manufacturer: true,
+      model: true,
+      capacity: true,
+      address: true,
+    },
+  },
   maintenancePlan: {
     include: {
       executions: {
@@ -115,6 +128,19 @@ const PMOC_INCLUDE = {
     orderBy: [{ scheduledFor: 'desc' as const }, { id: 'desc' as const }],
     take: 20,
     include: {
+      equipment: {
+        select: {
+          id: true,
+          name: true,
+          tag: true,
+          sector: true,
+          manufacturer: true,
+          model: true,
+          capacity: true,
+          status: true,
+          address: true,
+        },
+      },
       operation: {
         select: {
           id: true,
@@ -150,7 +176,19 @@ const PMOC_INCLUDE = {
   equipments: {
     include: {
       equipment: {
-        select: { id: true, name: true, tag: true, type: true, status: true, customerId: true },
+        select: {
+          id: true,
+          name: true,
+          tag: true,
+          type: true,
+          status: true,
+          customerId: true,
+          sector: true,
+          manufacturer: true,
+          model: true,
+          capacity: true,
+          address: true,
+        },
       },
     },
     orderBy: { createdAt: 'asc' as const },
@@ -172,6 +210,7 @@ const PMOC_INCLUDE = {
           title: true,
           description: true,
           maintenanceType: true,
+          pmocUnit: true,
           active: true,
         },
       },
@@ -365,6 +404,12 @@ export class PmocComplianceService implements ComplianceEvaluator<{
     context: PmocAuditContext,
   ): Promise<unknown> {
     const periodicity = dto.periodicity ?? this.periodicityFromRule(dto.recurrenceRule);
+    const configurationOnly = dto.configurationOnly === true;
+    const generationMode = configurationOnly
+      ? dto.generationMode === PmocGenerationMode.PAUSED
+        ? PmocGenerationMode.PAUSED
+        : PmocGenerationMode.MANUAL
+      : dto.generationMode ?? PmocGenerationMode.MANUAL;
     const recurrenceRule = dto.recurrenceRule ?? this.ruleForPeriodicity(periodicity);
     this.recurrence.validate(recurrenceRule);
     const startDate = this.dateOnly(dto.startDate);
@@ -399,10 +444,23 @@ export class PmocComplianceService implements ComplianceEvaluator<{
       organization.id,
     );
     await this.validateDefaults(
-      dto.defaultOperatorId,
+      configurationOnly ? undefined : dto.defaultOperatorId,
       dto.defaultTechnicianId,
       dto.signatureOverrideId,
     );
+    if (configurationOnly) {
+      if (!dto.defaultAddressId || scopes.length === 0 || !dto.serviceTypes?.length) {
+        throw new ApplicationException(
+          ERROR_CODES.PMOC_INVALID_RELATIONSHIP,
+          'Informe endereço, escopo e tipos de serviço para configurar o plano PMOC',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      await this.validateConfigurationTechnician(
+        dto.defaultTechnicianId,
+        dto.signatureOverrideId,
+      );
+    }
     await this.validateAddress(dto.defaultAddressId, dto.customerId);
 
     return this.prisma.$transaction(async (tx) => {
@@ -420,13 +478,15 @@ export class PmocComplianceService implements ComplianceEvaluator<{
           createdBy: actor.id,
         },
       });
-      const maintenanceExecution = await tx.maintenanceExecution.create({
-        data: {
-          maintenancePlanId: maintenancePlan.id,
-          scheduledAt: startDate,
-          notes: 'Execução inicial planejada gerada pelo PMOC.',
-        },
-      });
+      const maintenanceExecution = configurationOnly
+        ? null
+        : await tx.maintenanceExecution.create({
+            data: {
+              maintenancePlanId: maintenancePlan.id,
+              scheduledAt: startDate,
+              notes: 'Execução inicial planejada gerada pelo PMOC.',
+            },
+          });
       const created = await tx.pmocPlan.create({
         data: {
           organizationId: organization.id,
@@ -439,25 +499,27 @@ export class PmocComplianceService implements ComplianceEvaluator<{
               ? this.clean(dto.coverage)
               : null,
           periodicity,
-          generationMode: dto.generationMode ?? PmocGenerationMode.MANUAL,
-          defaultOperatorId: dto.defaultOperatorId ?? null,
+          generationMode,
+          defaultOperatorId: configurationOnly ? null : dto.defaultOperatorId ?? null,
           defaultTechnicianId: dto.defaultTechnicianId ?? null,
           defaultAddressId: dto.defaultAddressId ?? null,
           defaultOperationType: dto.defaultOperationType ?? OperationType.PREVENTIVA,
           serviceTypes,
-          defaultEstimatedDurationMinutes: dto.defaultEstimatedDurationMinutes ?? null,
-          defaultOperationObservations: dto.defaultOperationObservations
+          defaultEstimatedDurationMinutes: configurationOnly
+            ? null
+            : dto.defaultEstimatedDurationMinutes ?? null,
+          defaultOperationObservations: !configurationOnly && dto.defaultOperationObservations
             ? this.clean(dto.defaultOperationObservations)
             : null,
           includeChecklistInOperations: dto.includeChecklistInOperations ?? true,
           signatureOverrideId: dto.signatureOverrideId ?? null,
           operationalStatus:
-            dto.generationMode === PmocGenerationMode.PAUSED || dto.active === false
+            generationMode === PmocGenerationMode.PAUSED || dto.active === false
               ? PmocOperationalStatus.PAUSED
               : PmocOperationalStatus.PENDING,
-          lastReservedExecutionNumber: 1,
+          lastReservedExecutionNumber: configurationOnly ? 0 : 1,
           nextExecutionDate: startDate,
-          nextGenerationDate: startDate,
+          nextGenerationDate: configurationOnly ? null : startDate,
           responsibleTechnician: this.clean(dto.responsibleTechnician),
           artNumber: dto.artNumber ? this.clean(dto.artNumber) : null,
           contractNumber: dto.contractNumber ? this.clean(dto.contractNumber) : null,
@@ -488,22 +550,26 @@ export class PmocComplianceService implements ComplianceEvaluator<{
         },
         select: { id: true, number: true },
       });
-      const executionRequest = await tx.pmocExecutionRequest.create({
-        data: {
-          pmocPlanId: created.id,
-          maintenanceExecutionId: maintenanceExecution.id,
-          executionNumber: 1,
-          executionYear: startDate.getUTCFullYear(),
-          scheduledFor: startDate,
-          requestedBy: actor.id,
-          plannedOperatorId: dto.defaultOperatorId ?? null,
-          plannedTechnicianId: dto.defaultTechnicianId ?? null,
-          origin:
-            dto.generationMode === PmocGenerationMode.AUTO
-              ? PmocExecutionOrigin.AUTO
-              : PmocExecutionOrigin.MANUAL,
-        },
-      });
+      const executionRequest =
+        configurationOnly || !maintenanceExecution
+          ? null
+          : await tx.pmocExecutionRequest.create({
+              data: {
+                pmocPlanId: created.id,
+                equipmentId: dto.equipmentId,
+                maintenanceExecutionId: maintenanceExecution.id,
+                executionNumber: 1,
+                executionYear: startDate.getUTCFullYear(),
+                scheduledFor: startDate,
+                requestedBy: actor.id,
+                plannedOperatorId: dto.defaultOperatorId ?? null,
+                plannedTechnicianId: dto.defaultTechnicianId ?? null,
+                origin:
+                  generationMode === PmocGenerationMode.AUTO
+                    ? PmocExecutionOrigin.AUTO
+                    : PmocExecutionOrigin.MANUAL,
+              },
+            });
       await tx.pmocHistory.createMany({
         data: [
           {
@@ -511,22 +577,28 @@ export class PmocComplianceService implements ComplianceEvaluator<{
             actorId: actor.id,
             action: PmocHistoryAction.CREATED,
             newStatus:
-              dto.generationMode === PmocGenerationMode.PAUSED || dto.active === false
+              generationMode === PmocGenerationMode.PAUSED || dto.active === false
                 ? PmocOperationalStatus.PAUSED
                 : PmocOperationalStatus.PENDING,
-            metadata: { periodicity, generationMode: dto.generationMode ?? PmocGenerationMode.MANUAL },
+            metadata: {
+              periodicity,
+              generationMode,
+              configurationOnly,
+            },
           },
-          {
-            pmocPlanId: created.id,
-            executionRequestId: executionRequest.id,
-            actorId: actor.id,
-            action:
-              dto.generationMode === PmocGenerationMode.AUTO
-                ? PmocHistoryAction.REQUEST_CREATED_AUTO
-                : PmocHistoryAction.REQUEST_CREATED_MANUAL,
-            newStatus: PmocExecutionRequestStatus.PENDING,
-            metadata: { executionNumber: 1, scheduledFor: startDate.toISOString() },
-          },
+          ...(executionRequest
+            ? [{
+                pmocPlanId: created.id,
+                executionRequestId: executionRequest.id,
+                actorId: actor.id,
+                action:
+                  generationMode === PmocGenerationMode.AUTO
+                    ? PmocHistoryAction.REQUEST_CREATED_AUTO
+                    : PmocHistoryAction.REQUEST_CREATED_MANUAL,
+                newStatus: PmocExecutionRequestStatus.PENDING,
+                metadata: { executionNumber: 1, scheduledFor: startDate.toISOString() },
+              }]
+            : []),
         ],
       });
       await tx.maintenancePlan.update({
@@ -564,6 +636,7 @@ export class PmocComplianceService implements ComplianceEvaluator<{
           equipmentId: dto.equipmentId,
           maintenancePlanId: maintenancePlan.id,
           pmocNumber: pmoc.number,
+          configurationOnly,
           activeCoverageConfirmed,
           existingActivePmocIds: activeCoveragePlans.map((plan) => plan.id),
         }),
@@ -583,24 +656,27 @@ export class PmocComplianceService implements ComplianceEvaluator<{
           ),
         });
       }
-      await tx.auditLog.create({
-        data: this.audit(
-          (dto.generationMode ?? PmocGenerationMode.MANUAL) === PmocGenerationMode.AUTO
-            ? PMOC_AUDIT_ACTIONS.EXECUTION_REQUEST_CREATED_AUTO
-            : PMOC_AUDIT_ACTIONS.EXECUTION_REQUEST_CREATED_MANUAL,
-          PMOC_EXECUTION_REQUEST_RESOURCE,
-          actor.id,
-          context,
-          {
-            pmocPlanId: pmoc.id,
-            executionRequestId: executionRequest.id,
-            executionNumber: 1,
-            scheduledFor: startDate.toISOString(),
-          },
-        ),
-      });
+      if (executionRequest) {
+        await tx.auditLog.create({
+          data: this.audit(
+            generationMode === PmocGenerationMode.AUTO
+              ? PMOC_AUDIT_ACTIONS.EXECUTION_REQUEST_CREATED_AUTO
+              : PMOC_AUDIT_ACTIONS.EXECUTION_REQUEST_CREATED_MANUAL,
+            PMOC_EXECUTION_REQUEST_RESOURCE,
+            actor.id,
+            context,
+            {
+              pmocPlanId: pmoc.id,
+              executionRequestId: executionRequest.id,
+              executionNumber: 1,
+              scheduledFor: startDate.toISOString(),
+            },
+          ),
+        });
+      }
       if (
-        (dto.generationMode ?? PmocGenerationMode.MANUAL) === PmocGenerationMode.MANUAL &&
+        executionRequest &&
+        generationMode === PmocGenerationMode.MANUAL &&
         startDate.getTime() <= Date.now()
       ) {
         await this.notifications.notifyPmocExecutionTx(
@@ -620,6 +696,7 @@ export class PmocComplianceService implements ComplianceEvaluator<{
     context: PmocAuditContext,
   ): Promise<unknown> {
     const existing = await this.pmocOrThrow(id);
+    const configurationOnly = dto.configurationOnly === true;
     const startDate = dto.startDate ? this.dateOnly(dto.startDate) : existing.startDate;
     const endDate = dto.endDate ? this.dateOnly(dto.endDate) : existing.endDate;
     this.assertDateRange(startDate, endDate);
@@ -636,10 +713,16 @@ export class PmocComplianceService implements ComplianceEvaluator<{
         : null;
     if (equipmentIds) await this.equipmentsForCustomerOrThrow(equipmentIds, existing.customerId);
     await this.validateDefaults(
-      dto.defaultOperatorId ?? undefined,
+      configurationOnly ? undefined : dto.defaultOperatorId ?? undefined,
       dto.defaultTechnicianId ?? undefined,
       dto.signatureOverrideId ?? undefined,
     );
+    if (configurationOnly) {
+      await this.validateConfigurationTechnician(
+        dto.defaultTechnicianId ?? existing.defaultTechnicianId ?? undefined,
+        dto.signatureOverrideId ?? existing.signatureOverrideId ?? undefined,
+      );
+    }
     await this.validateAddress(dto.defaultAddressId ?? undefined, existing.customerId);
     const serviceTypes =
       dto.serviceTypes !== undefined || dto.defaultOperationType !== undefined
@@ -707,10 +790,19 @@ export class PmocComplianceService implements ComplianceEvaluator<{
               ? { coverage: dto.coverage ? this.clean(dto.coverage) : null }
               : {}),
           ...(dto.periodicity ? { periodicity: dto.periodicity } : {}),
-          ...(dto.generationMode ? { generationMode: dto.generationMode } : {}),
-          ...(dto.defaultOperatorId !== undefined
-            ? { defaultOperatorId: dto.defaultOperatorId }
+          ...(dto.generationMode
+            ? {
+                generationMode:
+                  configurationOnly && dto.generationMode === PmocGenerationMode.AUTO
+                    ? PmocGenerationMode.MANUAL
+                    : dto.generationMode,
+              }
             : {}),
+          ...(configurationOnly
+            ? { defaultOperatorId: null }
+            : dto.defaultOperatorId !== undefined
+              ? { defaultOperatorId: dto.defaultOperatorId }
+              : {}),
           ...(dto.defaultTechnicianId !== undefined
             ? { defaultTechnicianId: dto.defaultTechnicianId }
             : {}),
@@ -720,16 +812,20 @@ export class PmocComplianceService implements ComplianceEvaluator<{
             : {}),
           ...(serviceTypes ? { serviceTypes } : {}),
           ...(equipmentIds ? { equipmentId: equipmentIds[0] } : {}),
-          ...(dto.defaultEstimatedDurationMinutes !== undefined
-            ? { defaultEstimatedDurationMinutes: dto.defaultEstimatedDurationMinutes }
-            : {}),
-          ...(dto.defaultOperationObservations !== undefined
-            ? {
-                defaultOperationObservations: dto.defaultOperationObservations
-                  ? this.clean(dto.defaultOperationObservations)
-                  : null,
-              }
-            : {}),
+          ...(configurationOnly
+            ? { defaultEstimatedDurationMinutes: null }
+            : dto.defaultEstimatedDurationMinutes !== undefined
+              ? { defaultEstimatedDurationMinutes: dto.defaultEstimatedDurationMinutes }
+              : {}),
+          ...(configurationOnly
+            ? { defaultOperationObservations: null }
+            : dto.defaultOperationObservations !== undefined
+              ? {
+                  defaultOperationObservations: dto.defaultOperationObservations
+                    ? this.clean(dto.defaultOperationObservations)
+                    : null,
+                }
+              : {}),
           ...(dto.includeChecklistInOperations !== undefined
             ? { includeChecklistInOperations: dto.includeChecklistInOperations }
             : {}),
@@ -1699,6 +1795,43 @@ export class PmocComplianceService implements ComplianceEvaluator<{
           HttpStatus.NOT_FOUND,
         );
       }
+    }
+  }
+
+  private async validateConfigurationTechnician(
+    technicianId?: string,
+    signatureId?: string,
+  ): Promise<void> {
+    if (!technicianId || !signatureId) {
+      throw new ApplicationException(
+        ERROR_CODES.PMOC_INVALID_RELATIONSHIP,
+        'Selecione um responsável técnico OWNER com assinatura ativa',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const technician = await this.prisma.user.findFirst({
+      where: {
+        id: technicianId,
+        role: Role.OWNER,
+        isActive: true,
+        disabledAt: null,
+        institutionalSignature: {
+          is: {
+            id: signatureId,
+            active: true,
+            deletedAt: null,
+            imageStorageKey: { not: null },
+          },
+        },
+      },
+      select: { id: true },
+    });
+    if (!technician) {
+      throw new ApplicationException(
+        ERROR_CODES.PMOC_INVALID_RELATIONSHIP,
+        'O responsável técnico deve ser um OWNER ativo com assinatura cadastrada',
+        HttpStatus.BAD_REQUEST,
+      );
     }
   }
 

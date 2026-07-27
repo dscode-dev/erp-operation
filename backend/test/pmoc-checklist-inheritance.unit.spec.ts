@@ -154,10 +154,6 @@ describe('PMOC checklist per unit', () => {
         equipmentId: '22222222-2222-4222-8222-222222222222',
         sector: 'Split 18.000 BTU',
       },
-      {
-        equipmentId: '66666666-6666-4666-8666-666666666666',
-        sector: 'Cobertura',
-      },
     ]);
   });
 
@@ -177,6 +173,6 @@ describe('PMOC checklist per unit', () => {
     // A tabela do PMOC continua vindo do catálogo por unidade.
     expect(payload.maintenanceChecklist).toHaveLength(3);
     expect(payload.maintenanceChecklist?.map((item) => item.executed)).toEqual([true, false, false]);
-    expect(payload.inspectedEquipments).toHaveLength(2);
+    expect(payload.inspectedEquipments).toHaveLength(1);
   });
 });

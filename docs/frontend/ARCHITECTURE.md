@@ -1,5 +1,11 @@
 # ARCHITECTURE — Frontend
 
+## Separação PMOC Plan × execução
+
+`PmocPlanWizard(configurationOnly)` é uma variação do componente oficial. A Platform persiste o
+plano; `PmocExecutionRequest`, `Operation`, `Assignment` e Document Engine continuam no fluxo
+operacional posterior. As datas do formulário são projeções e não criam registros.
+
 ## Cliente 360
 
 ```text
@@ -1221,3 +1227,23 @@ TechnicalCatalog
 A separação é feita por workflow no catálogo oficial. Não existem arrays locais, tabela paralela
 ou adaptação no Document Engine. Os wizards geram o mesmo snapshot estruturado da Operation, que
 continua alimentando Preview e PDF.
+
+# PMOC: plano agregado, execução unitária
+
+```text
+PmocPlan (N equipamentos)
+  → PmocExecutionRequest (1 equipamento)
+  → MaintenanceExecution
+  → Operation (1 equipamento + evidências próprias)
+  → DocumentContext
+  → Preview / PDF / Repositório
+```
+
+O wizard dedicado evita condicionais no `OperationCreationDrawer` e somente orquestra APIs
+oficiais. O backend continua sendo a autoridade sobre cobertura, numeração e relacionamentos.
+# PMOC — compartilhamento Platform/Operator
+
+O executor por equipamento reside na camada compartilhada da Platform e é consumido pelo Operator,
+evitando dois wizards e duas regras de persistência. O seletor mobile apenas resolve
+`PmocPlan + equipment + PmocExecutionRequest + prefill`; toda mutação permanece nas APIs oficiais.
+O PDF é obtido como `Blob` autenticado e nunca é montado no navegador.

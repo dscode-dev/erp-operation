@@ -557,16 +557,16 @@ export class DocumentBuilderService {
         critical: true,
         components: [
           this.metadata('execution-timeline-metadata', [
-            ['Atribuído para', operation.assignment?.assignee.name ?? operation.operator.name],
-            ['Atribuído por', operation.assignment?.assigner.name ?? '—'],
-            ['Aceito em', this.date(operation.assignment?.acceptedAt ?? null)],
+            ['Atribuído para', operation.assignments?.[0]?.assignee.name ?? operation.operator.name],
+            ['Atribuído por', operation.assignments?.[0]?.assigner.name ?? '—'],
+            ['Aceito em', this.date(operation.assignments?.[0]?.acceptedAt ?? null)],
             [
               'Iniciado em',
-              this.date(operation.startedAt ?? operation.assignment?.startedAt ?? null),
+              this.date(operation.startedAt ?? operation.assignments?.[0]?.startedAt ?? null),
             ],
             [
               'Concluído em',
-              this.date(operation.completedAt ?? operation.assignment?.completedAt ?? null),
+              this.date(operation.completedAt ?? operation.assignments?.[0]?.completedAt ?? null),
             ],
           ]),
         ],
@@ -1326,7 +1326,7 @@ export class DocumentBuilderService {
   private assignmentHistorySection(
     operation: DocumentContext['operation'],
   ): DocumentSection | null {
-    const history = operation.assignment?.history ?? [];
+    const history = operation.assignments?.[0]?.history ?? [];
     if (history.length === 0) return null;
     return {
       id: 'assignment-history',

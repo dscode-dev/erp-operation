@@ -120,10 +120,11 @@ describe('SignaturesService soft-delete semantics', () => {
     const updateCalls = prisma.signature.update.mock.calls as Array<[unknown]>;
     const updateCall = updateCalls[0]?.[0] as {
       where: { id: string };
-      data: { active: boolean; deletedAt: Date };
+      data: { active: boolean; deletedAt: Date; userId: null };
     };
     expect(updateCall.where.id).toBe(signature.id);
     expect(updateCall.data.active).toBe(false);
+    expect(updateCall.data.userId).toBeNull();
     expect(updateCall.data.deletedAt).toBeInstanceOf(Date);
   });
 });

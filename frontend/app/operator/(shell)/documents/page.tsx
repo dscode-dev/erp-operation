@@ -19,8 +19,25 @@ import { documentsApi, operationApi, useQuery, ApiClientError, type OperationDoc
 import type { DocumentKind } from "@erp/types";
 import { DOCUMENT_KIND_LABEL } from "@erp/types";
 import { formatDateTime } from "@erp/utils";
+import { useAuth } from "@erp/ui/auth/auth-provider";
 import { CustomerPicker } from "@operator/components/customer-picker";
 import { useSelectedCustomer } from "@operator/lib/selected-customer";
+
+// Tipos que o operador em campo pode reemitir (OS, Visita Técnica e Recibo).
+const OPERATOR_REGEN_TYPES: DocumentKind[] = ["WORK_ORDER", "TECHNICAL_REPORT", "RECEIPT"];
+// O owner reemite qualquer documento disponível a partir do mobile (inclui PMOC,
+// Laudo Técnico e Orçamento). Operador nesses tipos fica para um momento futuro.
+const OWNER_REGEN_TYPES: DocumentKind[] = [
+  "WORK_ORDER",
+  "TECHNICAL_REPORT",
+  "RECEIPT",
+  "PMOC",
+  "TECHNICAL_OPINION",
+  "BUDGET",
+];
+// OS e Visita Técnica são finalizados em campo (submit + finalize antes de gerar);
+// os demais já foram finalizados pela gestão e apenas re-renderizam o PDF.
+const FIELD_REVIEW_TYPES: DocumentKind[] = ["WORK_ORDER", "TECHNICAL_REPORT"];
 
 type Availability = "AVAILABLE" | "STALE" | "IN_REVIEW" | "AWAITING_PDF";
 
@@ -52,6 +69,11 @@ function availability(document: OperationDocument): Availability {
 }
 
 function OperatorDocumentsInner() {
+  const { session } = useAuth();
+  // Por enquanto, a reemissão dos tipos expandidos (PMOC, Laudo, Orçamento) é
+  // exclusiva do owner; o operador continua limitado a OS/RVT/Recibo.
+  const regenTypes = session?.role === "OWNER" ? OWNER_REGEN_TYPES : OPERATOR_REGEN_TYPES;
+  const canRegenerate = (type: DocumentKind) => regenTypes.includes(type);
   const [customer, setCustomer] = useSelectedCustomer();
   const [detail, setDetail] = useState<Row | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -159,8 +181,12 @@ function OperatorDocumentsInner() {
     setActionError(null);
     try {
       const handoff = await documentsApi.saveHandoffDraft(row.operation.id, row.type);
-      await documentsApi.submitHandoff(handoff.id);
-      await documentsApi.finalizeHandoffReview(handoff.id);
+      // OS/RVT passam pela revisão de campo; PMOC e demais já foram finalizados
+      // pela gestão — basta re-renderizar o PDF com os dados atualizados.
+      if (FIELD_REVIEW_TYPES.includes(row.type)) {
+        await documentsApi.submitHandoff(handoff.id);
+        await documentsApi.finalizeHandoffReview(handoff.id);
+      }
       await documentsApi.renderDocument(handoff.id);
       clearStale(row.id);
       await ops.refetch();
@@ -176,7 +202,7 @@ function OperatorDocumentsInner() {
     <div className="px-4 pt-4 pb-24 space-y-4">
       <header>
         <h1 className="text-[22px] font-semibold tracking-tight">Documentos</h1>
-        <p className="text-caption">Emita, baixe ou compartilhe suas OS e Visitas Técnicas concluídas.</p>
+        <p className="text-caption">Emita, baixe ou compartilhe os documentos concluídos deste cliente.</p>
       </header>
 
       <div className="sticky top-12 z-10 -mx-4 px-4 py-2 bg-[var(--color-background)]/95 backdrop-blur">
@@ -201,7 +227,7 @@ function OperatorDocumentsInner() {
             const avail = effectiveAvailability(d);
             const av = AVAILABILITY[avail];
             const canGet = avail === "AVAILABLE";
-            const canEmit = !canGet && d.operation.status === "COMPLETED" && (d.type === "WORK_ORDER" || d.type === "TECHNICAL_REPORT");
+            const canEmit = !canGet && d.operation.status === "COMPLETED" && canRegenerate(d.type);
             return (
               <li key={d.id} className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)]">
                 <button type="button" onClick={() => setDetail(d)} className="w-full text-left flex items-center gap-3 p-3.5 active:scale-[0.99] transition-transform">
@@ -233,7 +259,7 @@ function OperatorDocumentsInner() {
         {detail && (() => {
           const detailAvail = effectiveAvailability(detail);
           const detailCompleted = detail.operation.status === "COMPLETED";
-          const detailDirect = detail.type === "WORK_ORDER" || detail.type === "TECHNICAL_REPORT";
+          const detailDirect = canRegenerate(detail.type);
           return (
           <div className="space-y-3">
             {detailAvail === "AVAILABLE" ? (

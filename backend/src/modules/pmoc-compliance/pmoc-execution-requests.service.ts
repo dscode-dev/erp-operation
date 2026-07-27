@@ -23,6 +23,7 @@ import { ERROR_CODES } from '../../shared/constants/error-codes.constants';
 import {
   PMOC_AUDIT_ACTIONS,
   PMOC_EXECUTION_REQUEST_RESOURCE,
+  PMOC_MAX_PROCEDURE_IMAGES,
 } from '../../shared/constants/pmoc.constants';
 import { ApplicationException } from '../../shared/exceptions/application.exception';
 import type { AuthenticatedUser } from '../../shared/types/authenticated-user.type';
@@ -48,6 +49,19 @@ import type {
 const EARLY_GENERATION_THRESHOLD_DAYS = 10;
 
 const REQUEST_INCLUDE = {
+  equipment: {
+    select: {
+      id: true,
+      name: true,
+      tag: true,
+      sector: true,
+      manufacturer: true,
+      model: true,
+      capacity: true,
+      status: true,
+      address: { select: { id: true, name: true, street: true, number: true, city: true } },
+    },
+  },
   requester: { select: { id: true, name: true, username: true, role: true } },
   operation: {
     select: {
@@ -410,7 +424,16 @@ export class PmocExecutionRequestsService {
     const scheduledFor = dto.scheduledFor
       ? new Date(dto.scheduledFor)
       : plan.maintenancePlan.nextExecution;
-    return this.createForSchedule(plan, scheduledFor, actor.id, context, dto.notes);
+    const equipmentId = dto.equipmentId ?? plan.equipmentId;
+    this.assertEquipmentCovered(plan, equipmentId);
+    return this.createForSchedule(
+      plan,
+      scheduledFor,
+      actor.id,
+      context,
+      dto.notes,
+      equipmentId,
+    );
   }
 
   async prefill(id: string, actor: AuthenticatedUser): Promise<CreateOperationDto> {
@@ -439,6 +462,17 @@ export class PmocExecutionRequestsService {
     this.assertRequestCanGenerate(request.status);
     this.assertOperatorCanClaim(request, actor);
     this.assertPlanCanSchedule(request.pmocPlan);
+    if ((dto.operation?.photos?.length ?? 0) > PMOC_MAX_PROCEDURE_IMAGES) {
+      throw new ApplicationException(
+        ERROR_CODES.VALIDATION_ERROR,
+        `A execução PMOC permite no máximo ${PMOC_MAX_PROCEDURE_IMAGES} evidências fotográficas`,
+        HttpStatus.BAD_REQUEST,
+        {
+          maximum: PMOC_MAX_PROCEDURE_IMAGES,
+          current: dto.operation?.photos?.length ?? 0,
+        },
+      );
+    }
     // Adiantamento: bloqueia gerar uma execução muito antes do previsto sem
     // confirmação explícita; quando confirmado, é registrado no histórico do PMOC.
     const daysEarly = this.earlyGenerationDays(request.scheduledFor);
@@ -662,8 +696,9 @@ export class PmocExecutionRequestsService {
         if (nextExecution < request.pmocPlan.endDate) {
           const existingNextRequest = await tx.pmocExecutionRequest.findUnique({
             where: {
-              pmocPlanId_scheduledFor: {
+              pmocPlanId_equipmentId_scheduledFor: {
                 pmocPlanId: request.pmocPlanId,
+                equipmentId: request.equipmentId,
                 scheduledFor: nextExecution,
               },
             },
@@ -674,14 +709,7 @@ export class PmocExecutionRequestsService {
               tx,
               request.pmocPlanId,
             );
-            let nextMaintenance = await tx.maintenanceExecution.findFirst({
-              where: {
-                maintenancePlanId: request.pmocPlan.maintenancePlanId,
-                scheduledAt: nextExecution,
-              },
-              select: { id: true },
-            });
-            nextMaintenance ??= await tx.maintenanceExecution.create({
+            const nextMaintenance = await tx.maintenanceExecution.create({
               data: {
                 maintenancePlanId: request.pmocPlan.maintenancePlanId,
                 scheduledAt: nextExecution,
@@ -692,6 +720,7 @@ export class PmocExecutionRequestsService {
             const nextRequest = await tx.pmocExecutionRequest.create({
               data: {
                 pmocPlanId: request.pmocPlanId,
+                equipmentId: request.equipmentId,
                 maintenanceExecutionId: nextMaintenance.id,
                 executionNumber: nextExecutionNumber,
                 executionYear: nextExecution.getUTCFullYear(),
@@ -717,6 +746,7 @@ export class PmocExecutionRequestsService {
                 notes: 'Próxima solicitação calculada pelo RecurringEngine.',
                 metadata: {
                   executionNumber: nextExecutionNumber,
+                  equipmentId: request.equipmentId,
                   scheduledFor: nextExecution.toISOString(),
                 },
               },
@@ -732,6 +762,7 @@ export class PmocExecutionRequestsService {
                   pmocPlanId: request.pmocPlanId,
                   executionRequestId: nextRequest.id,
                   executionNumber: nextExecutionNumber,
+                  equipmentId: request.equipmentId,
                   scheduledFor: nextExecution.toISOString(),
                 },
               ),
@@ -871,20 +902,24 @@ export class PmocExecutionRequestsService {
     actorId: string | null,
     context: OperationAuditContext,
     notes?: string,
+    equipmentId: string = plan.equipmentId,
   ): Promise<unknown> {
+    this.assertEquipmentCovered(plan, equipmentId);
     const existing = await this.prisma.pmocExecutionRequest.findUnique({
-      where: { pmocPlanId_scheduledFor: { pmocPlanId: plan.id, scheduledFor } },
+      where: {
+        pmocPlanId_equipmentId_scheduledFor: {
+          pmocPlanId: plan.id,
+          equipmentId,
+          scheduledFor,
+        },
+      },
       include: REQUEST_INCLUDE,
     });
     if (existing) return existing;
     try {
       return await this.prisma.$transaction(async (tx) => {
         const executionNumber = await this.reserveExecutionNumberTx(tx, plan.id);
-        let execution = await tx.maintenanceExecution.findFirst({
-          where: { maintenancePlanId: plan.maintenancePlanId, scheduledAt: scheduledFor },
-          select: { id: true },
-        });
-        execution ??= await tx.maintenanceExecution.create({
+        const execution = await tx.maintenanceExecution.create({
           data: {
             maintenancePlanId: plan.maintenancePlanId,
             scheduledAt: scheduledFor,
@@ -895,6 +930,7 @@ export class PmocExecutionRequestsService {
         const request = await tx.pmocExecutionRequest.create({
           data: {
             pmocPlanId: plan.id,
+            equipmentId,
             maintenanceExecutionId: execution.id,
             executionNumber,
             executionYear: scheduledFor.getUTCFullYear(),
@@ -922,6 +958,7 @@ export class PmocExecutionRequestsService {
             notes: notes ?? null,
             metadata: {
               executionNumber,
+              equipmentId,
               scheduledFor: scheduledFor.toISOString(),
               generationMode: plan.generationMode,
             },
@@ -938,6 +975,7 @@ export class PmocExecutionRequestsService {
               pmocPlanId: plan.id,
               executionRequestId: request.id,
               executionNumber,
+              equipmentId,
               scheduledFor: scheduledFor.toISOString(),
             },
           ),
@@ -961,7 +999,13 @@ export class PmocExecutionRequestsService {
         cause.code === 'P2002'
       ) {
         const concurrent = await this.prisma.pmocExecutionRequest.findUnique({
-          where: { pmocPlanId_scheduledFor: { pmocPlanId: plan.id, scheduledFor } },
+          where: {
+            pmocPlanId_equipmentId_scheduledFor: {
+              pmocPlanId: plan.id,
+              equipmentId,
+              scheduledFor,
+            },
+          },
           include: REQUEST_INCLUDE,
         });
         if (concurrent) return concurrent;
@@ -1114,11 +1158,17 @@ export class PmocExecutionRequestsService {
     actor: AuthenticatedUser,
     unitChecklist: PmocUnitChecklistItem[],
     reviewed?: CreateOperationDto,
-    responsibility?: Pick<RequestWithPlan, 'plannedOperator' | 'plannedTechnician'>,
+    responsibility?: Pick<
+      RequestWithPlan,
+      'equipmentId' | 'plannedOperator' | 'plannedTechnician'
+    >,
   ): CreateOperationDto {
-    const equipments = plan.equipments.length
+    const coveredEquipments = plan.equipments.length
       ? plan.equipments.map((item) => item.equipment)
       : [plan.equipment];
+    const equipment =
+      coveredEquipments.find((item) => item.id === responsibility?.equipmentId) ??
+      plan.equipment;
     const plannedOperator = responsibility?.plannedOperator;
     const activeDefaultOperator =
       plannedOperator?.isActive && !plannedOperator.disabledAt
@@ -1130,7 +1180,7 @@ export class PmocExecutionRequestsService {
     const addressId =
       reviewed?.addressId ??
       plan.defaultAddressId ??
-      plan.equipment.addressId ??
+      equipment.addressId ??
       plan.customer.addresses[0]?.id ??
       undefined;
     const maintenanceType = this.maintenanceType(plan.periodicity);
@@ -1161,7 +1211,7 @@ export class PmocExecutionRequestsService {
       ...reviewed,
       customerId: plan.customerId,
       addressId,
-      equipmentId: plan.equipmentId,
+      equipmentId: equipment.id,
       operatorId,
       documentType: DocumentTemplateType.PMOC,
       type: plan.defaultOperationType,
@@ -1177,14 +1227,28 @@ export class PmocExecutionRequestsService {
       serviceDescription: reviewed?.serviceDescription ?? plan.coverage ?? plan.observations ?? undefined,
       maintenanceType,
       maintenanceChecklist: reviewed?.maintenanceChecklist ?? unitMaintenanceChecklist,
-      // A cobertura da execução pertence ao PMOC. O frontend pode revisar os
-      // textos e o responsável, mas não retirar equipamentos do plano ao gerar
-      // uma OS.
-      inspectedEquipments: equipments.map((equipment) => ({
+      // Cada execução representa exatamente um equipamento coberto. O plano
+      // continua agregando toda a cobertura, sem misturar evidências entre ativos.
+      inspectedEquipments: [{
         equipmentId: equipment.id,
         sector: equipment.sector ?? equipment.address?.name ?? equipment.name,
-      })),
+      }],
     };
+  }
+
+  private assertEquipmentCovered(plan: PlanForExecution, equipmentId: string): void {
+    const covered = new Set([
+      plan.equipmentId,
+      ...plan.equipments.map((item) => item.equipmentId),
+    ]);
+    if (!covered.has(equipmentId)) {
+      throw new ApplicationException(
+        ERROR_CODES.VALIDATION_ERROR,
+        'O equipamento selecionado não pertence à cobertura deste PMOC',
+        HttpStatus.BAD_REQUEST,
+        { equipmentId, pmocPlanId: plan.id },
+      );
+    }
   }
 
   private maintenanceType(periodicity: PmocPeriodicity): OperationMaintenanceType {

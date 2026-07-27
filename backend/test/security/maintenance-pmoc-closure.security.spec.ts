@@ -115,6 +115,80 @@ describe('AppSec Maintenance Planning and PMOC closure', () => {
     expect(errorCode(mismatchedEquipment)).toBe(ERROR_CODES.PMOC_INVALID_RELATIONSHIP);
   });
 
+  it('persists a configuration-only PMOC without reserving execution, OS or document', async () => {
+    const graph = await createCustomerGraph();
+    const organization = await prisma.organization.findFirstOrThrow();
+    const scope = await prisma.technicalCatalog.create({
+      data: {
+        organizationId: organization.id,
+        type: TechnicalCatalogType.PLAN_SCOPE,
+        workflows: [TechnicalCatalogWorkflow.PMOC],
+        title: 'Climatização dos ambientes',
+      },
+    });
+    const signature = await prisma.signature.create({
+      data: {
+        organizationId: organization.id,
+        userId: owner.user.id,
+        name: owner.user.name,
+        title: 'Responsável técnico',
+        imageStorageKey: `signatures/${owner.user.id}.png`,
+        mimeType: 'image/png',
+        originalFileName: 'assinatura.png',
+        fileSize: 128,
+        active: true,
+        isDefault: true,
+      },
+    });
+
+    const created = await authPost(owner, '/api/v1/pmoc').send({
+      configurationOnly: true,
+      customerId: graph.customerId,
+      equipmentId: graph.equipmentId,
+      equipmentIds: [graph.equipmentId],
+      defaultAddressId: graph.addressId,
+      scopeCatalogIds: [scope.id],
+      serviceTypes: [OperationType.PREVENTIVA],
+      responsibleTechnician: owner.user.name,
+      defaultTechnicianId: owner.user.id,
+      signatureOverrideId: signature.id,
+      generationMode: 'MANUAL',
+      startDate: '2026-08-01',
+      endDate: '2027-08-01',
+    });
+
+    expect(created.status).toBe(201);
+    const pmoc = (created.body as {
+      data: {
+        id: string;
+        maintenancePlanId: string;
+        executionRequests: unknown[];
+        lastReservedExecutionNumber: number;
+        nextGenerationDate: string | null;
+      };
+    }).data;
+    expect(pmoc).toMatchObject({
+      executionRequests: [],
+      lastReservedExecutionNumber: 0,
+      nextGenerationDate: null,
+    });
+    await expect(prisma.maintenanceExecution.count({
+      where: { maintenancePlanId: pmoc.maintenancePlanId },
+    })).resolves.toBe(0);
+    await expect(prisma.operation.count({
+      where: { pmocExecutionRequest: { pmocPlanId: pmoc.id } },
+    })).resolves.toBe(0);
+    await expect(prisma.operationDocument.count({
+      where: { operation: { pmocExecutionRequest: { pmocPlanId: pmoc.id } } },
+    })).resolves.toBe(0);
+    await expect(prisma.auditLog.count({
+      where: {
+        resource: 'PMOC_EXECUTION_REQUEST',
+        metadata: { path: ['pmocPlanId'], equals: pmoc.id },
+      },
+    })).resolves.toBe(0);
+  });
+
   it('warns about active customer coverage and creates another PMOC only after explicit confirmation', async () => {
     const graph = await createCustomerGraph();
     const startDate = new Date();
@@ -345,6 +419,20 @@ describe('AppSec Maintenance Planning and PMOC closure', () => {
     };
     const requestId = pmoc.data.executionRequests[0]?.id;
     expect(requestId).toBeDefined();
+    const secondEquipmentRequest = await authPost(
+      owner,
+      `/api/v1/pmoc/${pmoc.data.id}/execution-requests`,
+    ).send({
+      equipmentId: secondEquipment.id,
+      scheduledFor: '2026-07-16T00:00:00.000Z',
+    });
+    expect(secondEquipmentRequest.status).toBe(201);
+    expect(secondEquipmentRequest.body).toMatchObject({
+      data: {
+        equipmentId: secondEquipment.id,
+        equipment: { id: secondEquipment.id },
+      },
+    });
 
     const prefill = await authGet(owner, `/api/v1/pmoc/execution-requests/${requestId}/prefill`);
     expect(prefill.status).toBe(200);
@@ -358,7 +446,7 @@ describe('AppSec Maintenance Planning and PMOC closure', () => {
       },
     });
     expect((prefill.body as { data: { inspectedEquipments: Array<{ equipmentId: string }> } }).data.inspectedEquipments.map((item) => item.equipmentId)).toEqual(
-      expect.arrayContaining([graph.equipmentId, secondEquipment.id]),
+      [graph.equipmentId],
     );
 
     const generated = await authPost(
@@ -388,10 +476,10 @@ describe('AppSec Maintenance Planning and PMOC closure', () => {
       OperationType.CORRETIVA,
     ]);
     expect(generatedOperation.inspectedEquipments.map((item) => item.equipmentId)).toEqual(
-      expect.arrayContaining([graph.equipmentId, secondEquipment.id]),
+      [graph.equipmentId],
     );
     expect(generatedRequest.data.generatedOperationId).toBe(operationId);
-    const assignment = await prisma.assignment.findUniqueOrThrow({ where: { operationId } });
+    const assignment = await prisma.assignment.findFirstOrThrow({ where: { operationId, isPrimary: true } });
     expect(assignment.assignedTo).toBe(operator.user.id);
     await expect(
       prisma.operationDocument.findUnique({ where: { operationId_type: { operationId, type: 'WORK_ORDER' } } }),
@@ -418,10 +506,12 @@ describe('AppSec Maintenance Planning and PMOC closure', () => {
     expect(completed.status).toBe(200);
     const completedPlan = await prisma.pmocPlan.findUniqueOrThrow({ where: { id: pmoc.data.id } });
     expect(completedPlan).toMatchObject({
-      lastReservedExecutionNumber: 2,
+      lastReservedExecutionNumber: 3,
       lastGeneratedExecutionNumber: 1,
     });
-    expect(completedPlan.lastExecutionDate).toBeInstanceOf(Date);
+    // PMOC permanece em revisão administrativa após a coleta do operador.
+    // A data oficial só é consolidada quando a execução é finalizada.
+    expect(completedPlan.lastExecutionDate).toBeNull();
     await expect(
       prisma.pmocExecutionRequest.findMany({
         where: { pmocPlanId: pmoc.data.id },
@@ -431,6 +521,7 @@ describe('AppSec Maintenance Planning and PMOC closure', () => {
     ).resolves.toEqual([
       { executionNumber: 1, status: 'GENERATED' },
       { executionNumber: 2, status: 'PENDING' },
+      { executionNumber: 3, status: 'PENDING' },
     ]);
     const historyResponse = await authGet(owner, `/api/v1/pmoc/${pmoc.data.id}/history`);
     expect(historyResponse.status).toBe(200);
@@ -438,10 +529,7 @@ describe('AppSec Maintenance Planning and PMOC closure', () => {
       data: Array<{ action: string; execution: { executionNumber: number; workOrderNumber: number; executedAt: string } | null }>;
     };
     const completionHistory = history.data.find((item) => item.action === 'EXECUTION_COMPLETED');
-    expect(completionHistory?.execution?.executionNumber).toBe(1);
-    expect(completionHistory?.execution?.executedAt).toBe(
-      completedPlan.lastExecutionDate?.toISOString(),
-    );
+    expect(completionHistory).toBeUndefined();
     expect(history.data.some((item) => item.action === 'ASSIGNMENT_ASSIGNED')).toBe(true);
     await expect(
       prisma.pmocHistory.count({ where: { pmocPlanId: pmoc.data.id, operationId } }),
@@ -661,9 +749,9 @@ describe('AppSec Maintenance Planning and PMOC closure', () => {
     expect(detail.body).toMatchObject({
       data: {
         overview: {
-          expectedExecutions: 12,
+          expectedExecutions: 11,
           completedExecutions: 0,
-          remainingExecutions: 12,
+          remainingExecutions: 11,
           health: { code: 'CRITICAL', label: 'Crítica' },
         },
       },

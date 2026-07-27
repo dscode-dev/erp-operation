@@ -49,7 +49,6 @@ import { QrScanner } from '@erp/ui/qr-scanner';
 import {
   cepApi,
   customersApi,
-  assignmentsApi,
   documentsApi,
   equipmentsApi,
   operationApi,
@@ -68,15 +67,14 @@ import {
   type DocumentKind,
   type OperationMaintenanceChecklistItem,
   type OperationMaintenanceType,
+  type CreateOperationPayload,
   type PmocPlan,
   type PmocExecutionRequest,
   type WalkInCustomerResult,
 } from '@erp/api';
 import { DOCUMENT_KIND_LABEL } from '@erp/types';
 import { useAuth } from '@erp/ui/auth/auth-provider';
-// Reaproveita exatamente o mesmo wizard de criação de PMOC da plataforma
-// (só usa pacotes compartilhados @erp/*; no mobile o Drawer abre em tela cheia).
-import { PmocPlanWizard } from '@platform/components/pmoc-plan-wizard';
+import { PmocEquipmentExecutionWizard } from '@platform/components/pmoc-equipment-execution-wizard';
 import { EQUIPMENT_STATUS_LABEL, EQUIPMENT_STATUS_PILL } from '@platform/equipment-display';
 import { useDebounce } from '@erp/utils';
 import { SERVICE_TYPES, serviceTypeLabel, type ServiceTypeKey } from '../../lib/service-types';
@@ -158,7 +156,6 @@ export function AtendimentoWizard({
   const { session, can } = useAuth();
   const isOwner = session?.role === 'OWNER';
   const [documentType, setDocumentType] = useState<DocumentKind | null>(null);
-  const [pmocCreateOpen, setPmocCreateOpen] = useState(false);
   const [pmocDoc, setPmocDoc] = useState<{ documentId: string; documentNumber: string } | null>(null);
   const [step, setStep] = useState(0);
 
@@ -450,7 +447,7 @@ export function AtendimentoWizard({
     );
   }
 
-  // PMOC criado no mobile: tela de compartilhar/baixar o PDF gerado.
+  // Execução PMOC concluída no mobile: compartilhar/baixar o PDF oficial.
   if (pmocDoc) {
     return (
       <SuccessView
@@ -471,25 +468,15 @@ export function AtendimentoWizard({
           onSelect={setDocumentType}
           onClose={() => router.push('/operator')}
           canCreatePmoc={Boolean(isOwner)}
-          onCreatePmoc={() => setPmocCreateOpen(true)}
+          onCreatePmoc={() => setDocumentType('PMOC')}
         />
-        {isOwner && (
-          <PmocPlanWizard
-            open={pmocCreateOpen}
-            forceFirstExecutionNow
-            onFirstDocument={(info) => setPmocDoc({ documentId: info.documentId, documentNumber: info.documentNumber })}
-            onClose={() => setPmocCreateOpen(false)}
-            onCreated={() => undefined}
-          />
-        )}
       </>
     );
   }
 
-  // Compatibilidade de rota/estado antigo: PMOC não é mais oferecido para
-  // início autônomo, mas um estado já aberto continua direcionado ao fluxo oficial.
+  // OWNER inicia no mobile uma execução de um PMOC já configurado.
   if (documentType === 'PMOC') {
-    return <PmocStartStep onBack={() => setDocumentType(null)} />;
+    return <PmocStartStep onBack={() => setDocumentType(null)} onCompleted={setPmocDoc} />;
   }
 
   // OS: escolha da origem (do zero / a partir de RVT / a partir de PMOC).
@@ -729,7 +716,7 @@ function AttendanceTypeStep({ onSelect, onClose, canCreatePmoc = false, onCreate
           {canCreatePmoc && (
             <button type="button" onClick={onCreatePmoc} className="flex w-full items-center gap-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 text-left active:scale-[0.99]">
               <span className="grid h-11 w-11 place-items-center rounded-[var(--radius-md)] bg-[var(--color-primary)]/10 text-[var(--color-primary)]"><CalendarClock className="h-5 w-5" /></span>
-              <span className="min-w-0 flex-1"><span className="block font-semibold">Plano PMOC</span><span className="block text-xs text-[var(--color-muted-foreground)]">Criar um novo plano de manutenção (PMOC)</span></span>
+              <span className="min-w-0 flex-1"><span className="block font-semibold">Executar PMOC</span><span className="block text-xs text-[var(--color-muted-foreground)]">Atender um equipamento de um plano já configurado</span></span>
               <ChevronRight className="h-5 w-5 text-[var(--color-muted-foreground)]" />
             </button>
           )}
@@ -739,46 +726,59 @@ function AttendanceTypeStep({ onSelect, onClose, canCreatePmoc = false, onCreate
   );
 }
 
-function PmocStartStep({ onBack }: { onBack: () => void }) {
-  const router = useRouter();
-  const { session } = useAuth();
+function PmocStartStep({
+  onBack,
+  onCompleted,
+}: {
+  onBack: () => void;
+  onCompleted: (document: { documentId: string; documentNumber: string }) => void;
+}) {
   const [planId, setPlanId] = useState('');
+  const [tick, setTick] = useState(0);
+  const [selectedEquipment, setSelectedEquipment] = useState<EquipmentSummary | null>(null);
+  const [executionRequest, setExecutionRequest] = useState<PmocExecutionRequest | null>(null);
+  const [prefill, setPrefill] = useState<CreateOperationPayload | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const plans = useQuery((signal) => pmocApi.listPmoc({ active: true, limit: 100, signal }), []);
+  const plan = useQuery<PmocPlan | null>(
+    (signal) => planId ? pmocApi.getPmoc(planId, { signal }) : Promise.resolve(null),
+    [planId, tick],
+  );
   const requests = useQuery(
     (signal) => planId
-      ? pmocApi.listExecutionRequests(planId, { status: 'PENDING', limit: 100, signal })
+      ? pmocApi.listExecutionRequests(planId, { limit: 100, signal })
       : Promise.resolve({ items: [], pagination: { page: 1, limit: 100, total: 0, totalPages: 0 } }),
-    [planId],
+    [planId, tick],
   );
-  const eligible = (requests.data?.items ?? []).filter((request) => !request.plannedOperatorId || request.plannedOperatorId === session?.user.id);
+  const equipments = (
+    plan.data?.equipments?.map((item) => item.equipment) ??
+    (plan.data?.equipment ? [plan.data.equipment] : [])
+  ) as EquipmentSummary[];
 
-  async function claim(request: PmocExecutionRequest, allowEarly = false) {
-    setBusy(request.id);
+  async function start(equipment: EquipmentSummary) {
+    if (!plan.data) return;
+    setBusy(equipment.id);
     setError(null);
     try {
-      const prefill = await pmocApi.getExecutionRequestPrefill(request.id);
-      const generated = await pmocApi.generateWorkOrder(
-        request.id,
-        { ...prefill, documentType: 'PMOC', operatorId: undefined },
-        { allowEarly },
+      const reusable = (requests.data?.items ?? []).find(
+        (request) =>
+          request.equipmentId === equipment.id &&
+          !request.operationId &&
+          (request.status === 'PENDING' || request.status === 'FAILED'),
       );
-      const operationId = generated.operationId ?? generated.generatedOperationId;
-      if (!operationId) throw new Error('A execução foi reservada, mas o atendimento não foi localizado.');
-      const assignments = await assignmentsApi.listMyAssignments({ operationId, limit: 1 });
-      const assignment = assignments.items[0];
-      if (!assignment) throw new Error('O atendimento PMOC foi criado, mas ainda não está disponível na sua fila.');
-      router.push(`/operator/services/${assignment.id}`);
+      const request =
+        reusable ??
+        await pmocApi.createExecutionRequest(plan.data.id, {
+          equipmentId: equipment.id,
+          scheduledFor: new Date().toISOString(),
+          notes: `Execução iniciada no aplicativo para ${equipment.name}.`,
+        });
+      const prefill = await pmocApi.getExecutionRequestPrefill(request.id);
+      setSelectedEquipment(equipment);
+      setExecutionRequest(request);
+      setPrefill(prefill);
     } catch (cause) {
-      // Adiantamento: confirma e refaz com allowEarly (registra na plataforma).
-      if (cause instanceof ApiClientError && cause.code === 'PMOC_EXECUTION_TOO_EARLY') {
-        setBusy(null);
-        if (window.confirm(`${cause.message}\n\nDeseja registrar o adiantamento e continuar?`)) {
-          void claim(request, true);
-        }
-        return;
-      }
       setError(cause instanceof Error ? cause.message : 'Não foi possível iniciar esta execução PMOC.');
     } finally {
       setBusy(null);
@@ -788,15 +788,52 @@ function PmocStartStep({ onBack }: { onBack: () => void }) {
   return (
     <div className="min-h-dvh px-4 py-5">
       <div className="mx-auto max-w-lg space-y-5">
-        <header className="flex items-start gap-3"><button type="button" onClick={onBack} className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-[var(--color-border)]"><ChevronRight className="h-4 w-4 rotate-180" /></button><div><p className="text-caption uppercase tracking-wider">Nova atividade</p><h1 className="text-[22px] font-semibold">Iniciar execução PMOC</h1><p className="mt-1 text-sm text-[var(--color-muted-foreground)]">Selecione um plano e assuma uma execução disponível. O atendimento seguirá a cadeia oficial do PMOC.</p></div></header>
+        <header className="flex items-start gap-3"><button type="button" onClick={onBack} className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-[var(--color-border)]"><ChevronRight className="h-4 w-4 rotate-180" /></button><div><p className="text-caption uppercase tracking-wider">Nova atividade</p><h1 className="text-[22px] font-semibold">Executar PMOC</h1><p className="mt-1 text-sm text-[var(--color-muted-foreground)]">Escolha um plano configurado e depois o equipamento que será atendido individualmente.</p></div></header>
         {plans.loading && !plans.data ? <SkeletonList rows={4} /> : plans.error && !plans.data ? <ErrorState error={plans.error} onRetry={plans.refetch} /> : (
           <label className="block space-y-1 text-sm"><span className="font-medium">Plano PMOC</span><select className="w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-3 py-3" value={planId} onChange={(event) => setPlanId(event.target.value)}><option value="">Selecione um plano ativo</option>{(plans.data?.items ?? []).map((plan: PmocPlan) => <option key={plan.id} value={plan.id}>PMOC-{String(plan.number).padStart(6, '0')} · {plan.customer?.name ?? plan.maintenancePlan?.name ?? 'Plano PMOC'}</option>)}</select></label>
         )}
         {error && <p className="rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 p-3 text-sm text-[var(--color-danger)]">{error}</p>}
-        {planId && (requests.loading && !requests.data ? <SkeletonList rows={3} /> : eligible.length === 0 ? <EmptyState icon={FileSearch} title="Nenhuma execução disponível" description="As próximas atividades aparecerão aqui conforme a programação do PMOC." /> : <div className="space-y-2">{eligible.map((request) => <button key={request.id} type="button" disabled={Boolean(busy)} onClick={() => void claim(request)} className="flex w-full items-center justify-between gap-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 text-left disabled:opacity-60"><span><span className="block font-semibold">Execução {String(request.executionNumber).padStart(3, '0')}</span><span className="block text-xs text-[var(--color-muted-foreground)]">Prevista para {new Date(request.scheduledFor).toLocaleDateString('pt-BR')}</span></span>{busy === request.id ? <Loader2 className="h-5 w-5 animate-spin" /> : <ChevronRight className="h-5 w-5" />}</button>)}</div>)}
+        {planId && (plan.loading && !plan.data ? <SkeletonList rows={4} /> : plan.error && !plan.data ? <ErrorState error={plan.error} onRetry={plan.refetch} /> : equipments.length === 0 ? <EmptyState icon={FileSearch} title="Nenhum equipamento coberto" description="Configure os equipamentos deste PMOC na Platform antes da execução." /> : <div className="space-y-3"><div><h2 className="font-semibold">Equipamentos cobertos</h2><p className="text-xs text-[var(--color-muted-foreground)]">Cada equipamento gera sua própria execução, evidências e documento PMOC.</p></div>{equipments.map((equipment) => {
+          const latest = (requests.data?.items ?? []).filter((request) => request.equipmentId === equipment.id).sort((left, right) => right.executionNumber - left.executionNumber)[0];
+          return <button key={equipment.id} type="button" disabled={Boolean(busy)} onClick={() => void start(equipment)} className="flex w-full items-center justify-between gap-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 text-left disabled:opacity-60"><span className="min-w-0"><span className="block truncate font-semibold">{equipment.name}</span><span className="block truncate text-xs text-[var(--color-muted-foreground)]">{[equipment.sector, equipment.manufacturer, equipment.model, equipment.capacity].filter(Boolean).join(' · ') || 'Sem detalhes técnicos'}</span>{latest && <span className="mt-1 block text-xs text-[var(--color-primary)]">Última execução {String(latest.executionNumber).padStart(3, '0')} · {pmocExecutionLabel(latest.status)}</span>}</span>{busy === equipment.id ? <Loader2 className="h-5 w-5 shrink-0 animate-spin" /> : <ChevronRight className="h-5 w-5 shrink-0" />}</button>;
+        })}</div>)}
       </div>
+      {plan.data && (
+        <PmocEquipmentExecutionWizard
+          open={Boolean(selectedEquipment && executionRequest && prefill)}
+          plan={plan.data}
+          equipment={selectedEquipment}
+          request={executionRequest}
+          prefill={prefill}
+          onClose={() => { setSelectedEquipment(null); setExecutionRequest(null); setPrefill(null); setTick((value) => value + 1); }}
+          onCompleted={(request, documentId, documentNumber) => {
+            setTick((value) => value + 1);
+            if (!documentId) {
+              setError('A execução foi concluída, mas o documento ainda precisa ser gerado em Documentos.');
+              setSelectedEquipment(null);
+              setExecutionRequest(null);
+              setPrefill(null);
+              return;
+            }
+            onCompleted({
+              documentId,
+              documentNumber: documentNumber ?? `PMOC-${String(request.executionNumber).padStart(3, '0')}`,
+            });
+          }}
+        />
+      )}
     </div>
   );
+}
+
+function pmocExecutionLabel(status: PmocExecutionRequest['status']): string {
+  return ({
+    PENDING: 'Disponível',
+    GENERATING_OS: 'Em preparação',
+    GENERATED: 'Concluída',
+    FAILED: 'Requer atenção',
+    CANCELLED: 'Cancelada',
+  } as Record<PmocExecutionRequest['status'], string>)[status];
 }
 
 /* ---------- OS a partir de RVT / PMOC ---------- */

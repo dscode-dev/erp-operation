@@ -268,10 +268,12 @@ export class SignaturesService {
     return this.prisma.$transaction(async (tx) => {
       const organization = await tx.organization.findFirst({ orderBy: { createdAt: 'asc' }, select: { id: true } });
       if (!organization) throw new ApplicationException(ERROR_CODES.ORGANIZATION_NOT_FOUND, 'Organization was not found', HttpStatus.NOT_FOUND);
+      await this.assertOwnerLinkAvailable(tx, dto.userId ?? null);
       if (dto.isDefault) await tx.signature.updateMany({ where: { organizationId: organization.id, isDefault: true }, data: { isDefault: false } });
       const created = await tx.signature.create({
         data: {
           organizationId: organization.id,
+          userId: dto.userId ?? null,
           name: this.clean(dto.name),
           title: this.clean(dto.title),
           profession: dto.profession ? this.clean(dto.profession) : null,
@@ -301,11 +303,15 @@ export class SignaturesService {
   ): Promise<SignatureResponse> {
     await this.signatureOrThrow(id, { includeDeleted: false });
     return this.prisma.$transaction(async (tx) => {
-      const current = await tx.signature.findUniqueOrThrow({ where: { id }, select: { organizationId: true } });
+      const current = await tx.signature.findUniqueOrThrow({ where: { id }, select: { organizationId: true, userId: true } });
+      if (dto.userId !== undefined && dto.userId !== current.userId) {
+        await this.assertOwnerLinkAvailable(tx, dto.userId, id);
+      }
       if (dto.isDefault) await tx.signature.updateMany({ where: { organizationId: current.organizationId, isDefault: true, id: { not: id } }, data: { isDefault: false } });
       const updated = await tx.signature.update({
         where: { id },
         data: {
+          ...(dto.userId !== undefined ? { userId: dto.userId } : {}),
           ...(dto.name !== undefined ? { name: this.clean(dto.name) } : {}),
           ...(dto.title !== undefined ? { title: this.clean(dto.title) } : {}),
           ...(dto.profession !== undefined ? { profession: this.clean(dto.profession) || null } : {}),
@@ -328,6 +334,41 @@ export class SignaturesService {
     });
   }
 
+  private async assertOwnerLinkAvailable(
+    tx: Prisma.TransactionClient,
+    userId: string | null,
+    currentSignatureId?: string,
+  ): Promise<void> {
+    if (!userId) return;
+    const owner = await tx.user.findFirst({
+      where: { id: userId, role: Role.OWNER, isActive: true, disabledAt: null },
+      select: { id: true },
+    });
+    if (!owner) {
+      throw new ApplicationException(
+        ERROR_CODES.USER_NOT_FOUND,
+        'Selecione um OWNER ativo como responsável por esta assinatura',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const linked = await tx.signature.findFirst({
+      where: {
+        userId,
+        deletedAt: null,
+        ...(currentSignatureId ? { id: { not: currentSignatureId } } : {}),
+      },
+      select: { id: true },
+    });
+    if (linked) {
+      throw new ApplicationException(
+        ERROR_CODES.USER_CONFLICT,
+        'Este responsável técnico já possui uma assinatura vinculada',
+        HttpStatus.CONFLICT,
+        { userId },
+      );
+    }
+  }
+
   async remove(
     id: string,
     actor: AuthenticatedUser,
@@ -335,7 +376,10 @@ export class SignaturesService {
   ): Promise<{ deleted: true }> {
     await this.signatureOrThrow(id, { includeDeleted: false });
     await this.prisma.$transaction([
-      this.prisma.signature.update({ where: { id }, data: { active: false, deletedAt: new Date() } }),
+      this.prisma.signature.update({
+        where: { id },
+        data: { active: false, deletedAt: new Date(), userId: null },
+      }),
       this.prisma.auditLog.create({
         data: this.auditInput(SIGNATURE_AUDIT_ACTIONS.SIGNATURE_DELETED, actor, context, {
           signatureId: id,

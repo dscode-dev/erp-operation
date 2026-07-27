@@ -28,6 +28,7 @@ import {
 import { DOCUMENT_KIND_LABEL } from "@erp/types";
 import { useDebounce, useLocalDraft } from "@erp/utils";
 import {
+  AuxiliaryOperatorSelect,
   CustomerAddressSelect,
   CustomerSelect,
   DateTimePicker,
@@ -126,6 +127,7 @@ export function OperationCreationDrawer({
   const [equipmentId, setEquipmentId] = useState("");
   const [equipmentIds, setEquipmentIds] = useState<string[]>([]);
   const [operatorId, setOperatorId] = useState("");
+  const [auxiliaryOperatorIds, setAuxiliaryOperatorIds] = useState<string[]>([]);
   const [type, setType] = useState<OperationType>("PREVENTIVA");
   const [documentType, setDocumentType] = useState<DocumentKind>("WORK_ORDER");
   const [date, setDate] = useState("");
@@ -207,6 +209,7 @@ export function OperationCreationDrawer({
     setEquipmentId(value.equipmentId);
     setEquipmentIds(value.equipmentIds);
     setOperatorId(value.operatorId);
+    setAuxiliaryOperatorIds([]);
     setType(value.type);
     setDocumentType(value.documentType);
     setDate(value.date);
@@ -234,6 +237,7 @@ export function OperationCreationDrawer({
         (activeInitialValues?.equipmentId ? [activeInitialValues.equipmentId] : []),
     );
     setOperatorId(activeInitialValues?.operatorId ?? "");
+    setAuxiliaryOperatorIds([]);
     setType(activeInitialValues?.type ?? "PREVENTIVA");
     setDocumentType(activeInitialValues?.documentType ?? "WORK_ORDER");
     const schedule = activeInitialValues?.scheduledFor ? localDateTime(activeInitialValues.scheduledFor) : null;
@@ -311,6 +315,7 @@ export function OperationCreationDrawer({
         status: activeInitialValues?.status ?? "DRAFT",
         scheduledFor,
         operatorId: operatorId || null,
+        auxiliaryOperatorIds: auxiliaryOperatorIds.filter((id) => id && id !== operatorId),
         checklist: checklist.map((label) => ({ label, done: false })),
         observations: observations || null,
         reportedIssue: reportedIssue || null,
@@ -590,6 +595,7 @@ export function OperationCreationDrawer({
                     : "PMOC continua sendo atribuído pelo plano oficial. Os demais atendimentos usarão o documento selecionado."}
                 </p>
                 <UserSelect value={operatorId} onChange={setOperatorId} />
+                <AuxiliaryOperatorSelect value={auxiliaryOperatorIds} onChange={setAuxiliaryOperatorIds} excludeId={operatorId || undefined} />
                 <DateTimePicker date={date} time={time} onDate={setDate} onTime={setTime} />
               </div>
             )}
