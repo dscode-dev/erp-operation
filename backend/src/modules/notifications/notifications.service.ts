@@ -233,7 +233,7 @@ export class NotificationsService {
           select: {
             id: true,
             number: true,
-            assignment: { select: { assignedTo: true } },
+            assignments: { where: { isPrimary: true }, select: { assignedTo: true } },
           },
         },
         pmocPlan: { select: { id: true, number: true, organizationId: true } },
@@ -242,8 +242,8 @@ export class NotificationsService {
     if (!request) return;
     const managers = await this.managementRecipientsTx(tx);
     const recipients = new Set(managers);
-    if (type === NotificationType.PMOC_OS_GENERATED && request.operation?.assignment?.assignedTo) {
-      recipients.add(request.operation.assignment.assignedTo);
+    if (type === NotificationType.PMOC_OS_GENERATED && request.operation?.assignments?.[0]?.assignedTo) {
+      recipients.add(request.operation.assignments[0].assignedTo);
     }
     const pmocNumber = `PMOC-${String(request.pmocPlan.number).padStart(6, '0')}`;
     const generated = type === NotificationType.PMOC_OS_GENERATED;

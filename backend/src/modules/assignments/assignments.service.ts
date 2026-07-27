@@ -214,8 +214,8 @@ export class AssignmentsService {
   }
 
   async history(operationId: string, actor: AuthenticatedUser): Promise<AssignmentHistoryPayload[]> {
-    const assignment = await this.prisma.assignment.findUnique({
-      where: { operationId },
+    const assignment = await this.prisma.assignment.findFirst({
+      where: { operationId, isPrimary: true },
       include: ASSIGNMENT_INCLUDE,
     });
     if (!assignment) {
@@ -240,14 +240,14 @@ export class AssignmentsService {
   ): Promise<AssignmentPayload> {
     return this.prisma.$transaction(async (tx) => {
       await this.operationOrThrowTx(tx, dto.operationId);
-      const existing = await tx.assignment.findUnique({
-        where: { operationId: dto.operationId },
+      const existing = await tx.assignment.findFirst({
+        where: { operationId: dto.operationId, isPrimary: true },
         select: { id: true },
       });
       if (existing) {
         throw new ApplicationException(
           ERROR_CODES.ASSIGNMENT_INVALID_TRANSITION,
-          'Operation already has an assignment',
+          'Operation already has a primary assignment',
           HttpStatus.CONFLICT,
         );
       }
@@ -487,11 +487,14 @@ export class AssignmentsService {
       assignedBy: string;
       assignedTo: string;
       notes?: string | null;
+      /** false para técnicos auxiliares (recebem/visualizam, não executam). */
+      isPrimary?: boolean;
     },
     actorId: string,
     context?: Partial<AssignmentAuditContext>,
   ): Promise<{ id: string }> {
     await this.operationalUserOrThrowTx(tx, input.assignedTo);
+    const isPrimary = input.isPrimary ?? true;
     // Auto-atribuição (o operador iniciou o próprio atendimento) já nasce visível;
     // demanda criada pela gestão fica oculta até o owner autorizar a exibição.
     const selfAssigned = input.assignedBy === input.assignedTo;
@@ -500,17 +503,21 @@ export class AssignmentsService {
         operationId: input.operationId,
         assignedBy: input.assignedBy,
         assignedTo: input.assignedTo,
+        isPrimary,
         notes: input.notes ?? null,
         operatorVisible: selfAssigned,
         authorizedAt: selfAssigned ? new Date() : null,
         authorizedBy: selfAssigned ? input.assignedBy : null,
       },
     });
-    // An assigned operation becomes PENDING until the operator starts it.
-    await tx.operation.updateMany({
-      where: { id: input.operationId, status: OperationStatus.DRAFT },
-      data: { status: OperationStatus.PENDING },
-    });
+    // Só o executor primário move a operação para PENDING; auxiliares apenas
+    // recebem/visualizam a mesma demanda.
+    if (isPrimary) {
+      await tx.operation.updateMany({
+        where: { id: input.operationId, status: OperationStatus.DRAFT },
+        data: { status: OperationStatus.PENDING },
+      });
+    }
     await this.historyTx(tx, assignment, AssignmentEventType.ASSIGNED, actorId, null, input.notes ?? null);
     await this.auditTx(tx, ASSIGNMENT_AUDIT_ACTIONS.ASSIGNMENT_CREATED, actorId, this.safeContext(context), {
       assignmentId: assignment.id,

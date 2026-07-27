@@ -100,7 +100,7 @@ const OPERATION_INCLUDE = {
       },
     },
   },
-  assignment: { select: { id: true, assignedBy: true, assignedTo: true, status: true } },
+  assignments: { where: { isPrimary: true }, select: { id: true, assignedBy: true, assignedTo: true, status: true } },
   sourceSale: { select: { id: true, number: true, status: true, soldAt: true, warrantyDays: true, warrantyStartsAt: true, warrantyEndsAt: true, total: true } },
 } satisfies Prisma.OperationInclude;
 
@@ -454,10 +454,30 @@ export class OperationsService {
             assignedBy: actor.id,
             assignedTo: operation.operatorId,
             notes: dto.observations ?? null,
+            isPrimary: true,
           },
           actor.id,
           context,
         );
+        // Técnicos auxiliares: recebem/visualizam a mesma demanda (view-only quando
+        // sem permissão de relatórios). Nunca duplica o executor primário.
+        const auxiliaryIds = [...new Set(dto.auxiliaryOperatorIds ?? [])].filter(
+          (id) => id !== operation.operatorId,
+        );
+        for (const auxiliaryId of auxiliaryIds) {
+          await this.assignments.createForOperationTx(
+            tx,
+            {
+              operationId: operation.id,
+              assignedBy: actor.id,
+              assignedTo: auxiliaryId,
+              notes: dto.observations ?? null,
+              isPrimary: false,
+            },
+            actor.id,
+            context,
+          );
+        }
         // Lembrete de manutenção: registra a previsão da próxima execução para OS
         // Preventiva/Instalação (exceto origem PMOC, que tem agenda própria).
         await this.reminders.syncFromOperationTx(tx, operation.id);

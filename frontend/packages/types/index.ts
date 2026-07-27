@@ -1088,6 +1088,8 @@ export type CreateOperationPayload = {
   equipmentId?: string | null;
   /** Delegates the resulting Operation/Assignment when allowed by backend RBAC. */
   operatorId?: string | null;
+  /** Técnicos auxiliares que também recebem/visualizam a demanda (view-only sem canReports). */
+  auxiliaryOperatorIds?: string[];
   /** Documento operacional solicitado para este atendimento. */
   documentType?: DocumentTemplateType;
   type: OperationType;

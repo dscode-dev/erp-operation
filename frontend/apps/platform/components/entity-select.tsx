@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { MultiSelect } from "@erp/ui/multi-select";
 import {
   customersApi,
   equipmentsApi,
@@ -70,6 +71,47 @@ export function UserSelect({ value, onChange }: { value: string; onChange: (id: 
         {operators.map((user) => <option key={user.id} value={user.id}>{user.name} · {user.role}</option>)}
       </select>
     </Field>
+  );
+}
+
+/**
+ * Técnicos auxiliares: recebem/visualizam a mesma demanda do executor primário.
+ * Sem permissão de Relatórios (canReports) ficam somente em visualização; com a
+ * permissão, podem colaborar. Nunca inclui o próprio executor primário.
+ */
+export function AuxiliaryOperatorSelect({
+  value,
+  onChange,
+  excludeId,
+}: {
+  value: string[];
+  onChange: (ids: string[]) => void;
+  excludeId?: string;
+}) {
+  const users = useQuery((signal) => usersApi.listUsers({ limit: 100, signal }), []);
+  const operators = useMemo(
+    () => (users.data?.items ?? []).filter((user) => user.isActive && user.id !== excludeId),
+    [users.data, excludeId],
+  );
+  return (
+    <div className="space-y-1.5">
+      <MultiSelect
+        label="Técnicos auxiliares (opcional)"
+        value={value.filter((id) => id !== excludeId)}
+        onChange={onChange}
+        options={operators.map((user) => ({
+          value: user.id,
+          label: user.name,
+          description: `${user.role}${user.permission?.canReports ? "" : " · somente visualização"}`,
+        }))}
+        placeholder="Selecionar técnicos auxiliares"
+        emptyMessage="Nenhum outro técnico disponível."
+      />
+      <span className="text-caption">
+        Recebem e visualizam a mesma demanda. Sem permissão de Relatórios, ficam somente em
+        visualização (não iniciam nem editam o atendimento).
+      </span>
+    </div>
   );
 }
 

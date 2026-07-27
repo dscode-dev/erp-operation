@@ -38,7 +38,8 @@ const DOCUMENT_CONTEXT_OPERATION_INCLUDE = {
     },
   },
   operator: { select: { id: true, name: true, email: true, username: true, jobTitle: true } },
-  assignment: {
+  assignments: {
+    where: { isPrimary: true },
     include: {
       assigner: { select: { id: true, name: true, username: true, jobTitle: true } },
       assignee: { select: { id: true, name: true, username: true, jobTitle: true } },

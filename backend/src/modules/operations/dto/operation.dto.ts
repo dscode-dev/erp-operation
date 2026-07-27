@@ -102,6 +102,14 @@ export class CreateOperationDto {
   @IsOptional() @IsUUID('4') addressId?: string;
   @IsOptional() @IsUUID('4') equipmentId?: string;
   @IsOptional() @IsUUID('4') operatorId?: string;
+  // Técnicos auxiliares que também recebem/visualizam a demanda (view-only quando
+  // sem permissão de relatórios). O executor continua sendo operatorId.
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @ArrayMaxSize(10)
+  @IsUUID('4', { each: true })
+  auxiliaryOperatorIds?: string[];
   @IsOptional() @IsEnum(DocumentTemplateType) documentType?: DocumentTemplateType;
   @IsEnum(OperationType) type!: OperationType;
   @IsOptional()

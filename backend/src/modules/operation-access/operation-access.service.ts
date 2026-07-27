@@ -32,14 +32,14 @@ export class OperationAccessService {
 
   operationScope(actor: AuthenticatedUser): Prisma.OperationWhereInput {
     if (actor.role !== Role.OPERATOR) return {};
-    return { assignment: { is: this.assignmentFilter(actor.id) } };
+    return { assignments: { some: this.assignmentFilter(actor.id) } };
   }
 
   documentScope(actor: AuthenticatedUser): Prisma.OperationDocumentWhereInput {
     if (actor.role !== Role.OPERATOR) return {};
     return {
       operation: {
-        is: { assignment: { is: this.assignmentFilter(actor.id) } },
+        is: { assignments: { some: this.assignmentFilter(actor.id) } },
       },
     };
   }
@@ -48,7 +48,7 @@ export class OperationAccessService {
     if (actor.role !== Role.OPERATOR) return {};
     return {
       operation: {
-        is: { assignment: { is: this.assignmentFilter(actor.id) } },
+        is: { assignments: { some: this.assignmentFilter(actor.id) } },
       },
     };
   }
@@ -57,7 +57,7 @@ export class OperationAccessService {
     if (actor.role !== Role.OPERATOR) return {};
     return {
       operation: {
-        is: { assignment: { is: this.assignmentFilter(actor.id) } },
+        is: { assignments: { some: this.assignmentFilter(actor.id) } },
       },
     };
   }
@@ -67,7 +67,7 @@ export class OperationAccessService {
     return {
       OR: [
         { operationId: null },
-        { operation: { is: { assignment: { is: this.assignmentFilter(actor.id) } } } },
+        { operation: { is: { assignments: { some: this.assignmentFilter(actor.id) } } } },
       ],
     };
   }
@@ -75,7 +75,7 @@ export class OperationAccessService {
   operationPartScope(actor: AuthenticatedUser): Prisma.OperationPartWhereInput {
     if (actor.role !== Role.OPERATOR) return {};
     return {
-      operation: { assignment: { is: this.assignmentFilter(actor.id) } },
+      operation: { assignments: { some: this.assignmentFilter(actor.id) } },
     };
   }
 
@@ -116,7 +116,7 @@ export class OperationAccessService {
     const allowed = await this.prisma.operationPhoto.findFirst({
       where: {
         id: photoId,
-        operation: { assignment: { is: this.assignmentFilter(actor.id) } },
+        operation: { assignments: { some: this.assignmentFilter(actor.id) } },
       },
       select: { id: true },
     });

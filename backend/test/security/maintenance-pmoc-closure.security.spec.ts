@@ -391,7 +391,7 @@ describe('AppSec Maintenance Planning and PMOC closure', () => {
       expect.arrayContaining([graph.equipmentId, secondEquipment.id]),
     );
     expect(generatedRequest.data.generatedOperationId).toBe(operationId);
-    const assignment = await prisma.assignment.findUniqueOrThrow({ where: { operationId } });
+    const assignment = await prisma.assignment.findFirstOrThrow({ where: { operationId, isPrimary: true } });
     expect(assignment.assignedTo).toBe(operator.user.id);
     await expect(
       prisma.operationDocument.findUnique({ where: { operationId_type: { operationId, type: 'WORK_ORDER' } } }),

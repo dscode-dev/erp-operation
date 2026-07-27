@@ -1005,7 +1005,7 @@ model Operation {
   operator                        User                                @relation(fields: [operatorId], references: [id], onDelete: Restrict)
   photos                          OperationPhoto[]
   documents                       OperationDocument[]
-  assignment                      Assignment?
+  assignments                     Assignment[]
   assignmentHistory               AssignmentHistory[]
   lifecycleEvents                 AssetLifecycleEvent[]
   maintenanceExecution            MaintenanceExecution?
@@ -1144,9 +1144,13 @@ model OperationInspectedEquipment {
 
 model Assignment {
   id              String              @id @default(uuid()) @db.Uuid
-  operationId     String              @unique @map("operation_id") @db.Uuid
+  operationId     String              @map("operation_id") @db.Uuid
   assignedBy      String              @map("assigned_by") @db.Uuid
   assignedTo      String              @map("assigned_to") @db.Uuid
+  // Executor primário (o operador que executa e gera o relatório = Operation.operatorId)
+  // vs. auxiliar (recebe/visualiza a mesma demanda). Uma operação tem 1 primário
+  // e N auxiliares.
+  isPrimary       Boolean             @default(true) @map("is_primary")
   status          AssignmentStatus    @default(ASSIGNED)
   // Visibilidade no app do operador: demandas criadas pela gestão só aparecem
   // após o owner autorizar. Auto-liberado quando o próprio operador se atribui.
@@ -1168,6 +1172,8 @@ model Assignment {
   assignee        User                @relation("AssignmentAssignedTo", fields: [assignedTo], references: [id], onDelete: Restrict)
   history         AssignmentHistory[]
 
+  @@unique([operationId, assignedTo], map: "assignments_operation_assignee_uq")
+  @@index([operationId, isPrimary], map: "assignments_operation_primary_idx")
   @@index([assignedTo, status, assignedAt])
   @@index([assignedTo, completedAt], map: "assignments_assignee_completed_idx")
   @@index([assignedBy, assignedAt])

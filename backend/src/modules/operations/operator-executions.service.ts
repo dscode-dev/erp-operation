@@ -101,11 +101,11 @@ export class OperatorExecutionsService {
             OR: [
               { scheduledFor: { gte: period.start, lt: period.end } },
               { completedAt: { gte: period.start, lt: period.end } },
-              { assignment: { assignedAt: { gte: period.start, lt: period.end } } },
+              { assignments: { some: { assignedAt: { gte: period.start, lt: period.end } } } },
             ],
           };
     const where: Prisma.OperationWhereInput = {
-      assignment: { assignedTo: operatorId },
+      assignments: { some: { assignedTo: operatorId } },
       ...rangeWhere,
       ...(query.status ? { status: query.status } : {}),
     };
@@ -124,7 +124,8 @@ export class OperatorExecutionsService {
           createdAt: true,
           customer: { select: { id: true, name: true, tradeName: true } },
           equipment: { select: { id: true, name: true, tag: true } },
-          assignment: {
+          assignments: {
+            where: { isPrimary: true },
             select: {
               id: true,
               status: true,
