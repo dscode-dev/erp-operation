@@ -14,6 +14,8 @@ import type {
 } from "@erp/types";
 
 export type CreatePmocPayload = {
+  /** Salva somente o plano; não cria execução, OS ou documento. */
+  configurationOnly?: boolean;
   name?: string;
   customerId: string;
   confirmActiveCoverage?: boolean;
@@ -85,9 +87,11 @@ export type UpdatePmocPayload = Partial<
     | "serviceTypes"
     | "defaultEstimatedDurationMinutes"
     | "defaultOperationObservations"
-  >, "defaultAddressId" | "defaultOperationObservations">
+  >, "defaultAddressId" | "defaultEstimatedDurationMinutes" | "defaultOperationObservations">
 > & {
+  configurationOnly?: boolean;
   artNumber?: string | null;
+  defaultEstimatedDurationMinutes?: number | null;
   contractNumber?: string | null;
   observations?: string | null;
   coverage?: string | null;
@@ -162,7 +166,7 @@ export function listExecutionRequests(
 
 export function createExecutionRequest(
   pmocId: string,
-  payload: { scheduledFor?: string; notes?: string } = {},
+  payload: { equipmentId?: string; scheduledFor?: string; notes?: string } = {},
 ): Promise<PmocExecutionRequest> {
   return api.post<PmocExecutionRequest>(`/pmoc/${pmocId}/execution-requests`, payload);
 }

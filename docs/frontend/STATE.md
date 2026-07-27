@@ -1,5 +1,14 @@
 # STATE — Frontend
 
+## PMOC — Wizard de configuração do plano (2026-07-27)
+
+- `Novo PMOC` abre quatro passos: Identificação e cobertura, Planejamento, Execuções e Confirmação.
+- Evidências e Documento não fazem parte do cadastro do plano.
+- Planejamento oferece Geração com revisão (padrão) e Programação pausada.
+- Técnico padrão lista OWNERs ativos com assinatura própria, vinculada automaticamente.
+- Checklist inicia com todas as unidades e itens marcados, permitindo desmarcar grupo ou item.
+- A conclusão envia `configurationOnly=true` e não gera OS, Preview ou PDF.
+
 ## Cliente 360 — Visão Geral e Serviços (2026-07-23)
 
 - Visão Geral recebeu KPIs reais de atendimentos, identificação reorganizada, endereços responsivos e lista das cinco operações recentes.
@@ -1325,3 +1334,21 @@ Status: concluído.
   itens `GENERAL` ou de OS/PMOC.
 - Os 18 defaults vêm do backend e continuam totalmente editáveis, reordenáveis, desativáveis e
   removíveis.
+
+# PMOC Detail — execução por equipamento (2026-07-27)
+
+- Resumo ganhou lista simples paginada dos equipamentos cobertos.
+- Execuções lista a cobertura por equipamento e apresenta último estado, OS e documento.
+- O botão Executar abre wizard dedicado: Identificação, Escopo, Evidências e Confirmação.
+- Evidências permitem câmera/upload e legenda, com máximo de seis e sem mínimo.
+- A confirmação cria/conclui a OS e solicita Preview/PDF pelo Document Engine oficial.
+- Timeline e ações documentais existentes foram preservadas.
+# PMOC — execução mobile por equipamento (2026-07-27)
+
+- A opção PMOC em Novo Atendimento, visível para OWNER, deixou de abrir o configurador de planos.
+- O fluxo mobile lista planos ativos, depois equipamentos cobertos, e abre o mesmo
+  `PmocEquipmentExecutionWizard` usado no detalhe PMOC da Platform.
+- Cada atendimento conclui uma execução individual e encaminha ao estado final com ações
+  “Compartilhar PDF” e “Baixar PDF”, usando download autenticado do Document Engine.
+- Configurações > Assinaturas permite associar uma assinatura institucional a um OWNER; essa relação
+  alimenta automaticamente o técnico padrão do Wizard PMOC.

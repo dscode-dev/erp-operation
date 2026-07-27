@@ -1,5 +1,35 @@
 # Backend State
 
+## PMOC — execução mobile por equipamento e assinatura OWNER (2026-07-27)
+
+- O app Operator não cria nem configura planos PMOC. OWNER escolhe um plano ativo e um equipamento
+  coberto, reutilizando a mesma `PmocExecutionRequest` e o mesmo executor individual da Platform.
+- A execução preserva o fluxo oficial `PmocPlan → PmocExecutionRequest → Operation →
+  MaintenanceExecution → Document Engine`; cada equipamento produz sua própria OS, evidências e
+  documento PMOC.
+- `Signature.userId` passou a ser configurável no CRUD institucional para vincular uma assinatura a
+  um OWNER ativo. O vínculo único por usuário identifica o responsável técnico sem flags paralelas.
+- Vários responsáveis técnicos são suportados por vários usuários OWNER, cada qual com sua
+  assinatura ativa. Assinatura removida libera o vínculo sem apagar documentos históricos.
+- Migration aditiva de dados `20260727213000_link_existing_owner_signature`: instalações com um
+  único OWNER recebem automaticamente a assinatura ativa padrão preexistente; instalações com
+  múltiplos OWNER exigem associação explícita em Configurações > Assinaturas.
+- Nenhum novo endpoint, renderer, Storage ou entidade foi criado.
+
+## PMOC — separação entre configuração e execução, passo 1 (2026-07-27)
+
+- `POST /api/v1/pmoc` aceita o campo aditivo `configurationOnly`.
+- Com `configurationOnly=true`, a transação cria somente `MaintenancePlan`, `PmocPlan`, cobertura,
+  equipamentos, escopos e checklist. Não cria `MaintenanceExecution`, `PmocExecutionRequest`,
+  `Operation`, `Assignment`, Handoff, Preview ou PDF.
+- O plano inicia com `lastReservedExecutionNumber=0`, mantém a primeira data prevista em
+  `nextExecutionDate` e persiste `nextGenerationDate=null`.
+- O modo aceita `MANUAL` (Geração com revisão) ou `PAUSED`; `AUTO` é normalizado para `MANUAL`.
+- Endereço, escopo, tipos de serviço, OWNER técnico ativo e assinatura própria ativa desse OWNER
+  são validados no backend.
+- O contrato anterior permanece compatível quando `configurationOnly` não é enviado.
+- Nenhuma entidade ou migration foi criada.
+
 ## Cliente 360 — métricas operacionais contextualizadas (2026-07-23)
 
 - `GET /operations/stats` aceita `customerId` opcional e calcula todos os estados somente para o cliente selecionado.
@@ -3185,3 +3215,15 @@ Status: implementado e validado em PostgreSQL/Docker.
   editáveis e soft-deletáveis.
 - O bootstrap de produção replica os mesmos defaults para instalações novas nas quais a
   Organization é criada depois do migrate; reexecução não duplica nem restaura itens removidos.
+
+# PMOC — execução individual por equipamento (Passo 2) — 2026-07-27
+
+- `PmocExecutionRequest` passou a possuir `equipmentId` obrigatório. A migration aditiva
+  `20260727190000_pmoc_execution_per_equipment` vincula registros anteriores ao equipamento
+  primário do plano sem remover histórico.
+- A unicidade agora é `pmocPlanId + equipmentId + scheduledFor`; equipamentos diferentes podem
+  ser executados na mesma data e a numeração monotônica global do PMOC é preservada.
+- Prefill, Operation, evidências e documento projetam exatamente um equipamento coberto.
+- A geração aceita no máximo seis evidências e continua sem mínimo obrigatório.
+- `POST /pmoc/:id/execution-requests` aceita `equipmentId?`; a omissão usa o equipamento primário
+  para retrocompatibilidade.

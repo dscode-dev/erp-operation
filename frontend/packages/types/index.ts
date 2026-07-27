@@ -1315,7 +1315,7 @@ export type PmocPlan = {
     position: number;
     technicalCatalog: Pick<
       TechnicalCatalog,
-      'id' | 'type' | 'title' | 'description' | 'maintenanceType' | 'active'
+      'id' | 'type' | 'title' | 'description' | 'maintenanceType' | 'pmocUnit' | 'active'
     >;
   }>;
   includeChecklistInOperations: boolean;
@@ -1342,7 +1342,19 @@ export type PmocPlan = {
   createdAt: string;
   updatedAt: string;
   customer?: Pick<Customer, 'id' | 'name' | 'tradeName'>;
-  equipment?: Pick<EquipmentSummary, 'id' | 'name' | 'tag' | 'type' | 'status'>;
+  equipment?: Pick<
+    EquipmentSummary,
+    | 'id'
+    | 'name'
+    | 'tag'
+    | 'type'
+    | 'status'
+    | 'sector'
+    | 'manufacturer'
+    | 'model'
+    | 'capacity'
+    | 'address'
+  >;
   maintenancePlan?: MaintenancePlan & { executions?: MaintenanceExecution[] };
   defaultOperator?: Pick<TeamUser, 'id' | 'name' | 'username' | 'role'> | null;
   defaultTechnician?: Pick<TeamUser, 'id' | 'name' | 'username' | 'role'> | null;
@@ -1354,7 +1366,19 @@ export type PmocPlan = {
   executionRequests?: PmocExecutionRequest[];
   equipments?: Array<{
     equipmentId: string;
-    equipment: Pick<EquipmentSummary, 'id' | 'name' | 'tag' | 'type' | 'status'>;
+    equipment: Pick<
+      EquipmentSummary,
+      | 'id'
+      | 'name'
+      | 'tag'
+      | 'type'
+      | 'status'
+      | 'sector'
+      | 'manufacturer'
+      | 'model'
+      | 'capacity'
+      | 'address'
+    >;
   }>;
   compliance: {
     status: PmocComplianceStatus;
@@ -1395,6 +1419,7 @@ export type PmocPlanOverview = {
 export type PmocExecutionRequest = {
   id: string;
   pmocPlanId: string;
+  equipmentId: string;
   maintenanceExecutionId: string | null;
   operationId: string | null;
   generatedOperationId: string | null;
@@ -1413,6 +1438,10 @@ export type PmocExecutionRequest = {
   cancelledAt: string | null;
   createdAt: string;
   updatedAt: string;
+  equipment?: Pick<
+    EquipmentSummary,
+    'id' | 'name' | 'tag' | 'sector' | 'manufacturer' | 'model' | 'capacity' | 'status' | 'address'
+  >;
   operation?:
     | (Pick<OperationSummary, 'id' | 'number' | 'type' | 'status'> & {
         scheduledFor?: string | null;

@@ -11,6 +11,7 @@ export type ListSignaturesParams = {
 };
 
 export type SignaturePayload = {
+  userId?: string | null;
   name: string;
   title: string;
   profession?: string;

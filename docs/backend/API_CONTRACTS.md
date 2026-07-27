@@ -1,5 +1,70 @@
 # API Contracts
 
+## Assinatura institucional vinculada ao responsável técnico
+
+### `POST /api/v1/signatures`
+
+### `PATCH /api/v1/signatures/:id`
+
+Campo aditivo:
+
+```json
+{
+  "userId": "uuid-de-um-owner-ativo"
+}
+```
+
+`userId` é opcional e pode ser `null`. Quando informado, deve identificar um `OWNER` ativo e não
+removido. Cada OWNER pode possuir uma única assinatura vinculada; diferentes usuários OWNER podem
+possuir assinaturas distintas. Violações retornam `400 USER_NOT_FOUND` ou `409 USER_CONFLICT`.
+
+Os endpoints PMOC existentes permanecem inalterados. O cliente mobile combina:
+
+1. `GET /api/v1/pmoc?active=true`;
+2. `GET /api/v1/pmoc/:id`;
+3. `GET /api/v1/pmoc/:id/execution-requests`;
+4. `POST /api/v1/pmoc/:id/execution-requests` com `equipmentId`;
+5. `GET /api/v1/pmoc/execution-requests/:id/prefill`;
+6. `POST /api/v1/pmoc/execution-requests/:id/generate-work-order`;
+7. endpoints oficiais do Document Engine para salvar, renderizar e baixar.
+
+## Criação do PMOC somente como configuração
+
+### `POST /api/v1/pmoc`
+
+```json
+{
+  "configurationOnly": true,
+  "customerId": "uuid",
+  "defaultAddressId": "uuid",
+  "equipmentId": "uuid",
+  "equipmentIds": ["uuid"],
+  "scopeCatalogIds": ["uuid"],
+  "serviceTypes": ["PREVENTIVA", "CORRETIVA"],
+  "periodicity": "MONTHLY",
+  "generationMode": "MANUAL",
+  "defaultTechnicianId": "uuid-do-owner",
+  "signatureOverrideId": "uuid-da-assinatura-do-owner",
+  "responsibleTechnician": "Nome do responsável",
+  "startDate": "2026-08-01",
+  "endDate": "2027-08-01"
+}
+```
+
+Resposta aditiva relevante:
+
+```json
+{
+  "executionRequests": [],
+  "lastReservedExecutionNumber": 0,
+  "nextExecutionDate": "2026-08-01T00:00:00.000Z",
+  "nextGenerationDate": null
+}
+```
+
+Nenhuma execução, OS ou documento é criado. Relacionamentos inválidos retornam `400
+PMOC_INVALID_RELATIONSHIP`; a confirmação de cobertura ativa mantém o contrato `409` existente.
+
 ## Métricas de operações por cliente
 
 ### `GET /api/v1/operations/stats?customerId={uuid}`
@@ -5872,3 +5937,22 @@ Os registros do RVT continuam usando o payload existente:
 ```
 
 Criação, edição, reordenação, ativação/desativação e exclusão utilizam os contratos existentes.
+
+## Execução PMOC por equipamento
+
+`POST /api/v1/pmoc/:id/execution-requests`
+
+```json
+{
+  "equipmentId": "uuid",
+  "scheduledFor": "2026-07-27T18:30:00.000Z",
+  "notes": "Execução iniciada para o equipamento selecionado."
+}
+```
+
+- `equipmentId` deve pertencer à cobertura. Se omitido, usa o equipamento primário legado.
+- A resposta inclui `equipmentId` e `equipment`.
+- A unicidade é PMOC + equipamento + instante.
+- Prefill e geração retornam/persistem apenas esse equipamento em `inspectedEquipments`.
+- `operation.photos` aceita no máximo seis evidências; violações retornam
+  `400 VALIDATION_ERROR`.

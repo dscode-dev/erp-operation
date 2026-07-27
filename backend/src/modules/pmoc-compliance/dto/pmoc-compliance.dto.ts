@@ -90,6 +90,15 @@ export class PmocDashboardQueryDto {
 }
 
 export class CreatePmocPlanDto {
+  /**
+   * Persiste somente a configuração do plano, sem reservar execução,
+   * criar atendimento ou iniciar o fluxo documental.
+   */
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  configurationOnly?: boolean;
+
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MinLength(2) @MaxLength(140)
   name?: string;
 
@@ -214,6 +223,11 @@ export class CreatePmocPlanDto {
 }
 
 export class UpdatePmocPlanDto {
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  configurationOnly?: boolean;
+
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MinLength(2) @MaxLength(140)
   name?: string;
 
@@ -344,6 +358,9 @@ export class ListPmocExecutionRequestsQueryDto {
 }
 
 export class CreatePmocExecutionRequestDto {
+  @IsOptional() @IsUUID()
+  equipmentId?: string;
+
   @IsOptional() @IsDateString()
   scheduledFor?: string;
 

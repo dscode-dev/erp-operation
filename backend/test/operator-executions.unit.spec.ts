@@ -47,7 +47,9 @@ describe('Operator executions read model', () => {
     expect(operation.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
-          assignment: { assignedTo: '5c4370c9-7608-451e-a38e-cfbfbc695128' },
+          assignments: {
+            some: { assignedTo: '5c4370c9-7608-451e-a38e-cfbfbc695128' },
+          },
           scheduledFor: {
             gte: new Date('2026-07-01T03:00:00.000Z'),
             lt: new Date('2026-08-01T03:00:00.000Z'),

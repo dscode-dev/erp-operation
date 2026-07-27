@@ -905,6 +905,7 @@ model Equipment {
   pmocPrimaryPlans          PmocPlan[]
   pmocLinks                 PmocPlanEquipment[]
   pmocEnvironments          PmocEnvironmentEquipment[]
+  pmocExecutionRequests     PmocExecutionRequest[]
   operationInspections      OperationInspectedEquipment[]
   budgetInspections         BudgetEquipment[]
   maintenanceChecklistItems OperationMaintenanceChecklistItem[]
@@ -1483,6 +1484,7 @@ model PmocPlanChecklist {
 model PmocExecutionRequest {
   id                     String                     @id @default(uuid()) @db.Uuid
   pmocPlanId             String                     @map("pmoc_plan_id") @db.Uuid
+  equipmentId            String                     @map("equipment_id") @db.Uuid
   maintenanceExecutionId String?                    @unique @map("maintenance_execution_id") @db.Uuid
   operationId            String?                    @unique @map("operation_id") @db.Uuid
   generatedOperationId   String?                    @unique @map("generated_operation_id") @db.Uuid
@@ -1502,6 +1504,7 @@ model PmocExecutionRequest {
   createdAt              DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt              DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(3)
   pmocPlan               PmocPlan                   @relation(fields: [pmocPlanId], references: [id], onDelete: Cascade)
+  equipment              Equipment                  @relation(fields: [equipmentId], references: [id], onDelete: Restrict)
   maintenanceExecution   MaintenanceExecution?      @relation(fields: [maintenanceExecutionId], references: [id], onDelete: SetNull)
   operation              Operation?                 @relation(fields: [operationId], references: [id], onDelete: SetNull)
   generatedOperation     Operation?                 @relation("PmocGeneratedOperation", fields: [generatedOperationId], references: [id], onDelete: SetNull)
@@ -1510,10 +1513,11 @@ model PmocExecutionRequest {
   plannedTechnician      User?                      @relation("PmocPlannedTechnician", fields: [plannedTechnicianId], references: [id], onDelete: SetNull)
   history                PmocHistory[]
 
-  @@unique([pmocPlanId, scheduledFor])
+  @@unique([pmocPlanId, equipmentId, scheduledFor])
   @@unique([pmocPlanId, executionNumber])
   @@index([status, scheduledFor])
   @@index([pmocPlanId, createdAt])
+  @@index([equipmentId, scheduledFor])
   @@index([plannedOperatorId])
   @@index([plannedTechnicianId])
   @@map("pmoc_execution_requests")

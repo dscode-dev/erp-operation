@@ -1,5 +1,15 @@
 # Frontend Integration
 
+## PMOC configurado antes da execução
+
+- Envie `configurationOnly: true` ao criar o plano pelo Wizard da Platform.
+- Sucesso significa somente persistência das predefinições; não procure documento, Preview, PDF, OS
+  ou `executionRequest`.
+- A projeção de quantidade e próximas datas no Wizard deriva de periodicidade, início e fim.
+- O responsável deve ser um OWNER ativo com assinatura própria ativa. Envie
+  `defaultTechnicianId` e `signatureOverrideId` correspondentes.
+- A criação da execução será integrada ao atendimento técnico em etapa posterior.
+
 ## Detalhe do cliente — visão operacional
 
 - KPIs: consumir `GET /operations/stats?customerId=:id`; não contar a página atual da tabela.
@@ -2608,3 +2618,25 @@ Não há alteração de integração frontend. A URL base e todos os contratos `
 - OS/PMOC: consultar `workflowsAny=WORK_ORDER,PMOC&includeGeneral=true`; itens exclusivos do RVT
   nunca devem ser apresentados.
 - O frontend pode editar/remover defaults normalmente. Operations já emitidas mantêm snapshots.
+
+## PMOC — execução por equipamento
+
+Na aba Execuções, liste `PmocPlan.equipments`. Ao executar, reutilize uma solicitação
+`PENDING/FAILED` do mesmo `equipmentId` ou crie outra com
+`POST /pmoc/:id/execution-requests`. Carregue o prefill, envie até seis fotos opcionais e gere a
+OS pelo endpoint oficial. Preview, render e download permanecem no `DocumentViewer`.
+
+Não agregue equipamentos no payload: o backend fixa `equipmentId` e `inspectedEquipments` no ativo
+oficial da solicitação.
+# PMOC mobile — execução de plano configurado (2026-07-27)
+
+- A entrada “Executar PMOC” é exclusiva de OWNER no Operator.
+- O app lista planos ativos, carrega seus equipamentos cobertos e inicia uma execução para apenas um
+  equipamento por vez.
+- Uma solicitação `PENDING/FAILED` ainda sem Operation é reutilizada para o mesmo equipamento; na
+  ausência dela, o app cria uma nova solicitação com `equipmentId`.
+- Após a confirmação, o cliente usa somente o Document Engine oficial. O retorno apresenta
+  compartilhamento nativo e download binário pelo endpoint autenticado.
+- O app nunca cria `PmocPlan`, nunca acessa Storage e nunca recebe `storageKey` ou Base64 do PDF.
+- Em Configurações > Assinaturas, associe a assinatura institucional ao respectivo OWNER para que o
+  Wizard PMOC o reconheça como técnico responsável. Mais de um OWNER pode ser configurado.

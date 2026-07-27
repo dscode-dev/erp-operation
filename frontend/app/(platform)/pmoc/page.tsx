@@ -84,7 +84,7 @@ export default function PmocPage() {
       </div>
     </div>}
 
-    <PmocPlanWizard open={wizard} onClose={() => setWizard(false)} onCreated={() => setTick((value) => value + 1)} />
+    <PmocPlanWizard configurationOnly open={wizard} onClose={() => setWizard(false)} onCreated={() => setTick((value) => value + 1)} />
   </div>;
 }
 

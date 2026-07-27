@@ -15,6 +15,12 @@ import {
 } from './security-app';
 
 describe('AppSec Assignment workflow abuse', () => {
+  const customerSignature = {
+    signatureData:
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=',
+    customerSignerName: 'Responsável do cliente',
+    signedAt: new Date('2026-07-27T12:00:00.000Z'),
+  };
   let security: SecurityApp;
   let owner: SecurityActor;
   let operatorA: SecurityActor;
@@ -60,6 +66,7 @@ describe('AppSec Assignment workflow abuse', () => {
 
   it('rejects repeated or out-of-order terminal workflow transitions', async () => {
     const operation = await createOperation(operatorA.user);
+    await prisma.operation.update({ where: { id: operation.id }, data: customerSignature });
     const assignment = await createAssignment(operation.id, operatorA.user.id);
 
     expect((await authPatch(operatorA, `/api/v1/assignments/${assignment.id}/accept`)).status).toBe(200);
@@ -81,6 +88,7 @@ describe('AppSec Assignment workflow abuse', () => {
 
   it('completes a Work Order directly and notifies management without review', async () => {
     const operation = await createOperation(operatorA.user);
+    await prisma.operation.update({ where: { id: operation.id }, data: customerSignature });
     const assignment = await createAssignment(operation.id, operatorA.user.id);
 
     expect((await authPatch(operatorA, `/api/v1/assignments/${assignment.id}/accept`)).status).toBe(200);
@@ -103,6 +111,9 @@ describe('AppSec Assignment workflow abuse', () => {
       equipmentId: graph.equipmentId,
       type: OperationType.CORRETIVA,
       status: 'DRAFT',
+      signatureData: customerSignature.signatureData,
+      customerSignerName: customerSignature.customerSignerName,
+      signedAt: customerSignature.signedAt.toISOString(),
     };
 
     expect((await authPost(operatorA, '/api/v1/operations').send({

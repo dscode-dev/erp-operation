@@ -302,6 +302,15 @@ describe('critical workflows with real PostgreSQL concurrency', () => {
     const manager = await createActor(Role.MANAGER, 'manager');
     const operator = await createActor(Role.OPERATOR, 'op');
     const fixture = await createMaintenanceFixture(operator);
+    await prisma.operation.update({
+      where: { id: fixture.operationId },
+      data: {
+        signatureData:
+          'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=',
+        customerSignerName: 'Responsável do cliente',
+        signedAt: new Date('2026-07-27T12:00:00.000Z'),
+      },
+    });
     const { assignments } = services();
     const assignment = await assignments.create({ operationId: fixture.operationId, assignedTo: operator.id }, manager, context);
     await assignments.accept(assignment.id, operator, context);

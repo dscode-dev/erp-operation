@@ -26,6 +26,7 @@ import { useAuth, applyBranding } from '@erp/ui/auth/auth-provider';
 import {
   organizationApi,
   signaturesApi,
+  usersApi,
   useQuery,
   ApiClientError,
   type BrandAssetType,
@@ -646,6 +647,9 @@ function SignaturesSection({
                     <StatusChip tone={signature.hasImage ? 'info' : 'neutral'}>
                       {signature.hasImage ? 'Imagem enviada' : 'Sem imagem'}
                     </StatusChip>
+                    {signature.user?.role === 'OWNER' && (
+                      <StatusChip tone="info">Técnico: {signature.user.name}</StatusChip>
+                    )}
                   </div>
                 </div>
               </div>
@@ -765,6 +769,7 @@ function SignatureEditor({
   onSaved: () => void;
 }) {
   const [name, setName] = useState('');
+  const [userId, setUserId] = useState('');
   const [title, setTitle] = useState('');
   const [profession, setProfession] = useState('');
   const [professionalCouncil, setProfessionalCouncil] = useState('');
@@ -780,10 +785,15 @@ function SignatureEditor({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const owners = useQuery(
+    (signal) => usersApi.listUsers({ limit: 100, signal }),
+    [open],
+  );
 
   useEffect(() => {
     if (!open) return;
     setName(signature?.name ?? '');
+    setUserId(signature?.userId ?? '');
     setTitle(signature?.title ?? '');
     setProfession(signature?.profession ?? '');
     setProfessionalCouncil(signature?.professionalCouncil ?? '');
@@ -812,7 +822,8 @@ function SignatureEditor({
     setError(null);
     try {
       const saved = signature
-        ? await signaturesApi.updateSignature(signature.id, {
+          ? await signaturesApi.updateSignature(signature.id, {
+            userId: userId || null,
             name,
             title,
             profession,
@@ -824,6 +835,7 @@ function SignatureEditor({
             position,
           })
         : await signaturesApi.createSignature({
+            userId: userId || null,
             name,
             title,
             profession,
@@ -894,6 +906,23 @@ function SignatureEditor({
             </p>
           </div>
           <Input label="Nome" value={name} onChange={setName} />
+          <label className="grid gap-1.5 text-sm">
+            <span className="font-medium">Responsável técnico OWNER</span>
+            <select value={userId} onChange={(event) => setUserId(event.target.value)}>
+              <option value="">Assinatura institucional sem vínculo pessoal</option>
+              {(owners.data?.items ?? [])
+                .filter((owner) => owner.isActive && owner.role === 'OWNER')
+                .map((owner) => (
+                  <option key={owner.id} value={owner.id}>
+                    {owner.name} · {owner.jobTitle ?? 'OWNER'}
+                  </option>
+                ))}
+            </select>
+            <span className="text-caption">
+              Vincule para que esta assinatura seja reconhecida automaticamente nos planos PMOC
+              cujo técnico responsável seja este OWNER.
+            </span>
+          </label>
           <Input label="Título" value={title} onChange={setTitle} />
           <Input label="Profissão" value={profession} onChange={setProfession} />
           <Input

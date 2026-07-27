@@ -1,5 +1,11 @@
 # COMPONENTS — Frontend
 
+## `PmocPlanWizard`
+
+- `configurationOnly` ativa o cadastro de predefinições em `/pmoc`.
+- O modo omite operador padrão, prioridade, duração, evidências e configuração documental.
+- O componente oficial continua atendendo revisão e fluxo mobile; nenhum Wizard paralelo foi criado.
+
 ## Cliente 360
 
 - `CustomerKpi`: indicador compacto para total, concluídos, em execução e pendências.
@@ -876,3 +882,24 @@ Tipos:
   impedindo classificação acidental de um item de RVT como OS/PMOC.
 - Os seletores dos wizards continuam reutilizando `MultiSelect`; os dados vêm exclusivamente da
   API.
+
+## `PmocEquipmentExecutionWizard`
+
+Wizard reservado à execução de um equipamento coberto pelo PMOC. Reutiliza `Drawer`,
+`PhotoInput`, API PMOC e Document Engine; não altera o drawer genérico de Operation.
+
+- Identificação readonly do cliente/local/equipamento.
+- Escopo herdado, técnico responsável, auxiliares e data/hora.
+- Evidências opcionais, até seis.
+- Confirmação com textos operacionais e emissão oficial.
+
+`CoveredEquipmentList` e `EquipmentExecutions` projetam a mesma cobertura no Resumo e em
+Execuções.
+# PMOC por equipamento
+
+- `PmocEquipmentExecutionWizard`: componente compartilhado entre Platform e Operator para
+  Identificação, Escopo, Evidências e Confirmação de uma execução individual.
+- `PmocStartStep` (Operator): seletor de plano/equipamento que cria ou reutiliza a
+  `PmocExecutionRequest` oficial e abre o componente compartilhado.
+- `SuccessView`: reutilizado após PMOC para download binário e Web Share API, com fallback seguro
+  para download.
