@@ -1,6 +1,7 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import {
   AssetLifecycleEventType,
+  FinancialAccountType,
   FinancialCategoryType,
   FinancialEntryOrigin,
   FinancialEntryStatus,
@@ -25,6 +26,7 @@ import type {
   CreateFinancialAccountDto,
   CreateFinancialCategoryDto,
   CreateFinancialEntryDto,
+  ImportReceiptsDto,
   ListFinancialAccountsQueryDto,
   ListFinancialCategoriesQueryDto,
   ListFinancialEntriesQueryDto,
@@ -260,13 +262,15 @@ export class FinancialService {
     const organizationId = await this.organizationId();
     const status = FinancialEntryStatus.PENDING;
     const amount = this.money(dto.amount);
-    await this.assertAccountCategory(organizationId, dto.accountId, dto.categoryId, dto.type);
+    const accountId = dto.accountId ?? (await this.getOrCreateGeneralAccountId(organizationId));
+    const categoryId = dto.categoryId ?? null;
+    await this.assertAccountCategory(organizationId, accountId, categoryId, dto.type);
     return this.prisma.$transaction(async (tx) => {
       const entry = await tx.financialEntry.create({
         data: {
           organizationId,
-          accountId: dto.accountId,
-          categoryId: dto.categoryId,
+          accountId,
+          categoryId,
           type: dto.type,
           origin: dto.origin ?? FinancialEntryOrigin.MANUAL,
           originId: dto.originId ?? null,
@@ -302,6 +306,125 @@ export class FinancialService {
       );
       return entry;
     });
+  }
+
+  /**
+   * Recibos emitidos (operações com valor total) ainda não lançados na conta
+   * geral. Serve a importação manual; a extração é idempotente por operação.
+   */
+  async listImportableReceipts(): Promise<unknown> {
+    const organizationId = await this.organizationId();
+    const imported = await this.prisma.financialEntry.findMany({
+      where: { organizationId, origin: FinancialEntryOrigin.RECEIPT, canceledAt: null, deletedAt: null },
+      select: { originId: true },
+    });
+    const importedIds = new Set(imported.map((entry) => entry.originId).filter(Boolean));
+    const operations = await this.prisma.operation.findMany({
+      where: { receiptAmount: { not: null } },
+      orderBy: [{ completedAt: 'desc' }, { createdAt: 'desc' }],
+      take: 200,
+      select: {
+        id: true,
+        receiptNumber: true,
+        receiptAmount: true,
+        receiptService: true,
+        completedAt: true,
+        createdAt: true,
+        customer: { select: { id: true, name: true, tradeName: true } },
+      },
+    });
+    return operations
+      .filter((operation) => !importedIds.has(operation.id))
+      .map((operation) => ({
+        operationId: operation.id,
+        receiptNumber: operation.receiptNumber,
+        amount: operation.receiptAmount?.toString() ?? '0',
+        service: operation.receiptService,
+        customerName: operation.customer?.tradeName ?? operation.customer?.name ?? null,
+        date: (operation.completedAt ?? operation.createdAt).toISOString(),
+      }));
+  }
+
+  /** Importa manualmente uma lista de recibos como entradas na conta geral. */
+  async importReceipts(
+    dto: ImportReceiptsDto,
+    actor: AuthenticatedUser,
+    context: FinancialAuditContext,
+  ): Promise<{ imported: number }> {
+    const organizationId = await this.organizationId();
+    const accountId = await this.getOrCreateGeneralAccountId(organizationId);
+    let imported = 0;
+    for (const operationId of [...new Set(dto.operationIds)]) {
+      if (await this.syncReceiptEntryInternal(organizationId, accountId, operationId, actor.id, context)) {
+        imported += 1;
+      }
+    }
+    return { imported };
+  }
+
+  /**
+   * Extração automática: chamado quando um recibo é emitido/atualizado com valor.
+   * Idempotente (uma operação = uma entrada RECEIPT). Não lança se já existe ou
+   * se a operação não tem valor de recibo.
+   */
+  async syncReceiptEntry(operationId: string, actorId: string, context: FinancialAuditContext): Promise<boolean> {
+    const organizationId = await this.organizationId();
+    const accountId = await this.getOrCreateGeneralAccountId(organizationId);
+    return this.syncReceiptEntryInternal(organizationId, accountId, operationId, actorId, context);
+  }
+
+  private async syncReceiptEntryInternal(
+    organizationId: string,
+    accountId: string,
+    operationId: string,
+    actorId: string,
+    context: FinancialAuditContext,
+  ): Promise<boolean> {
+    const existing = await this.prisma.financialEntry.findFirst({
+      where: { organizationId, origin: FinancialEntryOrigin.RECEIPT, originId: operationId, canceledAt: null, deletedAt: null },
+      select: { id: true },
+    });
+    if (existing) return false;
+    const operation = await this.prisma.operation.findFirst({
+      where: { id: operationId, receiptAmount: { not: null } },
+      select: { receiptAmount: true, receiptNumber: true, receiptService: true, completedAt: true, createdAt: true },
+    });
+    if (!operation?.receiptAmount) return false;
+    const amount = this.money(Number(operation.receiptAmount));
+    const when = operation.completedAt ?? operation.createdAt;
+    const description = `Recibo ${operation.receiptNumber ?? ''}${operation.receiptService ? ` · ${operation.receiptService}` : ''}`
+      .trim()
+      .slice(0, 180) || 'Recibo';
+    await this.prisma.$transaction(async (tx) => {
+      const entry = await tx.financialEntry.create({
+        data: {
+          organizationId,
+          accountId,
+          categoryId: null,
+          type: FinancialEntryType.RECEIVABLE,
+          origin: FinancialEntryOrigin.RECEIPT,
+          originId: operationId,
+          amount,
+          dueDate: when,
+          paidAt: when,
+          description,
+          status: FinancialEntryStatus.PAID,
+          createdBy: actorId,
+        },
+      });
+      await this.applyBalanceTx(tx, accountId, FinancialEntryType.RECEIVABLE, entry.amount, 'apply');
+      await this.createHistoryTx(tx, entry.id, actorId, FinancialHistoryAction.CREATED, null, entry.status, {
+        amount: entry.amount.toString(),
+        origin: 'RECEIPT',
+        operationId,
+      });
+      await this.auditTx(tx, FINANCIAL_AUDIT_ACTIONS.ENTRY_CREATED, FINANCIAL_ENTRY_RESOURCE, { id: actorId } as AuthenticatedUser, context, {
+        entryId: entry.id,
+        origin: 'RECEIPT',
+        amount: entry.amount.toString(),
+      });
+    });
+    return true;
   }
 
   async updateEntry(
@@ -568,14 +691,14 @@ export class FinancialService {
   private async assertAccountCategory(
     organizationId: string,
     accountId: string,
-    categoryId: string,
+    categoryId: string | null,
     entryType: FinancialEntryType,
   ): Promise<void> {
-    const [account, category] = await this.prisma.$transaction([
-      this.prisma.financialAccount.findFirst({ where: { id: accountId, organizationId, active: true, deletedAt: null }, select: { id: true } }),
-      this.prisma.financialCategory.findFirst({ where: { id: categoryId, organizationId, active: true, deletedAt: null }, select: { id: true, type: true } }),
-    ]);
+    const account = await this.prisma.financialAccount.findFirst({ where: { id: accountId, organizationId, active: true, deletedAt: null }, select: { id: true } });
     if (!account) throw new ApplicationException(ERROR_CODES.FINANCIAL_ACCOUNT_NOT_FOUND, 'Financial account was not found or inactive', HttpStatus.NOT_FOUND);
+    // Categoria é opcional no fluxo simplificado; só valida quando informada.
+    if (!categoryId) return;
+    const category = await this.prisma.financialCategory.findFirst({ where: { id: categoryId, organizationId, active: true, deletedAt: null }, select: { id: true, type: true } });
     if (!category) throw new ApplicationException(ERROR_CODES.FINANCIAL_CATEGORY_NOT_FOUND, 'Financial category was not found or inactive', HttpStatus.NOT_FOUND);
     if (
       (entryType === FinancialEntryType.RECEIVABLE && category.type !== FinancialCategoryType.INCOME) ||
@@ -584,6 +707,25 @@ export class FinancialService {
     ) {
       throw new ApplicationException(ERROR_CODES.FINANCIAL_INVALID_RELATIONSHIP, 'Financial category type does not match entry type', HttpStatus.BAD_REQUEST);
     }
+  }
+
+  /**
+   * Conta geral única da organização (fluxo simplificado). Auto-provisionada:
+   * reaproveita a conta ativa existente ou cria "Conta Geral". Sem cadastro
+   * manual de contas por enquanto.
+   */
+  private async getOrCreateGeneralAccountId(organizationId: string): Promise<string> {
+    const existing = await this.prisma.financialAccount.findFirst({
+      where: { organizationId, active: true, deletedAt: null },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    });
+    if (existing) return existing.id;
+    const created = await this.prisma.financialAccount.create({
+      data: { organizationId, name: 'Conta Geral', type: FinancialAccountType.CASH },
+      select: { id: true },
+    });
+    return created.id;
   }
 
   private assertWritable(entry: EntryWithRelations): void {

@@ -100,6 +100,20 @@ export class FinancialController {
     return this.financial.getEntry(id);
   }
 
+  @Get('receipts/importable')
+  listImportableReceipts(): Promise<unknown> {
+    return this.financial.listImportableReceipts();
+  }
+
+  @Post('receipts/import')
+  importReceipts(
+    @Body() body: ImportReceiptsDto,
+    @CurrentUser() actor: AuthenticatedUser,
+    @Req() request: RequestWithId,
+  ): Promise<{ imported: number }> {
+    return this.financial.importReceipts(body, actor, this.context(request));
+  }
+
   @Post('entries')
   createEntry(
     @Body() body: CreateFinancialEntryDto,
