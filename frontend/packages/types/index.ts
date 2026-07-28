@@ -1234,7 +1234,8 @@ export type PmocOperationalStatus =
   | 'OVERDUE'
   | 'PAUSED'
   | 'ERROR'
-  | 'EXPIRED';
+  | 'EXPIRED'
+  | 'COMPLETED';
 export type PmocExecutionRequestStatus =
   | 'PENDING'
   | 'GENERATING_OS'
@@ -1323,6 +1324,7 @@ export type PmocPlan = {
   defaultOperationObservations: string | null;
   signatureOverrideId: string | null;
   operationalStatus: PmocOperationalStatus;
+  plannedExecutionCount: number;
   lastReservedExecutionNumber: number;
   lastGeneratedExecutionNumber: number;
   lastExecutionDate: string | null;
@@ -1392,6 +1394,7 @@ export type PmocPlan = {
 
 export type PmocPlanOverview = {
   expectedExecutions: number;
+  expectedEquipmentExecutions: number;
   completedExecutions: number;
   remainingExecutions: number;
   pendingExecutions: number;
@@ -1408,6 +1411,21 @@ export type PmocPlanOverview = {
     status: OperationDocumentStatus;
     renderedAt: string | null;
   } | null;
+  coverageEnded: boolean;
+  hasOpenExecutions: boolean;
+  operationalStatus: PmocOperationalStatus;
+  equipmentExecutions: Array<{
+    equipmentId: string;
+    expectedExecutions: number;
+    completedExecutions: number;
+    remainingExecutions: number;
+    cancelledExecutions: number;
+    failedExecutions: number;
+    overdueExecutions: number;
+    nextExecutionNumber: number;
+    hasOpenExecutions: boolean;
+    coverageEnded: boolean;
+  }>;
   health: {
     code: 'EXCELLENT' | 'GOOD' | 'ATTENTION' | 'CRITICAL';
     label: 'Excelente' | 'Boa' | 'Atenção' | 'Crítica';
@@ -1424,6 +1442,7 @@ export type PmocExecutionRequest = {
   operationId: string | null;
   generatedOperationId: string | null;
   executionNumber: number;
+  equipmentExecutionNumber: number;
   executionYear: number | null;
   status: PmocExecutionRequestStatus;
   origin: PmocExecutionOrigin;
@@ -1490,6 +1509,7 @@ export type PmocHistoryItem = {
   };
   execution?: {
     executionNumber: number;
+    equipmentExecutionNumber: number;
     executionYear: number | null;
     workOrderNumber: number | null;
     status: PmocExecutionRequestStatus;
@@ -1512,6 +1532,7 @@ export type PmocDashboardExecution = {
   customer: Pick<Customer, 'id' | 'name' | 'tradeName'>;
   equipments: Array<Pick<EquipmentSummary, 'id' | 'name' | 'tag'>>;
   executionNumber: number;
+  equipmentExecutionNumber: number;
   origin: PmocExecutionOrigin;
   status: PmocExecutionRequestStatus;
   indicator: 'ON_TIME' | 'DUE_SOON' | 'OVERDUE' | 'COMPLETED' | 'CANCELLED' | 'FAILED';

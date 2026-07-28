@@ -1,5 +1,14 @@
 # COMPONENTS — Frontend
 
+## `PmocEquipmentExecutionWizard`
+
+Exibe `equipmentExecutionNumber` e é reutilizado por Platform e Operator.
+
+## `EquipmentExecutions`
+
+Consome `overview.equipmentExecutions`, mostra progresso por ativo e destaca pendências posteriores
+ao término da cobertura.
+
 ## `PmocPlanWizard`
 
 - `configurationOnly` ativa o cadastro de predefinições em `/pmoc`.

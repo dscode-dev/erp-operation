@@ -44,6 +44,24 @@ export class RecurringEngine {
     return dates;
   }
 
+  countBefore(rule: RecurrenceRuleDto, start: Date, endExclusive: Date): number {
+    this.validate(rule);
+    let cursor = new Date(start);
+    let count = 0;
+    while (cursor < endExclusive && count < 10_000) {
+      count += 1;
+      cursor = this.next(rule, cursor);
+    }
+    return count;
+  }
+
+  occurrenceAt(rule: RecurrenceRuleDto, start: Date, executionNumber: number): Date {
+    if (!Number.isInteger(executionNumber) || executionNumber < 1 || executionNumber > 10_000) {
+      throw this.invalid();
+    }
+    return this.occurrences(rule, start, executionNumber)[executionNumber - 1];
+  }
+
   validate(rule: RecurrenceRuleDto): void {
     if (!rule || !Object.values(RecurrenceFrequency).includes(rule.frequency)) {
       throw this.invalid();

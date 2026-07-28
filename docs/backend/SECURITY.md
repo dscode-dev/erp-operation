@@ -1,5 +1,15 @@
 # Security
 
+## Integridade das execuções PMOC por equipamento
+
+- Reserva protegida por row lock e incremento atômico no PostgreSQL.
+- Constraint única `(pmocPlanId, equipmentId, equipmentExecutionNumber)`.
+- O limite `plannedExecutionCount` é verificado no mesmo `UPDATE` que reserva a vaga.
+- Cliques concorrentes no mesmo equipamento são idempotentes.
+- Não é permitido reduzir a quantidade planejada abaixo de números já reservados. Alterações na
+  cobertura não apagam nem reutilizam o histórico dos equipamentos removidos.
+- A reconciliação considera somente `MaintenanceExecution.COMPLETED`.
+
 ## PMOC configuration-only
 
 - O backend garante que `configurationOnly=true` não produza efeitos operacionais ou documentais.

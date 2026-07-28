@@ -1,5 +1,13 @@
 # OPUS Frontend Integration
 
+## PMOC — contrato visual de ciclos
+
+O número visual é `equipmentExecutionNumber`, com sequência `001..plannedExecutionCount` por
+equipamento. A aba Execuções usa `overview.equipmentExecutions`. O total configurado permanece em
+`expectedExecutions`; o agregado operacional está em `expectedEquipmentExecutions`.
+
+Não calcule finalização no frontend. `OVERDUE` e `COMPLETED` são decisões do backend.
+
 ## PMOC — cadastro de configuração
 
 Na rota `/pmoc`, o Wizard oficial usa `POST /pmoc` com `configurationOnly: true`. O modo possui

@@ -1,5 +1,16 @@
 # Backend State
 
+## PMOC — capacidade e encerramento por equipamento (2026-07-28)
+
+- `PmocPlan.plannedExecutionCount` persiste a quantidade de ciclos da cobertura sem multiplicá-la
+  no resumo do plano.
+- Cada equipamento mantém contador próprio. `equipmentExecutionNumber` começa em `001` para cada
+  ativo; `executionNumber` global foi preservado para histórico e retrocompatibilidade.
+- A reserva usa lock PostgreSQL por `(PMOC, equipamento)`, limite autoritativo e constraint única.
+- Cobertura encerrada com ciclos incompletos fica `OVERDUE`. Depois que todos os equipamentos
+  concluem o total previsto, a reconciliação altera o plano para `COMPLETED`.
+- Migration aditiva: `20260728113000_pmoc_execution_capacity_per_equipment`.
+
 ## PMOC — execução mobile por equipamento e assinatura OWNER (2026-07-27)
 
 - O app Operator não cria nem configura planos PMOC. OWNER escolhe um plano ativo e um equipamento

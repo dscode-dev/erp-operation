@@ -1,5 +1,42 @@
 # API Contracts
 
+## PMOC — ciclos independentes por equipamento
+
+Campos aditivos em `GET /api/v1/pmoc` e `GET /api/v1/pmoc/:id`:
+
+```json
+{
+  "plannedExecutionCount": 12,
+  "operationalStatus": "OVERDUE",
+  "overview": {
+    "expectedExecutions": 12,
+    "expectedEquipmentExecutions": 48,
+    "completedExecutions": 37,
+    "remainingExecutions": 11,
+    "coverageEnded": true,
+    "hasOpenExecutions": true,
+    "equipmentExecutions": [{
+      "equipmentId": "uuid",
+      "expectedExecutions": 12,
+      "completedExecutions": 10,
+      "remainingExecutions": 2,
+      "nextExecutionNumber": 11,
+      "hasOpenExecutions": true,
+      "coverageEnded": true
+    }]
+  }
+}
+```
+
+`PmocExecutionRequest` inclui `equipmentExecutionNumber`, número visual reiniciado por equipamento.
+`executionNumber` permanece como identidade histórica global.
+
+`POST /api/v1/pmoc/:id/execution-requests` reutiliza solicitação aberta do mesmo equipamento.
+Quando o limite é atingido, retorna `409 PMOC_EXECUTION_LIMIT_REACHED`.
+
+Estados aditivos: `OVERDUE` significa cobertura encerrada com pendências; `COMPLETED` significa
+cobertura encerrada com todos os ciclos de todos os equipamentos concluídos.
+
 ## Assinatura institucional vinculada ao responsável técnico
 
 ### `POST /api/v1/signatures`

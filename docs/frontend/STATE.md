@@ -1,5 +1,12 @@
 # STATE — Frontend
 
+## PMOC — ciclos por equipamento e encerramento (2026-07-28)
+
+- Platform e Operator exibem sequência independente por equipamento.
+- O detalhe separa ciclos configurados do total operacional dos ativos.
+- A aba Execuções mostra progresso individual e alerta de cobertura encerrada com pendências.
+- Equipamentos concluídos não oferecem nova execução; PMOC `COMPLETED` aparece como Finalizado.
+
 ## PMOC — Wizard de configuração do plano (2026-07-27)
 
 - `Novo PMOC` abre quatro passos: Identificação e cobertura, Planejamento, Execuções e Confirmação.

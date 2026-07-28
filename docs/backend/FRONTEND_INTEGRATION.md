@@ -1,5 +1,14 @@
 # Frontend Integration
 
+## PMOC — progresso por equipamento
+
+- `overview.expectedExecutions` continua sendo a quantidade de ciclos configurados do plano.
+- `overview.expectedEquipmentExecutions` é o total operacional multiplicado pelos equipamentos.
+- Cada linha consome `overview.equipmentExecutions`; não calcule contadores localmente.
+- Wizard, histórico e documento exibem `equipmentExecutionNumber`.
+- `coverageEnded && hasOpenExecutions` exige aviso e mantém a execução do passivo disponível.
+- `operationalStatus=COMPLETED` deve ser exibido como **Finalizado**.
+
 ## PMOC configurado antes da execução
 
 - Envie `configurationOnly: true` ao criar o plano pelo Wizard da Platform.

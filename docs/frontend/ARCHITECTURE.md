@@ -1,5 +1,10 @@
 # ARCHITECTURE — Frontend
 
+## Projeção PMOC
+
+Periodicidade, capacidade, numeração e encerramento são autoritativos no backend.
+`executionNumber` permanece histórico; `equipmentExecutionNumber` é apresentado ao usuário.
+
 ## Separação PMOC Plan × execução
 
 `PmocPlanWizard(configurationOnly)` é uma variação do componente oficial. A Platform persiste o

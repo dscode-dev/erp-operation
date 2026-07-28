@@ -794,8 +794,10 @@ function PmocStartStep({
         )}
         {error && <p className="rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 p-3 text-sm text-[var(--color-danger)]">{error}</p>}
         {planId && (plan.loading && !plan.data ? <SkeletonList rows={4} /> : plan.error && !plan.data ? <ErrorState error={plan.error} onRetry={plan.refetch} /> : equipments.length === 0 ? <EmptyState icon={FileSearch} title="Nenhum equipamento coberto" description="Configure os equipamentos deste PMOC na Platform antes da execução." /> : <div className="space-y-3"><div><h2 className="font-semibold">Equipamentos cobertos</h2><p className="text-xs text-[var(--color-muted-foreground)]">Cada equipamento gera sua própria execução, evidências e documento PMOC.</p></div>{equipments.map((equipment) => {
-          const latest = (requests.data?.items ?? []).filter((request) => request.equipmentId === equipment.id).sort((left, right) => right.executionNumber - left.executionNumber)[0];
-          return <button key={equipment.id} type="button" disabled={Boolean(busy)} onClick={() => void start(equipment)} className="flex w-full items-center justify-between gap-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 text-left disabled:opacity-60"><span className="min-w-0"><span className="block truncate font-semibold">{equipment.name}</span><span className="block truncate text-xs text-[var(--color-muted-foreground)]">{[equipment.sector, equipment.manufacturer, equipment.model, equipment.capacity].filter(Boolean).join(' · ') || 'Sem detalhes técnicos'}</span>{latest && <span className="mt-1 block text-xs text-[var(--color-primary)]">Última execução {String(latest.executionNumber).padStart(3, '0')} · {pmocExecutionLabel(latest.status)}</span>}</span>{busy === equipment.id ? <Loader2 className="h-5 w-5 shrink-0 animate-spin" /> : <ChevronRight className="h-5 w-5 shrink-0" />}</button>;
+          const latest = (requests.data?.items ?? []).filter((request) => request.equipmentId === equipment.id).sort((left, right) => right.equipmentExecutionNumber - left.equipmentExecutionNumber)[0];
+          const progress = plan.data?.overview?.equipmentExecutions.find((item) => item.equipmentId === equipment.id);
+          const unavailable = !progress?.hasOpenExecutions;
+          return <button key={equipment.id} type="button" disabled={Boolean(busy) || unavailable} onClick={() => void start(equipment)} className="flex w-full items-center justify-between gap-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 text-left disabled:opacity-60"><span className="min-w-0"><span className="block truncate font-semibold">{equipment.name}</span><span className="block truncate text-xs text-[var(--color-muted-foreground)]">{[equipment.sector, equipment.manufacturer, equipment.model, equipment.capacity].filter(Boolean).join(' · ') || 'Sem detalhes técnicos'}</span>{progress && <span className={`mt-1 block text-xs ${progress.coverageEnded && progress.hasOpenExecutions ? 'text-[var(--color-danger)]' : 'text-[var(--color-primary)]'}`}>{progress.completedExecutions}/{progress.expectedExecutions} execuções concluídas{progress.coverageEnded && progress.hasOpenExecutions ? ` · cobertura encerrada, ${progress.remainingExecutions} pendente(s)` : ''}</span>}{latest && <span className="block text-xs text-[var(--color-muted-foreground)]">Última execução {String(latest.equipmentExecutionNumber).padStart(3, '0')} · {pmocExecutionLabel(latest.status)}</span>}</span>{busy === equipment.id ? <Loader2 className="h-5 w-5 shrink-0 animate-spin" /> : unavailable ? <Check className="h-5 w-5 shrink-0 text-[var(--color-success)]" /> : <ChevronRight className="h-5 w-5 shrink-0" />}</button>;
         })}</div>)}
       </div>
       {plan.data && (
@@ -817,7 +819,7 @@ function PmocStartStep({
             }
             onCompleted({
               documentId,
-              documentNumber: documentNumber ?? `PMOC-${String(request.executionNumber).padStart(3, '0')}`,
+              documentNumber: documentNumber ?? `PMOC-${String(request.equipmentExecutionNumber).padStart(3, '0')}`,
             });
           }}
         />

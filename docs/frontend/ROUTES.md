@@ -1,5 +1,15 @@
 # ROUTES — Frontend
 
+## `/pmoc/[id]`
+
+A aba Execuções apresenta capacidade independente por equipamento. Depois do fim da cobertura,
+itens pendentes continuam executáveis e recebem alerta. O plano fica Finalizado somente após todos
+os ciclos.
+
+## `/operator/atendimento`
+
+Executar PMOC mostra progresso, pendências e numeração própria do equipamento selecionado.
+
 ## `/pmoc`
 
 - `Novo PMOC` cria somente a configuração do plano.

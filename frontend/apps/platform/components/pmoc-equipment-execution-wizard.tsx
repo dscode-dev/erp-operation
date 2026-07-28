@@ -176,7 +176,7 @@ export function PmocEquipmentExecutionWizard({
       eyebrow={`PMOC-${String(plan.number).padStart(6, "0")}`}
       title={
         request
-          ? `Executar ${String(request.executionNumber).padStart(3, "0")} do PMOC`
+        ? `Executar ${String(request.equipmentExecutionNumber).padStart(3, "0")} do PMOC`
           : "Preparar execução do PMOC"
       }
       width="max-w-[980px]"
@@ -196,7 +196,7 @@ export function PmocEquipmentExecutionWizard({
                 ? "Gerando documento..."
                 : generatedRequest
                   ? "Gerar PDF novamente"
-                  : `Executar ${String(request?.executionNumber ?? 0).padStart(3, "0")} do PMOC`}
+                  : `Executar ${String(request?.equipmentExecutionNumber ?? 0).padStart(3, "0")} do PMOC`}
             </button>
           )}
         </>
@@ -297,7 +297,7 @@ export function PmocEquipmentExecutionWizard({
           <section className="space-y-5">
             <SectionTitle icon={Check} title="Confirmação" description="Revise os textos e confirme a execução documental deste equipamento." />
             <div className="grid gap-3 sm:grid-cols-2">
-              <Readonly label="Execução" value={String(request?.executionNumber ?? 0).padStart(3, "0")} />
+              <Readonly label="Execução" value={String(request?.equipmentExecutionNumber ?? 0).padStart(3, "0")} />
               <Readonly label="Equipamento" value={equipment.name} />
               <Readonly label="Técnico responsável" value={technician?.name ?? "Não configurado"} />
               <Readonly label="Evidências" value={`${photos.length} de ${MAX_PMOC_PHOTOS}`} />

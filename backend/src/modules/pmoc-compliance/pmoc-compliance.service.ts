@@ -49,6 +49,7 @@ import {
   UpdatePmocEnvironmentDto,
   UpdatePmocPlanDto,
 } from './dto/pmoc-compliance.dto';
+import { PmocExecutionRequestsService } from './pmoc-execution-requests.service';
 
 export interface PmocAuditContext {
   requestId: string;
@@ -234,7 +235,9 @@ const PMOC_INCLUDE = {
 const PMOC_ANALYTICS_REQUEST_SELECT = {
   id: true,
   pmocPlanId: true,
+  equipmentId: true,
   executionNumber: true,
+  equipmentExecutionNumber: true,
   status: true,
   origin: true,
   scheduledFor: true,
@@ -269,6 +272,7 @@ const PMOC_ANALYTICS_REQUEST_SELECT = {
 } satisfies Prisma.PmocExecutionRequestSelect;
 
 const PMOC_DASHBOARD_REQUEST_INCLUDE = {
+  equipment: { select: { id: true, name: true, tag: true } },
   pmocPlan: {
     select: {
       id: true,
@@ -328,9 +332,11 @@ export class PmocComplianceService implements ComplianceEvaluator<{
     private readonly lifecycle: LifecyclePublisher,
     private readonly documentConfiguration: DocumentConfigurationService,
     private readonly notifications: NotificationsService,
+    private readonly executionRequestsService: PmocExecutionRequestsService,
   ) {}
 
   async list(query: ListPmocQueryDto): Promise<unknown> {
+    await this.executionRequestsService.reconcileCoverageStatuses();
     const where: Prisma.PmocPlanWhereInput = {
       ...(query.customerId ? { customerId: query.customerId } : {}),
       ...(query.equipmentId
@@ -355,10 +361,7 @@ export class PmocComplianceService implements ComplianceEvaluator<{
     ]);
     const analytics = await this.analyticsForPlans(items);
     return this.page(
-      items.map((item) => ({
-        ...this.withCompliance(item),
-        overview: analytics.get(item.id),
-      })),
+      items.map((item) => this.withOverview(item, analytics.get(item.id))),
       query.page,
       query.limit,
       total,
@@ -366,9 +369,10 @@ export class PmocComplianceService implements ComplianceEvaluator<{
   }
 
   async get(id: string): Promise<unknown> {
+    await this.executionRequestsService.reconcileCoverageStatuses();
     const pmoc = await this.pmocOrThrow(id);
     const analytics = await this.analyticsForPlans([pmoc]);
-    return { ...this.withCompliance(pmoc), overview: analytics.get(pmoc.id) };
+    return this.withOverview(pmoc, analytics.get(pmoc.id));
   }
 
   async nameSuggestion(
@@ -415,7 +419,10 @@ export class PmocComplianceService implements ComplianceEvaluator<{
     const startDate = this.dateOnly(dto.startDate);
     const endDate = this.dateOnly(dto.endDate);
     this.assertDateRange(startDate, endDate);
-
+    const plannedExecutionCount = Math.max(
+      1,
+      this.recurrence.countBefore(recurrenceRule, startDate, endDate),
+    );
     const organization = await this.organizationOrThrow();
     const customer = await this.customerForPmocOrThrow(dto.customerId);
     const activeCoveragePlans = await this.activeCoveragePlans(dto.customerId, new Date());
@@ -517,6 +524,7 @@ export class PmocComplianceService implements ComplianceEvaluator<{
             generationMode === PmocGenerationMode.PAUSED || dto.active === false
               ? PmocOperationalStatus.PAUSED
               : PmocOperationalStatus.PENDING,
+          plannedExecutionCount,
           lastReservedExecutionNumber: configurationOnly ? 0 : 1,
           nextExecutionDate: startDate,
           nextGenerationDate: configurationOnly ? null : startDate,
@@ -528,7 +536,11 @@ export class PmocComplianceService implements ComplianceEvaluator<{
           active: dto.active ?? true,
           observations: dto.observations ? this.clean(dto.observations) : null,
           equipments: {
-            create: equipmentIds.map((equipmentId) => ({ equipmentId })),
+            create: equipmentIds.map((equipmentId) => ({
+              equipmentId,
+              lastReservedExecutionNumber:
+                !configurationOnly && equipmentId === dto.equipmentId ? 1 : 0,
+            })),
           },
           ...(scopes.length
             ? {
@@ -559,6 +571,7 @@ export class PmocComplianceService implements ComplianceEvaluator<{
                 equipmentId: dto.equipmentId,
                 maintenanceExecutionId: maintenanceExecution.id,
                 executionNumber: 1,
+                equipmentExecutionNumber: 1,
                 executionYear: startDate.getUTCFullYear(),
                 scheduledFor: startDate,
                 requestedBy: actor.id,
@@ -707,6 +720,22 @@ export class PmocComplianceService implements ComplianceEvaluator<{
         ? this.ruleForPeriodicity(periodicity)
         : (existing.maintenancePlan.recurrenceRule as unknown as RecurrenceRuleDto));
     this.recurrence.validate(recurrenceRule);
+    const plannedExecutionCount = Math.max(
+      1,
+      this.recurrence.countBefore(recurrenceRule, startDate, endDate),
+    );
+    const highestReservedExecution = existing.equipments.reduce(
+      (highest, item) => Math.max(highest, item.lastReservedExecutionNumber),
+      0,
+    );
+    if (plannedExecutionCount < highestReservedExecution) {
+      throw new ApplicationException(
+        ERROR_CODES.PMOC_EXECUTION_REQUEST_INVALID_STATE,
+        'A nova cobertura não pode excluir execuções já reservadas para os equipamentos',
+        HttpStatus.CONFLICT,
+        { plannedExecutionCount, highestReservedExecution },
+      );
+    }
     const equipmentIds =
       dto.equipmentIds !== undefined
         ? this.unique(dto.equipmentIds)
@@ -755,9 +784,24 @@ export class PmocComplianceService implements ComplianceEvaluator<{
         },
       });
       if (equipmentIds) {
+        const reserved = await tx.pmocExecutionRequest.groupBy({
+          by: ['equipmentId'],
+          where: { pmocPlanId: id, equipmentId: { in: equipmentIds } },
+          _max: { equipmentExecutionNumber: true },
+        });
+        const reservedByEquipment = new Map(
+          reserved.map((item) => [
+            item.equipmentId,
+            item._max.equipmentExecutionNumber ?? 0,
+          ]),
+        );
         await tx.pmocPlanEquipment.deleteMany({ where: { pmocPlanId: id } });
         await tx.pmocPlanEquipment.createMany({
-          data: equipmentIds.map((equipmentId) => ({ pmocPlanId: id, equipmentId })),
+          data: equipmentIds.map((equipmentId) => ({
+            pmocPlanId: id,
+            equipmentId,
+            lastReservedExecutionNumber: reservedByEquipment.get(equipmentId) ?? 0,
+          })),
           skipDuplicates: true,
         });
       }
@@ -790,6 +834,7 @@ export class PmocComplianceService implements ComplianceEvaluator<{
               ? { coverage: dto.coverage ? this.clean(dto.coverage) : null }
               : {}),
           ...(dto.periodicity ? { periodicity: dto.periodicity } : {}),
+          plannedExecutionCount,
           ...(dto.generationMode
             ? {
                 generationMode:
@@ -1292,7 +1337,7 @@ export class PmocComplianceService implements ComplianceEvaluator<{
 
   private planOverview(plan: PmocPayload, requests: PmocAnalyticsRequest[]): unknown {
     const now = new Date();
-    const expectedExecutions = this.expectedExecutionCount(plan);
+    const expectedExecutions = plan.plannedExecutionCount;
     const completed = requests.filter(
       (request) => request.maintenanceExecution?.status === MaintenanceExecutionStatus.COMPLETED,
     );
@@ -1306,10 +1351,6 @@ export class PmocComplianceService implements ComplianceEvaluator<{
       (request) =>
         request.status === PmocExecutionRequestStatus.PENDING && request.scheduledFor < now,
     );
-    const due = requests.filter(
-      (request) =>
-        request.scheduledFor <= now && request.status !== PmocExecutionRequestStatus.CANCELLED,
-    );
     const delayDays = completed
       .map((request) => {
         const executedAt = request.maintenanceExecution?.executedAt;
@@ -1319,14 +1360,11 @@ export class PmocComplianceService implements ComplianceEvaluator<{
     const averageDelayDays = delayDays.length
       ? Number((delayDays.reduce((sum, value) => sum + value, 0) / delayDays.length).toFixed(1))
       : 0;
-    const completionPercentage = due.length
-      ? Math.min(
-          100,
-          Number(
-            ((completed.filter((request) => request.scheduledFor <= now).length / due.length) * 100).toFixed(1),
-          ),
-        )
-      : 100;
+    const expectedEquipmentExecutions =
+      expectedExecutions * Math.max(plan.equipments.length, 1);
+    const completionPercentage = Number(
+      ((completed.length / Math.max(expectedEquipmentExecutions, 1)) * 100).toFixed(1),
+    );
     const denominator = Math.max(requests.length, 1);
     const score = Math.max(
       0,
@@ -1363,10 +1401,67 @@ export class PmocComplianceService implements ComplianceEvaluator<{
       .map((request) => request.maintenanceExecution?.executedAt)
       .filter((value): value is Date => Boolean(value))
       .sort((left, right) => right.getTime() - left.getTime())[0] ?? null;
+    const today = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+    );
+    const coverageEnded = plan.endDate < today;
+    const equipmentExecutions = plan.equipments.map(({ equipment }) => {
+      const equipmentRequests = requests.filter(
+        (request) => request.equipmentId === equipment.id,
+      );
+      const equipmentCompleted = equipmentRequests.filter(
+        (request) =>
+          request.maintenanceExecution?.status === MaintenanceExecutionStatus.COMPLETED,
+      ).length;
+      const equipmentCancelled = equipmentRequests.filter(
+        (request) => request.status === PmocExecutionRequestStatus.CANCELLED,
+      ).length;
+      const equipmentFailed = equipmentRequests.filter(
+        (request) => request.status === PmocExecutionRequestStatus.FAILED,
+      ).length;
+      const equipmentOverdue = equipmentRequests.filter(
+        (request) =>
+          request.status === PmocExecutionRequestStatus.PENDING &&
+          request.scheduledFor < now,
+      ).length;
+      const remaining = Math.max(expectedExecutions - equipmentCompleted, 0);
+      return {
+        equipmentId: equipment.id,
+        expectedExecutions,
+        completedExecutions: equipmentCompleted,
+        remainingExecutions: remaining,
+        cancelledExecutions: equipmentCancelled,
+        failedExecutions: equipmentFailed,
+        overdueExecutions: Math.max(
+          equipmentOverdue,
+          coverageEnded ? remaining : 0,
+        ),
+        nextExecutionNumber: Math.min(
+          (equipmentRequests.reduce(
+            (maximum, request) =>
+              Math.max(maximum, request.equipmentExecutionNumber),
+            0,
+          ) || 0) + 1,
+          expectedExecutions,
+        ),
+        hasOpenExecutions: remaining > 0,
+        coverageEnded,
+      };
+    });
+    const allEquipmentExecutionsCompleted =
+      equipmentExecutions.length > 0 &&
+      equipmentExecutions.every((item) => !item.hasOpenExecutions);
+    const operationalStatus =
+      coverageEnded && allEquipmentExecutionsCompleted
+        ? PmocOperationalStatus.COMPLETED
+        : coverageEnded
+          ? PmocOperationalStatus.OVERDUE
+          : this.operationalStatus(plan, now);
     return {
       expectedExecutions,
+      expectedEquipmentExecutions,
       completedExecutions: completed.length,
-      remainingExecutions: Math.max(expectedExecutions - completed.length, 0),
+      remainingExecutions: Math.max(expectedEquipmentExecutions - completed.length, 0),
       pendingExecutions: requests.filter(
         (request) =>
           request.status === PmocExecutionRequestStatus.PENDING ||
@@ -1380,27 +1475,12 @@ export class PmocComplianceService implements ComplianceEvaluator<{
       lastExecutionDate: lastExecutedAt,
       lastOperation: lastOperationRequest?.operation ?? null,
       lastDocument: documents[0] ?? null,
+      coverageEnded,
+      hasOpenExecutions: coverageEnded && !allEquipmentExecutionsCompleted,
+      operationalStatus,
+      equipmentExecutions,
       health: { ...health, score },
     };
-  }
-
-  private expectedExecutionCount(plan: PmocPayload): number {
-    const rule = plan.maintenancePlan.recurrenceRule as unknown as RecurrenceRuleDto;
-    let cursor = new Date(plan.startDate);
-    let count = 0;
-    try {
-      this.recurrence.validate(rule);
-      // Fim da cobertura é exclusivo: uma ocorrência que caia exatamente no
-      // endDate não conta (alinha com a projeção do wizard). Ex.: 25/07/2026 a
-      // 25/07/2027 mensal = 12 execuções, não 13.
-      while (cursor < plan.endDate && count < 10_000) {
-        count += 1;
-        cursor = this.recurrence.next(rule, cursor);
-      }
-      return count;
-    } catch {
-      return Math.max(plan.lastReservedExecutionNumber, 1);
-    }
   }
 
   private dashboardRange(
@@ -1436,9 +1516,7 @@ export class PmocComplianceService implements ComplianceEvaluator<{
             : request.scheduledFor.getTime() - now.getTime() <= 7 * 86_400_000
               ? 'DUE_SOON'
               : 'ON_TIME';
-    const equipments = request.pmocPlan.equipments.length
-      ? request.pmocPlan.equipments.map((item) => item.equipment)
-      : [request.pmocPlan.equipment];
+    const equipments = [request.equipment];
     return {
       id: request.id,
       pmocPlanId: request.pmocPlanId,
@@ -1447,6 +1525,7 @@ export class PmocComplianceService implements ComplianceEvaluator<{
       customer: request.pmocPlan.customer,
       equipments,
       executionNumber: request.executionNumber,
+      equipmentExecutionNumber: request.equipmentExecutionNumber,
       origin: request.origin,
       status: request.status,
       indicator,
@@ -1476,11 +1555,28 @@ export class PmocComplianceService implements ComplianceEvaluator<{
     };
   }
 
+  private withOverview<T extends PmocPayload>(pmoc: T, overview: unknown): unknown {
+    const base = this.withCompliance(pmoc);
+    const status =
+      overview &&
+      typeof overview === 'object' &&
+      'operationalStatus' in overview
+        ? (overview as { operationalStatus: PmocOperationalStatus }).operationalStatus
+        : base.operationalStatus;
+    return { ...base, operationalStatus: status, overview };
+  }
+
   private operationalStatus(pmoc: PmocPayload, now = new Date()): PmocOperationalStatus {
+    if (pmoc.operationalStatus === PmocOperationalStatus.COMPLETED) {
+      return PmocOperationalStatus.COMPLETED;
+    }
     if (!pmoc.active || pmoc.generationMode === PmocGenerationMode.PAUSED) {
       return PmocOperationalStatus.PAUSED;
     }
-    if (pmoc.endDate < now) return PmocOperationalStatus.EXPIRED;
+    const today = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+    );
+    if (pmoc.endDate < today) return PmocOperationalStatus.OVERDUE;
     if (pmoc.executionRequests.some((request) => request.status === PmocExecutionRequestStatus.FAILED)) {
       return PmocOperationalStatus.ERROR;
     }
