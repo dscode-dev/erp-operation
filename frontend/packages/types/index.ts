@@ -414,6 +414,7 @@ export type CustomerAddress = {
   street: string | null;
   number: string | null;
   complement: string | null;
+  referencePoint: string | null;
   district: string | null;
   city: string | null;
   state: string | null;

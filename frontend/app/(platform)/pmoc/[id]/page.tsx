@@ -216,7 +216,11 @@ function operationalStatusLabel(value: string) { return ({ ACTIVE: "Ativo", PEND
 function operationTypeLabel(value: string) { return ({ PREVENTIVA: "Manutenção preventiva", CORRETIVA: "Manutenção corretiva", INSTALACAO: "Instalação", PROJETO: "Projeto / inspeção técnica" } as Record<string, string>)[value] ?? value; }
 function equipmentProgressLabel(value?: string) { return ({ NOT_STARTED: "Disponível para execução", SCHEDULED: "Próxima execução programada", IN_PROGRESS: "Atendimento em andamento", UP_TO_DATE: "Em dia", OVERDUE: "Execução atrasada", ATTENTION: "Requer atenção", COMPLETED: "Ciclos concluídos" } as Record<string, string>)[value ?? ""] ?? "Disponível para execução"; }
 function equipmentProgressTone(value?: string): "success" | "warning" | "danger" | "info" { return value === "COMPLETED" || value === "UP_TO_DATE" ? "success" : value === "OVERDUE" || value === "ATTENTION" ? "danger" : value === "IN_PROGRESS" ? "warning" : "info"; }
-function date(value: string | null) { return value ? new Date(value).toLocaleDateString("pt-BR") : "—"; }
+function date(value: string | null) {
+  return value
+    ? new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC" }).format(new Date(value))
+    : "—";
+}
 function dateTime(value: string | null) { return value ? new Date(value).toLocaleString("pt-BR") : "—"; }
 function message(cause: unknown) { return cause instanceof ApiClientError ? cause.message : cause instanceof Error ? cause.message : "Não foi possível concluir a ação."; }
 const primary = "inline-flex h-10 items-center gap-2 rounded-[var(--radius-md)] bg-[var(--color-primary)] px-4 text-sm font-medium text-[var(--color-primary-foreground)] disabled:opacity-50";

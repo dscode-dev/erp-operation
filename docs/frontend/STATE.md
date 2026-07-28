@@ -1,5 +1,12 @@
 # STATE — Frontend
 
+## Atendimento mobile e calendário PMOC (2026-07-28)
+
+- O resumo do atendimento mostra complemento e ponto de referência do endereço.
+- Os formulários oficiais de endereço permitem cadastrar/editar ponto de referência opcional.
+- Resumo, listagem e próxima execução PMOC preservam o dia civil sem deslocamento por fuso.
+- Status do orçamento no Preview/PDF é traduzido pelo Document Engine.
+
 ## Refinamentos PMOC, Operator e Budget (2026-07-28)
 
 - Execuções PMOC mostram progresso real, última conclusão, próxima data e status por equipamento.
@@ -1386,3 +1393,12 @@ Status: concluído.
   “Compartilhar PDF” e “Baixar PDF”, usando download autenticado do Document Engine.
 - Configurações > Assinaturas permite associar uma assinatura institucional a um OWNER; essa relação
   alimenta automaticamente o técnico padrão do Wizard PMOC.
+
+# Correções de Recibo e Equipamentos do cliente — 2026-07-28
+
+- Ao selecionar uma Ordem de Serviço concluída como origem, a Central de Relatórios usa a data
+  local atual como data de emissão do novo Recibo. A data da OS não é mais copiada.
+- Na aba Equipamentos do detalhe do cliente, a ação Editar deixou de herdar o link da linha.
+  O clique abre somente o drawer de edição; clicar nos demais campos continua abrindo o detalhe
+  do equipamento.
+- Nenhum contrato de API, entidade ou migration foi alterado.

@@ -1,5 +1,20 @@
 # OPUS Frontend Integration
 
+## Compatibilidade das migrations recentes
+
+- Nenhum endpoint foi removido.
+- `source` mantém `MANUAL` como fallback de registros históricos.
+- `referencePoint` permanece opcional.
+- Não é necessário tratamento de indisponibilidade de dados antigos.
+
+## Ajustes de endereço e calendário
+
+- `CustomerAddress.referencePoint?: string | null` está disponível no CRUD oficial.
+- O Operator deve mostrar `complement` e `referencePoint` no resumo do atendimento.
+- Esses campos não pertencem ao documento final.
+- Datas previstas/cobertura PMOC devem ser renderizadas como datas-calendário UTC.
+- O status presente no Blueprint de orçamento já chega traduzido pelo backend.
+
 ## Refinamento de execução e orçamento
 
 - PMOC por equipamento: consumir `lastExecutionNumber`, `lastExecutionDate`, `nextExecutionNumber`,

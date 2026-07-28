@@ -7,16 +7,19 @@ ADD COLUMN "source" "BudgetItemSource" NOT NULL DEFAULT 'MANUAL';
 -- existed. Exact organization/type/title matching avoids reclassifying unrelated
 -- manual material rows.
 UPDATE "budget_items" AS "item"
-SET
-  "source" = 'CATALOG',
-  "unit_price" = 0,
-  "snapshot_cost" = 0,
-  "snapshot_sale_price" = 0,
-  "snapshot_margin" = 0,
-  "total" = 0
+SET "source" = 'CATALOG'
 FROM "budgets" AS "budget"
 WHERE "budget"."id" = "item"."budget_id"
   AND "item"."type" = 'MATERIAL'
+  -- A origem anterior não é demonstrável apenas pelo texto. Para preservar
+  -- integralmente valores comerciais existentes, somente snapshots que já
+  -- eram totalmente informativos (todos os valores zerados) são classificados
+  -- como catálogo. Qualquer item com valor permanece MANUAL.
+  AND "item"."unit_price" = 0
+  AND "item"."snapshot_cost" = 0
+  AND "item"."snapshot_sale_price" = 0
+  AND "item"."snapshot_margin" = 0
+  AND "item"."total" = 0
   AND EXISTS (
     SELECT 1
     FROM "technical_catalogs" AS "catalog"

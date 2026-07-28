@@ -1,3 +1,5 @@
+BEGIN;
+
 UPDATE "maintenance_executions" execution
 SET
   "status" = 'COMPLETED'::"MaintenanceExecutionStatus",
@@ -46,3 +48,5 @@ WHERE plan."id" = projection."pmoc_plan_id"
     plan."last_execution_date" IS NULL
     OR plan."last_execution_date" < projection."last_execution"
   );
+
+COMMIT;

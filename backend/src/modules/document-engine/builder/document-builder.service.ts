@@ -1,5 +1,6 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import {
+  BudgetStatus,
   DocumentTemplateType,
   OperationMaintenanceType,
   OperationStatus,
@@ -43,6 +44,15 @@ const OPERATION_STATUS_LABEL: Record<OperationStatus, string> = {
   REVIEW: 'Em revisão',
   COMPLETED: 'Concluída',
   CANCELED: 'Cancelada',
+};
+
+const BUDGET_STATUS_LABEL: Record<BudgetStatus, string> = {
+  DRAFT: 'Rascunho',
+  PENDING: 'Pendente',
+  APPROVED: 'Aprovado',
+  REJECTED: 'Rejeitado',
+  EXPIRED: 'Expirado',
+  CANCELED: 'Cancelado',
 };
 
 @Injectable()
@@ -857,12 +867,18 @@ export class DocumentBuilderService {
         critical: true,
         components: [this.metadata('pmoc-operational-metadata', [
           ['Operação', `OP-${String(operation.number).padStart(6, '0')}`],
-          ['Execução prevista', this.date(operation.maintenanceExecution?.scheduledAt ?? null)],
+          [
+            'Execução prevista',
+            this.calendarDate(operation.maintenanceExecution?.scheduledAt ?? null),
+          ],
           ['Início', this.date(operation.startedAt)],
           ['Conclusão', this.date(operation.completedAt)],
           ['Técnico em campo', operation.operator.name],
           ['Contato do cliente', contact ? `${contact.name}${contact.phone ? ` · ${contact.phone}` : ''}` : (operation.customer.phone ?? '—')],
-          ['Vigência', `${this.date(pmoc.startDate)} a ${this.date(pmoc.endDate)}`],
+          [
+            'Vigência',
+            `${this.calendarDate(pmoc.startDate)} a ${this.calendarDate(pmoc.endDate)}`,
+          ],
           ['Periodicidade', this.maintenanceTypeLabel(operation.maintenanceType ?? 'MONTHLY')],
           [
             'Tipos de serviço',
@@ -1657,7 +1673,7 @@ export class DocumentBuilderService {
           this.metadata('budget-metadata', [
             ['Número', `ORC-${String(budget.number).padStart(6, '0')}`],
             ['Título', budget.title],
-            ['Status', budget.status],
+            ['Status', BUDGET_STATUS_LABEL[budget.status]],
             ['Data', this.dateOnly(budget.issuedAt)],
             ['Válido até', this.dateOnly(budget.expirationDate)],
             ['Responsável', budget.creator.name],
@@ -2205,6 +2221,19 @@ export class DocumentBuilderService {
     return new Intl.DateTimeFormat('pt-BR', {
       dateStyle: 'short',
       timeZone: 'America/Recife',
+    }).format(new Date(value));
+  }
+
+  /**
+   * Datas de cobertura/recorrência representam um dia civil, não um instante.
+   * Prisma materializa colunas PostgreSQL DATE em 00:00 UTC; formatá-las em BRT
+   * faria 28/07 aparecer como 27/07.
+   */
+  private calendarDate(value: Date | string | null): string {
+    if (!value) return '—';
+    return new Intl.DateTimeFormat('pt-BR', {
+      dateStyle: 'short',
+      timeZone: 'UTC',
     }).format(new Date(value));
   }
 

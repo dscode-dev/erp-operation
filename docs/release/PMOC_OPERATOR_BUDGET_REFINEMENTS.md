@@ -16,9 +16,10 @@
 ## Compatibilidade
 
 - Operations, documentos e solicitações PMOC existentes foram preservados.
-- `BudgetItem.source` usa `MANUAL` como padrão e a migration reclassifica como
+- `BudgetItem.source` usa `MANUAL` como padrão. A migration classifica como
   `CATALOG` somente descrições com correspondência exata no catálogo da mesma
-  organização.
+  organização e cujo snapshot comercial já esteja integralmente zerado.
+- Nenhum preço, custo, margem ou total histórico é alterado pela migration.
 - Preview e PDF continuam usando o mesmo DocumentBlueprint.
 
 ## Segurança

@@ -1,5 +1,29 @@
 # Backend State
 
+## Certificação das migrations recentes para produção (2026-07-28)
+
+- As migrations `20260728180000`, `20260728181000` e `20260728190000` foram ensaiadas sobre clone
+  integral do banco com dados, reconstruído no estado imediatamente anterior a elas.
+- O backfill de Budget foi endurecido: somente snapshots já integralmente zerados e com
+  correspondência exata no catálogo recebem `source=CATALOG`; valores históricos nunca são
+  alterados.
+- A reconciliação PMOC é transacional e atualiza apenas projeções derivadas de Operations
+  concluídas.
+- Contagens e hashes de Customers, endereços preexistentes, Operations e documentos permaneceram
+  idênticos. Todas as constraints continuaram validadas.
+- Tempo observado para as três migrations no clone local: 2,939 segundos, incluindo overhead do
+  Prisma. Produção deve usar backup verificado e janela curta sem escrita devido aos locks de DDL.
+
+## Endereço operacional, status do orçamento e datas PMOC (2026-07-28)
+
+- `CustomerAddress.referencePoint` foi adicionado como campo opcional, sanitizado e limitado a
+  180 caracteres. Migration aditiva: `20260728190000_customer_address_reference_point`.
+- Operations continuam apenas referenciando o endereço oficial do cliente; complemento e ponto de
+  referência não foram duplicados e não integram o Document Engine.
+- O Blueprint de Budget traduz todos os estados oficiais para pt-BR.
+- Datas de cobertura e recorrência PMOC são tratadas como datas-calendário em UTC. Horários reais
+  de início, conclusão e assinatura continuam formatados em `America/Recife`.
+
 ## PMOC, atendimentos e materiais de orçamento — refinamento (2026-07-28)
 
 - A Operation PMOC concluída agora vincula a `MaintenanceExecution` antes dos efeitos de

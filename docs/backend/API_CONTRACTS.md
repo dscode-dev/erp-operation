@@ -1,5 +1,30 @@
 # API Contracts
 
+## Compatibilidade de migrations
+
+As migrations recentes são aditivas e não removem contratos:
+
+- `BudgetItem.source` possui default `MANUAL` para clientes e registros anteriores.
+- `CustomerAddress.referencePoint` é nullable.
+- A reconciliação PMOC não altera IDs, relacionamentos ou payloads; apenas corrige projeções de
+  conclusão derivadas.
+
+## Endereços — ponto de referência
+
+`POST /api/v1/customers/:id/addresses` e
+`PATCH /api/v1/customers/:id/addresses/:addressId` aceitam o campo aditivo:
+
+```json
+{
+  "referencePoint": "Entrada pelo portão lateral"
+}
+```
+
+- Campo opcional; `null`/ausência significam não informado.
+- String sanitizada com máximo de 180 caracteres.
+- Respostas de CustomerAddress e Operations que incluem `address` retornam o mesmo campo.
+- Complemento e ponto de referência são operacionais e não compõem contratos documentais.
+
 ## Refinamento PMOC e Budget
 
 `overview.equipmentExecutions[]` em `GET /api/v1/pmoc/:id` inclui:

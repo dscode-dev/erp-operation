@@ -42,6 +42,7 @@ export type WalkInCustomerPayload = {
     street: string;
     number: string;
     complement?: string;
+    referencePoint?: string;
     district: string;
     city: string;
     state: string;

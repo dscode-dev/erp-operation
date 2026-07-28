@@ -1,5 +1,23 @@
 # Security
 
+## Segurança de dados nas migrations recentes
+
+- Nenhuma migration executa `DELETE`, `DROP TABLE`, alteração de FK ou mudança destrutiva de tipo.
+- Backfills PMOC são atômicos e condicionados a Operation oficialmente concluída.
+- O backfill de Budget não modifica nenhum valor monetário histórico.
+- DDL de `budget_items` e `customer_addresses` exige lock curto; aplicar em janela sem escrita,
+  precedida por backup restaurável.
+- Rollback de aplicação é compatível com as colunas aditivas. Rollback de dados deve ser feito por
+  restauração do backup, não por migration reversa improvisada.
+
+## Ponto de referência e separação documental
+
+- `referencePoint` é opcional, passa por whitelist/DTO, trim e limite de 180 caracteres.
+- O campo permanece sob o mesmo RBAC e validação de ownership do endereço do cliente.
+- Complemento e ponto de referência são lidos pela Operation por relação oficial; não há snapshot
+  ou payload documental adicional.
+- O Document Engine não recebe nem expõe esses dados no Preview/PDF.
+
 ## Integridade PMOC e materiais de orçamento (2026-07-28)
 
 - O vínculo PMOC → MaintenanceExecution e os efeitos de conclusão ocorrem na mesma transação.

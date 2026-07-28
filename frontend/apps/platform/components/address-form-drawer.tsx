@@ -17,6 +17,7 @@ type AddressForm = {
   street: string;
   number: string;
   complement: string;
+  referencePoint: string;
   district: string;
   city: string;
   state: string;
@@ -30,6 +31,7 @@ function fromAddress(address: CustomerAddress | null): AddressForm {
     street: address?.street ?? "",
     number: address?.number ?? "",
     complement: address?.complement ?? "",
+    referencePoint: address?.referencePoint ?? "",
     district: address?.district ?? "",
     city: address?.city ?? "",
     state: address?.state ?? "",
@@ -103,6 +105,7 @@ export function AddressFormDrawer({
       street: form.street.trim(),
       number: form.number.trim(),
       complement: form.complement.trim() || null,
+      referencePoint: form.referencePoint.trim() || null,
       district: form.district.trim(),
       city: form.city.trim(),
       state: form.state.trim().toUpperCase(),
@@ -175,6 +178,15 @@ export function AddressFormDrawer({
             <input value={form.complement} onChange={(e) => set("complement", e.target.value)} className={inputCls} />
           </Field>
         </div>
+
+        <Field label="Ponto de referência">
+          <input
+            value={form.referencePoint}
+            onChange={(e) => set("referencePoint", e.target.value)}
+            className={inputCls}
+            placeholder="Ex.: próximo ao portão lateral"
+          />
+        </Field>
 
         <div className="grid grid-cols-2 gap-3">
           <Field label="Cidade" required>

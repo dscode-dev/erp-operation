@@ -837,6 +837,13 @@ describe('DocumentEngine foundation', () => {
   it('certifies PMOC equipment checklists, photos and semantic signatures in one Blueprint', async () => {
     const context = operationContext(DocumentTemplateType.PMOC);
     const operation = context.operation as Record<string, unknown>;
+    const maintenanceExecution = operation.maintenanceExecution as {
+      scheduledAt: Date;
+      plan: { pmocPlan: { startDate: Date; endDate: Date } };
+    };
+    maintenanceExecution.scheduledAt = new Date('2026-07-28T00:00:00.000Z');
+    maintenanceExecution.plan.pmocPlan.startDate = new Date('2026-07-28T00:00:00.000Z');
+    maintenanceExecution.plan.pmocPlan.endDate = new Date('2027-07-28T00:00:00.000Z');
     operation.maintenanceType = 'MONTHLY';
     operation.inspectedEquipments = [{
       equipmentId: 'equipment-1', position: 0, sector: 'Sala técnica', brandSnapshot: 'Carrier',
@@ -858,6 +865,10 @@ describe('DocumentEngine foundation', () => {
     const built = (new DocumentBuilderService({} as never) as unknown as { buildFromContext: (ctx: unknown) => DocumentBlueprint }).buildFromContext(context);
     const ids = built.sections.map((section) => section.id);
     expect(ids).toEqual(expect.arrayContaining(['pmoc-identification', 'pmoc-operational-data', 'pmoc-inspected-equipments', 'pmoc-legal-reference', 'pmoc-checklist', 'signature']));
+    const operational = built.sections.find((section) => section.id === 'pmoc-operational-data')?.components[0];
+    const operationalItems = operational?.kind === 'metadata' ? operational.items : [];
+    expect(operationalItems.find((item) => item.label === 'Execução prevista')?.value).toBe('28/07/2026');
+    expect(operationalItems.find((item) => item.label === 'Vigência')?.value).toBe('28/07/2026 a 28/07/2027');
     const checklistSection = built.sections.find((section) => section.id === 'pmoc-checklist');
     const table = checklistSection?.components.find((component) => component.kind === 'table');
     expect(table?.kind === 'table' ? table.rows.map((row) => row.executed) : []).toEqual(['Sim', 'N.A.']);
@@ -1813,6 +1824,12 @@ describe('DocumentEngine foundation', () => {
     expect(descriptions?.kind === 'table' ? descriptions.columns.map((column) => column.key) : []).toEqual(['item', 'quantity']);
     expect(descriptions?.kind === 'table' ? descriptions.rows[0] : null).not.toHaveProperty('unitPrice');
     expect(materials?.kind === 'table' ? materials.rows : []).toHaveLength(1);
+    const identification = built.sections.find((section) => section.id === 'budget-identification')?.components[0];
+    expect(
+      identification?.kind === 'metadata'
+        ? identification.items.find((item) => item.label === 'Status')?.value
+        : null,
+    ).toBe('Rascunho');
     const signature = built.sections.find((section) => section.id === 'signature')?.components[0];
     // Orçamento não coleta assinatura do cliente — apenas o responsável técnico.
     expect(signature?.kind === 'signature' ? signature.signatures.map((item) => item.role) : []).toEqual(['fixed']);

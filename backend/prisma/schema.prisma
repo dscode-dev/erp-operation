@@ -826,6 +826,7 @@ model CustomerAddress {
   street                  String      @db.VarChar(180)
   number                  String      @db.VarChar(20)
   complement              String?     @db.VarChar(120)
+  referencePoint          String?     @map("reference_point") @db.VarChar(180)
   district                String      @db.VarChar(100)
   city                    String      @db.VarChar(100)
   state                   String      @db.VarChar(2)

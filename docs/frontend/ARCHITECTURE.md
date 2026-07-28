@@ -1,5 +1,12 @@
 # ARCHITECTURE — Frontend
 
+## Datas-calendário e dados operacionais de endereço
+
+- Campos PMOC que representam um dia, sem horário, são formatados com `timeZone: "UTC"`.
+- Timestamps reais continuam usando o timezone local; as duas semânticas não são misturadas.
+- Complemento e ponto de referência vêm da relação `Operation.address` e são somente informativos
+  no Operator. Nenhuma regra documental foi duplicada no frontend.
+
 ## Projeções operacionais e snapshots comerciais
 
 - PMOC consome a projeção por equipamento do backend, sem recompor estado pelas Execution Requests.
@@ -1273,3 +1280,14 @@ O executor por equipamento reside na camada compartilhada da Platform e é consu
 evitando dois wizards e duas regras de persistência. O seletor mobile apenas resolve
 `PmocPlan + equipment + PmocExecutionRequest + prefill`; toda mutação permanece nas APIs oficiais.
 O PDF é obtido como `Blob` autenticado e nunca é montado no navegador.
+
+## Navegação de tabelas e ações
+
+`DataTable.rowHref` cobre somente colunas navegáveis. Controles de ação declaram `link: false`,
+mantendo a semântica de um único destino por interação e evitando `<button>` dentro de `<a>`.
+
+## Data documental do Recibo
+
+A seleção de uma OS é apenas uma fonte de preenchimento. A data de emissão pertence ao novo Recibo
+e é inicializada pelo cliente web com a data civil local no momento da seleção; o backend persiste
+o valor explícito em `receiptIssuedAt`.

@@ -9,6 +9,8 @@ export type Column<T> = {
   header: string;
   className?: string;
   cell: (row: T) => ReactNode;
+  /** Set to false for action cells that must not inherit the row link. */
+  link?: boolean;
   /** Provide to make the column sortable (client-side, current page). */
   sortAccessor?: (row: T) => string | number;
 };
@@ -121,7 +123,7 @@ export function DataTable<T extends { id: string }>({
                   )}
                   {columns.map((c) => (
                     <td key={c.key} className={"align-middle " + (c.className ?? "")}>
-                      {href ? (
+                      {href && c.link !== false ? (
                         <Link href={href} className="block px-4 py-3 focus:outline-none focus-visible:bg-[var(--color-muted)]/60">
                           {c.cell(row)}
                         </Link>

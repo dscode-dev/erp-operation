@@ -1,5 +1,21 @@
 # Frontend Integration
 
+## Compatibilidade durante deploy
+
+- A aplicação anterior pode conviver temporariamente com as colunas aditivas:
+  `BudgetItem.source` possui default e `CustomerAddress.referencePoint` aceita `NULL`.
+- Não há remoção ou renomeação de campo.
+- O deploy deve aplicar migrations antes de iniciar a nova imagem da API.
+
+## Endereço operacional e datas PMOC
+
+- Formulários de endereço podem enviar `referencePoint` opcional.
+- O detalhe do atendimento recebe `operation.address.complement` e
+  `operation.address.referencePoint`; ambos são informativos e não devem ser enviados ao Preview.
+- `PmocPlan.startDate`, `endDate` e datas previstas representam dias civis. Ao formatar esses
+  campos, use `timeZone: "UTC"` para impedir recuo de um dia no navegador.
+- Timestamps de execução efetiva continuam sendo apresentados no fuso local da instalação.
+
 ## PMOC e materiais de orçamento
 
 - Use `lastExecution*` para Última execução e `nextExecution*` para Próxima prevista. Não derive

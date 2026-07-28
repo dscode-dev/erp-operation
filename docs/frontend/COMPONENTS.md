@@ -1,5 +1,12 @@
 # COMPONENTS — Frontend
 
+## AddressFormDrawer e atendimento Operator
+
+- `AddressFormDrawer`: inclui `referencePoint` opcional no CRUD oficial de endereços.
+- `CustomerFormDrawer`: permite informar o mesmo campo ao criar cliente com endereço inicial.
+- `operator/services/[id]`: exibe Complemento e Ponto de referência no card operacional, sem
+  encaminhá-los ao documento.
+
 ## PMOC `EquipmentExecutions`
 
 Consome a projeção pronta do backend e separa última execução da próxima solicitação.
@@ -940,6 +947,13 @@ Wizard reservado à execução de um equipamento coberto pelo PMOC. Reutiliza `D
 
 `CoveredEquipmentList` e `EquipmentExecutions` projetam a mesma cobertura no Resumo e em
 Execuções.
+
+## `DataTable` — células de ação
+
+- Colunas podem declarar `link: false` quando contêm botões, menus ou outros controles.
+- Essas células não são envolvidas pelo `rowHref`, evitando elementos interativos aninhados e
+  navegação acidental.
+- A tabela de equipamentos do cliente utiliza essa opção no botão Editar.
 # PMOC por equipamento
 
 - `PmocEquipmentExecutionWizard`: componente compartilhado entre Platform e Operator para
