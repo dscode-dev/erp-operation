@@ -544,6 +544,11 @@ function EquipmentTab({ customerId }: { customerId: string }) {
         ),
       },
       {
+        key: 'type',
+        header: 'Tipo',
+        cell: (item) => item.equipmentTypeCatalog?.title ?? item.type,
+      },
+      {
         key: 'model',
         header: 'Modelo',
         cell: (item) =>

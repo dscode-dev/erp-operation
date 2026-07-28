@@ -1,5 +1,26 @@
 # ROUTES — Frontend
 
+## `/maintenance-checklists`
+
+As abas `Checklists de Equipamentos` e `Descrições de materiais` reutilizam o CRUD oficial dos
+Catálogos Técnicos. Links podem abrir diretamente com `?type=EQUIPMENT_TYPE` ou
+`?type=BUDGET_MATERIAL_DESCRIPTION`.
+
+## `/clientes/:id?tab=equipments` e `/budgets`
+
+O cadastro de equipamento consome o catálogo de tipos. O Wizard de orçamento consome descrições
+reutilizáveis na etapa Materiais.
+
+## `/operations`
+
+O Wizard de criação permite ao OWNER/MANAGER informar o valor operacional e usa a identificação
+técnica enriquecida dos equipamentos.
+
+## `/operator/services` e `/operator/services/:id`
+
+A lista ordena atendimentos por criação decrescente. O detalhe exibe o valor do serviço quando
+informado e os Wizards exigem a complementação dos equipamentos originalmente incompletos.
+
 ## `/pmoc/[id]`
 
 A aba Execuções apresenta capacidade independente por equipamento. Depois do fim da cobertura,

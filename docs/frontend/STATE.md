@@ -1,5 +1,24 @@
 # STATE — Frontend
 
+## Catálogos de equipamentos e materiais (2026-07-28)
+
+- Catálogos Técnicos ganhou as abas `Checklists de Equipamentos` e `Descrições de materiais`.
+- O cadastro de equipamento usa somente tipos ativos do backend e preserva tipos arquivados durante
+  edição de registros antigos.
+- A etapa Materiais do orçamento possui o multi-select `Descrição dos Materiais`.
+- Seleções viram itens editáveis com quantidade, unidade e valor; os snapshots permanecem
+  independentes do catálogo.
+
+## Operações — valor do serviço e equipamentos (2026-07-28)
+
+- O Wizard gerencial possui valor operacional no passo Execução; ele é exibido ao técnico no
+  detalhe do atendimento e não aparece em documentos.
+- Seletores de equipamento exibem marca, modelo e capacidade no título e setor no subtítulo.
+- Os Wizards Operator, atribuídos ou iniciados no mobile, solicitam os campos técnicos ausentes de
+  cada equipamento antes da conclusão.
+- Atendimentos estão ordenados do mais recente para o mais antigo.
+- O rótulo oficial foi ajustado para `Auxiliar Técnico`.
+
 ## PMOC — ciclos por equipamento e encerramento (2026-07-28)
 
 - Platform e Operator exibem sequência independente por equipamento.

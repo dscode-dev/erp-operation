@@ -485,6 +485,14 @@ export type EquipmentCounts = { children: number; attachments: number; metrics: 
 export type EquipmentSummary = {
   id: string;
   type: EquipmentType;
+  equipmentTypeCatalogId?: string | null;
+  equipmentTypeCatalog?: {
+    id: string;
+    title: string;
+    active: boolean;
+    deletedAt: string | null;
+    tags: string[];
+  } | null;
   status: EquipmentStatus;
   name: string;
   sector: string | null;
@@ -668,7 +676,8 @@ export type AssetLifecycleStats = {
 
 export type CreateEquipmentPayload = {
   customerId: string;
-  type: EquipmentType;
+  type?: EquipmentType;
+  equipmentTypeCatalogId?: string;
   /** Derivado de marca + modelo no backend quando omitido. */
   name?: string;
   sector?: string | null;
@@ -799,7 +808,15 @@ export type OperationInspectedEquipment = {
   serialSnapshot?: string | null;
   systemTypeSnapshot?: string | null;
   currentSituationSnapshot?: string | null;
-  equipment?: { id: string; name: string; type: EquipmentType };
+  equipment?: {
+    id: string;
+    name: string;
+    type: EquipmentType;
+    sector: string | null;
+    manufacturer: string | null;
+    model: string | null;
+    capacity: string | null;
+  };
 };
 
 export type MaintenanceChecklistTemplate = {
@@ -818,7 +835,9 @@ export type TechnicalCatalogType =
   | 'SITE_CONDITION'
   | 'CONCLUSION'
   | 'RECOMMENDATION'
-  | 'PLAN_SCOPE';
+  | 'PLAN_SCOPE'
+  | 'EQUIPMENT_TYPE'
+  | 'BUDGET_MATERIAL_DESCRIPTION';
 
 export type TechnicalCatalogArea =
   | 'GENERAL'
@@ -852,6 +871,7 @@ export type TechnicalCatalog = {
   pmocUnit: PmocChecklistUnit | null;
   sortOrder: number;
   active: boolean;
+  deletedAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -902,6 +922,8 @@ export type OperationSummary = {
   requestedDocumentType: DocumentTemplateType;
   serviceTypes: OperationType[];
   status: OperationStatus;
+  /** Informação operacional da OS; não compõe Preview/PDF nem o Financial Core. */
+  serviceValue?: string | number | null;
   customer: { id: string; name: string } | null;
   equipment: { id: string; name: string } | null;
   operator: { id: string; name: string } | null;
@@ -933,7 +955,16 @@ export type OperationDetail = Omit<OperationSummary, 'equipment'> & {
     status: AssignmentStatus;
   } | null;
   address: CustomerAddress | null;
-  equipment: { id: string; name: string; tag: string | null; type: EquipmentType } | null;
+  equipment: {
+    id: string;
+    name: string;
+    tag: string | null;
+    type: EquipmentType;
+    sector: string | null;
+    manufacturer: string | null;
+    model: string | null;
+    capacity: string | null;
+  } | null;
   checklist: OperationChecklistItem[];
   observations: string | null;
   reportedIssue: string | null;
@@ -1102,6 +1133,7 @@ export type CreateOperationPayload = {
   observations?: string | null;
   reportedIssue?: string | null;
   serviceDescription?: string | null;
+  serviceValue?: number;
   receiptNumber?: string | null;
   receiptIssuedAt?: string | null;
   receiptAmount?: number | null;
@@ -1130,6 +1162,9 @@ export type CreateOperationPayload = {
     sector: string;
     systemType?: string | null;
     currentSituation?: string | null;
+    manufacturer?: string | null;
+    model?: string | null;
+    capacity?: string | null;
   }>;
   signatureData?: string | null;
   customerSignerName?: string | null;

@@ -1,5 +1,61 @@
 # API Contracts
 
+## Catálogos de equipamentos e materiais
+
+Os contratos existentes de `/api/v1/technical-catalogs` aceitam dois tipos adicionais:
+
+- `EQUIPMENT_TYPE`
+- `BUDGET_MATERIAL_DESCRIPTION`
+
+CRUD, paginação, ordenação, soft delete, RBAC e auditoria permanecem iguais aos demais catálogos.
+
+`POST /api/v1/equipments` e `PATCH /api/v1/equipments/:id` aceitam:
+
+```json
+{
+  "equipmentTypeCatalogId": "uuid",
+  "type": "OTHER"
+}
+```
+
+- `equipmentTypeCatalogId` deve apontar para item ativo do tipo `EQUIPMENT_TYPE`.
+- `type` tornou-se opcional quando o catálogo é informado.
+- Tipos V1 são derivados pela tag de compatibilidade; tipos personalizados persistem `OTHER` no
+  enum legado.
+- Respostas de equipamentos incluem `equipmentTypeCatalog` com `id`, `title`, `active`,
+  `deletedAt` e `tags`.
+- Equipamentos vinculados continuam retornando o título mesmo após soft delete do catálogo.
+
+Não houve alteração no payload de Budget: a descrição selecionada é enviada em
+`items[].description`.
+
+## Operações — campos operacionais aditivos
+
+`POST /api/v1/operations` aceita, adicionalmente:
+
+```json
+{
+  "serviceValue": 1350.00,
+  "inspectedEquipments": [
+    {
+      "equipmentId": "uuid",
+      "manufacturer": "Carrier",
+      "model": "Ecosplit",
+      "capacity": "20 TR"
+    }
+  ]
+}
+```
+
+- `serviceValue`: opcional, `0..999999999.99`, máximo de duas casas decimais e permitido somente a
+  OWNER/MANAGER. OPERATOR recebe `403 OPERATION_SERVICE_VALUE_FORBIDDEN`.
+- Marca, modelo e capacidade são opcionais no contrato. Quando o equipamento já possui o campo, o
+  valor cadastrado é preservado.
+- `PATCH /api/v1/operations/:id` aceita os mesmos campos técnicos em `inspectedEquipments`. Um
+  OPERATOR só pode informar IDs originalmente vinculados à operação que lhe pertence.
+- Respostas autorizadas de Operation/Assignment incluem `serviceValue`, quando informado.
+- Nenhum contrato documental contém `serviceValue`.
+
 ## PMOC — ciclos independentes por equipamento
 
 Campos aditivos em `GET /api/v1/pmoc` e `GET /api/v1/pmoc/:id`:

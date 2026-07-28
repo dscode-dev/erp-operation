@@ -22,6 +22,7 @@ export class ListEquipmentsQueryDto {
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(100) search?: string;
   @IsOptional() @IsUUID('4') customerId?: string;
   @IsOptional() @IsUUID('4') addressId?: string;
+  @IsOptional() @IsUUID('4') equipmentTypeCatalogId?: string;
   @IsOptional() @IsEnum(EquipmentStatus) status?: EquipmentStatus;
   @IsOptional() @IsEnum(EquipmentType) type?: EquipmentType;
 }
@@ -30,7 +31,8 @@ export class CreateEquipmentDto {
   @IsUUID('4') customerId!: string;
   @IsOptional() @IsUUID('4') addressId?: string;
   @IsOptional() @IsUUID('4') parentEquipmentId?: string;
-  @IsEnum(EquipmentType) type!: EquipmentType;
+  @IsOptional() @IsUUID('4') equipmentTypeCatalogId?: string;
+  @IsOptional() @IsEnum(EquipmentType) type?: EquipmentType;
   @IsOptional() @IsEnum(EquipmentStatus) status?: EquipmentStatus;
   // Nome é derivado de marca + modelo quando não informado (identificação do
   // equipamento por marca/modelo). Opcional no formulário.
@@ -63,6 +65,7 @@ export class UpdateEquipmentDto {
   @IsOptional() @IsUUID('4') customerId?: string;
   @IsOptional() @IsUUID('4') addressId?: string;
   @IsOptional() @IsUUID('4') parentEquipmentId?: string;
+  @IsOptional() @IsUUID('4') equipmentTypeCatalogId?: string;
   @IsOptional() @IsEnum(EquipmentType) type?: EquipmentType;
   @IsOptional() @IsEnum(EquipmentStatus) status?: EquipmentStatus;
   @IsOptional()

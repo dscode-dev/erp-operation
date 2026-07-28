@@ -52,7 +52,18 @@ export type OperationCreationTransactionHook = (
 const OPERATION_INCLUDE = {
   customer: { select: { id: true, name: true, tradeName: true } },
   address: true,
-  equipment: { select: { id: true, name: true, tag: true, type: true } },
+  equipment: {
+    select: {
+      id: true,
+      name: true,
+      tag: true,
+      type: true,
+      sector: true,
+      manufacturer: true,
+      model: true,
+      capacity: true,
+    },
+  },
   operator: { select: { id: true, name: true } },
   photos: {
     orderBy: { createdAt: 'asc' as const },
@@ -71,7 +82,19 @@ const OPERATION_INCLUDE = {
   },
   inspectedEquipments: {
     orderBy: { position: 'asc' as const },
-    include: { equipment: { select: { id: true, name: true, type: true } } },
+    include: {
+      equipment: {
+        select: {
+          id: true,
+          name: true,
+          type: true,
+          sector: true,
+          manufacturer: true,
+          model: true,
+          capacity: true,
+        },
+      },
+    },
   },
   documents: { orderBy: { createdAt: 'asc' as const } },
   maintenanceExecution: {
@@ -270,6 +293,13 @@ export class OperationsService {
         HttpStatus.CONFLICT,
       );
     }
+    if (actor.role === Role.OPERATOR && dto.serviceValue !== undefined) {
+      throw new ApplicationException(
+        ERROR_CODES.OPERATION_SERVICE_VALUE_FORBIDDEN,
+        'Somente a gestão pode definir o valor operacional do serviço',
+        HttpStatus.FORBIDDEN,
+      );
+    }
     await this.validateRelations(dto.customerId, dto.addressId, dto.equipmentId);
     this.validateReferencePeriod(dto.referenceMonth, dto.referenceYear);
     const inspectedEquipments = await this.resolveInspectedEquipments(
@@ -332,6 +362,7 @@ export class OperationsService {
           observations: dto.observations ?? null,
           reportedIssue: dto.reportedIssue ?? null,
           serviceDescription: dto.serviceDescription ?? null,
+          serviceValue: dto.serviceValue ?? null,
           receiptNumber: dto.receiptNumber ?? null,
           receiptIssuedAt: dto.receiptIssuedAt ? new Date(dto.receiptIssuedAt) : null,
           receiptAmount: dto.receiptAmount ?? null,
@@ -373,6 +404,13 @@ export class OperationsService {
           signedAt: signatureData ? (dto.signedAt ? new Date(dto.signedAt) : new Date()) : null,
         },
       });
+      await this.completeMissingEquipmentProfilesTx(
+        tx,
+        operation.id,
+        dto.inspectedEquipments,
+        actor,
+        context,
+      );
       if (sourceSale) {
         await tx.saleHistory.create({
           data: {
@@ -536,6 +574,8 @@ export class OperationsService {
         serviceTypes: true,
         referenceMonth: true,
         referenceYear: true,
+        equipmentId: true,
+        inspectedEquipments: { select: { equipmentId: true } },
         maintenanceExecution: { select: { plan: { select: { pmocPlan: { select: { id: true } } } } } },
         _count: { select: { photos: true } },
       },
@@ -554,6 +594,23 @@ export class OperationsService {
       dto.inspectedEquipments === undefined
         ? null
         : await this.resolveInspectedEquipments(existing.customerId, dto.inspectedEquipments);
+    if (actor.role === Role.OPERATOR && dto.inspectedEquipments !== undefined) {
+      const allowedEquipmentIds = new Set([
+        ...(existing.equipmentId ? [existing.equipmentId] : []),
+        ...existing.inspectedEquipments.map((item) => item.equipmentId),
+      ]);
+      const unexpectedEquipment = dto.inspectedEquipments.find(
+        (item) => !allowedEquipmentIds.has(item.equipmentId),
+      );
+      if (unexpectedEquipment) {
+        throw new ApplicationException(
+          ERROR_CODES.OPERATION_EQUIPMENT_INVALID,
+          'O operador pode complementar somente equipamentos vinculados à Ordem de Serviço',
+          HttpStatus.FORBIDDEN,
+          { equipmentId: unexpectedEquipment.equipmentId },
+        );
+      }
+    }
     await this.validateChecklistEquipments(existing.customerId, dto.maintenanceChecklist);
     const photos = (dto.photos ?? []).map((p) => this.decodePhoto(p));
     if (existing._count.photos + photos.length > MAX_OPERATION_PHOTOS) {
@@ -679,6 +736,13 @@ export class OperationsService {
         }
       }
       if (inspectedEquipments !== null) {
+        await this.completeMissingEquipmentProfilesTx(
+          tx,
+          id,
+          dto.inspectedEquipments,
+          actor,
+          context,
+        );
         await tx.operationInspectedEquipment.deleteMany({ where: { operationId: id } });
         if (inspectedEquipments.length > 0) {
           await tx.operationInspectedEquipment.createMany({
@@ -859,6 +923,9 @@ export class OperationsService {
       sector?: string;
       systemType?: string;
       currentSituation?: string;
+      manufacturer?: string;
+      model?: string;
+      capacity?: string;
     }>,
   ): Promise<InspectedEquipmentSnapshot[]> {
     if (!items?.length) return [];
@@ -898,15 +965,59 @@ export class OperationsService {
         // O setor do relatório vem do cadastro do equipamento; o valor enviado
         // (histórico/manual) é apenas fallback quando o equipamento não tem setor.
         sector: equipment.sector?.trim() || item.sector?.trim() || 'Não informado',
-        brandSnapshot: equipment.manufacturer,
-        modelSnapshot: equipment.model,
-        capacitySnapshot: equipment.capacity,
+        brandSnapshot: equipment.manufacturer?.trim() || item.manufacturer?.trim() || null,
+        modelSnapshot: equipment.model?.trim() || item.model?.trim() || null,
+        capacitySnapshot: equipment.capacity?.trim() || item.capacity?.trim() || null,
         tagSnapshot: equipment.tag,
         serialSnapshot: equipment.serialNumber,
         systemTypeSnapshot: item.systemType || null,
         currentSituationSnapshot: item.currentSituation || null,
       };
     });
+  }
+
+  private async completeMissingEquipmentProfilesTx(
+    tx: Prisma.TransactionClient,
+    operationId: string,
+    items: CreateOperationDto['inspectedEquipments'],
+    actor: AuthenticatedUser,
+    context: OperationAuditContext,
+  ): Promise<void> {
+    for (const item of items ?? []) {
+      const fields = [
+        ['manufacturer', item.manufacturer],
+        ['model', item.model],
+        ['capacity', item.capacity],
+      ] as const;
+      const completedFields: string[] = [];
+      for (const [field, rawValue] of fields) {
+        const value = rawValue?.trim();
+        if (!value) continue;
+        const updated = await tx.equipment.updateMany({
+          where: {
+            id: item.equipmentId,
+            OR: [{ [field]: null }, { [field]: '' }],
+          },
+          data: { [field]: value },
+        });
+        if (updated.count === 1) completedFields.push(field);
+      }
+      if (completedFields.length > 0) {
+        await tx.auditLog.create({
+          data: this.audit(
+            'EQUIPMENT_PROFILE_COMPLETED_FROM_OPERATION',
+            'equipment',
+            actor,
+            context,
+            {
+              operationId,
+              equipmentId: item.equipmentId,
+              changedFields: completedFields,
+            },
+          ),
+        });
+      }
+    }
   }
 
   private async validateChecklistEquipments(

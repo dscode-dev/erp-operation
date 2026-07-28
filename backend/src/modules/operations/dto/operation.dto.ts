@@ -94,6 +94,21 @@ export class OperationInspectedEquipmentDto {
   @IsString()
   @MaxLength(500)
   currentSituation?: string;
+  @IsOptional()
+  @Transform(({ value }) => trim(value))
+  @IsString()
+  @MaxLength(120)
+  manufacturer?: string;
+  @IsOptional()
+  @Transform(({ value }) => trim(value))
+  @IsString()
+  @MaxLength(120)
+  model?: string;
+  @IsOptional()
+  @Transform(({ value }) => trim(value))
+  @IsString()
+  @MaxLength(80)
+  capacity?: string;
 }
 
 export class CreateOperationDto {
@@ -157,6 +172,12 @@ export class CreateOperationDto {
   @IsString()
   @MaxLength(20000)
   serviceDescription?: string;
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(999_999_999.99)
+  serviceValue?: number;
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(40) @Matches(/^[A-Za-z0-9._/-]+$/) receiptNumber?: string;
   @IsOptional() @IsDateString() receiptIssuedAt?: string;
   @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) @Max(999_999_999.99) receiptAmount?: number;

@@ -754,6 +754,19 @@ describe('DocumentEngine foundation', () => {
     });
   });
 
+  it('never exposes the operational service value in the document blueprint', () => {
+    const context = operationContext(DocumentTemplateType.WORK_ORDER);
+    (context.operation as { serviceValue: number }).serviceValue = 987654.32;
+    const built = (
+      new DocumentBuilderService({} as never) as unknown as {
+        buildFromContext: (ctx: unknown) => DocumentBlueprint;
+      }
+    ).buildFromContext(context);
+
+    expect(JSON.stringify(built)).not.toContain('987654.32');
+    expect(JSON.stringify(built)).not.toContain('serviceValue');
+  });
+
   it('certifies the DC-05 receipt snapshots, technical-only signature and PDF parity', async () => {
     const context = operationContext(DocumentTemplateType.RECEIPT);
     const operation = context.operation as Record<string, unknown>;

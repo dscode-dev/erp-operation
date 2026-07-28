@@ -1,5 +1,31 @@
 # Backend State
 
+## Catálogos — tipos de equipamento e materiais de orçamento (2026-07-28)
+
+- `TechnicalCatalogType` recebeu `EQUIPMENT_TYPE` e `BUDGET_MATERIAL_DESCRIPTION`.
+- `Equipment.equipmentTypeCatalogId` referencia opcionalmente o catálogo oficial. O enum
+  `EquipmentType` foi preservado para retrocompatibilidade; tipos personalizados usam `OTHER`.
+- A migration cria os nove tipos V1 para cada organização existente e vincula os equipamentos
+  legados sem apagar ou reclassificar dados.
+- O bootstrap de produção garante os mesmos tipos em bancos onde a organização nasce após migrate.
+- Descrições de materiais são consumidas somente na criação do orçamento; `BudgetItem.description`
+  continua sendo o snapshot imutável do texto escolhido.
+- Migrations aditivas:
+  `20260728170000_equipment_and_budget_catalogs` (novos enums, em transação própria) e
+  `20260728171000_equipment_type_catalog_relation` (relação, defaults e backfill).
+
+## Operações — valor operacional e complementação técnica (2026-07-28)
+
+- `Operation.serviceValue` foi adicionado por migration aditiva como valor operacional opcional,
+  não negativo e com duas casas decimais.
+- Somente OWNER/MANAGER podem defini-lo na criação. O valor não pertence ao Financial Core e não é
+  entregue ao Document Engine, Preview ou PDF.
+- `inspectedEquipments` aceita marca, modelo e capacidade. Durante criação/execução, o serviço
+  completa somente campos vazios do equipamento e preserva valores existentes.
+- OPERATOR só pode complementar equipamentos já vinculados à própria operação atribuída.
+- Auditoria: `EQUIPMENT_PROFILE_COMPLETED_FROM_OPERATION`.
+- Migration: `20260728153000_operation_service_value`.
+
 ## PMOC — capacidade e encerramento por equipamento (2026-07-28)
 
 - `PmocPlan.plannedExecutionCount` persiste a quantidade de ciclos da cobertura sem multiplicá-la

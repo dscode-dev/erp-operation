@@ -10,7 +10,11 @@ import { assignmentsApi, useQuery, type Assignment } from "@erp/api";
 
 export default function OperatorServices() {
   const assignments = useQuery((signal) => assignmentsApi.listMyAssignments({ limit: 100, signal }), []);
-  const items = assignments.data?.items ?? [];
+  const items = [...(assignments.data?.items ?? [])].sort(
+    (left, right) =>
+      new Date(right.operation.createdAt ?? right.assignedAt).getTime() -
+      new Date(left.operation.createdAt ?? left.assignedAt).getTime(),
+  );
   const ongoing = items.filter((item) => item.status === "STARTED");
   const pending = items.filter((item) => item.status === "ASSIGNED" || item.status === "ACCEPTED");
   const done = items.filter((item) => item.status === "COMPLETED");

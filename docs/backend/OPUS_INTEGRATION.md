@@ -1,5 +1,23 @@
 # OPUS Frontend Integration
 
+## Equipment/Budget catalogs
+
+Use `technicalCatalogsApi.listEquipmentTypes()` para o campo Tipo do equipamento e
+`technicalCatalogsApi.listBudgetMaterialDescriptions()` para o multi-select “Descrição dos
+Materiais”. O primeiro persiste `equipmentTypeCatalogId`; o segundo apenas preenche snapshots do
+`BudgetItem`.
+
+Itens arquivados não aparecem em novas seleções. Equipamentos antigos mantêm o título relacionado.
+
+## Operations — criação e execução em campo
+
+`serviceValue` é informação operacional da Operation. OWNER/MANAGER informam na criação; o Operator
+atribuído apenas visualiza no detalhe. Não renderize o campo em documentos.
+
+O payload `inspectedEquipments[]` aceita `manufacturer`, `model` e `capacity`. Use-o no atendimento
+para completar exclusivamente campos vazios dos equipamentos relacionados. A API rejeita IDs fora
+do escopo da Operation. Listas devem exibir `Marca - Modelo - Capacidade` e o setor como subtítulo.
+
 ## PMOC — contrato visual de ciclos
 
 O número visual é `equipmentExecutionNumber`, com sequência `001..plannedExecutionCount` por

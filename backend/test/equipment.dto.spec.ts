@@ -20,6 +20,16 @@ describe('Equipment DTOs', () => {
     expect(await validate(dto)).toHaveLength(0);
   });
 
+  it('accepts a catalog-backed equipment type without requiring the legacy enum', async () => {
+    const dto = plainToInstance(CreateEquipmentDto, {
+      customerId: '9c29f81c-a494-4130-93dc-c498e8503a6d',
+      equipmentTypeCatalogId: '8113c516-13da-4eaf-ac24-76e5fb34f5b4',
+      manufacturer: 'Carrier',
+      model: '42X',
+    });
+    expect(await validate(dto)).toHaveLength(0);
+  });
+
   it('validates filters and pagination', async () => {
     const dto = plainToInstance(ListEquipmentsQueryDto, {
       page: '2',

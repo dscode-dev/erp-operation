@@ -249,7 +249,7 @@ export function PmocEquipmentExecutionWizard({
               </label>
             </div>
             <div>
-              <p className="mb-2 text-sm font-medium">Técnicos auxiliares <span className="font-normal text-[var(--color-muted-foreground)]">(opcional)</span></p>
+              <p className="mb-2 text-sm font-medium">Auxiliar Técnico <span className="font-normal text-[var(--color-muted-foreground)]">(opcional)</span></p>
               <div className="grid gap-2 sm:grid-cols-2">
                 {availableAuxiliaries.map((user) => (
                   <label key={user.id} className="flex items-center gap-3 rounded-lg border border-[var(--color-border)] p-3 text-sm">

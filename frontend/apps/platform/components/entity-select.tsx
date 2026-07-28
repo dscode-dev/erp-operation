@@ -75,7 +75,7 @@ export function UserSelect({ value, onChange }: { value: string; onChange: (id: 
 }
 
 /**
- * Técnicos auxiliares: recebem/visualizam a mesma demanda do executor primário.
+ * Auxiliar técnico: recebe/visualiza a mesma demanda do executor primário.
  * Sem permissão de Relatórios (canReports) ficam somente em visualização; com a
  * permissão, podem colaborar. Nunca inclui o próprio executor primário.
  */
@@ -96,7 +96,7 @@ export function AuxiliaryOperatorSelect({
   return (
     <div className="space-y-1.5">
       <MultiSelect
-        label="Técnicos auxiliares (opcional)"
+        label="Auxiliar Técnico (opcional)"
         value={value.filter((id) => id !== excludeId)}
         onChange={onChange}
         options={operators.map((user) => ({
@@ -104,7 +104,7 @@ export function AuxiliaryOperatorSelect({
           label: user.name,
           description: `${user.role}${user.permission?.canReports ? "" : " · somente visualização"}`,
         }))}
-        placeholder="Selecionar técnicos auxiliares"
+        placeholder="Selecionar auxiliar técnico"
         emptyMessage="Nenhum outro técnico disponível."
       />
       <span className="text-caption">

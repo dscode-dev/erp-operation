@@ -11,6 +11,7 @@ import { Drawer } from "@erp/ui/drawer";
 import {
   equipmentsApi,
   customersApi,
+  technicalCatalogsApi,
   ApiClientError,
   type EquipmentDetail,
   type EquipmentStatus,
@@ -18,10 +19,10 @@ import {
   type CreateEquipmentPayload,
   type Customer,
   type CustomerAddress,
+  type TechnicalCatalog,
 } from "@erp/api";
 import {
   EQUIPMENT_TYPES,
-  EQUIPMENT_TYPE_LABEL,
   EQUIPMENT_STATUSES,
   EQUIPMENT_STATUS_LABEL,
 } from "@platform/equipment-display";
@@ -29,6 +30,7 @@ import {
 type FormState = {
   customerId: string;
   type: EquipmentType;
+  equipmentTypeCatalogId: string;
   sector: string;
   addressId: string;
   status: EquipmentStatus;
@@ -47,6 +49,7 @@ function fromEquipment(e: EquipmentDetail | null, presetCustomerId?: string): Fo
   return {
     customerId: e?.customer?.id ?? presetCustomerId ?? "",
     type: e?.type ?? "SPLIT",
+    equipmentTypeCatalogId: e?.equipmentTypeCatalogId ?? e?.equipmentTypeCatalog?.id ?? "",
     sector: e?.sector ?? "",
     addressId: e?.address?.id ?? "",
     status: e?.status ?? "ACTIVE",
@@ -79,6 +82,8 @@ export function EquipmentFormDrawer({
   const [form, setForm] = useState<FormState>(fromEquipment(equipment, presetCustomerId));
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [addresses, setAddresses] = useState<CustomerAddress[]>([]);
+  const [equipmentTypes, setEquipmentTypes] = useState<TechnicalCatalog[]>([]);
+  const [typesError, setTypesError] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -93,6 +98,39 @@ export function EquipmentFormDrawer({
       .listCustomers({ page: 1, limit: 100, signal: ac.signal })
       .then((res) => setCustomers(res.items))
       .catch(() => undefined);
+    technicalCatalogsApi
+      .listEquipmentTypes({ signal: ac.signal })
+      .then((activeTypes) => {
+        const archived = equipment?.equipmentTypeCatalog;
+        const items =
+          archived && !activeTypes.some((item) => item.id === archived.id)
+            ? [
+                ...activeTypes,
+                {
+                  ...archived,
+                  organizationId: "",
+                  type: "EQUIPMENT_TYPE" as const,
+                  description: null,
+                  areas: ["GENERAL" as const],
+                  workflows: ["GENERAL" as const],
+                  maintenanceType: null,
+                  pmocUnit: null,
+                  sortOrder: Number.MAX_SAFE_INTEGER,
+                  createdAt: "",
+                  updatedAt: "",
+                },
+              ]
+            : activeTypes;
+        setEquipmentTypes(items);
+        setTypesError(false);
+        setForm((current) => {
+          if (current.equipmentTypeCatalogId) return current;
+          const tag = `legacy-${current.type.toLowerCase().replaceAll("_", "-")}`;
+          const matched = items.find((item) => item.tags.includes(tag));
+          return matched ? { ...current, equipmentTypeCatalogId: matched.id } : current;
+        });
+      })
+      .catch(() => setTypesError(true));
     return () => ac.abort();
   }, [open, equipment, presetCustomerId]);
 
@@ -116,6 +154,10 @@ export function EquipmentFormDrawer({
 
   async function handleSave() {
     if (!form.customerId) { setError("Selecione o cliente."); return; }
+    if (!form.equipmentTypeCatalogId) {
+      setError("Selecione o tipo do equipamento.");
+      return;
+    }
     if (!form.manufacturer.trim() && !form.model.trim()) {
       setError("Informe ao menos a marca ou o modelo do equipamento.");
       return;
@@ -126,6 +168,7 @@ export function EquipmentFormDrawer({
     const payload: CreateEquipmentPayload = {
       customerId: form.customerId,
       type: form.type,
+      equipmentTypeCatalogId: form.equipmentTypeCatalogId,
       sector: form.sector.trim() || null,
       addressId: form.addressId || null,
       status: form.status,
@@ -201,9 +244,27 @@ export function EquipmentFormDrawer({
 
         <div className="grid grid-cols-2 gap-3">
           <Field label="Tipo">
-            <select value={form.type} onChange={(e) => set("type", e.target.value as EquipmentType)} className={inputCls}>
-              {EQUIPMENT_TYPES.map((t) => <option key={t} value={t}>{EQUIPMENT_TYPE_LABEL[t]}</option>)}
+            <select
+              value={form.equipmentTypeCatalogId}
+              onChange={(event) => {
+                const selected = equipmentTypes.find((item) => item.id === event.target.value);
+                set("equipmentTypeCatalogId", event.target.value);
+                set("type", legacyEquipmentType(selected));
+              }}
+              className={inputCls}
+            >
+              <option value="">Selecione o tipo…</option>
+              {equipmentTypes.map((type) => (
+                <option key={type.id} value={type.id}>
+                  {type.title}{type.deletedAt ? " (tipo arquivado)" : ""}
+                </option>
+              ))}
             </select>
+            {typesError && (
+              <span className="text-caption text-[var(--color-danger)]">
+                Não foi possível carregar os tipos cadastrados.
+              </span>
+            )}
           </Field>
           <Field label="Status">
             <select value={form.status} onChange={(e) => set("status", e.target.value as EquipmentStatus)} className={inputCls}>
@@ -277,6 +338,14 @@ export function EquipmentFormDrawer({
 
 const inputCls =
   "w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-3 h-9 text-sm outline-none focus:border-[var(--color-primary)]";
+
+function legacyEquipmentType(catalog?: Pick<TechnicalCatalog, "tags">): EquipmentType {
+  for (const type of EQUIPMENT_TYPES) {
+    const tag = `legacy-${type.toLowerCase().replaceAll("_", "-")}`;
+    if (catalog?.tags.includes(tag)) return type;
+  }
+  return "OTHER";
+}
 
 function Field({
   label,

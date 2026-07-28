@@ -1,5 +1,19 @@
 # ARCHITECTURE — Frontend
 
+## Catálogos como fonte de entrada, snapshots como histórico
+
+`EQUIPMENT_TYPE` mantém relação com Equipment porque representa classificação cadastral durável.
+`BUDGET_MATERIAL_DESCRIPTION` apenas acelera a entrada: Budget continua proprietário de seus itens
+e snapshots. Ambos reutilizam API, RBAC, paginação e Drawer do catálogo oficial.
+
+## Dados operacionais da OS
+
+`serviceValue` permanece no agregado Operation. O frontend não o encaminha para componentes do
+Document Engine. A Platform coleta; o Operator autorizado visualiza.
+
+A complementação de equipamentos utiliza `inspectedEquipments` da própria Operation, sem criar
+endpoint ou cadastro paralelo. O backend decide ownership e persiste somente campos ausentes.
+
 ## Projeção PMOC
 
 Periodicidade, capacidade, numeração e encerramento são autoritativos no backend.

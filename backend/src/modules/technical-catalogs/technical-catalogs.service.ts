@@ -31,6 +31,7 @@ const CATALOG_SELECT = {
   pmocUnit: true,
   sortOrder: true,
   active: true,
+  deletedAt: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.TechnicalCatalogSelect;
@@ -42,6 +43,8 @@ const TYPE_LABELS: Record<TechnicalCatalogType, string> = {
   CONCLUSION: 'Conclusões',
   RECOMMENDATION: 'Recomendações',
   PLAN_SCOPE: 'Escopos de plano',
+  EQUIPMENT_TYPE: 'Checklists de Equipamentos',
+  BUDGET_MATERIAL_DESCRIPTION: 'Descrições de materiais',
 };
 
 const AREA_LABELS: Record<TechnicalCatalogArea, string> = {

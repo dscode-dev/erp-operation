@@ -1,5 +1,10 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import { EquipmentStatus, EquipmentType, Prisma } from '@prisma/client';
+import {
+  EquipmentStatus,
+  EquipmentType,
+  Prisma,
+  TechnicalCatalogType,
+} from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { extname } from 'node:path';
 import {
@@ -37,6 +42,9 @@ export interface EquipmentAuditContext {
 const EQUIPMENT_INCLUDE = {
   customer: { select: { id: true, name: true, tradeName: true, isActive: true } },
   address: true,
+  equipmentTypeCatalog: {
+    select: { id: true, title: true, active: true, deletedAt: true, tags: true },
+  },
   parent: { select: { id: true, name: true, tag: true, type: true } },
   children: {
     select: { id: true, name: true, tag: true, type: true, status: true, isActive: true },
@@ -57,6 +65,9 @@ export class EquipmentsService {
     const where: Prisma.EquipmentWhereInput = {
       ...(query.customerId ? { customerId: query.customerId } : {}),
       ...(query.addressId ? { addressId: query.addressId } : {}),
+      ...(query.equipmentTypeCatalogId
+        ? { equipmentTypeCatalogId: query.equipmentTypeCatalogId }
+        : {}),
       ...(query.status ? { status: query.status } : {}),
       ...(query.type ? { type: query.type } : {}),
       ...(query.search
@@ -67,6 +78,11 @@ export class EquipmentsService {
               { serialNumber: { contains: query.search, mode: 'insensitive' } },
               { model: { contains: query.search, mode: 'insensitive' } },
               { manufacturer: { contains: query.search, mode: 'insensitive' } },
+              {
+                equipmentTypeCatalog: {
+                  title: { contains: query.search, mode: 'insensitive' },
+                },
+              },
             ],
           }
         : {}),
@@ -80,6 +96,9 @@ export class EquipmentsService {
         include: {
           customer: { select: { id: true, name: true, tradeName: true } },
           address: { select: { id: true, name: true, city: true, state: true } },
+          equipmentTypeCatalog: {
+            select: { id: true, title: true, active: true, deletedAt: true, tags: true },
+          },
           _count: { select: { children: true, attachments: true, metrics: true } },
         },
       }),
@@ -157,11 +176,16 @@ export class EquipmentsService {
     context: EquipmentAuditContext,
   ): Promise<unknown> {
     await this.validateRelations(dto.customerId, dto.addressId, dto.parentEquipmentId);
+    const classification = await this.resolveClassification(
+      dto.type,
+      dto.equipmentTypeCatalogId,
+      true,
+    );
     const qrToken = randomUUID();
     const equipment = await this.prisma.$transaction(async (tx) => {
       const created = await tx.equipment.create({
         data: {
-          ...this.createData(dto),
+          ...this.createData(dto, classification),
           qrToken,
           qrCode: `equipment:${qrToken}`,
         },
@@ -196,7 +220,16 @@ export class EquipmentsService {
     const addressId = dto.addressId ?? existing.addressId ?? undefined;
     const parentId = dto.parentEquipmentId ?? existing.parentEquipmentId ?? undefined;
     await this.validateRelations(customerId, addressId, parentId, id);
-    const data = this.updateData(dto);
+    const classification =
+      dto.type !== undefined || dto.equipmentTypeCatalogId !== undefined
+        ? await this.resolveClassification(
+            dto.type,
+            dto.equipmentTypeCatalogId,
+            true,
+            existing.equipmentTypeCatalogId,
+          )
+        : undefined;
+    const data = this.updateData(dto, classification);
     // Reidentifica o nome a partir de marca/modelo (mesclando com o existente)
     // sempre que um desses — ou o próprio nome — for enviado.
     if (dto.name !== undefined || dto.manufacturer !== undefined || dto.model !== undefined) {
@@ -399,12 +432,20 @@ export class EquipmentsService {
 
   private updateData(
     dto: CreateEquipmentDto | UpdateEquipmentDto,
+    classification?: { type: EquipmentType; catalogId: string | null },
   ): Prisma.EquipmentUncheckedUpdateInput {
     return {
       ...(dto.customerId ? { customerId: dto.customerId } : {}),
       ...(dto.addressId ? { addressId: dto.addressId } : {}),
       ...(dto.parentEquipmentId ? { parentEquipmentId: dto.parentEquipmentId } : {}),
-      ...(dto.type ? { type: dto.type } : {}),
+      ...(classification
+        ? {
+            type: classification.type,
+            equipmentTypeCatalogId: classification.catalogId,
+          }
+        : dto.type
+          ? { type: dto.type }
+          : {}),
       ...(dto.status ? { status: dto.status } : {}),
       ...(dto.sector !== undefined ? { sector: dto.sector } : {}),
       tag: dto.tag,
@@ -436,12 +477,16 @@ export class EquipmentsService {
     return (explicit?.trim() || brandModel || 'Equipamento').slice(0, 180);
   }
 
-  private createData(dto: CreateEquipmentDto): Prisma.EquipmentUncheckedCreateInput {
+  private createData(
+    dto: CreateEquipmentDto,
+    classification: { type: EquipmentType; catalogId: string | null },
+  ): Prisma.EquipmentUncheckedCreateInput {
     return {
       customerId: dto.customerId,
       addressId: dto.addressId,
       parentEquipmentId: dto.parentEquipmentId,
-      type: dto.type,
+      type: classification.type,
+      equipmentTypeCatalogId: classification.catalogId,
       status: dto.status,
       name: this.deriveName(dto.manufacturer, dto.model, dto.name),
       sector: dto.sector,
@@ -456,6 +501,64 @@ export class EquipmentsService {
       observations: dto.observations,
       qrCode: '',
     };
+  }
+
+  private async resolveClassification(
+    legacyType: EquipmentType | undefined,
+    catalogId: string | undefined,
+    required: boolean,
+    currentCatalogId?: string | null,
+  ): Promise<{ type: EquipmentType; catalogId: string | null }> {
+    if (catalogId) {
+      const catalog = await this.prisma.technicalCatalog.findFirst({
+        where: {
+          id: catalogId,
+          type: TechnicalCatalogType.EQUIPMENT_TYPE,
+          ...(catalogId === currentCatalogId ? {} : { active: true, deletedAt: null }),
+        },
+        select: { id: true, tags: true },
+      });
+      if (!catalog) {
+        throw new ApplicationException(
+          ERROR_CODES.TECHNICAL_CATALOG_NOT_FOUND,
+          'O tipo de equipamento selecionado não está disponível',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      return {
+        type: this.legacyTypeFromTags(catalog.tags) ?? EquipmentType.OTHER,
+        catalogId: catalog.id,
+      };
+    }
+    if (legacyType) {
+      const tag = `legacy-${legacyType.toLowerCase().replaceAll('_', '-')}`;
+      const catalog = await this.prisma.technicalCatalog.findFirst({
+        where: {
+          type: TechnicalCatalogType.EQUIPMENT_TYPE,
+          active: true,
+          deletedAt: null,
+          tags: { has: tag },
+        },
+        orderBy: { createdAt: 'asc' },
+        select: { id: true },
+      });
+      return { type: legacyType, catalogId: catalog?.id ?? null };
+    }
+    if (required) {
+      throw new ApplicationException(
+        ERROR_CODES.VALIDATION_ERROR,
+        'Selecione o tipo do equipamento',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    return { type: EquipmentType.OTHER, catalogId: null };
+  }
+
+  private legacyTypeFromTags(tags: string[]): EquipmentType | null {
+    for (const type of Object.values(EquipmentType)) {
+      if (tags.includes(`legacy-${type.toLowerCase().replaceAll('_', '-')}`)) return type;
+    }
+    return null;
   }
 
   private async validateRelations(

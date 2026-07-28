@@ -56,6 +56,7 @@ type OperationDraftSnapshot = {
   observations: string;
   reportedIssue: string;
   serviceDescription: string;
+  serviceValue: string;
 };
 type PmocOperationDraft = {
   plan: PmocPlan;
@@ -136,6 +137,7 @@ export function OperationCreationDrawer({
   const [observations, setObservations] = useState("");
   const [reportedIssue, setReportedIssue] = useState("");
   const [serviceDescription, setServiceDescription] = useState("");
+  const [serviceValue, setServiceValue] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<OperationDetail | null>(null);
@@ -179,6 +181,7 @@ export function OperationCreationDrawer({
       observations,
       reportedIssue,
       serviceDescription,
+      serviceValue,
     }),
     [
       step,
@@ -195,10 +198,11 @@ export function OperationCreationDrawer({
       observations,
       reportedIssue,
       serviceDescription,
+      serviceValue,
     ],
   );
   const draftDirty =
-    Boolean(customerId || observations.trim() || reportedIssue.trim() || serviceDescription.trim()) ||
+    Boolean(customerId || observations.trim() || reportedIssue.trim() || serviceDescription.trim() || serviceValue.trim()) ||
     equipmentIds.length > 0 ||
     checklist.length > 0;
 
@@ -218,6 +222,7 @@ export function OperationCreationDrawer({
     setObservations(value.observations);
     setReportedIssue(value.reportedIssue);
     setServiceDescription(value.serviceDescription);
+    setServiceValue(value.serviceValue ?? "");
   }
 
   useEffect(() => {
@@ -247,6 +252,11 @@ export function OperationCreationDrawer({
     setObservations(activeInitialValues?.observations ?? "");
     setReportedIssue(activeInitialValues?.reportedIssue ?? "");
     setServiceDescription(activeInitialValues?.serviceDescription ?? "");
+    setServiceValue(
+      activeInitialValues?.serviceValue !== undefined
+        ? String(activeInitialValues.serviceValue)
+        : "",
+    );
     setSaving(false);
     setError(null);
     setCreated(null);
@@ -320,6 +330,7 @@ export function OperationCreationDrawer({
         observations: observations || null,
         reportedIssue: reportedIssue || null,
         serviceDescription: serviceDescription || null,
+        ...(serviceValue.trim() ? { serviceValue: Number(serviceValue) } : {}),
       };
       let operation: OperationDetail;
       if (pmocDraft) {
@@ -436,6 +447,7 @@ export function OperationCreationDrawer({
                     observations: "",
                     reportedIssue: "",
                     serviceDescription: "",
+                    serviceValue: "",
                   });
                   draft.clear();
                   setRecoveredAt(null);
@@ -568,8 +580,11 @@ export function OperationCreationDrawer({
                       onChange={(ids) => { setEquipmentIds(ids); setEquipmentId(ids[0] ?? ""); }}
                       options={(equipments.data?.items ?? []).map((equipment) => ({
                         value: equipment.id,
-                        label: equipment.name,
-                        description: equipment.tag ?? equipment.type,
+                        label:
+                          [equipment.manufacturer, equipment.model, equipment.capacity]
+                            .filter(Boolean)
+                            .join(" - ") || equipment.name,
+                        description: equipment.sector || "Setor não informado",
                       }))}
                       placeholder={customerId ? "Selecione um ou mais equipamentos" : "Selecione primeiro o cliente"}
                       emptyMessage="Nenhum equipamento ativo disponível para este cliente."
@@ -582,6 +597,27 @@ export function OperationCreationDrawer({
             {step === 2 && (
               <div className="space-y-3">
                 <ServiceTypeSelect value={type} onChange={setType} />
+                <Field label="Valor do serviço">
+                  <div className="relative">
+                    <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-[var(--color-muted-foreground)]">
+                      R$
+                    </span>
+                    <input
+                      type="number"
+                      min="0"
+                      max="999999999.99"
+                      step="0.01"
+                      inputMode="decimal"
+                      value={serviceValue}
+                      onChange={(event) => setServiceValue(event.target.value)}
+                      className={`${inputCls} pl-10`}
+                      placeholder="0,00"
+                    />
+                  </div>
+                  <p className="mt-1 text-caption">
+                    Informação operacional visível ao técnico responsável. Não será exibida no Preview ou PDF.
+                  </p>
+                </Field>
                 <Field label="Documento solicitado">
                   <select value={documentType} onChange={(event) => setDocumentType(event.target.value as DocumentKind)} className={inputCls} disabled={documentTypeLocked}>
                     {(documentTypeLocked ? (["PMOC"] as DocumentKind[]) : ATTENDANCE_DOCUMENT_TYPES).map((item) => (
@@ -623,6 +659,7 @@ export function OperationCreationDrawer({
                 <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 text-sm">
                   <div><strong>Cliente:</strong> {customerId ? "selecionado" : "—"}</div>
                   <div><strong>Tipo:</strong> {type}</div>
+                  <div><strong>Valor do serviço:</strong> {serviceValue.trim() ? Number(serviceValue).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "Não informado"}</div>
                   <div><strong>Documento:</strong> {DOCUMENT_KIND_LABEL[documentType]}</div>
                   <div><strong>Agenda:</strong> {scheduledFor ? new Date(scheduledFor).toLocaleString("pt-BR") : "não definida"}</div>
                   <div><strong>Checklist:</strong> {checklist.length} item(ns)</div>
@@ -731,7 +768,16 @@ function ReadonlyPmocEquipments({
   equipments,
 }: {
   equipmentIds: string[];
-  equipments: Array<{ id: string; name: string; tag: string | null; type: string }>;
+  equipments: Array<{
+    id: string;
+    name: string;
+    tag: string | null;
+    type: string;
+    sector: string | null;
+    manufacturer: string | null;
+    model: string | null;
+    capacity: string | null;
+  }>;
 }) {
   const selected = equipmentIds.map((id) => equipments.find((equipment) => equipment.id === id));
   return (
@@ -740,8 +786,16 @@ function ReadonlyPmocEquipments({
       <div className="space-y-2">
         {selected.map((equipment, index) => (
           <div key={equipment?.id ?? equipmentIds[index]} className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-muted)]/35 px-3 py-2">
-            <p className="text-sm font-medium">{equipment?.name ?? `Equipamento ${index + 1}`}</p>
-            <p className="text-xs text-[var(--color-muted-foreground)]">{equipment?.tag ?? equipment?.type ?? equipmentIds[index]}</p>
+            <p className="text-sm font-medium">
+              {equipment
+                ? [equipment.manufacturer, equipment.model, equipment.capacity]
+                    .filter(Boolean)
+                    .join(" - ") || equipment.name
+                : `Equipamento ${index + 1}`}
+            </p>
+            <p className="text-xs text-[var(--color-muted-foreground)]">
+              {equipment?.sector || "Setor não informado"}
+            </p>
           </div>
         ))}
       </div>

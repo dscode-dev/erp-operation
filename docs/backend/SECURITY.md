@@ -1,5 +1,27 @@
 # Security
 
+## Catálogos de equipamentos e orçamento
+
+- Somente OWNER/MANAGER podem criar, editar, reordenar, ativar, desativar ou excluir itens.
+- Leitura segue o RBAC já aplicado ao catálogo e é limitada à instalação single-company.
+- O backend valida UUID, tipo `EQUIPMENT_TYPE`, atividade e soft delete antes de classificar um
+  equipamento.
+- Um catálogo arquivado permanece referenciado por equipamentos históricos, graças ao FK
+  `ON DELETE RESTRICT` e ao soft delete.
+- Descrições de materiais são copiadas como texto no Budget; mudanças futuras no catálogo não
+  alteram orçamentos existentes.
+
+## Valor operacional e complementação de equipamento
+
+- `serviceValue` não é saldo, custo, margem ou lançamento financeiro. É um dado operacional da OS,
+  visível ao gestor e ao operador autorizado pela Assignment.
+- OPERATOR não pode definir nem alterar o valor; tentativa na criação retorna 403.
+- A complementação técnica usa o ownership já validado da Operation, restringe os IDs aos
+  equipamentos originalmente vinculados e valida cliente/estado ativo.
+- Atualizações são condicionais e preenchem apenas `NULL`/vazio, evitando sobrescrita concorrente.
+- Valor não é enviado ao DocumentContext/Blueprint/PDF. Alterações técnicas são auditadas sem
+  exposição de dados sensíveis.
+
 ## Integridade das execuções PMOC por equipamento
 
 - Reserva protegida por row lock e incremento atômico no PostgreSQL.

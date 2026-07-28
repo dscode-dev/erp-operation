@@ -106,6 +106,8 @@ enum TechnicalCatalogType {
   CONCLUSION
   RECOMMENDATION
   PLAN_SCOPE
+  EQUIPMENT_TYPE
+  BUDGET_MATERIAL_DESCRIPTION
 }
 
 enum TechnicalCatalogArea {
@@ -873,6 +875,9 @@ model Equipment {
   customerId                String                              @map("customer_id") @db.Uuid
   addressId                 String?                             @map("address_id") @db.Uuid
   parentEquipmentId         String?                             @map("parent_equipment_id") @db.Uuid
+  equipmentTypeCatalogId    String?                             @map("equipment_type_catalog_id") @db.Uuid
+  /// Classificação legada preservada para retrocompatibilidade. Novos tipos
+  /// personalizados utilizam equipmentTypeCatalogId e mantêm OTHER neste enum.
   type                      EquipmentType
   status                    EquipmentStatus                     @default(ACTIVE)
   name                      String                              @db.VarChar(180)
@@ -897,6 +902,7 @@ model Equipment {
   customer                  Customer                            @relation(fields: [customerId], references: [id], onDelete: Cascade)
   address                   CustomerAddress?                    @relation(fields: [addressId], references: [id], onDelete: SetNull)
   parent                    Equipment?                          @relation("EquipmentHierarchy", fields: [parentEquipmentId], references: [id], onDelete: SetNull)
+  equipmentTypeCatalog      TechnicalCatalog?                   @relation("EquipmentTypeCatalog", fields: [equipmentTypeCatalogId], references: [id], onDelete: Restrict)
   children                  Equipment[]                         @relation("EquipmentHierarchy")
   attachments               EquipmentAttachment[]
   metrics                   EquipmentMetric[]
@@ -916,6 +922,7 @@ model Equipment {
   @@index([customerId, status])
   @@index([addressId])
   @@index([parentEquipmentId])
+  @@index([equipmentTypeCatalogId])
   @@index([type, isActive])
   @@index([name])
   @@index([tag])
@@ -973,6 +980,9 @@ model Operation {
   observations                    String?                             @db.Text
   reportedIssue                   String?                             @map("reported_issue") @db.Text
   serviceDescription              String?                             @map("service_description") @db.Text
+  /// Valor operacional informado pela gestão ao técnico responsável. Não
+  /// integra o Financial Core nem o Document Engine.
+  serviceValue                    Decimal?                            @map("service_value") @db.Decimal(15, 2)
   receiptNumber                   String?                             @map("receipt_number") @db.VarChar(40)
   receiptIssuedAt                 DateTime?                           @map("receipt_issued_at") @db.Date
   receiptAmount                   Decimal?                            @map("receipt_amount") @db.Decimal(15, 2)
@@ -1110,6 +1120,7 @@ model TechnicalCatalog {
   organization       Organization               @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   pmocPlanScopes     PmocPlanScope[]
   pmocPlanChecklists PmocPlanChecklist[]
+  equipments         Equipment[]                @relation("EquipmentTypeCatalog")
 
   @@index([organizationId, type, active, sortOrder], map: "technical_catalog_lookup_idx")
   @@index([organizationId, maintenanceType, active], map: "technical_catalog_maintenance_idx")

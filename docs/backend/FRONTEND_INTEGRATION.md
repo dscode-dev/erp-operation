@@ -1,5 +1,28 @@
 # Frontend Integration
 
+## Catálogos de equipamentos e materiais
+
+- Liste tipos com `GET /technical-catalogs?type=EQUIPMENT_TYPE&active=true`.
+- Envie o UUID selecionado em `equipmentTypeCatalogId`; use `equipmentTypeCatalog.title` para
+  exibição e mantenha `type` apenas como fallback legado.
+- Liste descrições com
+  `GET /technical-catalogs?type=BUDGET_MATERIAL_DESCRIPTION&active=true`.
+- Ao selecionar descrições no orçamento, crie itens editáveis e envie apenas snapshots em
+  `items[].description`, quantidade, unidade e valor unitário.
+- Nunca faça Budget depender do catálogo depois de salvo.
+
+## OS — valor e perfil técnico dos equipamentos
+
+- No cadastro gerencial, envie `serviceValue` como número decimal. Não replique o campo em Preview,
+  PDF ou formulários documentais.
+- No app Operator, mostre o valor somente no detalhe de uma Operation obtida pelo fluxo autorizado
+  de Assignment.
+- Em `inspectedEquipments`, envie `manufacturer`, `model` e `capacity` somente para completar dados
+  ausentes. O backend nunca substitui um valor técnico já cadastrado por esse fluxo.
+- Para cada equipamento incompleto, bloqueie a conclusão até preencher todos os campos ausentes.
+  O fluxo suporta múltiplos equipamentos.
+- Rótulo visual: `Marca - Modelo - Capacidade`; subtítulo: setor.
+
 ## PMOC — progresso por equipamento
 
 - `overview.expectedExecutions` continua sendo a quantidade de ciclos configurados do plano.
