@@ -1,5 +1,144 @@
 # API Contracts
 
+## Compatibilidade de migrations
+
+As migrations recentes são aditivas e não removem contratos:
+
+- `BudgetItem.source` possui default `MANUAL` para clientes e registros anteriores.
+- `CustomerAddress.referencePoint` é nullable.
+- A reconciliação PMOC não altera IDs, relacionamentos ou payloads; apenas corrige projeções de
+  conclusão derivadas.
+
+## Endereços — ponto de referência
+
+`POST /api/v1/customers/:id/addresses` e
+`PATCH /api/v1/customers/:id/addresses/:addressId` aceitam o campo aditivo:
+
+```json
+{
+  "referencePoint": "Entrada pelo portão lateral"
+}
+```
+
+- Campo opcional; `null`/ausência significam não informado.
+- String sanitizada com máximo de 180 caracteres.
+- Respostas de CustomerAddress e Operations que incluem `address` retornam o mesmo campo.
+- Complemento e ponto de referência são operacionais e não compõem contratos documentais.
+
+## Refinamento PMOC e Budget
+
+`overview.equipmentExecutions[]` em `GET /api/v1/pmoc/:id` inclui:
+
+```json
+{
+  "lastExecutionNumber": 1,
+  "lastExecutionDate": "2026-07-15T15:00:00.000Z",
+  "nextExecutionNumber": 2,
+  "nextExecutionDate": "2026-08-15T12:00:00.000Z",
+  "executionStatus": "UP_TO_DATE"
+}
+```
+
+`executionStatus`: `NOT_STARTED`, `SCHEDULED`, `IN_PROGRESS`, `UP_TO_DATE`, `OVERDUE`,
+`ATTENTION` ou `COMPLETED`.
+
+`items[]` de `POST/PATCH /api/v1/budgets` aceita `source?: MANUAL | CATALOG`.
+O padrão retrocompatível é `MANUAL`. `CATALOG` só é aceito para `MATERIAL` e o backend força todos
+os valores comerciais do item para zero.
+
+## Catálogos de equipamentos e materiais
+
+Os contratos existentes de `/api/v1/technical-catalogs` aceitam dois tipos adicionais:
+
+- `EQUIPMENT_TYPE`
+- `BUDGET_MATERIAL_DESCRIPTION`
+
+CRUD, paginação, ordenação, soft delete, RBAC e auditoria permanecem iguais aos demais catálogos.
+
+`POST /api/v1/equipments` e `PATCH /api/v1/equipments/:id` aceitam:
+
+```json
+{
+  "equipmentTypeCatalogId": "uuid",
+  "type": "OTHER"
+}
+```
+
+- `equipmentTypeCatalogId` deve apontar para item ativo do tipo `EQUIPMENT_TYPE`.
+- `type` tornou-se opcional quando o catálogo é informado.
+- Tipos V1 são derivados pela tag de compatibilidade; tipos personalizados persistem `OTHER` no
+  enum legado.
+- Respostas de equipamentos incluem `equipmentTypeCatalog` com `id`, `title`, `active`,
+  `deletedAt` e `tags`.
+- Equipamentos vinculados continuam retornando o título mesmo após soft delete do catálogo.
+
+Não houve alteração no payload de Budget: a descrição selecionada é enviada em
+`items[].description`.
+
+## Operações — campos operacionais aditivos
+
+`POST /api/v1/operations` aceita, adicionalmente:
+
+```json
+{
+  "serviceValue": 1350.00,
+  "inspectedEquipments": [
+    {
+      "equipmentId": "uuid",
+      "manufacturer": "Carrier",
+      "model": "Ecosplit",
+      "capacity": "20 TR"
+    }
+  ]
+}
+```
+
+- `serviceValue`: opcional, `0..999999999.99`, máximo de duas casas decimais e permitido somente a
+  OWNER/MANAGER. OPERATOR recebe `403 OPERATION_SERVICE_VALUE_FORBIDDEN`.
+- Marca, modelo e capacidade são opcionais no contrato. Quando o equipamento já possui o campo, o
+  valor cadastrado é preservado.
+- `PATCH /api/v1/operations/:id` aceita os mesmos campos técnicos em `inspectedEquipments`. Um
+  OPERATOR só pode informar IDs originalmente vinculados à operação que lhe pertence.
+- Respostas autorizadas de Operation/Assignment incluem `serviceValue`, quando informado.
+- Nenhum contrato documental contém `serviceValue`.
+
+## PMOC — ciclos independentes por equipamento
+
+Campos aditivos em `GET /api/v1/pmoc` e `GET /api/v1/pmoc/:id`:
+
+```json
+{
+  "plannedExecutionCount": 12,
+  "operationalStatus": "OVERDUE",
+  "overview": {
+    "expectedExecutions": 12,
+    "expectedEquipmentExecutions": 48,
+    "completedExecutions": 37,
+    "remainingExecutions": 11,
+    "coverageEnded": true,
+    "hasOpenExecutions": true,
+    "equipmentExecutions": [{
+      "equipmentId": "uuid",
+      "expectedExecutions": 12,
+      "completedExecutions": 10,
+      "remainingExecutions": 2,
+      "nextExecutionNumber": 11,
+      "hasOpenExecutions": true,
+      "coverageEnded": true
+    }]
+  }
+}
+```
+
+`PmocExecutionRequest` inclui `equipmentExecutionNumber`, número visual reiniciado por equipamento.
+`executionNumber` permanece como identidade histórica global.
+
+`POST /api/v1/pmoc/:id/execution-requests` reutiliza solicitação aberta do mesmo equipamento.
+Quando o limite é atingido, retorna `409 PMOC_EXECUTION_LIMIT_REACHED`.
+
+Estados aditivos: `OVERDUE` significa cobertura encerrada com pendências; `COMPLETED` significa
+cobertura encerrada com todos os ciclos de todos os equipamentos concluídos.
+
 ## Assinatura institucional vinculada ao responsável técnico
 
 ### `POST /api/v1/signatures`

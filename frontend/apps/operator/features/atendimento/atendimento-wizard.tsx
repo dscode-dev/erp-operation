@@ -97,6 +97,11 @@ const FIELD_DOCUMENT_TYPES: DocumentKind[] = [
   'TECHNICAL_REPORT',
 ];
 type ChecklistItem = { catalogId: string; label: string; done: boolean; note?: string };
+type EquipmentProfileDraft = {
+  manufacturer: string;
+  model: string;
+  capacity: string;
+};
 type OsOrigin = 'scratch' | 'rvt' | 'pmoc';
 type WalkInForm = {
   personType: 'PERSON' | 'COMPANY';
@@ -121,12 +126,12 @@ const EMPTY_WALK_IN: WalkInForm = {
   equipmentManufacturer: '', equipmentModel: '', equipmentCapacity: '',
 };
 function walkInValid(w: WalkInForm): boolean {
-  // CPF/CNPJ é opcional; o equipamento é identificado por marca/modelo (ao menos um).
+  // CPF/CNPJ é opcional; o perfil técnico mínimo do equipamento é obrigatório.
   return Boolean(
     w.name.trim() && w.street.trim() && w.number.trim() &&
     w.district.trim() && w.city.trim() && w.state.trim().length === 2 &&
     w.contactName.trim() && w.contactPhone.trim() &&
-    (w.equipmentManufacturer.trim() || w.equipmentModel.trim()),
+    w.equipmentManufacturer.trim() && w.equipmentModel.trim() && w.equipmentCapacity.trim(),
   );
 }
 function walkInAddressLabel(w: WalkInForm): string {
@@ -162,6 +167,7 @@ export function AtendimentoWizard({
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [address, setAddress] = useState<{ id: string; label: string } | null>(null);
   const [equipments, setEquipments] = useState<EquipmentSummary[]>([]);
+  const [equipmentProfiles, setEquipmentProfiles] = useState<Record<string, EquipmentProfileDraft>>({});
   const [serviceType, setServiceType] = useState<ServiceTypeKey | null>(null);
   const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
   const [maintenanceType, setMaintenanceType] = useState<OperationMaintenanceType>('SEMIANNUAL');
@@ -228,6 +234,33 @@ export function AtendimentoWizard({
     };
   }, [initialEquipmentId, initialCustomerId]);
 
+  useEffect(() => {
+    setEquipmentProfiles((current) => {
+      const next = { ...current };
+      for (const equipment of equipments) {
+        next[equipment.id] ??= {
+          manufacturer: equipment.manufacturer ?? '',
+          model: equipment.model ?? '',
+          capacity: equipment.capacity ?? '',
+        };
+      }
+      return next;
+    });
+  }, [equipments]);
+
+  const equipmentProfilesComplete = equipments.every((equipment) => {
+    const profile = equipmentProfiles[equipment.id] ?? {
+      manufacturer: equipment.manufacturer ?? '',
+      model: equipment.model ?? '',
+      capacity: equipment.capacity ?? '',
+    };
+    return Boolean(
+      profile.manufacturer.trim() &&
+      profile.model.trim() &&
+      profile.capacity.trim(),
+    );
+  });
+
   function pickServiceType(key: ServiceTypeKey) {
     setServiceType(key);
   }
@@ -277,7 +310,7 @@ export function AtendimentoWizard({
       case 0:
         return walkInMode ? walkInValid(walk) : !!customer;
       case 1:
-        return true; // equipamento opcional
+        return equipmentProfilesComplete; // equipamento opcional; selecionados precisam estar identificados
       case 2:
         return !!serviceType;
       case 3:
@@ -293,7 +326,7 @@ export function AtendimentoWizard({
       default:
         return false;
     }
-  }, [step, customer, serviceType, signature, signerName, technicalSignatureId, walkInMode, walk]);
+  }, [step, customer, serviceType, signature, signerName, technicalSignatureId, walkInMode, walk, equipmentProfilesComplete]);
 
   function back() {
     if (step === 0) router.push('/operator');
@@ -334,9 +367,18 @@ export function AtendimentoWizard({
       // OS avulso: registra cliente novo (Revisão) + endereço + contato + equipamento.
       let customerId = customer?.id ?? null;
       let addressId = address?.id ?? null;
-      let inspectedEquipments = equipments.map((item) => ({
+      let inspectedEquipments: Array<{
+        equipmentId: string;
+        sector: string;
+        manufacturer?: string;
+        model?: string;
+        capacity?: string;
+      }> = equipments.map((item) => ({
         equipmentId: item.id,
-        sector: item.address?.name ?? address?.label ?? item.name,
+        sector: item.sector ?? item.address?.name ?? address?.label ?? item.name,
+        manufacturer: equipmentProfiles[item.id]?.manufacturer.trim() || undefined,
+        model: equipmentProfiles[item.id]?.model.trim() || undefined,
+        capacity: equipmentProfiles[item.id]?.capacity.trim() || undefined,
       }));
       let equipmentId = equipments[0]?.id ?? null;
       if (walkInMode) {
@@ -536,6 +578,7 @@ export function AtendimentoWizard({
                   setCustomer(c);
                   setAddress(null);
                   setEquipments([]);
+                  setEquipmentProfiles({});
                   setOsOrigin(null);
                 }}
               />
@@ -546,6 +589,7 @@ export function AtendimentoWizard({
                   setCustomer(null);
                   setAddress(null);
                   setEquipments([]);
+                  setEquipmentProfiles({});
                   setOsOrigin('scratch');
                 }}
                 className="flex w-full items-center gap-3 rounded-[var(--radius-md)] border border-dashed border-[var(--color-primary)]/40 bg-[var(--color-primary)]/5 p-3.5 text-left active:scale-[0.99]"
@@ -568,11 +612,23 @@ export function AtendimentoWizard({
             customerId={customer.id}
             selected={equipments}
             onChange={setEquipments}
+            profiles={equipmentProfiles}
+            onProfileChange={(equipmentId, field, value) =>
+              setEquipmentProfiles((current) => ({
+                ...current,
+                [equipmentId]: {
+                  manufacturer: current[equipmentId]?.manufacturer ?? '',
+                  model: current[equipmentId]?.model ?? '',
+                  capacity: current[equipmentId]?.capacity ?? '',
+                  [field]: value,
+                },
+              }))
+            }
             onScanSelect={(eq) => {
               setEquipments((current) =>
                 current.some((item) => item.id === eq.id) ? current : [...current, eq],
               );
-              setStep(2);
+              if (eq.manufacturer && eq.model && eq.capacity) setStep(2);
             }}
           />
         )}
@@ -794,8 +850,10 @@ function PmocStartStep({
         )}
         {error && <p className="rounded-[var(--radius-md)] border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 p-3 text-sm text-[var(--color-danger)]">{error}</p>}
         {planId && (plan.loading && !plan.data ? <SkeletonList rows={4} /> : plan.error && !plan.data ? <ErrorState error={plan.error} onRetry={plan.refetch} /> : equipments.length === 0 ? <EmptyState icon={FileSearch} title="Nenhum equipamento coberto" description="Configure os equipamentos deste PMOC na Platform antes da execução." /> : <div className="space-y-3"><div><h2 className="font-semibold">Equipamentos cobertos</h2><p className="text-xs text-[var(--color-muted-foreground)]">Cada equipamento gera sua própria execução, evidências e documento PMOC.</p></div>{equipments.map((equipment) => {
-          const latest = (requests.data?.items ?? []).filter((request) => request.equipmentId === equipment.id).sort((left, right) => right.executionNumber - left.executionNumber)[0];
-          return <button key={equipment.id} type="button" disabled={Boolean(busy)} onClick={() => void start(equipment)} className="flex w-full items-center justify-between gap-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 text-left disabled:opacity-60"><span className="min-w-0"><span className="block truncate font-semibold">{equipment.name}</span><span className="block truncate text-xs text-[var(--color-muted-foreground)]">{[equipment.sector, equipment.manufacturer, equipment.model, equipment.capacity].filter(Boolean).join(' · ') || 'Sem detalhes técnicos'}</span>{latest && <span className="mt-1 block text-xs text-[var(--color-primary)]">Última execução {String(latest.executionNumber).padStart(3, '0')} · {pmocExecutionLabel(latest.status)}</span>}</span>{busy === equipment.id ? <Loader2 className="h-5 w-5 shrink-0 animate-spin" /> : <ChevronRight className="h-5 w-5 shrink-0" />}</button>;
+          const latest = (requests.data?.items ?? []).filter((request) => request.equipmentId === equipment.id).sort((left, right) => right.equipmentExecutionNumber - left.equipmentExecutionNumber)[0];
+          const progress = plan.data?.overview?.equipmentExecutions.find((item) => item.equipmentId === equipment.id);
+          const unavailable = !progress?.hasOpenExecutions;
+          return <button key={equipment.id} type="button" disabled={Boolean(busy) || unavailable} onClick={() => void start(equipment)} className="flex w-full items-center justify-between gap-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 text-left disabled:opacity-60"><span className="min-w-0"><span className="block truncate font-semibold">{equipment.name}</span><span className="block truncate text-xs text-[var(--color-muted-foreground)]">{[equipment.sector, equipment.manufacturer, equipment.model, equipment.capacity].filter(Boolean).join(' · ') || 'Sem detalhes técnicos'}</span>{progress && <span className={`mt-1 block text-xs ${progress.coverageEnded && progress.hasOpenExecutions ? 'text-[var(--color-danger)]' : 'text-[var(--color-primary)]'}`}>{progress.completedExecutions}/{progress.expectedExecutions} execuções concluídas{progress.coverageEnded && progress.hasOpenExecutions ? ` · cobertura encerrada, ${progress.remainingExecutions} pendente(s)` : ''}</span>}{latest && <span className="block text-xs text-[var(--color-muted-foreground)]">Última execução {String(latest.equipmentExecutionNumber).padStart(3, '0')} · {pmocExecutionLabel(latest.status)}</span>}</span>{busy === equipment.id ? <Loader2 className="h-5 w-5 shrink-0 animate-spin" /> : unavailable ? <Check className="h-5 w-5 shrink-0 text-[var(--color-success)]" /> : <ChevronRight className="h-5 w-5 shrink-0" />}</button>;
         })}</div>)}
       </div>
       {plan.data && (
@@ -817,7 +875,7 @@ function PmocStartStep({
             }
             onCompleted({
               documentId,
-              documentNumber: documentNumber ?? `PMOC-${String(request.executionNumber).padStart(3, '0')}`,
+              documentNumber: documentNumber ?? `PMOC-${String(request.equipmentExecutionNumber).padStart(3, '0')}`,
             });
           }}
         />
@@ -1251,11 +1309,19 @@ function EquipamentoStep({
   selected,
   onChange,
   onScanSelect,
+  profiles,
+  onProfileChange,
 }: {
   customerId: string;
   selected: EquipmentSummary[];
   onChange: (equipments: EquipmentSummary[]) => void;
   onScanSelect: (e: EquipmentSummary) => void;
+  profiles: Record<string, EquipmentProfileDraft>;
+  onProfileChange: (
+    equipmentId: string,
+    field: keyof EquipmentProfileDraft,
+    value: string,
+  ) => void;
 }) {
   const [search, setSearch] = useState('');
   const debounced = useDebounce(search, 300);
@@ -1299,7 +1365,10 @@ function EquipamentoStep({
     return (
       <ScannedEquipmentCard
         equipment={scanned}
-        onConfirm={() => onScanSelect(scanned)}
+        onConfirm={() => {
+          onScanSelect(scanned);
+          setScanned(null);
+        }}
         onCancel={() => setScanned(null)}
       />
     );
@@ -1367,9 +1436,11 @@ function EquipamentoStep({
                   {selected.some((item) => item.id === e.id) && <Check className="h-4 w-4" />}
                 </span>
                 <span className="min-w-0 flex-1">
-                  <strong className="block truncate text-sm">{e.name}</strong>
+                  <strong className="block truncate text-sm">
+                    {[e.manufacturer, e.model, e.capacity].filter(Boolean).join(' - ') || e.name}
+                  </strong>
                   <span className="block truncate text-caption">
-                    {`${e.tag ?? '—'} · ${e.manufacturer ?? ''} ${e.model ?? ''}`.trim()}
+                    {e.sector || 'Setor não informado'}
                   </span>
                 </span>
                 {e.status === 'MAINTENANCE' && <StatusChip tone="warning">Manutenção</StatusChip>}
@@ -1378,6 +1449,47 @@ function EquipamentoStep({
           ))}
         </ul>
       )}
+      {selected
+        .filter((equipment) => !equipment.manufacturer || !equipment.model || !equipment.capacity)
+        .map((equipment) => {
+          const missing = (
+            [
+              ['manufacturer', 'Marca'],
+              ['model', 'Modelo'],
+              ['capacity', 'Capacidade'],
+            ] as const
+          ).filter(([field]) => !equipment[field]);
+          return (
+            <section
+              key={equipment.id}
+              className="space-y-3 rounded-[var(--radius-lg)] border border-[var(--color-warning)]/35 bg-[var(--color-warning)]/5 p-3"
+            >
+              <div>
+                <h3 className="text-sm font-semibold">
+                  Complete os dados de {equipment.name}
+                </h3>
+                <p className="text-caption">
+                  Estes dados atualizarão o equipamento e serão utilizados na OS.
+                </p>
+              </div>
+              {missing.map(([field, label]) => (
+                <label key={field} className="block space-y-1 text-sm">
+                  <span className="font-medium">{label} *</span>
+                  <input
+                    value={profiles[equipment.id]?.[field] ?? ''}
+                    onChange={(event) =>
+                      onProfileChange(equipment.id, field, event.target.value)
+                    }
+                    maxLength={field === 'capacity' ? 80 : 120}
+                    placeholder={`Informe ${label.toLowerCase()}`}
+                    className="h-11 w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-3 outline-none focus:border-[var(--color-primary)]"
+                    required
+                  />
+                </label>
+              ))}
+            </section>
+          );
+        })}
     </div>
   );
 }

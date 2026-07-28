@@ -121,7 +121,12 @@ export class AssignmentsService {
         where,
         skip: (query.page - 1) * query.limit,
         take: query.limit,
-        orderBy: [{ assignedAt: 'asc' }, { id: 'asc' }],
+        orderBy: [
+          { operation: { number: 'desc' } },
+          { operation: { scheduledFor: 'desc' } },
+          { assignedAt: 'desc' },
+          { id: 'desc' },
+        ],
         include: ASSIGNMENT_INCLUDE,
       }),
       this.prisma.assignment.count({ where }),

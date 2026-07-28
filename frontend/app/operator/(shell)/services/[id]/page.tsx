@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, CalendarClock, Camera, CheckCircle2, ClipboardCheck, Clock, FileText, MapPin, Package, PenLine, Play, XCircle } from "lucide-react";
+import { ArrowLeft, Banknote, CalendarClock, Camera, CheckCircle2, ClipboardCheck, Clock, FileText, MapPin, Package, PenLine, Play, XCircle } from "lucide-react";
 import { useAuth } from "@erp/ui/auth/auth-provider";
 import { SkeletonCard, SkeletonList } from "@erp/ui/skeletons";
 import { EmptyState } from "@erp/ui/empty-state";
@@ -171,8 +171,20 @@ function AssignmentWorkflow({
 
       <section className="rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 space-y-3">
         <InfoRow icon={MapPin} label="Endereço" value={address} />
+        <InfoRow icon={MapPin} label="Complemento" value={op.address?.complement || "Não informado"} />
+        <InfoRow icon={MapPin} label="Ponto de referência" value={op.address?.referencePoint || "Não informado"} />
         <InfoRow icon={Package} label="Equipamentos" value={operation.data?.inspectedEquipments.map((item) => item.equipment?.name).filter(Boolean).join(", ") || pmoc?.equipments.map((item) => item.equipment.name).join(", ") || op.equipment?.name || "Sem equipamento vinculado"} />
         <InfoRow icon={ClipboardCheck} label="Tipos de serviço" value={(op.serviceTypes?.length ? op.serviceTypes : [op.type]).map(serviceTypeLabel).join(" · ")} />
+        {op.serviceValue !== null && op.serviceValue !== undefined && (
+          <InfoRow
+            icon={Banknote}
+            label="Valor do serviço"
+            value={Number(op.serviceValue).toLocaleString("pt-BR", {
+              style: "currency",
+              currency: "BRL",
+            })}
+          />
+        )}
         <InfoRow icon={Clock} label="Data do agendamento" value={op.scheduledFor ? assignmentTime(op.scheduledFor) : "Não agendado"} />
       </section>
 

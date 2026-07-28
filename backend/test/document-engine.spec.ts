@@ -754,6 +754,19 @@ describe('DocumentEngine foundation', () => {
     });
   });
 
+  it('never exposes the operational service value in the document blueprint', () => {
+    const context = operationContext(DocumentTemplateType.WORK_ORDER);
+    (context.operation as { serviceValue: number }).serviceValue = 987654.32;
+    const built = (
+      new DocumentBuilderService({} as never) as unknown as {
+        buildFromContext: (ctx: unknown) => DocumentBlueprint;
+      }
+    ).buildFromContext(context);
+
+    expect(JSON.stringify(built)).not.toContain('987654.32');
+    expect(JSON.stringify(built)).not.toContain('serviceValue');
+  });
+
   it('certifies the DC-05 receipt snapshots, technical-only signature and PDF parity', async () => {
     const context = operationContext(DocumentTemplateType.RECEIPT);
     const operation = context.operation as Record<string, unknown>;
@@ -824,6 +837,13 @@ describe('DocumentEngine foundation', () => {
   it('certifies PMOC equipment checklists, photos and semantic signatures in one Blueprint', async () => {
     const context = operationContext(DocumentTemplateType.PMOC);
     const operation = context.operation as Record<string, unknown>;
+    const maintenanceExecution = operation.maintenanceExecution as {
+      scheduledAt: Date;
+      plan: { pmocPlan: { startDate: Date; endDate: Date } };
+    };
+    maintenanceExecution.scheduledAt = new Date('2026-07-28T00:00:00.000Z');
+    maintenanceExecution.plan.pmocPlan.startDate = new Date('2026-07-28T00:00:00.000Z');
+    maintenanceExecution.plan.pmocPlan.endDate = new Date('2027-07-28T00:00:00.000Z');
     operation.maintenanceType = 'MONTHLY';
     operation.inspectedEquipments = [{
       equipmentId: 'equipment-1', position: 0, sector: 'Sala técnica', brandSnapshot: 'Carrier',
@@ -845,6 +865,10 @@ describe('DocumentEngine foundation', () => {
     const built = (new DocumentBuilderService({} as never) as unknown as { buildFromContext: (ctx: unknown) => DocumentBlueprint }).buildFromContext(context);
     const ids = built.sections.map((section) => section.id);
     expect(ids).toEqual(expect.arrayContaining(['pmoc-identification', 'pmoc-operational-data', 'pmoc-inspected-equipments', 'pmoc-legal-reference', 'pmoc-checklist', 'signature']));
+    const operational = built.sections.find((section) => section.id === 'pmoc-operational-data')?.components[0];
+    const operationalItems = operational?.kind === 'metadata' ? operational.items : [];
+    expect(operationalItems.find((item) => item.label === 'Execução prevista')?.value).toBe('28/07/2026');
+    expect(operationalItems.find((item) => item.label === 'Vigência')?.value).toBe('28/07/2026 a 28/07/2027');
     const checklistSection = built.sections.find((section) => section.id === 'pmoc-checklist');
     const table = checklistSection?.components.find((component) => component.kind === 'table');
     expect(table?.kind === 'table' ? table.rows.map((row) => row.executed) : []).toEqual(['Sim', 'N.A.']);
@@ -1779,8 +1803,9 @@ describe('DocumentEngine foundation', () => {
         customer: { name: 'Hospital Santa Clara', tradeName: 'Hospital Santa Clara', cnpj: '00.000.000/0001-00', cpf: null, phone: '+55 81 3000-0000', addresses: [], contacts: [{ name: 'Carlos', phone: '+55 81 99999-0000' }] },
         document: { id: '20000000-0000-4000-8000-000000000001', number: 'ORC-000027' },
         items: [
-          { id: 'service', type: 'SERVICE', description: 'Higienização técnica', quantity: 1, unit: 'SERV', unitPrice: 850, total: 850, product: null },
-          { id: 'material', type: 'MATERIAL', description: 'Filtro de reposição', quantity: 5, unit: 'UN', unitPrice: 85, total: 425, product: null },
+          { id: 'service', type: 'SERVICE', source: 'MANUAL', description: 'Higienização técnica', quantity: 1, unit: 'SERV', unitPrice: 850, total: 850, product: null },
+          { id: 'description', type: 'MATERIAL', source: 'CATALOG', description: 'Tubulação frigorígena', quantity: 2, unit: 'UN', unitPrice: 0, total: 0, product: null },
+          { id: 'material', type: 'MATERIAL', source: 'MANUAL', description: 'Filtro de reposição', quantity: 5, unit: 'UN', unitPrice: 85, total: 425, product: null },
         ],
       },
     };
@@ -1789,12 +1814,22 @@ describe('DocumentEngine foundation', () => {
     }).buildFromContext(context);
     expect(built.sections.map((section) => section.id)).toEqual([
       'budget-identification', 'budget-customer', 'budget-introduction', 'budget-services',
-      'budget-materials', 'budget-totals', 'budget-commercial-conditions', 'signature',
+      'budget-material-descriptions', 'budget-commercial-materials', 'budget-totals',
+      'budget-commercial-conditions', 'signature',
     ]);
     const services = built.sections.find((section) => section.id === 'budget-services')?.components[0];
-    const materials = built.sections.find((section) => section.id === 'budget-materials')?.components[0];
+    const descriptions = built.sections.find((section) => section.id === 'budget-material-descriptions')?.components[0];
+    const materials = built.sections.find((section) => section.id === 'budget-commercial-materials')?.components[0];
     expect(services?.kind === 'table' ? services.rows : []).toHaveLength(1);
+    expect(descriptions?.kind === 'table' ? descriptions.columns.map((column) => column.key) : []).toEqual(['item', 'quantity']);
+    expect(descriptions?.kind === 'table' ? descriptions.rows[0] : null).not.toHaveProperty('unitPrice');
     expect(materials?.kind === 'table' ? materials.rows : []).toHaveLength(1);
+    const identification = built.sections.find((section) => section.id === 'budget-identification')?.components[0];
+    expect(
+      identification?.kind === 'metadata'
+        ? identification.items.find((item) => item.label === 'Status')?.value
+        : null,
+    ).toBe('Rascunho');
     const signature = built.sections.find((section) => section.id === 'signature')?.components[0];
     // Orçamento não coleta assinatura do cliente — apenas o responsável técnico.
     expect(signature?.kind === 'signature' ? signature.signatures.map((item) => item.role) : []).toEqual(['fixed']);

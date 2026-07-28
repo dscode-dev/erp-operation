@@ -100,6 +100,11 @@ export class CustomerAddressDto {
   @IsString()
   @MaxLength(120)
   complement?: string;
+  @IsOptional()
+  @Transform(({ value }) => trim(value))
+  @IsString()
+  @MaxLength(180)
+  referencePoint?: string;
   @Transform(({ value }) => trim(value))
   @IsString()
   @MinLength(2)
@@ -130,6 +135,11 @@ export class UpdateCustomerAddressDto {
   @IsString()
   @MaxLength(120)
   complement?: string;
+  @IsOptional()
+  @Transform(({ value }) => trim(value))
+  @IsString()
+  @MaxLength(180)
+  referencePoint?: string;
   @IsOptional()
   @Transform(({ value }) => trim(value))
   @IsString()
@@ -190,6 +200,7 @@ class WalkInAddressDto {
   @Transform(({ value }) => trim(value)) @IsString() @MinLength(2) @MaxLength(180) street!: string;
   @Transform(({ value }) => trim(value)) @IsString() @MaxLength(20) number!: string;
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(120) complement?: string;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(180) referencePoint?: string;
   @Transform(({ value }) => trim(value)) @IsString() @MinLength(2) @MaxLength(100) district!: string;
   @Transform(({ value }) => trim(value)) @IsString() @MinLength(2) @MaxLength(100) city!: string;
   @Transform(({ value }) => upper(value)) @IsString() @Length(2, 2) state!: string;

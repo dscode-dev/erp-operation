@@ -1,5 +1,46 @@
 # STATE — Frontend
 
+## Atendimento mobile e calendário PMOC (2026-07-28)
+
+- O resumo do atendimento mostra complemento e ponto de referência do endereço.
+- Os formulários oficiais de endereço permitem cadastrar/editar ponto de referência opcional.
+- Resumo, listagem e próxima execução PMOC preservam o dia civil sem deslocamento por fuso.
+- Status do orçamento no Preview/PDF é traduzido pelo Document Engine.
+
+## Refinamentos PMOC, Operator e Budget (2026-07-28)
+
+- Execuções PMOC mostram progresso real, última conclusão, próxima data e status por equipamento.
+- Meus Atendimentos ordena por número da Operation, usa agenda como desempate, mantém concluídas no
+  final e oferece filtros de status/data.
+- Materiais do orçamento separam descrições sem preço de itens comerciais.
+- Preview, PDF e detalhe ocultam valores dos itens originados no catálogo.
+
+## Catálogos de equipamentos e materiais (2026-07-28)
+
+- Catálogos Técnicos ganhou as abas `Checklists de Equipamentos` e `Descrições de materiais`.
+- O cadastro de equipamento usa somente tipos ativos do backend e preserva tipos arquivados durante
+  edição de registros antigos.
+- A etapa Materiais do orçamento possui o multi-select `Descrição dos Materiais`.
+- Seleções viram itens editáveis com quantidade, unidade e valor; os snapshots permanecem
+  independentes do catálogo.
+
+## Operações — valor do serviço e equipamentos (2026-07-28)
+
+- O Wizard gerencial possui valor operacional no passo Execução; ele é exibido ao técnico no
+  detalhe do atendimento e não aparece em documentos.
+- Seletores de equipamento exibem marca, modelo e capacidade no título e setor no subtítulo.
+- Os Wizards Operator, atribuídos ou iniciados no mobile, solicitam os campos técnicos ausentes de
+  cada equipamento antes da conclusão.
+- Atendimentos estão ordenados do mais recente para o mais antigo.
+- O rótulo oficial foi ajustado para `Auxiliar Técnico`.
+
+## PMOC — ciclos por equipamento e encerramento (2026-07-28)
+
+- Platform e Operator exibem sequência independente por equipamento.
+- O detalhe separa ciclos configurados do total operacional dos ativos.
+- A aba Execuções mostra progresso individual e alerta de cobertura encerrada com pendências.
+- Equipamentos concluídos não oferecem nova execução; PMOC `COMPLETED` aparece como Finalizado.
+
 ## PMOC — Wizard de configuração do plano (2026-07-27)
 
 - `Novo PMOC` abre quatro passos: Identificação e cobertura, Planejamento, Execuções e Confirmação.
@@ -1352,3 +1393,12 @@ Status: concluído.
   “Compartilhar PDF” e “Baixar PDF”, usando download autenticado do Document Engine.
 - Configurações > Assinaturas permite associar uma assinatura institucional a um OWNER; essa relação
   alimenta automaticamente o técnico padrão do Wizard PMOC.
+
+# Correções de Recibo e Equipamentos do cliente — 2026-07-28
+
+- Ao selecionar uma Ordem de Serviço concluída como origem, a Central de Relatórios usa a data
+  local atual como data de emissão do novo Recibo. A data da OS não é mais copiada.
+- Na aba Equipamentos do detalhe do cliente, a ação Editar deixou de herdar o link da linha.
+  O clique abre somente o drawer de edição; clicar nos demais campos continua abrindo o detalhe
+  do equipamento.
+- Nenhum contrato de API, entidade ou migration foi alterado.

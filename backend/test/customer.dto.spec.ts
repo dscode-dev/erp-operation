@@ -4,6 +4,7 @@ import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import {
   CreateCustomerDto,
+  CustomerAddressDto,
   ListCustomersQueryDto,
 } from '../src/modules/customers/dto/customer.dto';
 
@@ -32,5 +33,22 @@ describe('Customer DTOs', () => {
     expect(await validate(dto)).toHaveLength(0);
     expect(dto.page).toBe(1);
     expect(dto.limit).toBe(20);
+  });
+
+  it('accepts an optional sanitized address reference point', async () => {
+    const dto = plainToInstance(CustomerAddressDto, {
+      name: 'Matriz',
+      street: 'Rua do Sol',
+      number: '120',
+      complement: 'Sala 2',
+      referencePoint: '  Entrada ao lado da farmácia  ',
+      district: 'Centro',
+      city: 'Recife',
+      state: 'pe',
+    });
+
+    expect(await validate(dto)).toHaveLength(0);
+    expect(dto.referencePoint).toBe('Entrada ao lado da farmácia');
+    expect(dto.state).toBe('PE');
   });
 });

@@ -371,8 +371,19 @@ function BudgetSummary({ budget }: { budget: Budget }) {
 
 function BudgetItems({ budget }: { budget: Budget }) {
   if (budget.items.length === 0) return <EmptyState icon={ShoppingCart} title="Sem itens" description="Este orçamento não possui itens cadastrados." />;
+  const descriptions = budget.items.filter((item) => item.source === "CATALOG");
+  const commercial = budget.items.filter((item) => item.source !== "CATALOG");
   return (
-    <div className="overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)]">
+    <div className="space-y-4">
+      {descriptions.length > 0 && <div className="overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)]">
+        <div className="border-b border-[var(--color-border)] px-4 py-3"><h3 className="text-sm font-semibold">Descrição dos materiais</h3><p className="text-caption">Itens informativos, sem composição de preço.</p></div>
+        <table className="w-full text-sm">
+          <thead className="bg-[var(--color-muted)]/40 text-[11px] uppercase tracking-wider text-[var(--color-muted-foreground)]"><tr><th className="px-4 py-2 text-left">Descrição</th><th className="px-4 py-2 text-right">Quantidade</th></tr></thead>
+          <tbody className="divide-y divide-[var(--color-border)]">{descriptions.map((item) => <tr key={item.id}><td className="px-4 py-3 font-medium">{item.description}</td><td className="px-4 py-3 text-right font-mono">{formatNumber(Number(item.quantity))}</td></tr>)}</tbody>
+        </table>
+      </div>}
+      {commercial.length > 0 && <div className="overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)]">
+      <div className="border-b border-[var(--color-border)] px-4 py-3"><h3 className="text-sm font-semibold">Serviços, materiais e fornecimentos</h3></div>
       <table className="w-full text-sm">
         <thead className="bg-[var(--color-muted)]/40 text-[11px] uppercase tracking-wider text-[var(--color-muted-foreground)]">
           <tr>
@@ -383,7 +394,7 @@ function BudgetItems({ budget }: { budget: Budget }) {
           </tr>
         </thead>
         <tbody className="divide-y divide-[var(--color-border)]">
-          {budget.items.map((item) => (
+          {commercial.map((item) => (
             <tr key={item.id}>
               <td className="px-4 py-3"><div className="font-medium">{item.description}</div><div className="text-caption">{item.type === "SERVICE" ? "Serviço" : "Material"}</div></td>
               <td className="px-4 py-3 text-right font-mono">{formatNumber(Number(item.quantity))} {item.unit}</td>
@@ -393,6 +404,7 @@ function BudgetItems({ budget }: { budget: Budget }) {
           ))}
         </tbody>
       </table>
+      </div>}
     </div>
   );
 }

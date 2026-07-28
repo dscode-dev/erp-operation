@@ -197,6 +197,13 @@ const defaultPmocStart = new Date();
 const defaultPmocEnd = new Date(defaultPmocStart);
 defaultPmocEnd.setUTCFullYear(defaultPmocEnd.getUTCFullYear() + 1);
 
+function localDateInputValue(date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 const emptyForm: WorkflowForm = {
   workOrderSource: '',
   receiptSource: '',
@@ -239,7 +246,7 @@ const emptyForm: WorkflowForm = {
   amount: '',
   receivedFrom: '',
   receiptNumber: '',
-  receiptDate: new Date().toISOString().slice(0, 10),
+  receiptDate: localDateInputValue(),
   receiptAmountInWords: '',
   receiptService: '',
   receiptDescription: '',
@@ -938,7 +945,9 @@ function ReportWorkflowDrawer({
               receiptSource: 'OPERATION' as const,
               receiptNumber:
                 detail.receiptNumber ?? `REC-${String(detail.number).padStart(6, '0')}`,
-              receiptDate: (detail.completedAt ?? new Date().toISOString()).slice(0, 10),
+              // A emissão do Recibo é um novo ato documental. A data da OS serve
+              // apenas como origem dos dados e nunca como data de emissão.
+              receiptDate: localDateInputValue(),
               amount: receiptAmount === null ? '' : receiptAmount.toFixed(2).replace('.', ','),
               receiptAmountInWords: receiptAmount === null ? '' : brlAmountInWords(receiptAmount),
               receiptService:

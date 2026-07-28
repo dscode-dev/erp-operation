@@ -22,7 +22,13 @@ export type AtendimentoDraft = {
   customerId: string | null;
   addressId: string | null;
   equipmentId: string | null;
-  inspectedEquipments: Array<{ equipmentId: string; sector: string }>;
+  inspectedEquipments: Array<{
+    equipmentId: string;
+    sector: string;
+    manufacturer?: string;
+    model?: string;
+    capacity?: string;
+  }>;
   /** ServiceTypeKey maps 1:1 to the backend OperationType. */
   serviceType: ServiceTypeKey | null;
   checklist: { catalogId?: string; label: string; done: boolean; note?: string }[];

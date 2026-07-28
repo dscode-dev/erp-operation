@@ -295,6 +295,7 @@ export class PmocExecutionRequestsService {
       request
         ? {
             executionNumber: request.executionNumber,
+            equipmentExecutionNumber: request.equipmentExecutionNumber,
             executionYear: request.executionYear,
             workOrderNumber: request.operation?.number ?? null,
             status: request.status,
@@ -312,8 +313,9 @@ export class PmocExecutionRequestsService {
       ...event,
       source: 'PMOC',
       execution: event.executionRequest
-        ? {
+          ? {
             executionNumber: event.executionRequest.executionNumber,
+            equipmentExecutionNumber: event.executionRequest.equipmentExecutionNumber,
             executionYear: event.executionRequest.executionYear,
             workOrderNumber: event.executionRequest.operation?.number ?? null,
             status: event.executionRequest.status,
@@ -420,7 +422,7 @@ export class PmocExecutionRequestsService {
     context: OperationAuditContext,
   ): Promise<unknown> {
     const plan = await this.planOrThrow(pmocPlanId);
-    this.assertPlanCanSchedule(plan);
+    this.assertPlanIsOperational(plan);
     const scheduledFor = dto.scheduledFor
       ? new Date(dto.scheduledFor)
       : plan.maintenancePlan.nextExecution;
@@ -461,7 +463,7 @@ export class PmocExecutionRequestsService {
     const request = await this.requestWithPlanOrThrow(id);
     this.assertRequestCanGenerate(request.status);
     this.assertOperatorCanClaim(request, actor);
-    this.assertPlanCanSchedule(request.pmocPlan);
+    this.assertPlanIsOperational(request.pmocPlan);
     if ((dto.operation?.photos?.length ?? 0) > PMOC_MAX_PROCEDURE_IMAGES) {
       throw new ApplicationException(
         ERROR_CODES.VALIDATION_ERROR,
@@ -693,7 +695,10 @@ export class PmocExecutionRequestsService {
         );
         // Fim da cobertura é exclusivo: não reserva execução que caia exatamente
         // no endDate (evita a 13ª execução num período de 1 ano).
-        if (nextExecution < request.pmocPlan.endDate) {
+        if (
+          request.equipmentExecutionNumber < request.pmocPlan.plannedExecutionCount &&
+          nextExecution < request.pmocPlan.endDate
+        ) {
           const existingNextRequest = await tx.pmocExecutionRequest.findUnique({
             where: {
               pmocPlanId_equipmentId_scheduledFor: {
@@ -705,6 +710,12 @@ export class PmocExecutionRequestsService {
             select: { id: true },
           });
           if (!existingNextRequest) {
+            const nextEquipmentExecutionNumber = await this.reserveEquipmentExecutionNumberTx(
+              tx,
+              request.pmocPlanId,
+              request.equipmentId,
+              request.pmocPlan.plannedExecutionCount,
+            );
             const nextExecutionNumber = await this.reserveExecutionNumberTx(
               tx,
               request.pmocPlanId,
@@ -723,6 +734,7 @@ export class PmocExecutionRequestsService {
                 equipmentId: request.equipmentId,
                 maintenanceExecutionId: nextMaintenance.id,
                 executionNumber: nextExecutionNumber,
+                equipmentExecutionNumber: nextEquipmentExecutionNumber,
                 executionYear: nextExecution.getUTCFullYear(),
                 plannedOperatorId: request.pmocPlan.defaultOperatorId,
                 plannedTechnicianId: request.pmocPlan.defaultTechnicianId,
@@ -746,6 +758,7 @@ export class PmocExecutionRequestsService {
                 notes: 'Próxima solicitação calculada pelo RecurringEngine.',
                 metadata: {
                   executionNumber: nextExecutionNumber,
+                  equipmentExecutionNumber: nextEquipmentExecutionNumber,
                   equipmentId: request.equipmentId,
                   scheduledFor: nextExecution.toISOString(),
                 },
@@ -762,6 +775,7 @@ export class PmocExecutionRequestsService {
                   pmocPlanId: request.pmocPlanId,
                   executionRequestId: nextRequest.id,
                   executionNumber: nextExecutionNumber,
+                  equipmentExecutionNumber: nextEquipmentExecutionNumber,
                   equipmentId: request.equipmentId,
                   scheduledFor: nextExecution.toISOString(),
                 },
@@ -898,31 +912,64 @@ export class PmocExecutionRequestsService {
 
   async createForSchedule(
     plan: PlanForExecution,
-    scheduledFor: Date,
+    _scheduledFor: Date,
     actorId: string | null,
     context: OperationAuditContext,
     notes?: string,
     equipmentId: string = plan.equipmentId,
   ): Promise<unknown> {
     this.assertEquipmentCovered(plan, equipmentId);
-    const existing = await this.prisma.pmocExecutionRequest.findUnique({
+    const existing = await this.prisma.pmocExecutionRequest.findFirst({
       where: {
-        pmocPlanId_equipmentId_scheduledFor: {
-          pmocPlanId: plan.id,
-          equipmentId,
-          scheduledFor,
+        pmocPlanId: plan.id,
+        equipmentId,
+        operationId: null,
+        status: {
+          in: [PmocExecutionRequestStatus.PENDING, PmocExecutionRequestStatus.FAILED],
         },
       },
       include: REQUEST_INCLUDE,
+      orderBy: [{ equipmentExecutionNumber: 'asc' }, { scheduledFor: 'asc' }],
     });
     if (existing) return existing;
     try {
       return await this.prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`
+          SELECT "id"
+          FROM "pmoc_plan_equipments"
+          WHERE "pmoc_plan_id" = ${plan.id}::uuid
+            AND "equipment_id" = ${equipmentId}::uuid
+          FOR UPDATE
+        `;
+        const concurrentOpenRequest = await tx.pmocExecutionRequest.findFirst({
+          where: {
+            pmocPlanId: plan.id,
+            equipmentId,
+            operationId: null,
+            status: {
+              in: [PmocExecutionRequestStatus.PENDING, PmocExecutionRequestStatus.FAILED],
+            },
+          },
+          include: REQUEST_INCLUDE,
+          orderBy: [{ equipmentExecutionNumber: 'asc' }, { scheduledFor: 'asc' }],
+        });
+        if (concurrentOpenRequest) return concurrentOpenRequest;
+        const equipmentExecutionNumber = await this.reserveEquipmentExecutionNumberTx(
+          tx,
+          plan.id,
+          equipmentId,
+          plan.plannedExecutionCount,
+        );
+        const officialScheduledFor = this.recurrence.occurrenceAt(
+          plan.maintenancePlan.recurrenceRule as unknown as RecurrenceRuleDto,
+          plan.startDate,
+          equipmentExecutionNumber,
+        );
         const executionNumber = await this.reserveExecutionNumberTx(tx, plan.id);
         const execution = await tx.maintenanceExecution.create({
           data: {
             maintenancePlanId: plan.maintenancePlanId,
-            scheduledAt: scheduledFor,
+            scheduledAt: officialScheduledFor,
             notes: notes ?? 'Execução planejada pela fundação PMOC.',
           },
           select: { id: true },
@@ -933,8 +980,9 @@ export class PmocExecutionRequestsService {
             equipmentId,
             maintenanceExecutionId: execution.id,
             executionNumber,
-            executionYear: scheduledFor.getUTCFullYear(),
-            scheduledFor,
+            equipmentExecutionNumber,
+            executionYear: officialScheduledFor.getUTCFullYear(),
+            scheduledFor: officialScheduledFor,
             requestedBy: actorId,
             plannedOperatorId: plan.defaultOperatorId,
             plannedTechnicianId: plan.defaultTechnicianId,
@@ -958,8 +1006,9 @@ export class PmocExecutionRequestsService {
             notes: notes ?? null,
             metadata: {
               executionNumber,
+              equipmentExecutionNumber,
               equipmentId,
-              scheduledFor: scheduledFor.toISOString(),
+              scheduledFor: officialScheduledFor.toISOString(),
               generationMode: plan.generationMode,
             },
           },
@@ -975,14 +1024,15 @@ export class PmocExecutionRequestsService {
               pmocPlanId: plan.id,
               executionRequestId: request.id,
               executionNumber,
+              equipmentExecutionNumber,
               equipmentId,
-              scheduledFor: scheduledFor.toISOString(),
+              scheduledFor: officialScheduledFor.toISOString(),
             },
           ),
         });
         if (
           plan.generationMode === PmocGenerationMode.MANUAL &&
-          scheduledFor.getTime() <= Date.now()
+          officialScheduledFor.getTime() <= Date.now()
         ) {
           await this.notifications.notifyPmocExecutionTx(
             tx,
@@ -998,15 +1048,17 @@ export class PmocExecutionRequestsService {
         cause instanceof Prisma.PrismaClientKnownRequestError &&
         cause.code === 'P2002'
       ) {
-        const concurrent = await this.prisma.pmocExecutionRequest.findUnique({
+        const concurrent = await this.prisma.pmocExecutionRequest.findFirst({
           where: {
-            pmocPlanId_equipmentId_scheduledFor: {
-              pmocPlanId: plan.id,
-              equipmentId,
-              scheduledFor,
+            pmocPlanId: plan.id,
+            equipmentId,
+            operationId: null,
+            status: {
+              in: [PmocExecutionRequestStatus.PENDING, PmocExecutionRequestStatus.FAILED],
             },
           },
           include: REQUEST_INCLUDE,
+          orderBy: [{ equipmentExecutionNumber: 'asc' }, { scheduledFor: 'asc' }],
         });
         if (concurrent) return concurrent;
       }
@@ -1030,6 +1082,83 @@ export class PmocExecutionRequestsService {
       select: { id: true, pmocPlanId: true },
       orderBy: [{ scheduledFor: 'asc' }, { id: 'asc' }],
       take: limit,
+    });
+  }
+
+  async reconcileCoverageStatuses(): Promise<number> {
+    return this.prisma.$transaction(async (tx) => {
+      const changed = await tx.$queryRaw<
+        Array<{
+          id: string;
+          maintenancePlanId: string;
+          operationalStatus: PmocOperationalStatus;
+        }>
+      >`
+        WITH projection AS (
+          SELECT
+            plan."id",
+            plan."maintenance_plan_id",
+            plan."planned_execution_count",
+            NOT EXISTS (
+              SELECT 1
+              FROM "pmoc_plan_equipments" covered
+              WHERE covered."pmoc_plan_id" = plan."id"
+                AND (
+                  SELECT COUNT(*)
+                  FROM "pmoc_execution_requests" request
+                  JOIN "maintenance_executions" execution
+                    ON execution."id" = request."maintenance_execution_id"
+                  WHERE request."pmoc_plan_id" = plan."id"
+                    AND request."equipment_id" = covered."equipment_id"
+                    AND execution."status" = 'COMPLETED'::"MaintenanceExecutionStatus"
+                ) < plan."planned_execution_count"
+            ) AS "all_completed"
+          FROM "pmoc_plans" plan
+          WHERE plan."active" = TRUE
+            AND plan."end_date" < CURRENT_DATE
+        )
+        UPDATE "pmoc_plans" plan
+        SET
+          "operational_status" = CASE
+            WHEN projection."all_completed"
+              THEN 'COMPLETED'::"PmocOperationalStatus"
+            ELSE 'OVERDUE'::"PmocOperationalStatus"
+          END,
+          "active" = NOT projection."all_completed",
+          "next_execution_date" = CASE
+            WHEN projection."all_completed" THEN NULL
+            ELSE plan."next_execution_date"
+          END,
+          "next_generation_date" = CASE
+            WHEN projection."all_completed" THEN NULL
+            ELSE plan."next_generation_date"
+          END,
+          "updated_at" = CURRENT_TIMESTAMP
+        FROM projection
+        WHERE plan."id" = projection."id"
+          AND (
+            plan."operational_status" IS DISTINCT FROM CASE
+              WHEN projection."all_completed"
+                THEN 'COMPLETED'::"PmocOperationalStatus"
+              ELSE 'OVERDUE'::"PmocOperationalStatus"
+            END
+            OR plan."active" IS DISTINCT FROM NOT projection."all_completed"
+          )
+        RETURNING
+          plan."id",
+          plan."maintenance_plan_id" AS "maintenancePlanId",
+          plan."operational_status" AS "operationalStatus"
+      `;
+      const completedMaintenancePlanIds = changed
+        .filter((item) => item.operationalStatus === PmocOperationalStatus.COMPLETED)
+        .map((item) => item.maintenancePlanId);
+      if (completedMaintenancePlanIds.length) {
+        await tx.maintenancePlan.updateMany({
+          where: { id: { in: completedMaintenancePlanIds } },
+          data: { active: false },
+        });
+      }
+      return changed.length;
     });
   }
 
@@ -1333,6 +1462,33 @@ export class PmocExecutionRequestsService {
     return executionNumber;
   }
 
+  private async reserveEquipmentExecutionNumberTx(
+    tx: Prisma.TransactionClient,
+    pmocPlanId: string,
+    equipmentId: string,
+    plannedExecutionCount: number,
+  ): Promise<number> {
+    const rows = await tx.$queryRaw<Array<{ executionNumber: number }>>`
+      UPDATE "pmoc_plan_equipments"
+      SET
+        "last_reserved_execution_number" = "last_reserved_execution_number" + 1
+      WHERE "pmoc_plan_id" = ${pmocPlanId}::uuid
+        AND "equipment_id" = ${equipmentId}::uuid
+        AND "last_reserved_execution_number" < ${plannedExecutionCount}
+      RETURNING "last_reserved_execution_number" AS "executionNumber"
+    `;
+    const executionNumber = rows[0]?.executionNumber;
+    if (!executionNumber) {
+      throw new ApplicationException(
+        ERROR_CODES.PMOC_EXECUTION_LIMIT_REACHED,
+        'Todas as execuções previstas para este equipamento já foram reservadas',
+        HttpStatus.CONFLICT,
+        { pmocPlanId, equipmentId, plannedExecutionCount },
+      );
+    }
+    return executionNumber;
+  }
+
   private async syncPlanScheduleTx(
     tx: Prisma.TransactionClient,
     pmocPlanId: string,
@@ -1403,14 +1559,9 @@ export class PmocExecutionRequestsService {
     return plan;
   }
 
-  private assertPlanCanSchedule(plan: PlanForExecution): void {
+  private assertPlanIsOperational(plan: PlanForExecution): void {
     if (!plan.active || plan.generationMode === PmocGenerationMode.PAUSED) {
       throw this.invalidState('Paused or inactive PMOC plans cannot generate Work Orders');
-    }
-    const now = new Date();
-    const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-    if (plan.endDate < today) {
-      throw this.invalidState('Expired PMOC plans cannot generate Work Orders');
     }
   }
 

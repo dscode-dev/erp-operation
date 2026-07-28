@@ -1,5 +1,62 @@
 # Security
 
+## Segurança de dados nas migrations recentes
+
+- Nenhuma migration executa `DELETE`, `DROP TABLE`, alteração de FK ou mudança destrutiva de tipo.
+- Backfills PMOC são atômicos e condicionados a Operation oficialmente concluída.
+- O backfill de Budget não modifica nenhum valor monetário histórico.
+- DDL de `budget_items` e `customer_addresses` exige lock curto; aplicar em janela sem escrita,
+  precedida por backup restaurável.
+- Rollback de aplicação é compatível com as colunas aditivas. Rollback de dados deve ser feito por
+  restauração do backup, não por migration reversa improvisada.
+
+## Ponto de referência e separação documental
+
+- `referencePoint` é opcional, passa por whitelist/DTO, trim e limite de 180 caracteres.
+- O campo permanece sob o mesmo RBAC e validação de ownership do endereço do cliente.
+- Complemento e ponto de referência são lidos pela Operation por relação oficial; não há snapshot
+  ou payload documental adicional.
+- O Document Engine não recebe nem expõe esses dados no Preview/PDF.
+
+## Integridade PMOC e materiais de orçamento (2026-07-28)
+
+- O vínculo PMOC → MaintenanceExecution e os efeitos de conclusão ocorrem na mesma transação.
+- A reconciliação promove somente execuções vinculadas a Operations `COMPLETED`.
+- `BudgetItem.source=CATALOG` é validado e não pode injetar preço, mesmo que o cliente envie valor.
+- Itens históricos permanecem snapshots; alterações do catálogo não reescrevem orçamentos.
+
+## Catálogos de equipamentos e orçamento
+
+- Somente OWNER/MANAGER podem criar, editar, reordenar, ativar, desativar ou excluir itens.
+- Leitura segue o RBAC já aplicado ao catálogo e é limitada à instalação single-company.
+- O backend valida UUID, tipo `EQUIPMENT_TYPE`, atividade e soft delete antes de classificar um
+  equipamento.
+- Um catálogo arquivado permanece referenciado por equipamentos históricos, graças ao FK
+  `ON DELETE RESTRICT` e ao soft delete.
+- Descrições de materiais são copiadas como texto no Budget; mudanças futuras no catálogo não
+  alteram orçamentos existentes.
+
+## Valor operacional e complementação de equipamento
+
+- `serviceValue` não é saldo, custo, margem ou lançamento financeiro. É um dado operacional da OS,
+  visível ao gestor e ao operador autorizado pela Assignment.
+- OPERATOR não pode definir nem alterar o valor; tentativa na criação retorna 403.
+- A complementação técnica usa o ownership já validado da Operation, restringe os IDs aos
+  equipamentos originalmente vinculados e valida cliente/estado ativo.
+- Atualizações são condicionais e preenchem apenas `NULL`/vazio, evitando sobrescrita concorrente.
+- Valor não é enviado ao DocumentContext/Blueprint/PDF. Alterações técnicas são auditadas sem
+  exposição de dados sensíveis.
+
+## Integridade das execuções PMOC por equipamento
+
+- Reserva protegida por row lock e incremento atômico no PostgreSQL.
+- Constraint única `(pmocPlanId, equipmentId, equipmentExecutionNumber)`.
+- O limite `plannedExecutionCount` é verificado no mesmo `UPDATE` que reserva a vaga.
+- Cliques concorrentes no mesmo equipamento são idempotentes.
+- Não é permitido reduzir a quantidade planejada abaixo de números já reservados. Alterações na
+  cobertura não apagam nem reutilizam o histórico dos equipamentos removidos.
+- A reconciliação considera somente `MaintenanceExecution.COMPLETED`.
+
 ## PMOC configuration-only
 
 - O backend garante que `configurationOnly=true` não produza efeitos operacionais ou documentais.

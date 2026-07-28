@@ -158,6 +158,7 @@ export class CustomersService {
             street: dto.address.street,
             number: dto.address.number,
             complement: dto.address.complement ?? null,
+            referencePoint: dto.address.referencePoint ?? null,
             district: dto.address.district,
             city: dto.address.city,
             state: dto.address.state,

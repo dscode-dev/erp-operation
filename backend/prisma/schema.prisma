@@ -106,6 +106,8 @@ enum TechnicalCatalogType {
   CONCLUSION
   RECOMMENDATION
   PLAN_SCOPE
+  EQUIPMENT_TYPE
+  BUDGET_MATERIAL_DESCRIPTION
 }
 
 enum TechnicalCatalogArea {
@@ -168,6 +170,11 @@ enum BudgetStatus {
 enum BudgetItemType {
   SERVICE
   MATERIAL
+}
+
+enum BudgetItemSource {
+  MANUAL
+  CATALOG
 }
 
 enum BudgetPaymentMethod {
@@ -320,6 +327,7 @@ enum PmocOperationalStatus {
   PAUSED
   ERROR
   EXPIRED
+  COMPLETED
 }
 
 enum PmocExecutionRequestStatus {
@@ -561,43 +569,43 @@ model RefreshToken {
 }
 
 model Organization {
-  id                  String                @id @default(uuid()) @db.Uuid
-  legalName           String                @map("legal_name") @db.VarChar(180)
-  tradeName           String                @map("trade_name") @db.VarChar(120)
-  cnpj                String                @db.VarChar(18)
-  stateRegistration   String?               @map("state_registration") @db.VarChar(30)
-  email               String                @db.VarChar(254)
-  phone               String                @db.VarChar(30)
-  phoneNumbers        String[]              @default([]) @map("phone_numbers")
-  website             String?               @db.VarChar(255)
-  zipCode             String?               @map("zip_code") @db.VarChar(10)
-  street              String?               @db.VarChar(180)
-  number              String?               @db.VarChar(20)
-  complement          String?               @db.VarChar(120)
-  district            String?               @db.VarChar(120)
-  city                String                @db.VarChar(100)
-  state               String                @db.VarChar(2)
-  primaryColor        String                @map("primary_color") @db.VarChar(7)
-  secondaryColor      String                @map("secondary_color") @db.VarChar(7)
-  segment             String?               @db.VarChar(80)
-  isActive            Boolean               @default(true) @map("is_active")
-  createdAt           DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt           DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
-  settings            OrganizationSettings?
-  assets              BrandAsset[]
-  templates           DocumentTemplate[]
-  pmocPlans           PmocPlan[]
-  inventoryItems      InventoryItem[]
-  productPricings     ProductPricing[]
-  budgets             Budget[]
-  financialAccounts   FinancialAccount[]
-  financialCategories FinancialCategory[]
-  financialEntries    FinancialEntry[]
-  purchaseOrders      PurchaseOrder[]
-  notifications       Notification[]
-  technicalCatalogs   TechnicalCatalog[]
-  signatures          Signature[]
-  sales               Sale[]
+  id                   String                @id @default(uuid()) @db.Uuid
+  legalName            String                @map("legal_name") @db.VarChar(180)
+  tradeName            String                @map("trade_name") @db.VarChar(120)
+  cnpj                 String                @db.VarChar(18)
+  stateRegistration    String?               @map("state_registration") @db.VarChar(30)
+  email                String                @db.VarChar(254)
+  phone                String                @db.VarChar(30)
+  phoneNumbers         String[]              @default([]) @map("phone_numbers")
+  website              String?               @db.VarChar(255)
+  zipCode              String?               @map("zip_code") @db.VarChar(10)
+  street               String?               @db.VarChar(180)
+  number               String?               @db.VarChar(20)
+  complement           String?               @db.VarChar(120)
+  district             String?               @db.VarChar(120)
+  city                 String                @db.VarChar(100)
+  state                String                @db.VarChar(2)
+  primaryColor         String                @map("primary_color") @db.VarChar(7)
+  secondaryColor       String                @map("secondary_color") @db.VarChar(7)
+  segment              String?               @db.VarChar(80)
+  isActive             Boolean               @default(true) @map("is_active")
+  createdAt            DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+  settings             OrganizationSettings?
+  assets               BrandAsset[]
+  templates            DocumentTemplate[]
+  pmocPlans            PmocPlan[]
+  inventoryItems       InventoryItem[]
+  productPricings      ProductPricing[]
+  budgets              Budget[]
+  financialAccounts    FinancialAccount[]
+  financialCategories  FinancialCategory[]
+  financialEntries     FinancialEntry[]
+  purchaseOrders       PurchaseOrder[]
+  notifications        Notification[]
+  technicalCatalogs    TechnicalCatalog[]
+  signatures           Signature[]
+  sales                Sale[]
   maintenanceReminders MaintenanceReminder[]
 
   @@map("organizations")
@@ -777,30 +785,30 @@ model Notification {
 }
 
 model Customer {
-  id             String               @id @default(uuid()) @db.Uuid
-  type           CustomerType
-  name           String               @db.VarChar(180)
-  tradeName      String?              @map("trade_name") @db.VarChar(180)
-  cpf            String?              @unique @db.VarChar(14)
-  cnpj           String?              @unique @db.VarChar(18)
-  email          String?              @db.VarChar(254)
-  phone          String?              @db.VarChar(30)
-  secondaryPhone String?              @map("secondary_phone") @db.VarChar(30)
-  notes          String?              @db.Text
-  isActive       Boolean              @default(true) @map("is_active")
+  id                   String                @id @default(uuid()) @db.Uuid
+  type                 CustomerType
+  name                 String                @db.VarChar(180)
+  tradeName            String?               @map("trade_name") @db.VarChar(180)
+  cpf                  String?               @unique @db.VarChar(14)
+  cnpj                 String?               @unique @db.VarChar(18)
+  email                String?               @db.VarChar(254)
+  phone                String?               @db.VarChar(30)
+  secondaryPhone       String?               @map("secondary_phone") @db.VarChar(30)
+  notes                String?               @db.Text
+  isActive             Boolean               @default(true) @map("is_active")
   // Cadastro criado em campo (OS avulso) aguardando conclusão pelo owner.
-  pendingReview  Boolean              @default(false) @map("pending_review")
-  disabledAt     DateTime?            @map("disabled_at") @db.Timestamptz(3)
-  createdAt      DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt      DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
-  addresses      CustomerAddress[]
-  contacts       CustomerContact[]
-  attachments    CustomerAttachment[]
-  equipments     Equipment[]
-  operations     Operation[]
-  pmocPlans      PmocPlan[]
-  budgets        Budget[]
-  sales          Sale[]
+  pendingReview        Boolean               @default(false) @map("pending_review")
+  disabledAt           DateTime?             @map("disabled_at") @db.Timestamptz(3)
+  createdAt            DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+  addresses            CustomerAddress[]
+  contacts             CustomerContact[]
+  attachments          CustomerAttachment[]
+  equipments           Equipment[]
+  operations           Operation[]
+  pmocPlans            PmocPlan[]
+  budgets              Budget[]
+  sales                Sale[]
   maintenanceReminders MaintenanceReminder[]
 
   @@index([name])
@@ -818,6 +826,7 @@ model CustomerAddress {
   street                  String      @db.VarChar(180)
   number                  String      @db.VarChar(20)
   complement              String?     @db.VarChar(120)
+  referencePoint          String?     @map("reference_point") @db.VarChar(180)
   district                String      @db.VarChar(100)
   city                    String      @db.VarChar(100)
   state                   String      @db.VarChar(2)
@@ -872,6 +881,9 @@ model Equipment {
   customerId                String                              @map("customer_id") @db.Uuid
   addressId                 String?                             @map("address_id") @db.Uuid
   parentEquipmentId         String?                             @map("parent_equipment_id") @db.Uuid
+  equipmentTypeCatalogId    String?                             @map("equipment_type_catalog_id") @db.Uuid
+  /// Classificação legada preservada para retrocompatibilidade. Novos tipos
+  /// personalizados utilizam equipmentTypeCatalogId e mantêm OTHER neste enum.
   type                      EquipmentType
   status                    EquipmentStatus                     @default(ACTIVE)
   name                      String                              @db.VarChar(180)
@@ -896,6 +908,7 @@ model Equipment {
   customer                  Customer                            @relation(fields: [customerId], references: [id], onDelete: Cascade)
   address                   CustomerAddress?                    @relation(fields: [addressId], references: [id], onDelete: SetNull)
   parent                    Equipment?                          @relation("EquipmentHierarchy", fields: [parentEquipmentId], references: [id], onDelete: SetNull)
+  equipmentTypeCatalog      TechnicalCatalog?                   @relation("EquipmentTypeCatalog", fields: [equipmentTypeCatalogId], references: [id], onDelete: Restrict)
   children                  Equipment[]                         @relation("EquipmentHierarchy")
   attachments               EquipmentAttachment[]
   metrics                   EquipmentMetric[]
@@ -915,6 +928,7 @@ model Equipment {
   @@index([customerId, status])
   @@index([addressId])
   @@index([parentEquipmentId])
+  @@index([equipmentTypeCatalogId])
   @@index([type, isActive])
   @@index([name])
   @@index([tag])
@@ -972,6 +986,9 @@ model Operation {
   observations                    String?                             @db.Text
   reportedIssue                   String?                             @map("reported_issue") @db.Text
   serviceDescription              String?                             @map("service_description") @db.Text
+  /// Valor operacional informado pela gestão ao técnico responsável. Não
+  /// integra o Financial Core nem o Document Engine.
+  serviceValue                    Decimal?                            @map("service_value") @db.Decimal(15, 2)
   receiptNumber                   String?                             @map("receipt_number") @db.VarChar(40)
   receiptIssuedAt                 DateTime?                           @map("receipt_issued_at") @db.Date
   receiptAmount                   Decimal?                            @map("receipt_amount") @db.Decimal(15, 2)
@@ -1109,6 +1126,7 @@ model TechnicalCatalog {
   organization       Organization               @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   pmocPlanScopes     PmocPlanScope[]
   pmocPlanChecklists PmocPlanChecklist[]
+  equipments         Equipment[]                @relation("EquipmentTypeCatalog")
 
   @@index([organizationId, type, active, sortOrder], map: "technical_catalog_lookup_idx")
   @@index([organizationId, maintenanceType, active], map: "technical_catalog_maintenance_idx")
@@ -1405,6 +1423,7 @@ model PmocPlan {
   includeChecklistInOperations    Boolean                @default(true) @map("include_checklist_in_operations")
   signatureOverrideId             String?                @map("signature_override_id") @db.Uuid
   operationalStatus               PmocOperationalStatus  @default(ACTIVE) @map("operational_status")
+  plannedExecutionCount           Int                    @default(1) @map("planned_execution_count")
   lastReservedExecutionNumber     Int                    @default(0) @map("last_reserved_execution_number")
   lastGeneratedExecutionNumber    Int                    @default(0) @map("last_generated_execution_number")
   lastExecutionDate               DateTime?              @map("last_execution_date") @db.Timestamptz(3)
@@ -1482,39 +1501,41 @@ model PmocPlanChecklist {
 }
 
 model PmocExecutionRequest {
-  id                     String                     @id @default(uuid()) @db.Uuid
-  pmocPlanId             String                     @map("pmoc_plan_id") @db.Uuid
-  equipmentId            String                     @map("equipment_id") @db.Uuid
-  maintenanceExecutionId String?                    @unique @map("maintenance_execution_id") @db.Uuid
-  operationId            String?                    @unique @map("operation_id") @db.Uuid
-  generatedOperationId   String?                    @unique @map("generated_operation_id") @db.Uuid
-  executionNumber        Int                        @map("execution_number")
-  executionYear          Int?                       @map("execution_year") @db.SmallInt
-  status                 PmocExecutionRequestStatus @default(PENDING)
-  origin                 PmocExecutionOrigin
-  scheduledFor           DateTime                   @map("scheduled_for") @db.Timestamptz(3)
-  requestedBy            String?                    @map("requested_by") @db.Uuid
-  plannedOperatorId      String?                    @map("planned_operator_id") @db.Uuid
-  plannedTechnicianId    String?                    @map("planned_technician_id") @db.Uuid
-  attemptCount           Int                        @default(0) @map("attempt_count")
-  lastAttemptAt          DateTime?                  @map("last_attempt_at") @db.Timestamptz(3)
-  failureReason          String?                    @map("failure_reason") @db.VarChar(1000)
-  generatedAt            DateTime?                  @map("generated_at") @db.Timestamptz(3)
-  cancelledAt            DateTime?                  @map("cancelled_at") @db.Timestamptz(3)
-  createdAt              DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt              DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(3)
-  pmocPlan               PmocPlan                   @relation(fields: [pmocPlanId], references: [id], onDelete: Cascade)
-  equipment              Equipment                  @relation(fields: [equipmentId], references: [id], onDelete: Restrict)
-  maintenanceExecution   MaintenanceExecution?      @relation(fields: [maintenanceExecutionId], references: [id], onDelete: SetNull)
-  operation              Operation?                 @relation(fields: [operationId], references: [id], onDelete: SetNull)
-  generatedOperation     Operation?                 @relation("PmocGeneratedOperation", fields: [generatedOperationId], references: [id], onDelete: SetNull)
-  requester              User?                      @relation("PmocExecutionRequestActor", fields: [requestedBy], references: [id], onDelete: SetNull)
-  plannedOperator        User?                      @relation("PmocPlannedOperator", fields: [plannedOperatorId], references: [id], onDelete: SetNull)
-  plannedTechnician      User?                      @relation("PmocPlannedTechnician", fields: [plannedTechnicianId], references: [id], onDelete: SetNull)
-  history                PmocHistory[]
+  id                       String                     @id @default(uuid()) @db.Uuid
+  pmocPlanId               String                     @map("pmoc_plan_id") @db.Uuid
+  equipmentId              String                     @map("equipment_id") @db.Uuid
+  maintenanceExecutionId   String?                    @unique @map("maintenance_execution_id") @db.Uuid
+  operationId              String?                    @unique @map("operation_id") @db.Uuid
+  generatedOperationId     String?                    @unique @map("generated_operation_id") @db.Uuid
+  executionNumber          Int                        @map("execution_number")
+  equipmentExecutionNumber Int                        @map("equipment_execution_number")
+  executionYear            Int?                       @map("execution_year") @db.SmallInt
+  status                   PmocExecutionRequestStatus @default(PENDING)
+  origin                   PmocExecutionOrigin
+  scheduledFor             DateTime                   @map("scheduled_for") @db.Timestamptz(3)
+  requestedBy              String?                    @map("requested_by") @db.Uuid
+  plannedOperatorId        String?                    @map("planned_operator_id") @db.Uuid
+  plannedTechnicianId      String?                    @map("planned_technician_id") @db.Uuid
+  attemptCount             Int                        @default(0) @map("attempt_count")
+  lastAttemptAt            DateTime?                  @map("last_attempt_at") @db.Timestamptz(3)
+  failureReason            String?                    @map("failure_reason") @db.VarChar(1000)
+  generatedAt              DateTime?                  @map("generated_at") @db.Timestamptz(3)
+  cancelledAt              DateTime?                  @map("cancelled_at") @db.Timestamptz(3)
+  createdAt                DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(3)
+  pmocPlan                 PmocPlan                   @relation(fields: [pmocPlanId], references: [id], onDelete: Cascade)
+  equipment                Equipment                  @relation(fields: [equipmentId], references: [id], onDelete: Restrict)
+  maintenanceExecution     MaintenanceExecution?      @relation(fields: [maintenanceExecutionId], references: [id], onDelete: SetNull)
+  operation                Operation?                 @relation(fields: [operationId], references: [id], onDelete: SetNull)
+  generatedOperation       Operation?                 @relation("PmocGeneratedOperation", fields: [generatedOperationId], references: [id], onDelete: SetNull)
+  requester                User?                      @relation("PmocExecutionRequestActor", fields: [requestedBy], references: [id], onDelete: SetNull)
+  plannedOperator          User?                      @relation("PmocPlannedOperator", fields: [plannedOperatorId], references: [id], onDelete: SetNull)
+  plannedTechnician        User?                      @relation("PmocPlannedTechnician", fields: [plannedTechnicianId], references: [id], onDelete: SetNull)
+  history                  PmocHistory[]
 
   @@unique([pmocPlanId, equipmentId, scheduledFor])
   @@unique([pmocPlanId, executionNumber])
+  @@unique([pmocPlanId, equipmentId, equipmentExecutionNumber], map: "pmoc_execution_equipment_number_uq")
   @@index([status, scheduledFor])
   @@index([pmocPlanId, createdAt])
   @@index([equipmentId, scheduledFor])
@@ -1564,12 +1585,13 @@ model PmocEnvironment {
 }
 
 model PmocPlanEquipment {
-  id          String    @id @default(uuid()) @db.Uuid
-  pmocPlanId  String    @map("pmoc_plan_id") @db.Uuid
-  equipmentId String    @map("equipment_id") @db.Uuid
-  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  pmocPlan    PmocPlan  @relation(fields: [pmocPlanId], references: [id], onDelete: Cascade)
-  equipment   Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+  id                          String    @id @default(uuid()) @db.Uuid
+  pmocPlanId                  String    @map("pmoc_plan_id") @db.Uuid
+  equipmentId                 String    @map("equipment_id") @db.Uuid
+  lastReservedExecutionNumber Int       @default(0) @map("last_reserved_execution_number")
+  createdAt                   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  pmocPlan                    PmocPlan  @relation(fields: [pmocPlanId], references: [id], onDelete: Cascade)
+  equipment                   Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
 
   @@unique([pmocPlanId, equipmentId])
   @@index([equipmentId])
@@ -1898,22 +1920,23 @@ model BudgetEquipment {
 }
 
 model BudgetItem {
-  id                String         @id @default(uuid()) @db.Uuid
-  budgetId          String         @map("budget_id") @db.Uuid
-  productId         String?        @map("product_id") @db.Uuid
-  type              BudgetItemType @default(MATERIAL)
-  description       String         @db.Text
-  quantity          Decimal        @db.Decimal(12, 3)
-  unit              String         @db.VarChar(20)
-  unitPrice         Decimal        @map("unit_price") @db.Decimal(14, 2)
-  sortOrder         Int            @default(0) @map("sort_order")
-  snapshotCost      Decimal        @map("snapshot_cost") @db.Decimal(14, 2)
-  snapshotSalePrice Decimal        @map("snapshot_sale_price") @db.Decimal(14, 2)
-  snapshotMargin    Decimal        @map("snapshot_margin") @db.Decimal(7, 2)
-  total             Decimal        @db.Decimal(14, 2)
-  createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
-  budget            Budget         @relation(fields: [budgetId], references: [id], onDelete: Cascade)
-  product           Product?       @relation(fields: [productId], references: [id], onDelete: SetNull)
+  id                String           @id @default(uuid()) @db.Uuid
+  budgetId          String           @map("budget_id") @db.Uuid
+  productId         String?          @map("product_id") @db.Uuid
+  type              BudgetItemType   @default(MATERIAL)
+  source            BudgetItemSource @default(MANUAL)
+  description       String           @db.Text
+  quantity          Decimal          @db.Decimal(12, 3)
+  unit              String           @db.VarChar(20)
+  unitPrice         Decimal          @map("unit_price") @db.Decimal(14, 2)
+  sortOrder         Int              @default(0) @map("sort_order")
+  snapshotCost      Decimal          @map("snapshot_cost") @db.Decimal(14, 2)
+  snapshotSalePrice Decimal          @map("snapshot_sale_price") @db.Decimal(14, 2)
+  snapshotMargin    Decimal          @map("snapshot_margin") @db.Decimal(7, 2)
+  total             Decimal          @db.Decimal(14, 2)
+  createdAt         DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  budget            Budget           @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  product           Product?         @relation(fields: [productId], references: [id], onDelete: SetNull)
 
   @@index([budgetId])
   @@index([budgetId, type, sortOrder])

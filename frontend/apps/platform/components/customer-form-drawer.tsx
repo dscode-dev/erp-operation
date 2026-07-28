@@ -31,6 +31,7 @@ type AddressState = {
   street: string;
   number: string;
   complement: string;
+  referencePoint: string;
   district: string;
   city: string;
   state: string;
@@ -44,6 +45,7 @@ const blankAddress: AddressState = {
   street: "",
   number: "",
   complement: "",
+  referencePoint: "",
   district: "",
   city: "",
   state: "",
@@ -178,6 +180,7 @@ export function CustomerFormDrawer({
               street: address.street.trim(),
               number: address.number.trim(),
               complement: address.complement.trim() || null,
+              referencePoint: address.referencePoint.trim() || null,
               district: address.district.trim(),
               city: address.city.trim(),
               state: address.state.trim().toUpperCase(),
@@ -373,6 +376,15 @@ export function CustomerFormDrawer({
                     <input value={address.complement} onChange={(e) => setAddressField("complement", e.target.value)} className={inputCls} />
                   </Field>
                 </div>
+
+                <Field label="Ponto de referência">
+                  <input
+                    value={address.referencePoint}
+                    onChange={(e) => setAddressField("referencePoint", e.target.value)}
+                    className={inputCls}
+                    placeholder="Ex.: entrada pela rua lateral"
+                  />
+                </Field>
 
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Cidade">

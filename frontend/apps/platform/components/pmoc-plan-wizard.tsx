@@ -1119,7 +1119,9 @@ function operationTypeLabel(value: OperationType) { return SERVICE_TYPES.find((i
 function signatureModeLabel(value: string) { return ({ NONE: 'Sem assinatura', FIXED: 'Assinatura institucional', COLLECTED: 'Coleta em campo', HYBRID: 'Assinatura híbrida' } as Record<string, string>)[value] ?? value; }
 function priorityLabel(value: Form['priority']) { return ({ LOW: 'Baixa', MEDIUM: 'Média', HIGH: 'Alta', CRITICAL: 'Crítica' } as const)[value]; }
 function roleLabel(value: string) { return ({ OWNER: "Owner", MANAGER: "Manager", OPERATOR: "Operator", VIEWER: "Viewer" } as Record<string, string>)[value] ?? value; }
-function activeCoverageLabel(item: PmocActiveCoverageResult["conflicts"][number]) { return `PMOC-${String(item.number).padStart(6, "0")} · ${item.name} · cobertura até ${new Date(item.endDate).toLocaleDateString("pt-BR")}`; }
+function activeCoverageLabel(item: PmocActiveCoverageResult["conflicts"][number]) {
+  return `PMOC-${String(item.number).padStart(6, "0")} · ${item.name} · cobertura até ${new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC" }).format(new Date(item.endDate))}`;
+}
 function evidenceFileDataUrl(file: File): Promise<string> { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = () => reject(new Error("Não foi possível ler a imagem.")); reader.readAsDataURL(file); }); }
 const primary = "inline-flex h-10 items-center gap-2 rounded-[var(--radius-md)] bg-[var(--color-primary)] px-4 text-sm font-medium text-[var(--color-primary-foreground)] disabled:opacity-50";
 const secondary = "inline-flex h-10 items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] px-4 text-sm font-medium";

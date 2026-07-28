@@ -1,4 +1,11 @@
-import { BudgetStatus, OperationMaintenanceType } from '@prisma/client';
+import {
+  BudgetStatus,
+  EquipmentType,
+  OperationMaintenanceType,
+  TechnicalCatalogArea,
+  TechnicalCatalogType,
+  TechnicalCatalogWorkflow,
+} from '@prisma/client';
 import {
   createActor,
   createBudgetFixture,
@@ -186,6 +193,62 @@ describe('database integrity constraints with real PostgreSQL', () => {
 
     await expect(
       prisma.$executeRaw`UPDATE "operations" SET "reference_year" = NULL WHERE "id" = ${operation.id}::uuid`,
+    ).rejects.toThrow();
+  });
+
+  it('accepts a non-negative operational service value and rejects negative values', async () => {
+    const actor = await createActor();
+    const operation = await createOperation(actor);
+
+    const updated = await prisma.operation.update({
+      where: { id: operation.id },
+      data: { serviceValue: 1350 },
+    });
+    expect(updated.serviceValue?.toString()).toBe('1350');
+
+    await expect(
+      prisma.$executeRaw`UPDATE "operations" SET "service_value" = -1 WHERE "id" = ${operation.id}::uuid`,
+    ).rejects.toThrow();
+  });
+
+  it('preserves equipment classification when a catalog type is archived', async () => {
+    const actor = await createActor();
+    const organization = await createOrganization();
+    const operation = await createOperation(actor);
+    const catalog = await prisma.technicalCatalog.create({
+      data: {
+        organizationId: organization.id,
+        type: TechnicalCatalogType.EQUIPMENT_TYPE,
+        title: 'Self-contained',
+        tags: ['equipment-type'],
+        areas: [TechnicalCatalogArea.GENERAL],
+        workflows: [TechnicalCatalogWorkflow.GENERAL],
+      },
+    });
+
+    await prisma.equipment.update({
+      where: { id: operation.equipmentId },
+      data: {
+        type: EquipmentType.OTHER,
+        equipmentTypeCatalogId: catalog.id,
+      },
+    });
+    await prisma.technicalCatalog.update({
+      where: { id: catalog.id },
+      data: { active: false, deletedAt: new Date() },
+    });
+
+    const equipment = await prisma.equipment.findUniqueOrThrow({
+      where: { id: operation.equipmentId },
+      include: { equipmentTypeCatalog: true },
+    });
+    expect(equipment.equipmentTypeCatalog).toMatchObject({
+      id: catalog.id,
+      title: 'Self-contained',
+      active: false,
+    });
+    await expect(
+      prisma.technicalCatalog.delete({ where: { id: catalog.id } }),
     ).rejects.toThrow();
   });
 });

@@ -18,6 +18,7 @@ export function listEquipments(params?: {
   search?: string;
   customerId?: string;
   addressId?: string;
+  equipmentTypeCatalogId?: string;
   status?: EquipmentStatus;
   type?: EquipmentType;
   signal?: AbortSignal;

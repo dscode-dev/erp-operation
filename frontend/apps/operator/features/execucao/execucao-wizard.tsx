@@ -41,6 +41,11 @@ const RVT_MAINTENANCE_TYPES: Array<{ value: OperationMaintenanceType; label: str
   { value: "WEEKLY", label: "Semanal" },
   { value: "SEMIANNUAL", label: "Semestral" },
 ];
+type EquipmentProfileDraft = {
+  manufacturer: string;
+  model: string;
+  capacity: string;
+};
 
 export function ExecucaoWizard({ assignmentId }: { assignmentId: string }) {
   const router = useRouter();
@@ -95,6 +100,29 @@ function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; oper
   const [signerName, setSignerName] = useState(operation.customerSignerName ?? "");
   const [signerRole, setSignerRole] = useState(operation.customerSignerRole ?? "");
   const [technicalSignatureId, setTechnicalSignatureId] = useState<string | null>(null);
+  const [equipmentProfiles, setEquipmentProfiles] = useState<Record<string, EquipmentProfileDraft>>(
+    () => {
+      const entries = operation.inspectedEquipments.map((item) => [
+        item.equipmentId,
+        {
+          manufacturer: item.equipment?.manufacturer ?? item.brandSnapshot ?? "",
+          model: item.equipment?.model ?? item.modelSnapshot ?? "",
+          capacity: item.equipment?.capacity ?? item.capacitySnapshot ?? "",
+        },
+      ] as const);
+      if (operation.equipment && !entries.some(([id]) => id === operation.equipment?.id)) {
+        entries.push([
+          operation.equipment.id,
+          {
+            manufacturer: operation.equipment.manufacturer ?? "",
+            model: operation.equipment.model ?? "",
+            capacity: operation.equipment.capacity ?? "",
+          },
+        ]);
+      }
+      return Object.fromEntries(entries);
+    },
+  );
 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -111,9 +139,57 @@ function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; oper
       : [],
     [type],
   );
+  const authorizedEquipmentIds = useMemo(
+    () =>
+      new Set([
+        ...operation.inspectedEquipments.map((item) => item.equipmentId),
+        ...(operation.equipment ? [operation.equipment.id] : []),
+      ]),
+    [operation],
+  );
   const equipmentOptions = useMemo(
-    () => (equipments.data?.items ?? []).map((item) => ({ value: item.id, label: [item.name, item.tag].filter(Boolean).join(" · ") })),
-    [equipments.data],
+    () =>
+      (equipments.data?.items ?? [])
+        .filter((item) => authorizedEquipmentIds.has(item.id))
+        .map((item) => ({
+          value: item.id,
+          label:
+            [item.manufacturer, item.model, item.capacity].filter(Boolean).join(" - ") ||
+            item.name,
+          description: item.sector || "Setor não informado",
+        })),
+    [authorizedEquipmentIds, equipments.data],
+  );
+  const requiredEquipmentProfileFields = useMemo(
+    () =>
+      Object.fromEntries(
+        [...authorizedEquipmentIds].map((id) => {
+          const inspected = operation.inspectedEquipments.find((item) => item.equipmentId === id);
+          const primary = operation.equipment?.id === id ? operation.equipment : null;
+          const profile = {
+            manufacturer: inspected?.equipment?.manufacturer ?? inspected?.brandSnapshot ?? primary?.manufacturer ?? "",
+            model: inspected?.equipment?.model ?? inspected?.modelSnapshot ?? primary?.model ?? "",
+            capacity: inspected?.equipment?.capacity ?? inspected?.capacitySnapshot ?? primary?.capacity ?? "",
+          };
+          return [
+            id,
+            (Object.keys(profile) as Array<keyof EquipmentProfileDraft>).filter(
+              (field) => !profile[field]?.trim(),
+            ),
+          ];
+        }),
+      ) as Record<string, Array<keyof EquipmentProfileDraft>>,
+    [authorizedEquipmentIds, operation],
+  );
+  const incompleteEquipmentIds = useMemo(
+    () =>
+      equipmentIds.filter((id) => (requiredEquipmentProfileFields[id]?.length ?? 0) > 0),
+    [equipmentIds, requiredEquipmentProfileFields],
+  );
+  const equipmentProfilesComplete = incompleteEquipmentIds.every((id) =>
+    requiredEquipmentProfileFields[id].every(
+      (field) => Boolean(equipmentProfiles[id]?.[field]?.trim()),
+    ),
   );
 
   useEffect(() => {
@@ -131,7 +207,9 @@ function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; oper
   const technicalSignatureRequired = directCompletion;
   const canFinish = (!technicalSignatureRequired || Boolean(technicalSignatureId)) && (!signatureRequired || (Boolean(signature) && signerName.trim().length > 0));
   const isLast = step === STEPS.length - 1;
-  const canAdvance = step !== 4 || ((!technicalSignatureRequired || Boolean(technicalSignatureId)) && (!signatureRequired || (Boolean(signature) && signerName.trim().length > 0)));
+  const canAdvance =
+    (step !== 1 || equipmentProfilesComplete) &&
+    (step !== 4 || ((!technicalSignatureRequired || Boolean(technicalSignatureId)) && (!signatureRequired || (Boolean(signature) && signerName.trim().length > 0))));
 
   function back() {
     if (step === 0) router.push(`/operator/services/${assignmentId}`);
@@ -157,7 +235,14 @@ function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; oper
         inspectedEquipments: equipmentIds.map((id) => {
           const existing = operation.inspectedEquipments.find((item) => item.equipmentId === id);
           const equipment = equipmentMap.get(id);
-          return { equipmentId: id, sector: existing?.sector ?? equipment?.address?.name ?? equipment?.name ?? "Não informado" };
+          const profile = equipmentProfiles[id];
+          return {
+            equipmentId: id,
+            sector: existing?.sector ?? equipment?.sector ?? equipment?.address?.name ?? equipment?.name ?? "Não informado",
+            manufacturer: profile?.manufacturer.trim() || undefined,
+            model: profile?.model.trim() || undefined,
+            capacity: profile?.capacity.trim() || undefined,
+          };
         }),
         photos: await Promise.all(photos.map(async (photo) => ({ dataUrl: await fileToDataUrl(photo.file), caption: photo.caption || photo.name }))),
         // A assinatura também é persistida na Operation (igual ao fluxo
@@ -260,6 +345,25 @@ function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; oper
               {managementAssigned && <span className="block text-[11px] text-[var(--color-muted-foreground)]">Definido pela gestão para este atendimento.</span>}
             </div>
             <MultiSelect label="Equipamentos envolvidos" value={equipmentIds} onChange={setEquipmentIds} options={equipmentOptions} placeholder="Selecionar equipamentos" />
+            {incompleteEquipmentIds.length > 0 && (
+              <EquipmentProfileCompletion
+                equipmentIds={incompleteEquipmentIds}
+                equipmentOptions={equipmentOptions}
+                requiredFields={requiredEquipmentProfileFields}
+                profiles={equipmentProfiles}
+                onChange={(equipmentId, field, value) =>
+                  setEquipmentProfiles((current) => ({
+                    ...current,
+                    [equipmentId]: {
+                      manufacturer: current[equipmentId]?.manufacturer ?? "",
+                      model: current[equipmentId]?.model ?? "",
+                      capacity: current[equipmentId]?.capacity ?? "",
+                      [field]: value,
+                    },
+                  }))
+                }
+              />
+            )}
             {type === "TECHNICAL_REPORT" ? <>
               <TextArea label="Observações" value={observations} onChange={setObservations} />
               <TextArea label="Recomendações técnicas (opcional)" value={recommendations} onChange={setRecommendations} />
@@ -345,6 +449,74 @@ function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; oper
 }
 
 /* ---------- Steps ---------- */
+
+function EquipmentProfileCompletion({
+  equipmentIds,
+  equipmentOptions,
+  requiredFields,
+  profiles,
+  onChange,
+}: {
+  equipmentIds: string[];
+  equipmentOptions: Array<{ value: string; label: string; description?: string }>;
+  requiredFields: Record<string, Array<keyof EquipmentProfileDraft>>;
+  profiles: Record<string, EquipmentProfileDraft>;
+  onChange: (
+    equipmentId: string,
+    field: keyof EquipmentProfileDraft,
+    value: string,
+  ) => void;
+}) {
+  const labels: Record<keyof EquipmentProfileDraft, string> = {
+    manufacturer: "Marca",
+    model: "Modelo",
+    capacity: "Capacidade",
+  };
+  return (
+    <section className="space-y-3 rounded-[var(--radius-lg)] border border-[var(--color-warning)]/35 bg-[var(--color-warning)]/5 p-3">
+      <div>
+        <h2 className="font-semibold">Complete os dados dos equipamentos</h2>
+        <p className="text-caption">
+          As informações serão atualizadas no cadastro do cliente e utilizadas nesta Ordem de Serviço.
+        </p>
+      </div>
+      {equipmentIds.map((equipmentId) => {
+        const option = equipmentOptions.find((item) => item.value === equipmentId);
+        return (
+          <div
+            key={equipmentId}
+            className="space-y-3 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] p-3"
+          >
+            <div>
+              <p className="text-sm font-medium">{option?.label ?? "Equipamento"}</p>
+              <p className="text-caption">{option?.description ?? "Setor não informado"}</p>
+            </div>
+            {requiredFields[equipmentId].map((field) => (
+              <label key={field} className="block space-y-1 text-sm">
+                <span className="font-medium">{labels[field]} *</span>
+                <input
+                  value={profiles[equipmentId]?.[field] ?? ""}
+                  onChange={(event) => onChange(equipmentId, field, event.target.value)}
+                  className={inputCls}
+                  maxLength={field === "capacity" ? 80 : 120}
+                  placeholder={`Informe ${labels[field].toLowerCase()}`}
+                  required
+                />
+              </label>
+            ))}
+          </div>
+        );
+      })}
+      {!equipmentIds.every((id) =>
+        requiredFields[id].every((field) => Boolean(profiles[id]?.[field]?.trim())),
+      ) && (
+        <p className="text-xs font-medium text-[var(--color-warning)]">
+          Preencha os campos obrigatórios para continuar.
+        </p>
+      )}
+    </section>
+  );
+}
 
 function AssignedRvtChecklistStep({ maintenanceType, onMaintenanceType, items, loading, onToggle }: {
   maintenanceType: OperationMaintenanceType;

@@ -50,7 +50,7 @@ export default function EquipamentoDetailPage({ params }: { params: Promise<{ id
         {(e) => (
           <>
             <PageHeader
-              eyebrow={EQUIPMENT_TYPE_LABEL[e.type]}
+              eyebrow={e.equipmentTypeCatalog?.title ?? EQUIPMENT_TYPE_LABEL[e.type]}
               title={e.name}
               description={e.customer?.name ?? undefined}
               actions={<StatusPill status={EQUIPMENT_STATUS_PILL[e.status]} label={EQUIPMENT_STATUS_LABEL[e.status]} />}

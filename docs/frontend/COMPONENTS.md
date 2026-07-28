@@ -1,5 +1,57 @@
 # COMPONENTS — Frontend
 
+## AddressFormDrawer e atendimento Operator
+
+- `AddressFormDrawer`: inclui `referencePoint` opcional no CRUD oficial de endereços.
+- `CustomerFormDrawer`: permite informar o mesmo campo ao criar cliente com endereço inicial.
+- `operator/services/[id]`: exibe Complemento e Ponto de referência no card operacional, sem
+  encaminhá-los ao documento.
+
+## PMOC `EquipmentExecutions`
+
+Consome a projeção pronta do backend e separa última execução da próxima solicitação.
+
+## `BudgetItemsEditor`
+
+Possui duas áreas opcionais: `Descrição dos Materiais` (`CATALOG`, sem preço) e
+`Materiais e fornecimentos` (`MANUAL`, comercial).
+
+## Operator Services
+
+Filtros de status/data sobre a fila oficial, com ordenação por número da Operation e concluídas ao
+final.
+
+## `EquipmentFormDrawer`
+
+Carrega `EQUIPMENT_TYPE` pelo client oficial, envia `equipmentTypeCatalogId` e mantém fallback do
+enum legado. Um tipo arquivado já vinculado continua visível durante edição.
+
+## `BudgetItemsEditor`
+
+Na variação `MATERIAL`, reutiliza `MultiSelect` com
+`BUDGET_MATERIAL_DESCRIPTION`. Cada seleção cria um item editável; descrição, quantidade, unidade e
+valor permanecem snapshots do orçamento.
+
+## `OperationCreationDrawer`
+
+Inclui valor operacional no passo Execução e apresenta os equipamentos como
+`Marca - Modelo - Capacidade`, com o setor no subtítulo.
+
+## `AtendimentoWizard` e `ExecucaoWizard`
+
+Identificam os campos técnicos originalmente ausentes por equipamento, coletam marca/modelo/
+capacidade e enviam a complementação pelo contrato oficial da Operation. O fluxo funciona com
+múltiplos equipamentos e não permite concluir enquanto houver campo obrigatório pendente.
+
+## `PmocEquipmentExecutionWizard`
+
+Exibe `equipmentExecutionNumber` e é reutilizado por Platform e Operator.
+
+## `EquipmentExecutions`
+
+Consome `overview.equipmentExecutions`, mostra progresso por ativo e destaca pendências posteriores
+ao término da cobertura.
+
 ## `PmocPlanWizard`
 
 - `configurationOnly` ativa o cadastro de predefinições em `/pmoc`.
@@ -895,6 +947,13 @@ Wizard reservado à execução de um equipamento coberto pelo PMOC. Reutiliza `D
 
 `CoveredEquipmentList` e `EquipmentExecutions` projetam a mesma cobertura no Resumo e em
 Execuções.
+
+## `DataTable` — células de ação
+
+- Colunas podem declarar `link: false` quando contêm botões, menus ou outros controles.
+- Essas células não são envolvidas pelo `rowHref`, evitando elementos interativos aninhados e
+  navegação acidental.
+- A tabela de equipamentos do cliente utiliza essa opção no botão Editar.
 # PMOC por equipamento
 
 - `PmocEquipmentExecutionWizard`: componente compartilhado entre Platform e Operator para
