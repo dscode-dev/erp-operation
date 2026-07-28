@@ -1792,8 +1792,9 @@ describe('DocumentEngine foundation', () => {
         customer: { name: 'Hospital Santa Clara', tradeName: 'Hospital Santa Clara', cnpj: '00.000.000/0001-00', cpf: null, phone: '+55 81 3000-0000', addresses: [], contacts: [{ name: 'Carlos', phone: '+55 81 99999-0000' }] },
         document: { id: '20000000-0000-4000-8000-000000000001', number: 'ORC-000027' },
         items: [
-          { id: 'service', type: 'SERVICE', description: 'Higienização técnica', quantity: 1, unit: 'SERV', unitPrice: 850, total: 850, product: null },
-          { id: 'material', type: 'MATERIAL', description: 'Filtro de reposição', quantity: 5, unit: 'UN', unitPrice: 85, total: 425, product: null },
+          { id: 'service', type: 'SERVICE', source: 'MANUAL', description: 'Higienização técnica', quantity: 1, unit: 'SERV', unitPrice: 850, total: 850, product: null },
+          { id: 'description', type: 'MATERIAL', source: 'CATALOG', description: 'Tubulação frigorígena', quantity: 2, unit: 'UN', unitPrice: 0, total: 0, product: null },
+          { id: 'material', type: 'MATERIAL', source: 'MANUAL', description: 'Filtro de reposição', quantity: 5, unit: 'UN', unitPrice: 85, total: 425, product: null },
         ],
       },
     };
@@ -1802,11 +1803,15 @@ describe('DocumentEngine foundation', () => {
     }).buildFromContext(context);
     expect(built.sections.map((section) => section.id)).toEqual([
       'budget-identification', 'budget-customer', 'budget-introduction', 'budget-services',
-      'budget-materials', 'budget-totals', 'budget-commercial-conditions', 'signature',
+      'budget-material-descriptions', 'budget-commercial-materials', 'budget-totals',
+      'budget-commercial-conditions', 'signature',
     ]);
     const services = built.sections.find((section) => section.id === 'budget-services')?.components[0];
-    const materials = built.sections.find((section) => section.id === 'budget-materials')?.components[0];
+    const descriptions = built.sections.find((section) => section.id === 'budget-material-descriptions')?.components[0];
+    const materials = built.sections.find((section) => section.id === 'budget-commercial-materials')?.components[0];
     expect(services?.kind === 'table' ? services.rows : []).toHaveLength(1);
+    expect(descriptions?.kind === 'table' ? descriptions.columns.map((column) => column.key) : []).toEqual(['item', 'quantity']);
+    expect(descriptions?.kind === 'table' ? descriptions.rows[0] : null).not.toHaveProperty('unitPrice');
     expect(materials?.kind === 'table' ? materials.rows : []).toHaveLength(1);
     const signature = built.sections.find((section) => section.id === 'signature')?.components[0];
     // Orçamento não coleta assinatura do cliente — apenas o responsável técnico.

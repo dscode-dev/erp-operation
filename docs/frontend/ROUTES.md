@@ -1,5 +1,17 @@
 # ROUTES — Frontend
 
+## `/pmoc/:id`
+
+A aba Execuções apresenta última conclusão e próxima previsão independentes por equipamento.
+
+## `/operator/services`
+
+Lista Operations recentes com concluídas ao final e filtros de status/data agendada.
+
+## `/budgets`
+
+Wizard e detalhe separam descrições informativas de materiais dos itens comerciais valorados.
+
 ## `/maintenance-checklists`
 
 As abas `Checklists de Equipamentos` e `Descrições de materiais` reutilizam o CRUD oficial dos

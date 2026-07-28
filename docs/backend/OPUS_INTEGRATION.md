@@ -1,5 +1,14 @@
 # OPUS Frontend Integration
 
+## Refinamento de execução e orçamento
+
+- PMOC por equipamento: consumir `lastExecutionNumber`, `lastExecutionDate`, `nextExecutionNumber`,
+  `nextExecutionDate` e `executionStatus` da projeção oficial.
+- Atendimentos Operator: a API retorna Operations mais recentes primeiro; concluídas permanecem no
+  último grupo da interface.
+- Budget: `source=CATALOG` identifica descrição sem preço; `source=MANUAL` identifica item
+  comercial. Nunca inferir origem pelo texto ou por preço zero.
+
 ## Equipment/Budget catalogs
 
 Use `technicalCatalogsApi.listEquipmentTypes()` para o campo Tipo do equipamento e

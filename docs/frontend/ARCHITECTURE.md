@@ -1,5 +1,12 @@
 # ARCHITECTURE — Frontend
 
+## Projeções operacionais e snapshots comerciais
+
+- PMOC consome a projeção por equipamento do backend, sem recompor estado pelas Execution Requests.
+- `BudgetItem.source` discrimina conteúdo informativo e comercial; texto e preço zero não inferem
+  origem.
+- O catálogo permanece fonte de entrada e Budget permanece proprietário do snapshot.
+
 ## Catálogos como fonte de entrada, snapshots como histórico
 
 `EQUIPMENT_TYPE` mantém relação com Equipment porque representa classificação cadastral durável.

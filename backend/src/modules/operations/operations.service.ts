@@ -520,11 +520,14 @@ export class OperationsService {
         // Preventiva/Instalação (exceto origem PMOC, que tem agenda própria).
         await this.reminders.syncFromOperationTx(tx, operation.id);
       }
+      // Integrações que vinculam entidades dependentes (ex.: PMOC →
+      // MaintenanceExecution) precisam terminar antes dos efeitos de conclusão.
+      // Assim, a sincronização encontra o grafo completo dentro da mesma transação.
+      await transactionHook?.(tx, operation.id);
       if (operation.status === 'COMPLETED') {
         await this.lifecycle.publishOperationCompletedTx(tx, operation.id, actor.id, context);
         await this.maintenance.syncOperationCompletedTx(tx, operation.id, actor.id, context);
       }
-      await transactionHook?.(tx, operation.id);
       return operation.id;
     });
 

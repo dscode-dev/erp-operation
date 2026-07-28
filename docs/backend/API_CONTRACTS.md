@@ -1,5 +1,26 @@
 # API Contracts
 
+## Refinamento PMOC e Budget
+
+`overview.equipmentExecutions[]` em `GET /api/v1/pmoc/:id` inclui:
+
+```json
+{
+  "lastExecutionNumber": 1,
+  "lastExecutionDate": "2026-07-15T15:00:00.000Z",
+  "nextExecutionNumber": 2,
+  "nextExecutionDate": "2026-08-15T12:00:00.000Z",
+  "executionStatus": "UP_TO_DATE"
+}
+```
+
+`executionStatus`: `NOT_STARTED`, `SCHEDULED`, `IN_PROGRESS`, `UP_TO_DATE`, `OVERDUE`,
+`ATTENTION` ou `COMPLETED`.
+
+`items[]` de `POST/PATCH /api/v1/budgets` aceita `source?: MANUAL | CATALOG`.
+O padrão retrocompatível é `MANUAL`. `CATALOG` só é aceito para `MATERIAL` e o backend força todos
+os valores comerciais do item para zero.
+
 ## Catálogos de equipamentos e materiais
 
 Os contratos existentes de `/api/v1/technical-catalogs` aceitam dois tipos adicionais:

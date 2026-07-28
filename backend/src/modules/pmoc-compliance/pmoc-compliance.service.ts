@@ -5,6 +5,7 @@ import {
   MaintenanceExecutionStatus,
   MaintenancePlanType,
   NotificationType,
+  OperationStatus,
   OperationType,
   PmocComplianceStatus,
   PmocExecutionOrigin,
@@ -1338,9 +1339,10 @@ export class PmocComplianceService implements ComplianceEvaluator<{
   private planOverview(plan: PmocPayload, requests: PmocAnalyticsRequest[]): unknown {
     const now = new Date();
     const expectedExecutions = plan.plannedExecutionCount;
-    const completed = requests.filter(
-      (request) => request.maintenanceExecution?.status === MaintenanceExecutionStatus.COMPLETED,
-    );
+    const isCompleted = (request: PmocAnalyticsRequest): boolean =>
+      request.maintenanceExecution?.status === MaintenanceExecutionStatus.COMPLETED ||
+      request.operation?.status === OperationStatus.COMPLETED;
+    const completed = requests.filter(isCompleted);
     const cancelled = requests.filter(
       (request) => request.status === PmocExecutionRequestStatus.CANCELLED,
     );
@@ -1353,7 +1355,8 @@ export class PmocComplianceService implements ComplianceEvaluator<{
     );
     const delayDays = completed
       .map((request) => {
-        const executedAt = request.maintenanceExecution?.executedAt;
+        const executedAt =
+          request.maintenanceExecution?.executedAt ?? request.operation?.completedAt;
         if (!executedAt) return 0;
         return Math.max(0, (executedAt.getTime() - request.scheduledFor.getTime()) / 86_400_000);
       });
@@ -1398,7 +1401,10 @@ export class PmocComplianceService implements ComplianceEvaluator<{
         (right.renderedAt?.getTime() ?? 0) - (left.renderedAt?.getTime() ?? 0),
       );
     const lastExecutedAt = completed
-      .map((request) => request.maintenanceExecution?.executedAt)
+      .map(
+        (request) =>
+          request.maintenanceExecution?.executedAt ?? request.operation?.completedAt,
+      )
       .filter((value): value is Date => Boolean(value))
       .sort((left, right) => right.getTime() - left.getTime())[0] ?? null;
     const today = new Date(
@@ -1409,10 +1415,8 @@ export class PmocComplianceService implements ComplianceEvaluator<{
       const equipmentRequests = requests.filter(
         (request) => request.equipmentId === equipment.id,
       );
-      const equipmentCompleted = equipmentRequests.filter(
-        (request) =>
-          request.maintenanceExecution?.status === MaintenanceExecutionStatus.COMPLETED,
-      ).length;
+      const completedRequests = equipmentRequests.filter(isCompleted);
+      const equipmentCompleted = completedRequests.length;
       const equipmentCancelled = equipmentRequests.filter(
         (request) => request.status === PmocExecutionRequestStatus.CANCELLED,
       ).length;
@@ -1424,7 +1428,54 @@ export class PmocComplianceService implements ComplianceEvaluator<{
           request.status === PmocExecutionRequestStatus.PENDING &&
           request.scheduledFor < now,
       ).length;
+      const lastCompleted = [...completedRequests].sort(
+        (left, right) =>
+          right.equipmentExecutionNumber - left.equipmentExecutionNumber ||
+          (
+            right.maintenanceExecution?.executedAt ??
+            right.operation?.completedAt ??
+            right.generatedAt ??
+            right.scheduledFor
+          ).getTime() -
+            (
+              left.maintenanceExecution?.executedAt ??
+              left.operation?.completedAt ??
+              left.generatedAt ??
+              left.scheduledFor
+            ).getTime(),
+      )[0];
+      const nextRequest = equipmentRequests
+        .filter(
+          (request) =>
+            request.status === PmocExecutionRequestStatus.PENDING ||
+            request.status === PmocExecutionRequestStatus.GENERATING_OS,
+        )
+        .sort(
+          (left, right) =>
+            left.scheduledFor.getTime() - right.scheduledFor.getTime() ||
+            left.equipmentExecutionNumber - right.equipmentExecutionNumber,
+        )[0];
+      const generatedInProgress = equipmentRequests.some(
+        (request) =>
+          request.operation &&
+          request.operation.status !== OperationStatus.COMPLETED &&
+          request.status === PmocExecutionRequestStatus.GENERATED,
+      );
       const remaining = Math.max(expectedExecutions - equipmentCompleted, 0);
+      const executionStatus =
+        remaining === 0
+          ? 'COMPLETED'
+          : equipmentFailed > 0
+            ? 'ATTENTION'
+            : equipmentOverdue > 0
+              ? 'OVERDUE'
+              : generatedInProgress
+                ? 'IN_PROGRESS'
+                : equipmentCompleted > 0
+                  ? 'UP_TO_DATE'
+                  : nextRequest
+                    ? 'SCHEDULED'
+                    : 'NOT_STARTED';
       return {
         equipmentId: equipment.id,
         expectedExecutions,
@@ -1436,14 +1487,23 @@ export class PmocComplianceService implements ComplianceEvaluator<{
           equipmentOverdue,
           coverageEnded ? remaining : 0,
         ),
-        nextExecutionNumber: Math.min(
-          (equipmentRequests.reduce(
-            (maximum, request) =>
-              Math.max(maximum, request.equipmentExecutionNumber),
-            0,
-          ) || 0) + 1,
-          expectedExecutions,
-        ),
+        lastExecutionNumber: lastCompleted?.equipmentExecutionNumber ?? null,
+        lastExecutionDate:
+          lastCompleted?.maintenanceExecution?.executedAt ??
+          lastCompleted?.operation?.completedAt ??
+          null,
+        nextExecutionDate: nextRequest?.scheduledFor ?? null,
+        executionStatus,
+        nextExecutionNumber:
+          nextRequest?.equipmentExecutionNumber ??
+          Math.min(
+            (equipmentRequests.reduce(
+              (maximum, request) =>
+                Math.max(maximum, request.equipmentExecutionNumber),
+              0,
+            ) || 0) + 1,
+            expectedExecutions,
+          ),
         hasOpenExecutions: remaining > 0,
         coverageEnded,
       };

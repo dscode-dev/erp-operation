@@ -1,5 +1,19 @@
 # COMPONENTS — Frontend
 
+## PMOC `EquipmentExecutions`
+
+Consome a projeção pronta do backend e separa última execução da próxima solicitação.
+
+## `BudgetItemsEditor`
+
+Possui duas áreas opcionais: `Descrição dos Materiais` (`CATALOG`, sem preço) e
+`Materiais e fornecimentos` (`MANUAL`, comercial).
+
+## Operator Services
+
+Filtros de status/data sobre a fila oficial, com ordenação por número da Operation e concluídas ao
+final.
+
 ## `EquipmentFormDrawer`
 
 Carrega `EQUIPMENT_TYPE` pelo client oficial, envia `equipmentTypeCatalogId` e mantém fallback do

@@ -1,5 +1,17 @@
 # Backend State
 
+## PMOC, atendimentos e materiais de orçamento — refinamento (2026-07-28)
+
+- A Operation PMOC concluída agora vincula a `MaintenanceExecution` antes dos efeitos de
+  conclusão. A migration `20260728180000_pmoc_execution_completion_reconciliation` corrige
+  execuções legadas vinculadas a Operations concluídas.
+- A projeção por equipamento distingue última execução concluída, próxima solicitação prevista e
+  status operacional.
+- `GET /assignments/my` prioriza número da Operation, data agendada e atribuição mais recentes.
+- `BudgetItem.source` separa `CATALOG` de `MANUAL`. Itens do catálogo têm preço e total
+  autoritativamente zerados.
+- Migration: `20260728181000_budget_item_source`.
+
 ## Catálogos — tipos de equipamento e materiais de orçamento (2026-07-28)
 
 - `TechnicalCatalogType` recebeu `EQUIPMENT_TYPE` e `BUDGET_MATERIAL_DESCRIPTION`.

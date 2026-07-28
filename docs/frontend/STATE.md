@@ -1,5 +1,13 @@
 # STATE — Frontend
 
+## Refinamentos PMOC, Operator e Budget (2026-07-28)
+
+- Execuções PMOC mostram progresso real, última conclusão, próxima data e status por equipamento.
+- Meus Atendimentos ordena por número da Operation, usa agenda como desempate, mantém concluídas no
+  final e oferece filtros de status/data.
+- Materiais do orçamento separam descrições sem preço de itens comerciais.
+- Preview, PDF e detalhe ocultam valores dos itens originados no catálogo.
+
 ## Catálogos de equipamentos e materiais (2026-07-28)
 
 - Catálogos Técnicos ganhou as abas `Checklists de Equipamentos` e `Descrições de materiais`.

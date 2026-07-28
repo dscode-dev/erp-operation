@@ -440,7 +440,7 @@ describe('critical workflows with real PostgreSQL concurrency', () => {
     expect(item.snapshotMargin.toString()).toBe(originalItem.snapshotMargin.toString());
     const { builder } = createDocumentEngine();
     const blueprint = await builder.buildBudget(fixture.budgetId);
-    const itemsTable = blueprint.sections.find((section) => section.id === 'budget-materials')?.components[0];
+    const itemsTable = blueprint.sections.find((section) => section.id === 'budget-commercial-materials')?.components[0];
     expect(itemsTable?.kind).toBe('table');
     if (itemsTable?.kind === 'table') {
       expect(itemsTable.rows[0].unitPrice).toContain('100,00');

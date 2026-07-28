@@ -1,5 +1,5 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { AssetLifecycleEventType, BudgetHistoryAction, BudgetItemType, BudgetStatus, DocumentTemplateType, NotificationType, OperationStatus, Prisma } from '@prisma/client';
+import { AssetLifecycleEventType, BudgetHistoryAction, BudgetItemSource, BudgetItemType, BudgetStatus, DocumentTemplateType, NotificationType, OperationStatus, Prisma } from '@prisma/client';
 import { BUDGET_AUDIT_ACTIONS, BUDGET_RESOURCE } from '../../shared/constants/budgets.constants';
 import { ERROR_CODES } from '../../shared/constants/error-codes.constants';
 import { ApplicationException } from '../../shared/exceptions/application.exception';
@@ -67,6 +67,7 @@ type BudgetRelations = {
 type SnapshotItem = {
   productId: string | null;
   type: BudgetItemType;
+  source: BudgetItemSource;
   description: string;
   quantity: number;
   unit: string;
@@ -213,6 +214,7 @@ export class BudgetsService {
           current.items.map((item) => ({
             productId: item.productId,
             type: item.type,
+            source: item.source,
             description: item.description,
             quantity: Number(item.quantity),
             unit: item.unit,
@@ -594,6 +596,14 @@ export class BudgetsService {
     }
     const items: SnapshotItem[] = [];
     for (const [index, item] of dtoItems.entries()) {
+      const source = item.source ?? BudgetItemSource.MANUAL;
+      if (source === BudgetItemSource.CATALOG && item.type !== BudgetItemType.MATERIAL) {
+        throw new ApplicationException(
+          ERROR_CODES.VALIDATION_ERROR,
+          'Itens sugeridos pelo catálogo devem pertencer à seção de materiais',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
       if (item.productId) {
         const product = await this.prisma.product.findUnique({
           where: { id: item.productId },
@@ -608,10 +618,12 @@ export class BudgetsService {
         }
       }
       const quantity = Number(item.quantity);
-      const unitPrice = Number(item.unitPrice);
+      const unitPrice =
+        source === BudgetItemSource.CATALOG ? 0 : Number(item.unitPrice);
       items.push({
         productId: item.productId ?? null,
         type: item.type,
+        source,
         description: this.clean(item.description),
         quantity,
         unit: this.clean(item.unit).toUpperCase(),

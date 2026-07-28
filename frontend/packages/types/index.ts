@@ -1457,6 +1457,17 @@ export type PmocPlanOverview = {
     cancelledExecutions: number;
     failedExecutions: number;
     overdueExecutions: number;
+    lastExecutionNumber: number | null;
+    lastExecutionDate: string | null;
+    nextExecutionDate: string | null;
+    executionStatus:
+      | 'NOT_STARTED'
+      | 'SCHEDULED'
+      | 'IN_PROGRESS'
+      | 'UP_TO_DATE'
+      | 'OVERDUE'
+      | 'ATTENTION'
+      | 'COMPLETED';
     nextExecutionNumber: number;
     hasOpenExecutions: boolean;
     coverageEnded: boolean;
@@ -2135,6 +2146,7 @@ export type PurchaseReceiptPayload = {
 
 export type BudgetStatus = 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'EXPIRED' | 'CANCELED';
 export type BudgetItemType = 'SERVICE' | 'MATERIAL';
+export type BudgetItemSource = 'MANUAL' | 'CATALOG';
 export type BudgetPaymentMethod = 'CASH' | 'PIX' | 'CREDIT_CARD';
 
 export type BudgetHistoryAction =
@@ -2155,6 +2167,7 @@ export type BudgetItem = {
   budgetId: string;
   productId: string | null;
   type: BudgetItemType;
+  source: BudgetItemSource;
   description: string;
   quantity: string | number;
   unit: string;
@@ -2265,6 +2278,7 @@ export type BudgetStats = {
 export type BudgetItemPayload = {
   productId?: string | null;
   type: BudgetItemType;
+  source?: BudgetItemSource;
   description: string;
   quantity: number;
   unit: string;

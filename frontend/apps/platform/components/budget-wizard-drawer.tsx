@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Plus, ShoppingCart, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Plus, Trash2 } from "lucide-react";
 import { Drawer } from "@erp/ui/drawer";
-import { EmptyState } from "@erp/ui/empty-state";
 import { MultiSelect } from "@erp/ui/multi-select";
 import {
   budgetsApi,
@@ -83,7 +82,7 @@ export function BudgetWizardDrawer({
     setCustomerId(budget?.customerId ?? ""); setAddressId(budget?.customerAddressId ?? ""); setEquipmentIds(budget?.equipments?.map((item) => item.equipmentId) ?? (budget?.equipmentId ? [budget.equipmentId] : []));
     setTitle(budget?.title ?? "Orçamento de manutenção"); setDescription(budget?.description ?? ""); setIssuedAt(budget?.issuedAt?.slice(0, 10) ?? today());
     setIntroduction(budget?.introduction ?? "Atendendo à honrosa solicitação de V.Sa., apresentamos nosso orçamento conforme solicitado.");
-    setItems(budget?.items.map((item) => ({ productId: item.productId, type: item.type, description: item.description, quantity: Number(item.quantity), unit: item.unit, unitPrice: Number(item.unitPrice), sortOrder: item.sortOrder })) ?? []);
+    setItems(budget?.items.map((item) => ({ productId: item.productId, type: item.type, source: item.source ?? "MANUAL", description: item.description, quantity: Number(item.quantity), unit: item.unit, unitPrice: Number(item.unitPrice), sortOrder: item.sortOrder })) ?? []);
     setAmountInWords(budget?.amountInWords ?? ""); setAmountEdited(Boolean(budget?.amountInWords)); setValidityDays(String(budget?.validityDays ?? 30)); setPaymentMethods(budget?.paymentMethods ?? ["PIX"]);
     setCommercialNotes(budget?.commercialNotes ?? ""); setObservations(budget?.observations ?? ""); setTechnicalSignatureId(budget?.document?.technicalSignatureId ?? "");
     setError(null);
@@ -118,7 +117,7 @@ export function BudgetWizardDrawer({
 
   const total = useMemo(() => items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0), [items]);
   const services = items.filter((item) => item.type === "SERVICE");
-  const materials = items.filter((item) => item.type === "MATERIAL");
+  const materials = items.filter((item) => item.type === "MATERIAL" && item.source !== "CATALOG");
   const selectedSignature = signatures.data?.items.find((signature) => signature.id === technicalSignatureId) ?? null;
 
   useEffect(() => {
@@ -199,25 +198,109 @@ function OriginStep({ origin, setOrigin, operationId, setOperationId, operations
 }
 
 function BudgetItemsEditor({ type, items, onChange, catalog = [] }: { type: BudgetItemType; items: BudgetItemPayload[]; onChange: (items: BudgetItemPayload[]) => void; catalog?: TechnicalCatalog[] }) {
-  const [description, setDescription] = useState(""); const [quantity, setQuantity] = useState("1"); const [unit, setUnit] = useState(type === "SERVICE" ? "SERV" : "UN"); const [unitPrice, setUnitPrice] = useState("0");
-  const rows = items.map((item, index) => ({ item, index })).filter(({ item }) => item.type === type); const label = type === "SERVICE" ? "serviço" : "material";
+  const [description, setDescription] = useState("");
+  const [quantity, setQuantity] = useState("1");
+  const [unit, setUnit] = useState(type === "SERVICE" ? "SERV" : "UN");
+  const [unitPrice, setUnitPrice] = useState("0");
+  const rows = items
+    .map((item, index) => ({ item, index }))
+    .filter(({ item }) => item.type === type && item.source !== "CATALOG");
+  const catalogRows = items
+    .map((item, index) => ({ item, index }))
+    .filter(({ item }) => item.type === "MATERIAL" && item.source === "CATALOG");
+  const label = type === "SERVICE" ? "serviço" : "material";
   const selectedCatalogIds = catalog
-    .filter((entry) => rows.some(({ item }) => item.description === entry.title))
+    .filter((entry) => catalogRows.some(({ item }) => item.description === entry.title))
     .map((entry) => entry.id);
-  function add() { if (!description.trim() || Number(quantity) <= 0 || Number(unitPrice) < 0) return; onChange([...items, { type, description: description.trim(), quantity: Number(quantity), unit: unit.trim() || "UN", unitPrice: Number(unitPrice) }]); setDescription(""); setQuantity("1"); setUnitPrice("0"); }
-  function move(index: number, direction: -1 | 1) { const next = [...items]; const target = index + direction; if (target < 0 || target >= next.length || next[target].type !== type) return; [next[index], next[target]] = [next[target], next[index]]; onChange(next); }
+
+  function add() {
+    if (!description.trim() || Number(quantity) <= 0 || Number(unitPrice) < 0) return;
+    onChange([...items, {
+      type,
+      source: "MANUAL",
+      description: description.trim(),
+      quantity: Number(quantity),
+      unit: unit.trim() || "UN",
+      unitPrice: Number(unitPrice),
+    }]);
+    setDescription("");
+    setQuantity("1");
+    setUnitPrice("0");
+  }
+
+  function move(index: number, direction: -1 | 1) {
+    const next = [...items];
+    const sameSourceIndexes = next
+      .map((item, itemIndex) => ({ item, itemIndex }))
+      .filter(({ item }) => item.type === type && item.source !== "CATALOG")
+      .map(({ itemIndex }) => itemIndex);
+    const position = sameSourceIndexes.indexOf(index);
+    const target = sameSourceIndexes[position + direction];
+    if (target === undefined) return;
+    [next[index], next[target]] = [next[target], next[index]];
+    onChange(next);
+  }
+
   function selectCatalog(ids: string[]) {
-    const selectedTitles = new Set(catalog.filter((entry) => ids.includes(entry.id)).map((entry) => entry.title));
-    const catalogTitles = new Set(catalog.map((entry) => entry.title));
-    const retained = items.filter((item) => item.type !== "MATERIAL" || !catalogTitles.has(item.description) || selectedTitles.has(item.description));
-    const existingTitles = new Set(retained.filter((item) => item.type === "MATERIAL").map((item) => item.description));
-    const added = [...selectedTitles].filter((title) => !existingTitles.has(title)).map((title) => ({ type: "MATERIAL" as const, description: title, quantity: 1, unit: "UN", unitPrice: 0 }));
+    const selectedTitles = new Set(
+      catalog.filter((entry) => ids.includes(entry.id)).map((entry) => entry.title),
+    );
+    const retained = items.filter(
+      (item) =>
+        item.source !== "CATALOG" ||
+        (item.type === "MATERIAL" && selectedTitles.has(item.description)),
+    );
+    const existingTitles = new Set(
+      retained
+        .filter((item) => item.type === "MATERIAL" && item.source === "CATALOG")
+        .map((item) => item.description),
+    );
+    const added = [...selectedTitles]
+      .filter((title) => !existingTitles.has(title))
+      .map((title) => ({
+        type: "MATERIAL" as const,
+        source: "CATALOG" as const,
+        description: title,
+        quantity: 1,
+        unit: "UN",
+        unitPrice: 0,
+      }));
     onChange([...retained, ...added]);
   }
+
   function update(index: number, patch: Partial<BudgetItemPayload>) {
     onChange(items.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item));
   }
-  return <div className="space-y-4"><div><h3 className="font-semibold">{type === "SERVICE" ? "Serviços" : "Materiais"}</h3><p className="text-caption">Os itens permanecem como snapshots deste orçamento e não dependem do catálogo posteriormente.</p></div>{type === "MATERIAL" && <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] p-4"><MultiSelect label="Descrição dos Materiais" value={selectedCatalogIds} onChange={selectCatalog} options={catalog.map((entry) => ({ value: entry.id, label: entry.title, description: entry.description ?? undefined }))} placeholder="Selecione uma ou mais descrições" emptyMessage="Nenhuma descrição cadastrada no Catálogo de Serviços." /><a href="/maintenance-checklists?type=BUDGET_MATERIAL_DESCRIPTION" target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs font-medium text-[var(--color-primary)]">Gerenciar descrições no Catálogo de Serviços</a></div>}<div className="space-y-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] p-4"><div className="grid gap-3 md:grid-cols-[1fr_90px_110px_160px_auto] md:items-end"><label className="block space-y-1"><span className="text-xs font-medium text-[var(--color-muted-foreground)]">Descrição do {label}</span><input value={description} onChange={(event) => setDescription(event.target.value)} placeholder={type === "SERVICE" ? "Ex.: Limpeza completa do split" : "Ex.: Gás refrigerante R-410A"} className={inputCls} /></label><label className="block space-y-1"><span className="text-xs font-medium text-[var(--color-muted-foreground)]">Quantidade</span><input type="number" min="0.001" step="0.001" value={quantity} onChange={(event) => setQuantity(event.target.value)} className={inputCls} /></label><label className="block space-y-1"><span className="text-xs font-medium text-[var(--color-muted-foreground)]">Unidade</span><input value={unit} onChange={(event) => setUnit(event.target.value)} placeholder="UN" className={inputCls} /></label><label className="block space-y-1"><span className="text-xs font-medium text-[var(--color-muted-foreground)]">Valor unitário (R$)</span><input type="number" min="0" step="0.01" value={unitPrice} onChange={(event) => setUnitPrice(event.target.value)} placeholder="0,00" className={inputCls} /></label><button type="button" onClick={add} className={secondaryBtn}><Plus className="h-4 w-4" /> Adicionar</button></div><p className="text-caption"><strong>Unidade</strong> = como o item é medido (UN, h, m, m², kg…). <strong>Valor unitário</strong> = preço de <strong>cada</strong> unidade, em reais. Subtotal deste item: <strong>{money(Number(quantity || 0) * Number(unitPrice || 0))}</strong>.</p></div>{rows.length === 0 ? <EmptyState icon={ShoppingCart} title={`Nenhum ${label} adicionado`} description={`Adicione ${label}s para compor o orçamento.`} /> : <ul className="space-y-2">{rows.map(({ item, index }, position) => <li key={`${type}-${index}`} className="space-y-3 rounded-[var(--radius-md)] border border-[var(--color-border)] p-3"><div className="grid gap-2 md:grid-cols-[minmax(220px,1fr)_90px_100px_140px]"><input aria-label={`Descrição do ${label}`} value={item.description} onChange={(event) => update(index, { description: event.target.value })} className={inputCls} /><input aria-label="Quantidade" type="number" min="0.001" step="0.001" value={item.quantity} onChange={(event) => update(index, { quantity: Number(event.target.value) })} className={inputCls} /><input aria-label="Unidade" value={item.unit} onChange={(event) => update(index, { unit: event.target.value })} className={inputCls} /><input aria-label="Valor unitário" type="number" min="0" step="0.01" value={item.unitPrice} onChange={(event) => update(index, { unitPrice: Number(event.target.value) })} className={inputCls} /></div><div className="flex items-center justify-between gap-3"><strong>{formatNumber(item.quantity)} {item.unit} · {money(item.quantity * item.unitPrice)}</strong><div className="flex gap-1"><IconButton onClick={() => move(index, -1)} disabled={position === 0} label="Mover para cima"><ArrowUp className="h-4 w-4" /></IconButton><IconButton onClick={() => move(index, 1)} disabled={position === rows.length - 1} label="Mover para baixo"><ArrowDown className="h-4 w-4" /></IconButton><IconButton onClick={() => onChange(items.filter((_, itemIndex) => itemIndex !== index))} label="Remover" danger><Trash2 className="h-4 w-4" /></IconButton></div></div></li>)}</ul>}</div>;
+
+  return <div className="space-y-4">
+    <div>
+      <h3 className="font-semibold">{type === "SERVICE" ? "Serviços" : "Materiais"}</h3>
+      <p className="text-caption">Esta etapa é opcional. Os itens informados são preservados como snapshots do orçamento.</p>
+    </div>
+    {type === "MATERIAL" && <section className="space-y-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] p-4">
+      <div>
+        <h4 className="text-sm font-semibold">Descrição dos Materiais</h4>
+        <p className="text-caption">Itens sugeridos pelo catálogo não possuem preço e aparecem no documento somente com descrição e quantidade.</p>
+      </div>
+      <MultiSelect label="Selecionar descrições" value={selectedCatalogIds} onChange={selectCatalog} options={catalog.map((entry) => ({ value: entry.id, label: entry.title, description: entry.description ?? undefined }))} placeholder="Selecione uma ou mais descrições" emptyMessage="Nenhuma descrição cadastrada no Catálogo de Serviços." />
+      {catalogRows.length > 0 && <ul className="space-y-2">{catalogRows.map(({ item, index }) => <li key={`catalog-${index}`} className="grid gap-2 rounded-[var(--radius-md)] bg-[var(--color-muted)] p-3 sm:grid-cols-[1fr_110px_auto] sm:items-center"><input aria-label="Descrição do material sugerido" value={item.description} onChange={(event) => update(index, { description: event.target.value })} className={inputCls} /><input aria-label="Quantidade do material sugerido" type="number" min="0.001" step="0.001" value={item.quantity} onChange={(event) => update(index, { quantity: Number(event.target.value) })} className={inputCls} /><IconButton onClick={() => onChange(items.filter((_, itemIndex) => itemIndex !== index))} label="Remover descrição" danger><Trash2 className="h-4 w-4" /></IconButton></li>)}</ul>}
+      <a href="/maintenance-checklists?type=BUDGET_MATERIAL_DESCRIPTION" target="_blank" rel="noreferrer" className="inline-block text-xs font-medium text-[var(--color-primary)]">Gerenciar descrições no Catálogo de Serviços</a>
+    </section>}
+    <section className="space-y-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] p-4">
+      <div>
+        <h4 className="text-sm font-semibold">{type === "SERVICE" ? "Serviços orçados" : "Materiais e fornecimentos"}</h4>
+        <p className="text-caption">{type === "SERVICE" ? "Informe os serviços e seus valores." : "Use esta área somente para itens comerciais que possuem valor."}</p>
+      </div>
+      <div className="grid gap-3 md:grid-cols-[1fr_90px_110px_160px_auto] md:items-end">
+        <label className="block space-y-1"><span className="text-xs font-medium text-[var(--color-muted-foreground)]">Descrição do {label}</span><input value={description} onChange={(event) => setDescription(event.target.value)} placeholder={type === "SERVICE" ? "Ex.: Limpeza completa do split" : "Ex.: Gás refrigerante R-410A"} className={inputCls} /></label>
+        <label className="block space-y-1"><span className="text-xs font-medium text-[var(--color-muted-foreground)]">Quantidade</span><input type="number" min="0.001" step="0.001" value={quantity} onChange={(event) => setQuantity(event.target.value)} className={inputCls} /></label>
+        <label className="block space-y-1"><span className="text-xs font-medium text-[var(--color-muted-foreground)]">Unidade</span><input value={unit} onChange={(event) => setUnit(event.target.value)} placeholder="UN" className={inputCls} /></label>
+        <label className="block space-y-1"><span className="text-xs font-medium text-[var(--color-muted-foreground)]">Valor unitário (R$)</span><input type="number" min="0" step="0.01" value={unitPrice} onChange={(event) => setUnitPrice(event.target.value)} placeholder="0,00" className={inputCls} /></label>
+        <button type="button" onClick={add} className={secondaryBtn}><Plus className="h-4 w-4" /> Adicionar</button>
+      </div>
+      {rows.length > 0 && <ul className="space-y-2">{rows.map(({ item, index }, position) => <li key={`${type}-${index}`} className="space-y-3 rounded-[var(--radius-md)] border border-[var(--color-border)] p-3"><div className="grid gap-2 md:grid-cols-[minmax(220px,1fr)_90px_100px_140px]"><input aria-label={`Descrição do ${label}`} value={item.description} onChange={(event) => update(index, { description: event.target.value })} className={inputCls} /><input aria-label="Quantidade" type="number" min="0.001" step="0.001" value={item.quantity} onChange={(event) => update(index, { quantity: Number(event.target.value) })} className={inputCls} /><input aria-label="Unidade" value={item.unit} onChange={(event) => update(index, { unit: event.target.value })} className={inputCls} /><input aria-label="Valor unitário" type="number" min="0" step="0.01" value={item.unitPrice} onChange={(event) => update(index, { unitPrice: Number(event.target.value) })} className={inputCls} /></div><div className="flex items-center justify-between gap-3"><strong>{formatNumber(item.quantity)} {item.unit} · {money(item.quantity * item.unitPrice)}</strong><div className="flex gap-1"><IconButton onClick={() => move(index, -1)} disabled={position === 0} label="Mover para cima"><ArrowUp className="h-4 w-4" /></IconButton><IconButton onClick={() => move(index, 1)} disabled={position === rows.length - 1} label="Mover para baixo"><ArrowDown className="h-4 w-4" /></IconButton><IconButton onClick={() => onChange(items.filter((_, itemIndex) => itemIndex !== index))} label="Remover" danger><Trash2 className="h-4 w-4" /></IconButton></div></div></li>)}</ul>}
+    </section>
+  </div>;
 }
 
 function Summary({ services, materials, total }: { services: BudgetItemPayload[]; materials: BudgetItemPayload[]; total: number }) { return <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] p-4"><h3 className="font-semibold">Valores</h3><div className="mt-3 space-y-2"><Info label="Serviços" value={money(sum(services))} /><Info label="Materiais" value={money(sum(materials))} /><Info label="Valor total" value={money(total)} strong /></div></div>; }

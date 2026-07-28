@@ -1,5 +1,12 @@
 # Security
 
+## Integridade PMOC e materiais de orçamento (2026-07-28)
+
+- O vínculo PMOC → MaintenanceExecution e os efeitos de conclusão ocorrem na mesma transação.
+- A reconciliação promove somente execuções vinculadas a Operations `COMPLETED`.
+- `BudgetItem.source=CATALOG` é validado e não pode injetar preço, mesmo que o cliente envie valor.
+- Itens históricos permanecem snapshots; alterações do catálogo não reescrevem orçamentos.
+
 ## Catálogos de equipamentos e orçamento
 
 - Somente OWNER/MANAGER podem criar, editar, reordenar, ativar, desativar ou excluir itens.

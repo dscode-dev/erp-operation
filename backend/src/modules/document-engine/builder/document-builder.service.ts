@@ -1601,7 +1601,12 @@ export class DocumentBuilderService {
     const address = budget.customerAddress ?? budget.customer.addresses[0] ?? null;
     const primaryContact = budget.customer.contacts[0] ?? null;
     const services = budget.items.filter((item) => item.type === 'SERVICE');
-    const materials = budget.items.filter((item) => item.type === 'MATERIAL');
+    const catalogMaterials = budget.items.filter(
+      (item) => item.type === 'MATERIAL' && item.source === 'CATALOG',
+    );
+    const commercialMaterials = budget.items.filter(
+      (item) => item.type === 'MATERIAL' && item.source !== 'CATALOG',
+    );
     const paymentLabels: Record<string, string> = {
       CASH: 'Espécie',
       PIX: 'PIX',
@@ -1626,6 +1631,21 @@ export class DocumentBuilderService {
         unit: this.clean(item.unit),
         unitPrice: this.money(item.unitPrice),
         total: this.money(item.total),
+      })),
+    });
+    const descriptionTable = (
+      id: string,
+      items: typeof budget.items,
+    ): Extract<DocumentBlueprintComponent, { kind: 'table' }> => ({
+      id,
+      kind: 'table',
+      columns: [
+        { key: 'item', label: 'Descrição', width: 0.82 },
+        { key: 'quantity', label: 'Quantidade', width: 0.18 },
+      ],
+      rows: items.map((item) => ({
+        item: this.clean(item.description || 'Material'),
+        quantity: this.decimal(item.quantity),
       })),
     });
     const sections: DocumentSection[] = [
@@ -1737,12 +1757,24 @@ export class DocumentBuilderService {
         components: [itemTable('budget-services-table', services)],
       });
     }
-    if (materials.length) {
+    if (catalogMaterials.length) {
       sections.push({
-        id: 'budget-materials',
-        title: 'Materiais',
+        id: 'budget-material-descriptions',
+        title: 'Descrição dos materiais',
         critical: true,
-        components: [itemTable('budget-materials-table', materials)],
+        components: [
+          descriptionTable('budget-material-descriptions-table', catalogMaterials),
+        ],
+      });
+    }
+    if (commercialMaterials.length) {
+      sections.push({
+        id: 'budget-commercial-materials',
+        title: 'Materiais e fornecimentos',
+        critical: true,
+        components: [
+          itemTable('budget-commercial-materials-table', commercialMaterials),
+        ],
       });
     }
 
@@ -1753,7 +1785,7 @@ export class DocumentBuilderService {
       components: [
         this.metadata('budget-totals-metadata', [
           ['Subtotal dos serviços', this.money(budget.serviceSubtotal)],
-          ['Subtotal dos materiais', this.money(budget.materialSubtotal)],
+          ['Subtotal de materiais e fornecimentos', this.money(budget.materialSubtotal)],
           ['Desconto', this.money(budget.discount)],
           ['Adicional', this.money(budget.additional)],
           ['Valor total', this.money(budget.total)],

@@ -1,5 +1,13 @@
 # Frontend Integration
 
+## PMOC e materiais de orçamento
+
+- Use `lastExecution*` para Última execução e `nextExecution*` para Próxima prevista. Não derive
+  esses valores escolhendo a maior Execution Request.
+- Renderize `executionStatus` diretamente com os rótulos de negócio.
+- Itens de `BUDGET_MATERIAL_DESCRIPTION` usam `type=MATERIAL`, `source=CATALOG` e `unitPrice=0`.
+- Materiais manuais usam `source=MANUAL`; as duas coleções são opcionais e visualmente separadas.
+
 ## Catálogos de equipamentos e materiais
 
 - Liste tipos com `GET /technical-catalogs?type=EQUIPMENT_TYPE&active=true`.
