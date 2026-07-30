@@ -29,6 +29,18 @@ describe('TechnicalCatalogsService', () => {
       value: TechnicalCatalogType.PLAN_SCOPE,
       label: 'Escopos de plano',
     });
+    expect(service.types()).toEqual(
+      expect.arrayContaining([
+        {
+          value: TechnicalCatalogType.EQUIPMENT_TYPE,
+          label: 'Checklists de Equipamentos',
+        },
+        {
+          value: TechnicalCatalogType.BUDGET_MATERIAL_DESCRIPTION,
+          label: 'Descrições de materiais',
+        },
+      ]),
+    );
   });
 
   it('keeps catalog mutations restricted to OWNER and MANAGER', () => {

@@ -1,5 +1,6 @@
 import {
   DocumentTemplateType,
+  EquipmentType,
   OperationMaintenanceType,
   PrismaClient,
   Role,
@@ -68,6 +69,7 @@ async function main(): Promise<void> {
   // The whole application assumes a single Organization exists (profile, settings,
   // templates all resolve `findFirst`). Guarantee one so first login works.
   await ensureDefaultOrganization();
+  await ensureEquipmentTypeDefaults();
   await ensureActivePmocTemplate();
   await ensureRvtChecklistDefaults();
   const [emailUser, usernameUser, userCount] = await Promise.all([
@@ -330,6 +332,73 @@ async function ensureDefaultOrganization(): Promise<void> {
   process.stdout.write(
     `${JSON.stringify({ event: 'organization_bootstrap_created', organizationId: organization.id })}\n`,
   );
+}
+
+const EQUIPMENT_TYPE_DEFAULTS: Array<{
+  legacyType: EquipmentType;
+  title: string;
+  sortOrder: number;
+}> = [
+  { legacyType: EquipmentType.SPLIT, title: 'Split', sortOrder: 0 },
+  { legacyType: EquipmentType.CHILLER, title: 'Chiller', sortOrder: 1 },
+  { legacyType: EquipmentType.CONDENSER, title: 'Condensadora', sortOrder: 2 },
+  { legacyType: EquipmentType.EVAPORATOR, title: 'Evaporadora', sortOrder: 3 },
+  { legacyType: EquipmentType.AIR_HANDLER, title: 'Fan Coil / AHU', sortOrder: 4 },
+  { legacyType: EquipmentType.SOLAR_INVERTER, title: 'Inversor Solar', sortOrder: 5 },
+  { legacyType: EquipmentType.ELECTRICAL_PANEL, title: 'Quadro Elétrico', sortOrder: 6 },
+  { legacyType: EquipmentType.GENERATOR, title: 'Gerador', sortOrder: 7 },
+  { legacyType: EquipmentType.OTHER, title: 'Outro', sortOrder: 8 },
+];
+
+async function ensureEquipmentTypeDefaults(): Promise<void> {
+  const organization = await prisma.organization.findFirst({ select: { id: true } });
+  if (!organization) throw new Error('Organization is required before equipment type bootstrap');
+  const existing = await prisma.technicalCatalog.findMany({
+    where: {
+      organizationId: organization.id,
+      type: TechnicalCatalogType.EQUIPMENT_TYPE,
+    },
+    select: { id: true, tags: true },
+  });
+  const existingTags = new Set(existing.flatMap((item) => item.tags));
+  const missing = EQUIPMENT_TYPE_DEFAULTS.filter(
+    ({ legacyType }) =>
+      !existingTags.has(`legacy-${legacyType.toLowerCase().replaceAll('_', '-')}`),
+  );
+  if (missing.length > 0) {
+    await prisma.technicalCatalog.createMany({
+      data: missing.map(({ legacyType, title, sortOrder }) => ({
+        organizationId: organization.id,
+        type: TechnicalCatalogType.EQUIPMENT_TYPE,
+        title,
+        description: 'Tipo de equipamento preservado da classificação oficial V1.',
+        tags: [
+          'equipment-type',
+          `legacy-${legacyType.toLowerCase().replaceAll('_', '-')}`,
+        ],
+        areas: [TechnicalCatalogArea.GENERAL],
+        workflows: [TechnicalCatalogWorkflow.GENERAL],
+        sortOrder,
+        active: true,
+      })),
+    });
+  }
+  const catalogs = await prisma.technicalCatalog.findMany({
+    where: {
+      organizationId: organization.id,
+      type: TechnicalCatalogType.EQUIPMENT_TYPE,
+    },
+    select: { id: true, tags: true },
+  });
+  for (const { legacyType } of EQUIPMENT_TYPE_DEFAULTS) {
+    const tag = `legacy-${legacyType.toLowerCase().replaceAll('_', '-')}`;
+    const catalog = catalogs.find((item) => item.tags.includes(tag));
+    if (!catalog) continue;
+    await prisma.equipment.updateMany({
+      where: { type: legacyType, equipmentTypeCatalogId: null },
+      data: { equipmentTypeCatalogId: catalog.id },
+    });
+  }
 }
 
 const RVT_CHECKLIST_DEFAULTS: Array<{

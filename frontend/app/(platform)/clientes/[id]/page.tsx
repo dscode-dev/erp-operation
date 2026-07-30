@@ -278,9 +278,11 @@ function Overview({
                   <p className="mt-2 text-caption">
                     {[
                       [address.street, address.number].filter(Boolean).join(', '),
+                      address.complement,
                       address.district,
                       [address.city, address.state].filter(Boolean).join('/'),
                       address.zipCode ? `CEP ${maskCep(address.zipCode)}` : null,
+                      address.referencePoint ? `Referência: ${address.referencePoint}` : null,
                     ]
                       .filter(Boolean)
                       .join(' · ') || 'Dados de endereço incompletos'}
@@ -544,6 +546,11 @@ function EquipmentTab({ customerId }: { customerId: string }) {
         ),
       },
       {
+        key: 'type',
+        header: 'Tipo',
+        cell: (item) => item.equipmentTypeCatalog?.title ?? item.type,
+      },
+      {
         key: 'model',
         header: 'Modelo',
         cell: (item) =>
@@ -569,11 +576,16 @@ function EquipmentTab({ customerId }: { customerId: string }) {
         key: 'actions',
         header: '',
         className: 'w-16',
+        link: false,
         cell: (item) => (
           <Gate roles={['OWNER', 'MANAGER']}>
             <button
+              type="button"
+              aria-label={`Editar ${item.name}`}
+              title="Editar equipamento"
               className="rounded-md border border-[var(--color-border)] p-2"
               onClick={async (event) => {
+                event.preventDefault();
                 event.stopPropagation();
                 setEditing(await equipmentsApi.getEquipment(item.id));
                 setFormOpen(true);

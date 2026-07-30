@@ -1,5 +1,54 @@
 # ROUTES — Frontend
 
+## Ajustes de endereço e PMOC
+
+- `/clientes` e `/clientes/:id`: cadastro/edição de endereço aceita ponto de referência.
+- `/operator/services/:id`: resumo operacional exibe complemento e ponto de referência.
+- `/pmoc` e `/pmoc/:id`: datas de cobertura e próximas execuções usam semântica de dia civil.
+
+## `/pmoc/:id`
+
+A aba Execuções apresenta última conclusão e próxima previsão independentes por equipamento.
+
+## `/operator/services`
+
+Lista Operations recentes com concluídas ao final e filtros de status/data agendada.
+
+## `/budgets`
+
+Wizard e detalhe separam descrições informativas de materiais dos itens comerciais valorados.
+
+## `/maintenance-checklists`
+
+As abas `Checklists de Equipamentos` e `Descrições de materiais` reutilizam o CRUD oficial dos
+Catálogos Técnicos. Links podem abrir diretamente com `?type=EQUIPMENT_TYPE` ou
+`?type=BUDGET_MATERIAL_DESCRIPTION`.
+
+## `/clientes/:id?tab=equipments` e `/budgets`
+
+O cadastro de equipamento consome o catálogo de tipos. O Wizard de orçamento consome descrições
+reutilizáveis na etapa Materiais.
+
+## `/operations`
+
+O Wizard de criação permite ao OWNER/MANAGER informar o valor operacional e usa a identificação
+técnica enriquecida dos equipamentos.
+
+## `/operator/services` e `/operator/services/:id`
+
+A lista ordena atendimentos por criação decrescente. O detalhe exibe o valor do serviço quando
+informado e os Wizards exigem a complementação dos equipamentos originalmente incompletos.
+
+## `/pmoc/[id]`
+
+A aba Execuções apresenta capacidade independente por equipamento. Depois do fim da cobertura,
+itens pendentes continuam executáveis e recebem alerta. O plano fica Finalizado somente após todos
+os ciclos.
+
+## `/operator/atendimento`
+
+Executar PMOC mostra progresso, pendências e numeração própria do equipamento selecionado.
+
 ## `/pmoc`
 
 - `Novo PMOC` cria somente a configuração do plano.
@@ -687,6 +736,16 @@ o filtro oficial `CHECKLIST + TECHNICAL_REPORT`.
 
 O wizard abre na rota atual. Preview, render e download continuam no drawer com
 `DocumentViewer`.
+
+## `/clientes/:id` — ação de equipamento
+
+- Na aba Equipamentos, clicar no conteúdo da linha navega para `/equipamentos/:id`.
+- Clicar no ícone Editar abre exclusivamente o `EquipmentFormDrawer`, sem alterar a rota.
+
+## `/reports` — Recibo originado por OS
+
+- A Ordem de Serviço fornece cliente, endereço e conteúdo para preenchimento inicial.
+- A data do Recibo é sempre iniciada com a data local da nova emissão e permanece editável.
 # PMOC no Operator
 
 - `/operator/atendimento`: para OWNER, a opção “Executar PMOC” seleciona plano ativo e equipamento

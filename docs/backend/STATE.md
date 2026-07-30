@@ -1,5 +1,78 @@
 # Backend State
 
+## Certificação das migrations recentes para produção (2026-07-28)
+
+- As migrations `20260728180000`, `20260728181000` e `20260728190000` foram ensaiadas sobre clone
+  integral do banco com dados, reconstruído no estado imediatamente anterior a elas.
+- O backfill de Budget foi endurecido: somente snapshots já integralmente zerados e com
+  correspondência exata no catálogo recebem `source=CATALOG`; valores históricos nunca são
+  alterados.
+- A reconciliação PMOC é transacional e atualiza apenas projeções derivadas de Operations
+  concluídas.
+- Contagens e hashes de Customers, endereços preexistentes, Operations e documentos permaneceram
+  idênticos. Todas as constraints continuaram validadas.
+- Tempo observado para as três migrations no clone local: 2,939 segundos, incluindo overhead do
+  Prisma. Produção deve usar backup verificado e janela curta sem escrita devido aos locks de DDL.
+
+## Endereço operacional, status do orçamento e datas PMOC (2026-07-28)
+
+- `CustomerAddress.referencePoint` foi adicionado como campo opcional, sanitizado e limitado a
+  180 caracteres. Migration aditiva: `20260728190000_customer_address_reference_point`.
+- Operations continuam apenas referenciando o endereço oficial do cliente; complemento e ponto de
+  referência não foram duplicados e não integram o Document Engine.
+- O Blueprint de Budget traduz todos os estados oficiais para pt-BR.
+- Datas de cobertura e recorrência PMOC são tratadas como datas-calendário em UTC. Horários reais
+  de início, conclusão e assinatura continuam formatados em `America/Recife`.
+
+## PMOC, atendimentos e materiais de orçamento — refinamento (2026-07-28)
+
+- A Operation PMOC concluída agora vincula a `MaintenanceExecution` antes dos efeitos de
+  conclusão. A migration `20260728180000_pmoc_execution_completion_reconciliation` corrige
+  execuções legadas vinculadas a Operations concluídas.
+- A projeção por equipamento distingue última execução concluída, próxima solicitação prevista e
+  status operacional.
+- `GET /assignments/my` prioriza número da Operation, data agendada e atribuição mais recentes.
+- `BudgetItem.source` separa `CATALOG` de `MANUAL`. Itens do catálogo têm preço e total
+  autoritativamente zerados.
+- Migration: `20260728181000_budget_item_source`.
+
+## Catálogos — tipos de equipamento e materiais de orçamento (2026-07-28)
+
+- `TechnicalCatalogType` recebeu `EQUIPMENT_TYPE` e `BUDGET_MATERIAL_DESCRIPTION`.
+- `Equipment.equipmentTypeCatalogId` referencia opcionalmente o catálogo oficial. O enum
+  `EquipmentType` foi preservado para retrocompatibilidade; tipos personalizados usam `OTHER`.
+- A migration cria os nove tipos V1 para cada organização existente e vincula os equipamentos
+  legados sem apagar ou reclassificar dados.
+- O bootstrap de produção garante os mesmos tipos em bancos onde a organização nasce após migrate.
+- Descrições de materiais são consumidas somente na criação do orçamento; `BudgetItem.description`
+  continua sendo o snapshot imutável do texto escolhido.
+- Migrations aditivas:
+  `20260728170000_equipment_and_budget_catalogs` (novos enums, em transação própria) e
+  `20260728171000_equipment_type_catalog_relation` (relação, defaults e backfill).
+
+## Operações — valor operacional e complementação técnica (2026-07-28)
+
+- `Operation.serviceValue` foi adicionado por migration aditiva como valor operacional opcional,
+  não negativo e com duas casas decimais.
+- Somente OWNER/MANAGER podem defini-lo na criação. O valor não pertence ao Financial Core e não é
+  entregue ao Document Engine, Preview ou PDF.
+- `inspectedEquipments` aceita marca, modelo e capacidade. Durante criação/execução, o serviço
+  completa somente campos vazios do equipamento e preserva valores existentes.
+- OPERATOR só pode complementar equipamentos já vinculados à própria operação atribuída.
+- Auditoria: `EQUIPMENT_PROFILE_COMPLETED_FROM_OPERATION`.
+- Migration: `20260728153000_operation_service_value`.
+
+## PMOC — capacidade e encerramento por equipamento (2026-07-28)
+
+- `PmocPlan.plannedExecutionCount` persiste a quantidade de ciclos da cobertura sem multiplicá-la
+  no resumo do plano.
+- Cada equipamento mantém contador próprio. `equipmentExecutionNumber` começa em `001` para cada
+  ativo; `executionNumber` global foi preservado para histórico e retrocompatibilidade.
+- A reserva usa lock PostgreSQL por `(PMOC, equipamento)`, limite autoritativo e constraint única.
+- Cobertura encerrada com ciclos incompletos fica `OVERDUE`. Depois que todos os equipamentos
+  concluem o total previsto, a reconciliação altera o plano para `COMPLETED`.
+- Migration aditiva: `20260728113000_pmoc_execution_capacity_per_equipment`.
+
 ## PMOC — execução mobile por equipamento e assinatura OWNER (2026-07-27)
 
 - O app Operator não cria nem configura planos PMOC. OWNER escolhe um plano ativo e um equipamento

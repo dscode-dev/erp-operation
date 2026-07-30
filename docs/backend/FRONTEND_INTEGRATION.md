@@ -1,5 +1,61 @@
 # Frontend Integration
 
+## Compatibilidade durante deploy
+
+- A aplicação anterior pode conviver temporariamente com as colunas aditivas:
+  `BudgetItem.source` possui default e `CustomerAddress.referencePoint` aceita `NULL`.
+- Não há remoção ou renomeação de campo.
+- O deploy deve aplicar migrations antes de iniciar a nova imagem da API.
+
+## Endereço operacional e datas PMOC
+
+- Formulários de endereço podem enviar `referencePoint` opcional.
+- O detalhe do atendimento recebe `operation.address.complement` e
+  `operation.address.referencePoint`; ambos são informativos e não devem ser enviados ao Preview.
+- `PmocPlan.startDate`, `endDate` e datas previstas representam dias civis. Ao formatar esses
+  campos, use `timeZone: "UTC"` para impedir recuo de um dia no navegador.
+- Timestamps de execução efetiva continuam sendo apresentados no fuso local da instalação.
+
+## PMOC e materiais de orçamento
+
+- Use `lastExecution*` para Última execução e `nextExecution*` para Próxima prevista. Não derive
+  esses valores escolhendo a maior Execution Request.
+- Renderize `executionStatus` diretamente com os rótulos de negócio.
+- Itens de `BUDGET_MATERIAL_DESCRIPTION` usam `type=MATERIAL`, `source=CATALOG` e `unitPrice=0`.
+- Materiais manuais usam `source=MANUAL`; as duas coleções são opcionais e visualmente separadas.
+
+## Catálogos de equipamentos e materiais
+
+- Liste tipos com `GET /technical-catalogs?type=EQUIPMENT_TYPE&active=true`.
+- Envie o UUID selecionado em `equipmentTypeCatalogId`; use `equipmentTypeCatalog.title` para
+  exibição e mantenha `type` apenas como fallback legado.
+- Liste descrições com
+  `GET /technical-catalogs?type=BUDGET_MATERIAL_DESCRIPTION&active=true`.
+- Ao selecionar descrições no orçamento, crie itens editáveis e envie apenas snapshots em
+  `items[].description`, quantidade, unidade e valor unitário.
+- Nunca faça Budget depender do catálogo depois de salvo.
+
+## OS — valor e perfil técnico dos equipamentos
+
+- No cadastro gerencial, envie `serviceValue` como número decimal. Não replique o campo em Preview,
+  PDF ou formulários documentais.
+- No app Operator, mostre o valor somente no detalhe de uma Operation obtida pelo fluxo autorizado
+  de Assignment.
+- Em `inspectedEquipments`, envie `manufacturer`, `model` e `capacity` somente para completar dados
+  ausentes. O backend nunca substitui um valor técnico já cadastrado por esse fluxo.
+- Para cada equipamento incompleto, bloqueie a conclusão até preencher todos os campos ausentes.
+  O fluxo suporta múltiplos equipamentos.
+- Rótulo visual: `Marca - Modelo - Capacidade`; subtítulo: setor.
+
+## PMOC — progresso por equipamento
+
+- `overview.expectedExecutions` continua sendo a quantidade de ciclos configurados do plano.
+- `overview.expectedEquipmentExecutions` é o total operacional multiplicado pelos equipamentos.
+- Cada linha consome `overview.equipmentExecutions`; não calcule contadores localmente.
+- Wizard, histórico e documento exibem `equipmentExecutionNumber`.
+- `coverageEnded && hasOpenExecutions` exige aviso e mantém a execução do passivo disponível.
+- `operationalStatus=COMPLETED` deve ser exibido como **Finalizado**.
+
 ## PMOC configurado antes da execução
 
 - Envie `configurationOnly: true` ao criar o plano pelo Wizard da Platform.

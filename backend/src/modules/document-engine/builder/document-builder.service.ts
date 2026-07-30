@@ -1,5 +1,6 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import {
+  BudgetStatus,
   DocumentTemplateType,
   OperationMaintenanceType,
   OperationStatus,
@@ -43,6 +44,15 @@ const OPERATION_STATUS_LABEL: Record<OperationStatus, string> = {
   REVIEW: 'Em revisão',
   COMPLETED: 'Concluída',
   CANCELED: 'Cancelada',
+};
+
+const BUDGET_STATUS_LABEL: Record<BudgetStatus, string> = {
+  DRAFT: 'Rascunho',
+  PENDING: 'Pendente',
+  APPROVED: 'Aprovado',
+  REJECTED: 'Rejeitado',
+  EXPIRED: 'Expirado',
+  CANCELED: 'Cancelado',
 };
 
 @Injectable()
@@ -857,12 +867,18 @@ export class DocumentBuilderService {
         critical: true,
         components: [this.metadata('pmoc-operational-metadata', [
           ['Operação', `OP-${String(operation.number).padStart(6, '0')}`],
-          ['Execução prevista', this.date(operation.maintenanceExecution?.scheduledAt ?? null)],
+          [
+            'Execução prevista',
+            this.calendarDate(operation.maintenanceExecution?.scheduledAt ?? null),
+          ],
           ['Início', this.date(operation.startedAt)],
           ['Conclusão', this.date(operation.completedAt)],
           ['Técnico em campo', operation.operator.name],
           ['Contato do cliente', contact ? `${contact.name}${contact.phone ? ` · ${contact.phone}` : ''}` : (operation.customer.phone ?? '—')],
-          ['Vigência', `${this.date(pmoc.startDate)} a ${this.date(pmoc.endDate)}`],
+          [
+            'Vigência',
+            `${this.calendarDate(pmoc.startDate)} a ${this.calendarDate(pmoc.endDate)}`,
+          ],
           ['Periodicidade', this.maintenanceTypeLabel(operation.maintenanceType ?? 'MONTHLY')],
           [
             'Tipos de serviço',
@@ -1601,7 +1617,12 @@ export class DocumentBuilderService {
     const address = budget.customerAddress ?? budget.customer.addresses[0] ?? null;
     const primaryContact = budget.customer.contacts[0] ?? null;
     const services = budget.items.filter((item) => item.type === 'SERVICE');
-    const materials = budget.items.filter((item) => item.type === 'MATERIAL');
+    const catalogMaterials = budget.items.filter(
+      (item) => item.type === 'MATERIAL' && item.source === 'CATALOG',
+    );
+    const commercialMaterials = budget.items.filter(
+      (item) => item.type === 'MATERIAL' && item.source !== 'CATALOG',
+    );
     const paymentLabels: Record<string, string> = {
       CASH: 'Espécie',
       PIX: 'PIX',
@@ -1628,6 +1649,21 @@ export class DocumentBuilderService {
         total: this.money(item.total),
       })),
     });
+    const descriptionTable = (
+      id: string,
+      items: typeof budget.items,
+    ): Extract<DocumentBlueprintComponent, { kind: 'table' }> => ({
+      id,
+      kind: 'table',
+      columns: [
+        { key: 'item', label: 'Descrição', width: 0.82 },
+        { key: 'quantity', label: 'Quantidade', width: 0.18 },
+      ],
+      rows: items.map((item) => ({
+        item: this.clean(item.description || 'Material'),
+        quantity: this.decimal(item.quantity),
+      })),
+    });
     const sections: DocumentSection[] = [
       {
         id: 'budget-identification',
@@ -1637,7 +1673,7 @@ export class DocumentBuilderService {
           this.metadata('budget-metadata', [
             ['Número', `ORC-${String(budget.number).padStart(6, '0')}`],
             ['Título', budget.title],
-            ['Status', budget.status],
+            ['Status', BUDGET_STATUS_LABEL[budget.status]],
             ['Data', this.dateOnly(budget.issuedAt)],
             ['Válido até', this.dateOnly(budget.expirationDate)],
             ['Responsável', budget.creator.name],
@@ -1737,12 +1773,24 @@ export class DocumentBuilderService {
         components: [itemTable('budget-services-table', services)],
       });
     }
-    if (materials.length) {
+    if (catalogMaterials.length) {
       sections.push({
-        id: 'budget-materials',
-        title: 'Materiais',
+        id: 'budget-material-descriptions',
+        title: 'Descrição dos materiais',
         critical: true,
-        components: [itemTable('budget-materials-table', materials)],
+        components: [
+          descriptionTable('budget-material-descriptions-table', catalogMaterials),
+        ],
+      });
+    }
+    if (commercialMaterials.length) {
+      sections.push({
+        id: 'budget-commercial-materials',
+        title: 'Materiais e fornecimentos',
+        critical: true,
+        components: [
+          itemTable('budget-commercial-materials-table', commercialMaterials),
+        ],
       });
     }
 
@@ -1753,7 +1801,7 @@ export class DocumentBuilderService {
       components: [
         this.metadata('budget-totals-metadata', [
           ['Subtotal dos serviços', this.money(budget.serviceSubtotal)],
-          ['Subtotal dos materiais', this.money(budget.materialSubtotal)],
+          ['Subtotal de materiais e fornecimentos', this.money(budget.materialSubtotal)],
           ['Desconto', this.money(budget.discount)],
           ['Adicional', this.money(budget.additional)],
           ['Valor total', this.money(budget.total)],
@@ -2173,6 +2221,19 @@ export class DocumentBuilderService {
     return new Intl.DateTimeFormat('pt-BR', {
       dateStyle: 'short',
       timeZone: 'America/Recife',
+    }).format(new Date(value));
+  }
+
+  /**
+   * Datas de cobertura/recorrência representam um dia civil, não um instante.
+   * Prisma materializa colunas PostgreSQL DATE em 00:00 UTC; formatá-las em BRT
+   * faria 28/07 aparecer como 27/07.
+   */
+  private calendarDate(value: Date | string | null): string {
+    if (!value) return '—';
+    return new Intl.DateTimeFormat('pt-BR', {
+      dateStyle: 'short',
+      timeZone: 'UTC',
     }).format(new Date(value));
   }
 

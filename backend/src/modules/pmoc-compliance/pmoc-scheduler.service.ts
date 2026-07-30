@@ -27,6 +27,7 @@ export class PmocSchedulerService {
     limit = 25,
   ): Promise<PmocSchedulerResult> {
     const runAt = new Date();
+    await this.requests.reconcileCoverageStatuses();
     await this.requests.beginSchedulerRun(runAt);
     const recovered = await this.requests.recoverStaleGenerating(
       new Date(Date.now() - 15 * 60 * 1000),

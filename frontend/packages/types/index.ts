@@ -414,6 +414,7 @@ export type CustomerAddress = {
   street: string | null;
   number: string | null;
   complement: string | null;
+  referencePoint: string | null;
   district: string | null;
   city: string | null;
   state: string | null;
@@ -485,6 +486,14 @@ export type EquipmentCounts = { children: number; attachments: number; metrics: 
 export type EquipmentSummary = {
   id: string;
   type: EquipmentType;
+  equipmentTypeCatalogId?: string | null;
+  equipmentTypeCatalog?: {
+    id: string;
+    title: string;
+    active: boolean;
+    deletedAt: string | null;
+    tags: string[];
+  } | null;
   status: EquipmentStatus;
   name: string;
   sector: string | null;
@@ -668,7 +677,8 @@ export type AssetLifecycleStats = {
 
 export type CreateEquipmentPayload = {
   customerId: string;
-  type: EquipmentType;
+  type?: EquipmentType;
+  equipmentTypeCatalogId?: string;
   /** Derivado de marca + modelo no backend quando omitido. */
   name?: string;
   sector?: string | null;
@@ -799,7 +809,15 @@ export type OperationInspectedEquipment = {
   serialSnapshot?: string | null;
   systemTypeSnapshot?: string | null;
   currentSituationSnapshot?: string | null;
-  equipment?: { id: string; name: string; type: EquipmentType };
+  equipment?: {
+    id: string;
+    name: string;
+    type: EquipmentType;
+    sector: string | null;
+    manufacturer: string | null;
+    model: string | null;
+    capacity: string | null;
+  };
 };
 
 export type MaintenanceChecklistTemplate = {
@@ -818,7 +836,9 @@ export type TechnicalCatalogType =
   | 'SITE_CONDITION'
   | 'CONCLUSION'
   | 'RECOMMENDATION'
-  | 'PLAN_SCOPE';
+  | 'PLAN_SCOPE'
+  | 'EQUIPMENT_TYPE'
+  | 'BUDGET_MATERIAL_DESCRIPTION';
 
 export type TechnicalCatalogArea =
   | 'GENERAL'
@@ -852,6 +872,7 @@ export type TechnicalCatalog = {
   pmocUnit: PmocChecklistUnit | null;
   sortOrder: number;
   active: boolean;
+  deletedAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -902,6 +923,8 @@ export type OperationSummary = {
   requestedDocumentType: DocumentTemplateType;
   serviceTypes: OperationType[];
   status: OperationStatus;
+  /** Informação operacional da OS; não compõe Preview/PDF nem o Financial Core. */
+  serviceValue?: string | number | null;
   customer: { id: string; name: string } | null;
   equipment: { id: string; name: string } | null;
   operator: { id: string; name: string } | null;
@@ -933,7 +956,16 @@ export type OperationDetail = Omit<OperationSummary, 'equipment'> & {
     status: AssignmentStatus;
   } | null;
   address: CustomerAddress | null;
-  equipment: { id: string; name: string; tag: string | null; type: EquipmentType } | null;
+  equipment: {
+    id: string;
+    name: string;
+    tag: string | null;
+    type: EquipmentType;
+    sector: string | null;
+    manufacturer: string | null;
+    model: string | null;
+    capacity: string | null;
+  } | null;
   checklist: OperationChecklistItem[];
   observations: string | null;
   reportedIssue: string | null;
@@ -1102,6 +1134,7 @@ export type CreateOperationPayload = {
   observations?: string | null;
   reportedIssue?: string | null;
   serviceDescription?: string | null;
+  serviceValue?: number;
   receiptNumber?: string | null;
   receiptIssuedAt?: string | null;
   receiptAmount?: number | null;
@@ -1130,6 +1163,9 @@ export type CreateOperationPayload = {
     sector: string;
     systemType?: string | null;
     currentSituation?: string | null;
+    manufacturer?: string | null;
+    model?: string | null;
+    capacity?: string | null;
   }>;
   signatureData?: string | null;
   customerSignerName?: string | null;
@@ -1234,7 +1270,8 @@ export type PmocOperationalStatus =
   | 'OVERDUE'
   | 'PAUSED'
   | 'ERROR'
-  | 'EXPIRED';
+  | 'EXPIRED'
+  | 'COMPLETED';
 export type PmocExecutionRequestStatus =
   | 'PENDING'
   | 'GENERATING_OS'
@@ -1323,6 +1360,7 @@ export type PmocPlan = {
   defaultOperationObservations: string | null;
   signatureOverrideId: string | null;
   operationalStatus: PmocOperationalStatus;
+  plannedExecutionCount: number;
   lastReservedExecutionNumber: number;
   lastGeneratedExecutionNumber: number;
   lastExecutionDate: string | null;
@@ -1392,6 +1430,7 @@ export type PmocPlan = {
 
 export type PmocPlanOverview = {
   expectedExecutions: number;
+  expectedEquipmentExecutions: number;
   completedExecutions: number;
   remainingExecutions: number;
   pendingExecutions: number;
@@ -1408,6 +1447,32 @@ export type PmocPlanOverview = {
     status: OperationDocumentStatus;
     renderedAt: string | null;
   } | null;
+  coverageEnded: boolean;
+  hasOpenExecutions: boolean;
+  operationalStatus: PmocOperationalStatus;
+  equipmentExecutions: Array<{
+    equipmentId: string;
+    expectedExecutions: number;
+    completedExecutions: number;
+    remainingExecutions: number;
+    cancelledExecutions: number;
+    failedExecutions: number;
+    overdueExecutions: number;
+    lastExecutionNumber: number | null;
+    lastExecutionDate: string | null;
+    nextExecutionDate: string | null;
+    executionStatus:
+      | 'NOT_STARTED'
+      | 'SCHEDULED'
+      | 'IN_PROGRESS'
+      | 'UP_TO_DATE'
+      | 'OVERDUE'
+      | 'ATTENTION'
+      | 'COMPLETED';
+    nextExecutionNumber: number;
+    hasOpenExecutions: boolean;
+    coverageEnded: boolean;
+  }>;
   health: {
     code: 'EXCELLENT' | 'GOOD' | 'ATTENTION' | 'CRITICAL';
     label: 'Excelente' | 'Boa' | 'Atenção' | 'Crítica';
@@ -1424,6 +1489,7 @@ export type PmocExecutionRequest = {
   operationId: string | null;
   generatedOperationId: string | null;
   executionNumber: number;
+  equipmentExecutionNumber: number;
   executionYear: number | null;
   status: PmocExecutionRequestStatus;
   origin: PmocExecutionOrigin;
@@ -1490,6 +1556,7 @@ export type PmocHistoryItem = {
   };
   execution?: {
     executionNumber: number;
+    equipmentExecutionNumber: number;
     executionYear: number | null;
     workOrderNumber: number | null;
     status: PmocExecutionRequestStatus;
@@ -1512,6 +1579,7 @@ export type PmocDashboardExecution = {
   customer: Pick<Customer, 'id' | 'name' | 'tradeName'>;
   equipments: Array<Pick<EquipmentSummary, 'id' | 'name' | 'tag'>>;
   executionNumber: number;
+  equipmentExecutionNumber: number;
   origin: PmocExecutionOrigin;
   status: PmocExecutionRequestStatus;
   indicator: 'ON_TIME' | 'DUE_SOON' | 'OVERDUE' | 'COMPLETED' | 'CANCELLED' | 'FAILED';
@@ -2079,6 +2147,7 @@ export type PurchaseReceiptPayload = {
 
 export type BudgetStatus = 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'EXPIRED' | 'CANCELED';
 export type BudgetItemType = 'SERVICE' | 'MATERIAL';
+export type BudgetItemSource = 'MANUAL' | 'CATALOG';
 export type BudgetPaymentMethod = 'CASH' | 'PIX' | 'CREDIT_CARD';
 
 export type BudgetHistoryAction =
@@ -2099,6 +2168,7 @@ export type BudgetItem = {
   budgetId: string;
   productId: string | null;
   type: BudgetItemType;
+  source: BudgetItemSource;
   description: string;
   quantity: string | number;
   unit: string;
@@ -2209,6 +2279,7 @@ export type BudgetStats = {
 export type BudgetItemPayload = {
   productId?: string | null;
   type: BudgetItemType;
+  source?: BudgetItemSource;
   description: string;
   quantity: number;
   unit: string;

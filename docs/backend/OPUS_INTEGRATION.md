@@ -1,5 +1,55 @@
 # OPUS Frontend Integration
 
+## Compatibilidade das migrations recentes
+
+- Nenhum endpoint foi removido.
+- `source` mantém `MANUAL` como fallback de registros históricos.
+- `referencePoint` permanece opcional.
+- Não é necessário tratamento de indisponibilidade de dados antigos.
+
+## Ajustes de endereço e calendário
+
+- `CustomerAddress.referencePoint?: string | null` está disponível no CRUD oficial.
+- O Operator deve mostrar `complement` e `referencePoint` no resumo do atendimento.
+- Esses campos não pertencem ao documento final.
+- Datas previstas/cobertura PMOC devem ser renderizadas como datas-calendário UTC.
+- O status presente no Blueprint de orçamento já chega traduzido pelo backend.
+
+## Refinamento de execução e orçamento
+
+- PMOC por equipamento: consumir `lastExecutionNumber`, `lastExecutionDate`, `nextExecutionNumber`,
+  `nextExecutionDate` e `executionStatus` da projeção oficial.
+- Atendimentos Operator: a API retorna Operations mais recentes primeiro; concluídas permanecem no
+  último grupo da interface.
+- Budget: `source=CATALOG` identifica descrição sem preço; `source=MANUAL` identifica item
+  comercial. Nunca inferir origem pelo texto ou por preço zero.
+
+## Equipment/Budget catalogs
+
+Use `technicalCatalogsApi.listEquipmentTypes()` para o campo Tipo do equipamento e
+`technicalCatalogsApi.listBudgetMaterialDescriptions()` para o multi-select “Descrição dos
+Materiais”. O primeiro persiste `equipmentTypeCatalogId`; o segundo apenas preenche snapshots do
+`BudgetItem`.
+
+Itens arquivados não aparecem em novas seleções. Equipamentos antigos mantêm o título relacionado.
+
+## Operations — criação e execução em campo
+
+`serviceValue` é informação operacional da Operation. OWNER/MANAGER informam na criação; o Operator
+atribuído apenas visualiza no detalhe. Não renderize o campo em documentos.
+
+O payload `inspectedEquipments[]` aceita `manufacturer`, `model` e `capacity`. Use-o no atendimento
+para completar exclusivamente campos vazios dos equipamentos relacionados. A API rejeita IDs fora
+do escopo da Operation. Listas devem exibir `Marca - Modelo - Capacidade` e o setor como subtítulo.
+
+## PMOC — contrato visual de ciclos
+
+O número visual é `equipmentExecutionNumber`, com sequência `001..plannedExecutionCount` por
+equipamento. A aba Execuções usa `overview.equipmentExecutions`. O total configurado permanece em
+`expectedExecutions`; o agregado operacional está em `expectedEquipmentExecutions`.
+
+Não calcule finalização no frontend. `OVERDUE` e `COMPLETED` são decisões do backend.
+
 ## PMOC — cadastro de configuração
 
 Na rota `/pmoc`, o Wizard oficial usa `POST /pmoc` com `configurationOnly: true`. O modo possui

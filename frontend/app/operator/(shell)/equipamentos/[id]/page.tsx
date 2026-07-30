@@ -36,7 +36,7 @@ export default function OperatorEquipamentoConsult({ params }: { params: Promise
             <header className="space-y-1.5">
               <StatusPill status={EQUIPMENT_STATUS_PILL[e.status]} label={EQUIPMENT_STATUS_LABEL[e.status]} />
               <h1 className="text-section-title leading-tight">{e.name}</h1>
-              <p className="text-caption">{EQUIPMENT_TYPE_LABEL[e.type]} · {e.customer?.name ?? "—"}</p>
+              <p className="text-caption">{e.equipmentTypeCatalog?.title ?? EQUIPMENT_TYPE_LABEL[e.type]} · {e.customer?.name ?? "—"}</p>
             </header>
 
             {canStart && (

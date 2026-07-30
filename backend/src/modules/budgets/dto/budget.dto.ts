@@ -1,4 +1,9 @@
-import { BudgetItemType, BudgetPaymentMethod, BudgetStatus } from '@prisma/client';
+import {
+  BudgetItemSource,
+  BudgetItemType,
+  BudgetPaymentMethod,
+  BudgetStatus,
+} from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMinSize,
@@ -41,6 +46,7 @@ export class ListBudgetsQueryDto extends BudgetPageQueryDto {
 export class BudgetItemInputDto {
   @IsOptional() @IsUUID('4') productId?: string;
   @IsEnum(BudgetItemType) type!: BudgetItemType;
+  @IsOptional() @IsEnum(BudgetItemSource) source?: BudgetItemSource;
   @Transform(({ value }) => trim(value)) @IsString() @MinLength(2) @MaxLength(2000) description!: string;
   @Type(() => Number) @IsNumber({ maxDecimalPlaces: 3 }) @Min(0.001) quantity!: number;
   @Transform(({ value }) => upper(value)) @IsString() @MinLength(1) @MaxLength(20) unit!: string;

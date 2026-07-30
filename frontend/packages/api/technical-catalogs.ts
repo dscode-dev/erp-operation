@@ -149,3 +149,27 @@ export function listPmocChecklistItems(opts?: {
     signal: opts?.signal,
   }).then((page) => page.items.filter((item) => item.pmocUnit));
 }
+
+export function listEquipmentTypes(opts?: { signal?: AbortSignal }): Promise<TechnicalCatalog[]> {
+  return list({
+    type: 'EQUIPMENT_TYPE',
+    active: true,
+    sortBy: 'sortOrder',
+    order: 'asc',
+    limit: 100,
+    signal: opts?.signal,
+  }).then((page) => page.items);
+}
+
+export function listBudgetMaterialDescriptions(opts?: {
+  signal?: AbortSignal;
+}): Promise<TechnicalCatalog[]> {
+  return list({
+    type: 'BUDGET_MATERIAL_DESCRIPTION',
+    active: true,
+    sortBy: 'sortOrder',
+    order: 'asc',
+    limit: 100,
+    signal: opts?.signal,
+  }).then((page) => page.items);
+}

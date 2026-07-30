@@ -89,6 +89,9 @@ export default function TechnicalCatalogsPage() {
   }, [selectedType, types.data]);
   const isRvtChecklist = selectedType === 'RVT_CHECKLIST';
   const isPmocChecklist = selectedType === 'PMOC_CHECKLIST';
+  const isEquipmentType = selectedType === 'EQUIPMENT_TYPE';
+  const isBudgetMaterial = selectedType === 'BUDGET_MATERIAL_DESCRIPTION';
+  const isSimpleCatalog = isEquipmentType || isBudgetMaterial;
   const effectiveType = isRvtChecklist || isPmocChecklist ? 'CHECKLIST' : selectedType;
   const catalogs = useQuery<Paginated<TechnicalCatalog>>(
     (signal) =>
@@ -260,6 +263,24 @@ export default function TechnicalCatalogsPage() {
             </p>
           </div>
         )}
+        {isEquipmentType && (
+          <div className="rounded-[var(--radius-lg)] border border-cyan-500/25 bg-cyan-500/5 p-4 text-sm">
+            <strong>Checklists de Equipamentos</strong>
+            <p className="mt-1 text-[var(--color-muted-foreground)]">
+              Tipos ativos aparecem no cadastro de equipamentos. Excluir ou renomear um tipo não
+              apaga a classificação dos equipamentos já cadastrados.
+            </p>
+          </div>
+        )}
+        {isBudgetMaterial && (
+          <div className="rounded-[var(--radius-lg)] border border-violet-500/25 bg-violet-500/5 p-4 text-sm">
+            <strong>Descrições de materiais para Orçamentos</strong>
+            <p className="mt-1 text-[var(--color-muted-foreground)]">
+              Cadastre descrições reutilizáveis para o multi-select da etapa Materiais. O orçamento
+              preserva uma cópia do texto selecionado.
+            </p>
+          </div>
+        )}
         <div className="grid gap-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 md:grid-cols-3 xl:grid-cols-[minmax(220px,1fr)_170px_190px_190px_160px_170px]">
           <label className="flex h-10 items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] px-3">
             <Search className="h-4 w-4 text-[var(--color-muted-foreground)]" />
@@ -307,20 +328,26 @@ export default function TechnicalCatalogsPage() {
           ) : (
             <span className="hidden xl:block" />
           )}
-          <select
-            value={area}
-            onChange={(event) => {
-              setArea(event.target.value as TechnicalCatalogArea | '');
-              setPage(1);
-            }}
-            className="h-10 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm"
-          >
-            <option value="">Todas as áreas</option>
-            {(taxonomy.data?.areas ?? []).map((item) => (
-              <option key={item.value} value={item.value}>{item.label}</option>
-            ))}
-          </select>
-          {isRvtChecklist || isPmocChecklist || selectedType === 'CHECKLIST' ? (
+          {isSimpleCatalog ? (
+            <span className="hidden xl:block" />
+          ) : (
+            <select
+              value={area}
+              onChange={(event) => {
+                setArea(event.target.value as TechnicalCatalogArea | '');
+                setPage(1);
+              }}
+              className="h-10 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm"
+            >
+              <option value="">Todas as áreas</option>
+              {(taxonomy.data?.areas ?? []).map((item) => (
+                <option key={item.value} value={item.value}>{item.label}</option>
+              ))}
+            </select>
+          )}
+          {isSimpleCatalog ? (
+            <span className="hidden xl:block" />
+          ) : isRvtChecklist || isPmocChecklist || selectedType === 'CHECKLIST' ? (
             <div className="flex h-10 items-center rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-muted)] px-3 text-sm">
               {isRvtChecklist
                 ? 'Relatório de Visita Técnica'
@@ -524,6 +551,7 @@ export default function TechnicalCatalogsPage() {
             pmocUnits={isPmocChecklist ? PMOC_UNITS : undefined}
             defaultPmocUnit={isPmocChecklist ? pmocUnit : undefined}
             maintenanceTypes={isRvtChecklist ? RVT_MAINTENANCE_TYPES : MAINTENANCE_TYPES}
+            simple={isSimpleCatalog}
             taxonomy={taxonomy.data ?? undefined}
             onClose={() => setEditor(null)}
             onSaved={(message) => {
@@ -560,6 +588,7 @@ function TechnicalCatalogDrawer({
   pmocUnits,
   defaultPmocUnit,
   maintenanceTypes,
+  simple = false,
   onClose,
   onSaved,
 }: {
@@ -570,6 +599,7 @@ function TechnicalCatalogDrawer({
   pmocUnits?: Array<{ value: PmocChecklistUnit; label: string }>;
   defaultPmocUnit?: PmocChecklistUnit;
   maintenanceTypes: Array<{ value: OperationMaintenanceType; label: string }>;
+  simple?: boolean;
   onClose: () => void;
   onSaved: (message: string) => void;
 }) {
@@ -651,23 +681,27 @@ function TechnicalCatalogDrawer({
             className="rounded border border-[var(--color-border)] bg-transparent p-3"
           />
         </label>
-        <label className="grid gap-1 text-sm font-medium">
-          Tags
-          <input
-            value={tags}
-            onChange={(event) => setTags(event.target.value)}
-            placeholder="refrigeração, elétrica, segurança"
-            className="h-10 rounded border border-[var(--color-border)] bg-transparent px-3"
+        {!simple && (
+          <label className="grid gap-1 text-sm font-medium">
+            Tags
+            <input
+              value={tags}
+              onChange={(event) => setTags(event.target.value)}
+              placeholder="refrigeração, elétrica, segurança"
+              className="h-10 rounded border border-[var(--color-border)] bg-transparent px-3"
+            />
+            <span className="text-caption">Separe por vírgulas. As tags serão normalizadas ao salvar.</span>
+          </label>
+        )}
+        {!simple && (
+          <CatalogMultiChoice
+            label="Áreas aplicáveis"
+            options={taxonomy?.areas ?? []}
+            values={areas}
+            onChange={setAreas}
           />
-          <span className="text-caption">Separe por vírgulas. As tags serão normalizadas ao salvar.</span>
-        </label>
-        <CatalogMultiChoice
-          label="Áreas aplicáveis"
-          options={taxonomy?.areas ?? []}
-          values={areas}
-          onChange={setAreas}
-        />
-        {fixedWorkflows ? (
+        )}
+        {simple ? null : fixedWorkflows ? (
           <div className="grid gap-1 text-sm font-medium">
             Uso no sistema
             <div className="rounded border border-[var(--color-border)] bg-[var(--color-muted)] p-3 font-normal">
