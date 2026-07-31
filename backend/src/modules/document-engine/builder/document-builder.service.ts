@@ -872,7 +872,6 @@ export class DocumentBuilderService {
             this.calendarDate(operation.maintenanceExecution?.scheduledAt ?? null),
           ],
           ['Início', this.date(operation.startedAt)],
-          ['Conclusão', this.date(operation.completedAt)],
           ['Técnico em campo', operation.operator.name],
           ['Contato do cliente', contact ? `${contact.name}${contact.phone ? ` · ${contact.phone}` : ''}` : (operation.customer.phone ?? '—')],
           [
@@ -990,7 +989,7 @@ export class DocumentBuilderService {
         components: [
           this.metadata('receipt-identification-metadata', [
             ['Número', operation.receiptNumber ?? documentNumber],
-            ['Data', this.date(operation.receiptIssuedAt ?? generatedAt)],
+            ['Data', this.calendarDate(operation.receiptIssuedAt ?? generatedAt)],
             ['Cliente', operation.customer.tradeName ?? operation.customer.name],
             ['Endereço', address ? this.address(address) : '—'],
             ['Valor', amount],
@@ -1019,7 +1018,7 @@ export class DocumentBuilderService {
         components: [
           this.metadata('receipt-warranty-metadata', [
             ['Prazo', warranty],
-            ['Início da contagem', this.date(operation.receiptIssuedAt ?? generatedAt)],
+            ['Início da contagem', this.calendarDate(operation.receiptIssuedAt ?? generatedAt)],
           ]),
         ],
       },

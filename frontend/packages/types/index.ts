@@ -1969,11 +1969,20 @@ export type FinancialCategory = {
   updatedAt: string;
 };
 
+export type ImportableReceipt = {
+  operationId: string;
+  receiptNumber: string | null;
+  amount: string;
+  service: string | null;
+  customerName: string | null;
+  date: string;
+};
+
 export type FinancialEntry = {
   id: string;
   organizationId: string;
   accountId: string;
-  categoryId: string;
+  categoryId: string | null;
   type: FinancialEntryType;
   origin: FinancialEntryOrigin;
   originId: string | null;

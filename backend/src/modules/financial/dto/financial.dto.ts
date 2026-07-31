@@ -7,6 +7,9 @@ import {
 } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  ArrayNotEmpty,
+  IsArray,
   IsBoolean,
   IsDateString,
   IsEnum,
@@ -84,9 +87,19 @@ export class ListFinancialEntriesQueryDto extends FinancialPageQueryDto {
   @IsOptional() @IsDateString() to?: string;
 }
 
+export class ImportReceiptsDto {
+  @IsArray()
+  @ArrayNotEmpty()
+  @ArrayMaxSize(200)
+  @IsUUID('4', { each: true })
+  operationIds!: string[];
+}
+
 export class CreateFinancialEntryDto {
-  @IsUUID('4') accountId!: string;
-  @IsUUID('4') categoryId!: string;
+  // Conta e categoria são opcionais: sem conta usa a "Conta Geral"; categoria
+  // não é mais exigida no fluxo simplificado.
+  @IsOptional() @IsUUID('4') accountId?: string;
+  @IsOptional() @IsUUID('4') categoryId?: string;
   @Transform(({ value }) => upper(value)) @IsEnum(FinancialEntryType) type!: FinancialEntryType;
   @IsOptional() @Transform(({ value }) => upper(value)) @IsEnum(FinancialEntryOrigin) origin?: FinancialEntryOrigin;
   @IsOptional() @IsUUID('4') originId?: string;

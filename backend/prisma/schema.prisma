@@ -415,6 +415,7 @@ enum FinancialEntryOrigin {
   PURCHASE
   OPERATION
   PMOC
+  RECEIPT
   OTHER
 }
 
@@ -2021,7 +2022,8 @@ model FinancialEntry {
   id             String                     @id @default(uuid()) @db.Uuid
   organizationId String                     @map("organization_id") @db.Uuid
   accountId      String                     @map("account_id") @db.Uuid
-  categoryId     String                     @map("category_id") @db.Uuid
+  // Categoria agora é opcional (fluxo simplificado por "conta geral").
+  categoryId     String?                    @map("category_id") @db.Uuid
   type           FinancialEntryType
   origin         FinancialEntryOrigin       @default(MANUAL)
   originId       String?                    @map("origin_id") @db.Uuid
@@ -2038,7 +2040,7 @@ model FinancialEntry {
   updatedAt      DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(3)
   organization   Organization               @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   account        FinancialAccount           @relation(fields: [accountId], references: [id], onDelete: Restrict)
-  category       FinancialCategory          @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  category       FinancialCategory?         @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   creator        User                       @relation("FinancialEntryCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
   allocations    FinancialEntryAllocation[]
   history        FinancialHistory[]

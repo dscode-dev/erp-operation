@@ -1544,6 +1544,7 @@ describe('DocumentEngine foundation', () => {
       {} as never,
       {} as never,
       {} as never,
+    {} as never,
     );
     const normalize = (
       service as unknown as { normalizeSignatureData: (value?: string) => string | null }
@@ -1590,6 +1591,7 @@ describe('DocumentEngine foundation', () => {
         assertOperationAccess: jest.fn(),
         assertOperationBackedResourceAccess: jest.fn(),
       } as never,
+      {} as never,
     );
 
     const result = await service.update(

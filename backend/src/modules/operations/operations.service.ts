@@ -25,6 +25,7 @@ import type { AuthenticatedUser } from '../../shared/types/authenticated-user.ty
 import { buildPaginatedResponse } from '../../shared/types/pagination.types';
 import { LifecyclePublisher } from '../asset-lifecycle/lifecycle-publisher.service';
 import { AssignmentsService } from '../assignments/assignments.service';
+import { FinancialService } from '../financial/financial.service';
 import { PrismaService } from '../database/prisma.service';
 import { MaintenancePlanningService } from '../maintenance-planning/maintenance-planning.service';
 import { MaintenanceRemindersService } from '../maintenance-reminders/maintenance-reminders.service';
@@ -164,6 +165,7 @@ export class OperationsService {
     private readonly reminders: MaintenanceRemindersService,
     private readonly assignments: AssignmentsService,
     private readonly access: OperationAccessService,
+    private readonly financial: FinancialService,
   ) {}
 
   async list(query: ListOperationsQueryDto, actor: AuthenticatedUser): Promise<unknown> {
@@ -552,6 +554,12 @@ export class OperationsService {
       }
     }
 
+    // Recibo emitido: extrai o valor total e lança automaticamente como ENTRADA
+    // na conta geral (idempotente). Falha aqui nunca bloqueia o recibo.
+    if (requestedDocumentType === DocumentTemplateType.RECEIPT && dto.receiptAmount != null) {
+      await this.financial.syncReceiptEntry(operationId, actor.id, context).catch(() => undefined);
+    }
+
     return this.operationOrThrow(operationId);
   }
 
@@ -792,6 +800,11 @@ export class OperationsService {
         await this.storage.delete(storageKey).catch(() => undefined);
         throw error;
       }
+    }
+    // Recibo emitido a partir de uma OS existente (atualiza a operação com o
+    // valor): lança automaticamente a ENTRADA na conta geral (idempotente).
+    if (dto.receiptAmount != null) {
+      await this.financial.syncReceiptEntry(id, actor.id, context).catch(() => undefined);
     }
     return this.operationOrThrow(id);
   }

@@ -38,7 +38,9 @@
       "Bash(perl -0pi -e 's/operation\\\\.assignment\\\\?\\\\./operation.assignments?.[0]?./g' src/modules/document-engine/builder/document-builder.service.ts)",
       "Bash(perl -0pi -e 's/assignment: \\\\{ select: \\\\{ id: true, assignedBy: true, assignedTo: true \\\\} \\\\}/assignments: { where: { isPrimary: true }, select: { id: true, assignedBy: true, assignedTo: true } }/g; s/assignment: \\\\{ select: \\\\{ assignedBy: true, assignedTo: true \\\\} \\\\}/assignments: { where: { isPrimary: true }, select: { assignedBy: true, assignedTo: true } }/g; s/operation\\\\.assignment\\\\?\\\\./operation.assignments?.[0]?./g; s/document\\\\.operation\\\\?\\\\.assignment\\\\b/document.operation?.assignments?.[0]/g' src/modules/document-engine/document-handoff.service.ts)",
       "Bash(awk '/private async assertRenderer|private assertRenderer/{f=1} f{print; if\\(++n>16\\) exit}' src/modules/document-engine/document-engine.service.ts)",
-      "Bash(awk '/assertPmocEmissionReady\\\\\\(/{f=1} f{print NR\": \"$0; if\\(/^  }/ && f>1\\){exit} f++}' src/modules/document-engine/document-engine.service.ts)"
+      "Bash(awk '/assertPmocEmissionReady\\\\\\(/{f=1} f{print NR\": \"$0; if\\(/^  }/ && f>1\\){exit} f++}' src/modules/document-engine/document-engine.service.ts)",
+      "Bash(grep -n \"import { AssignmentsService }\\\\|import { OperationAccessService }\\\\|from '../assignments/assignments.service'\\\\|from '../operation-access\" src/modules/operations/operations.service.ts)",
+      "Bash(awk 'NR>=575 && /return this.operationOrThrow|return this.get\\\\\\(|^  }/{print NR\": \"$0}' src/modules/operations/operations.service.ts)"
     ],
     "additionalDirectories": [
       "/Users/ds_/Documents/Devs/AllBlueLabs/Applications/ERP_Operation/backend/src/modules/maintenance-planning",
