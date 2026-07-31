@@ -14,6 +14,7 @@ import type {
   FinancialEntryType,
   FinancialHistory,
   FinancialStats,
+  ImportableReceipt,
   Paginated,
 } from "@erp/types";
 
@@ -110,6 +111,15 @@ export function cancelEntry(id: string, payload?: { reason?: string | null }): P
 
 export function getStats(opts?: { signal?: AbortSignal }): Promise<FinancialStats> {
   return api.get<FinancialStats>("/financial/stats", opts);
+}
+
+/** Recibos emitidos ainda não lançados como entrada na conta geral. */
+export function listImportableReceipts(opts?: { signal?: AbortSignal }): Promise<ImportableReceipt[]> {
+  return api.get<ImportableReceipt[]>("/financial/receipts/importable", opts);
+}
+
+export function importReceipts(operationIds: string[]): Promise<{ imported: number }> {
+  return api.post<{ imported: number }>("/financial/receipts/import", { operationIds });
 }
 
 export function getHistory(

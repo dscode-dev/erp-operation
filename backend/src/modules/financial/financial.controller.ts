@@ -9,6 +9,7 @@ import {
   CreateFinancialAccountDto,
   CreateFinancialCategoryDto,
   CreateFinancialEntryDto,
+  ImportReceiptsDto,
   ListFinancialAccountsQueryDto,
   ListFinancialCategoriesQueryDto,
   ListFinancialEntriesQueryDto,
