@@ -929,7 +929,16 @@ function ReportWorkflowDrawer({
               })
             ).items[0]
           : null;
-      const receiptAmount = receiptBudget ? Number(receiptBudget.total) : null;
+      // O valor do Recibo vem do valor do serviço da própria OS; se a OS não
+      // tiver valor, usa o total de um orçamento aprovado vinculado.
+      const serviceValue =
+        detail.serviceValue != null && detail.serviceValue !== "" ? Number(detail.serviceValue) : null;
+      const receiptAmount =
+        serviceValue && serviceValue > 0
+          ? serviceValue
+          : receiptBudget
+            ? Number(receiptBudget.total)
+            : null;
       const receiptDescription =
         [detail.serviceDescription, detail.observations].filter(Boolean).join('\n') || '';
       setOperation(detail);

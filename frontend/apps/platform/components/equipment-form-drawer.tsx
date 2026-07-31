@@ -40,8 +40,6 @@ type FormState = {
   serialNumber: string;
   capacity: string;
   voltage: string;
-  installationDate: string;
-  warrantyExpiration: string;
   observations: string;
 };
 
@@ -59,8 +57,6 @@ function fromEquipment(e: EquipmentDetail | null, presetCustomerId?: string): Fo
     serialNumber: e?.serialNumber ?? "",
     capacity: e?.capacity ?? "",
     voltage: e?.voltage ?? "",
-    installationDate: e?.installationDate?.slice(0, 10) ?? "",
-    warrantyExpiration: e?.warrantyExpiration?.slice(0, 10) ?? "",
     observations: e?.observations ?? "",
   };
 }
@@ -178,8 +174,6 @@ export function EquipmentFormDrawer({
       serialNumber: form.serialNumber.trim() || null,
       capacity: form.capacity.trim() || null,
       voltage: form.voltage.trim() || null,
-      installationDate: form.installationDate || null,
-      warrantyExpiration: form.warrantyExpiration || null,
       observations: form.observations.trim() || null,
     };
 
@@ -316,15 +310,6 @@ export function EquipmentFormDrawer({
           </Field>
           <Field label="Tensão">
             <input value={form.voltage} onChange={(e) => set("voltage", e.target.value)} className={inputCls} placeholder="220V" />
-          </Field>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Instalação">
-            <input type="date" value={form.installationDate} onChange={(e) => set("installationDate", e.target.value)} className={inputCls} />
-          </Field>
-          <Field label="Garantia até">
-            <input type="date" value={form.warrantyExpiration} onChange={(e) => set("warrantyExpiration", e.target.value)} className={inputCls} />
           </Field>
         </div>
 

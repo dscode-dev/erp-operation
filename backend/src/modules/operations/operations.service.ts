@@ -801,6 +801,11 @@ export class OperationsService {
         throw error;
       }
     }
+    // Recibo emitido a partir de uma OS existente (atualiza a operação com o
+    // valor): lança automaticamente a ENTRADA na conta geral (idempotente).
+    if (dto.receiptAmount != null) {
+      await this.financial.syncReceiptEntry(id, actor.id, context).catch(() => undefined);
+    }
     return this.operationOrThrow(id);
   }
 
