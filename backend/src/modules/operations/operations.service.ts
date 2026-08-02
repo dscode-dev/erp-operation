@@ -10,11 +10,9 @@ import { DOCUMENT_ONLY_DOCUMENT_TYPES, OPERATOR_DIRECT_COMPLETION_DOCUMENT_TYPES
 import { PMOC_MIN_PROCEDURE_IMAGES } from '../../shared/constants/pmoc.constants';
 import {
   MAX_OPERATION_PHOTOS,
-  MAX_OPERATION_PHOTO_SIZE_BYTES,
   MAX_OPERATION_SIGNATURE_SIZE_BYTES,
   OPERATION_AUDIT_ACTIONS,
   OPERATION_DOCUMENT_PREFIX,
-  OPERATION_PHOTO_MIME_TYPES,
   OPERATION_PHOTO_RESOURCE,
   OPERATION_RESOURCE,
   OPERATION_SIGNATURE_MIME_TYPES,
@@ -38,6 +36,7 @@ import type {
   OperationStatsQueryDto,
   UpdateOperationDto,
 } from './dto/operation.dto';
+import { decodeOperationPhoto } from './operation-media.utils';
 
 export interface OperationAuditContext {
   requestId: string;
@@ -51,7 +50,7 @@ export type OperationCreationTransactionHook = (
 ) => Promise<void>;
 
 const OPERATION_INCLUDE = {
-  customer: { select: { id: true, name: true, tradeName: true } },
+  customer: { select: { id: true, name: true, tradeName: true, phone: true, secondaryPhone: true } },
   address: true,
   equipment: {
     select: {
@@ -125,6 +124,30 @@ const OPERATION_INCLUDE = {
     },
   },
   assignments: { where: { isPrimary: true }, select: { id: true, assignedBy: true, assignedTo: true, status: true } },
+  cancellations: {
+    orderBy: { requestedAt: 'desc' as const },
+    take: 1,
+    select: {
+      id: true,
+      operationId: true,
+      assignmentId: true,
+      status: true,
+      reason: true,
+      customerSignerName: true,
+      customerSignerRole: true,
+      customerSignedAt: true,
+      requestedAt: true,
+      resolvedAt: true,
+      rescheduledFor: true,
+      resolutionNotes: true,
+      createdAt: true,
+      updatedAt: true,
+      requestedBy: { select: { id: true, name: true, role: true } },
+      resolvedBy: { select: { id: true, name: true, role: true } },
+      technicalSignature: { select: { id: true, name: true, title: true, profession: true, professionalCouncil: true, registrationNumber: true, department: true, active: true, isDefault: true } },
+      photos: { orderBy: { createdAt: 'asc' as const }, select: { id: true, caption: true, mimeType: true, fileSize: true, createdAt: true, createdBy: { select: { id: true, name: true, role: true } } } },
+    },
+  },
   sourceSale: { select: { id: true, number: true, status: true, soldAt: true, warrantyDays: true, warrantyStartsAt: true, warrantyEndsAt: true, total: true } },
 } satisfies Prisma.OperationInclude;
 
@@ -134,6 +157,7 @@ const OPERATION_LIST_INCLUDE = {
   operator: { select: { id: true, name: true } },
   documents: { orderBy: { createdAt: 'asc' as const } },
   _count: { select: { photos: true, documents: true } },
+  cancellations: { orderBy: { requestedAt: 'desc' as const }, take: 1, select: { id: true, status: true, reason: true, requestedAt: true, rescheduledFor: true } },
 } satisfies Prisma.OperationInclude;
 
 type DecodedPhoto = { buffer: Buffer; mimeType: string; ext: string; caption: string | null };
@@ -169,6 +193,9 @@ export class OperationsService {
   ) {}
 
   async list(query: ListOperationsQueryDto, actor: AuthenticatedUser): Promise<unknown> {
+    const filters: Prisma.OperationWhereInput[] = [];
+    if (query.equipmentId) filters.push({ OR: [{ equipmentId: query.equipmentId }, { inspectedEquipments: { some: { equipmentId: query.equipmentId } } }] });
+    if (query.status === 'CANCELED') filters.push({ OR: [{ status: 'CANCELED' }, { cancellations: { some: { status: 'REQUESTED' } } }] });
     const where: Prisma.OperationWhereInput = {
       ...this.access.operationScope(actor),
       // Recibo/RVT são apenas relatórios — não poluem a lista de Operações da
@@ -180,21 +207,10 @@ export class OperationsService {
       ...(query.customerId ? { customerId: query.customerId } : {}),
       // Filtro por equipamento inclui o equipamento principal E os inspecionados,
       // para o histórico de operações do equipamento ser completo.
-      ...(query.equipmentId
-        ? {
-            AND: [
-              {
-                OR: [
-                  { equipmentId: query.equipmentId },
-                  { inspectedEquipments: { some: { equipmentId: query.equipmentId } } },
-                ],
-              },
-            ],
-          }
-        : {}),
       ...(query.operatorId ? { operatorId: query.operatorId } : {}),
       ...(query.type ? { type: query.type } : {}),
-      ...(query.status ? { status: query.status } : {}),
+      ...(query.status && query.status !== 'CANCELED' ? { status: query.status } : {}),
+      ...(filters.length ? { AND: filters } : {}),
       ...(query.search
         ? {
             OR: [
@@ -234,7 +250,7 @@ export class OperationsService {
       this.prisma.operation.count({ where: { ...where, status: 'IN_PROGRESS' } }),
       this.prisma.operation.count({ where: { ...where, status: 'REVIEW' } }),
       this.prisma.operation.count({ where: { ...where, status: 'COMPLETED' } }),
-      this.prisma.operation.count({ where: { ...where, status: 'CANCELED' } }),
+      this.prisma.operation.count({ where: { ...where, OR: [{ status: 'CANCELED' }, { cancellations: { some: { status: 'REQUESTED' } } }] } }),
     ]);
     return {
       total,
@@ -819,6 +835,8 @@ export class OperationsService {
     actor: AuthenticatedUser,
     context: OperationAuditContext,
   ): Promise<unknown> {
+    const cancellation = await this.prisma.operationCancellation.findFirst({ where: { operationId: id, status: 'REQUESTED' }, select: { id: true } });
+    if (cancellation) throw new ApplicationException(ERROR_CODES.OPERATION_INVALID_TRANSITION, 'Use a decisão de cancelamento para concluir esta análise', HttpStatus.CONFLICT);
     await this.prisma.$transaction(async (tx) => {
       const transition = await tx.operation.updateMany({
         where: { id, status: 'REVIEW' },
@@ -1055,54 +1073,7 @@ export class OperationsService {
   }
 
   private decodePhoto(input: OperationPhotoInputDto): DecodedPhoto {
-    const match = /^data:(image\/png|image\/jpeg);base64,(.+)$/.exec(input.dataUrl.trim());
-    if (!match)
-      throw new ApplicationException(
-        ERROR_CODES.OPERATION_PHOTO_INVALID,
-        'Photo must be a PNG or JPEG data URL',
-        HttpStatus.BAD_REQUEST,
-      );
-    const mimeType = match[1];
-    if (!OPERATION_PHOTO_MIME_TYPES.includes(mimeType as never))
-      throw new ApplicationException(
-        ERROR_CODES.OPERATION_PHOTO_INVALID,
-        'Photo MIME type is not allowed',
-        HttpStatus.BAD_REQUEST,
-      );
-    const buffer = Buffer.from(match[2], 'base64');
-    if (buffer.length === 0 || buffer.length > MAX_OPERATION_PHOTO_SIZE_BYTES)
-      throw new ApplicationException(
-        ERROR_CODES.OPERATION_PHOTO_INVALID,
-        'Photo is empty or exceeds the 5 MiB limit',
-        HttpStatus.BAD_REQUEST,
-      );
-    if (!this.isValidImageBinary(buffer, mimeType))
-      throw new ApplicationException(
-        ERROR_CODES.OPERATION_PHOTO_INVALID,
-        'Photo binary does not match its declared MIME type',
-        HttpStatus.BAD_REQUEST,
-      );
-    return {
-      buffer,
-      mimeType,
-      ext: mimeType === 'image/png' ? 'png' : 'jpg',
-      caption: input.caption ?? null,
-    };
-  }
-
-  private isValidImageBinary(buffer: Buffer, mimeType: string): boolean {
-    if (mimeType === 'image/png') {
-      return buffer.length >= 8 && buffer
-        .subarray(0, 8)
-        .equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
-    }
-    return (
-      buffer.length >= 4 &&
-      buffer[0] === 0xff &&
-      buffer[1] === 0xd8 &&
-      buffer[buffer.length - 2] === 0xff &&
-      buffer[buffer.length - 1] === 0xd9
-    );
+    return decodeOperationPhoto(input);
   }
 
   private normalizeSignatureData(value?: string): string | null {

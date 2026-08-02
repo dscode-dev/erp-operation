@@ -1,5 +1,17 @@
 # Frontend Integration
 
+## Cancelamento pelo técnico
+
+1. O Operator mantém a coleta local até confirmar o último passo.
+2. Envia motivo, assinatura técnica própria, assinatura opcional do cliente e até seis fotos para
+   `POST /operations/:id/cancellation`.
+3. Solicita Preview/Render do `WORK_ORDER` pelos endpoints oficiais do Document Engine.
+4. A Platform identifica `cancellations[0].status=REQUESTED` como “Cancelado pelo operador”.
+5. OWNER/MANAGER escolhe reagendar ou aprovar. Reagendar exige técnico ativo e data futura.
+
+`customer.phone` e `customer.secondaryPhone` são retornados no detalhe da Operation/Assignment para
+orientação do técnico; esses campos não são acrescentados automaticamente ao PDF.
+
 ## Compatibilidade durante deploy
 
 - A aplicação anterior pode conviver temporariamente com as colunas aditivas:

@@ -395,6 +395,10 @@ export class DocumentBuilderService {
     documentNumber: string,
   ): DocumentSection[] {
     const { operation } = context;
+    const cancellation = operation.cancellations?.[0] ?? null;
+    if (cancellation && (cancellation.status === 'REQUESTED' || cancellation.status === 'APPROVED')) {
+      return this.canceledWorkOrderSections(context, generatedAt, documentNumber);
+    }
     const address = operation.address ?? operation.customer.addresses[0] ?? null;
     const contact = operation.customer.contacts[0] ?? null;
     const serviceItems = this.lines(operation.serviceDescription);
@@ -483,6 +487,51 @@ export class DocumentBuilderService {
         components: executionComponents,
       },
       this.observationSection(operation, 'Observações e resultado operacional'),
+    ].filter((section): section is DocumentSection => Boolean(section));
+  }
+
+  private canceledWorkOrderSections(
+    context: DocumentContext,
+    generatedAt: string,
+    documentNumber: string,
+  ): DocumentSection[] {
+    const { operation } = context;
+    const cancellation = operation.cancellations[0];
+    const address = operation.address ?? operation.customer.addresses[0] ?? null;
+    const contact = operation.customer.contacts[0] ?? null;
+    return [
+      {
+        id: 'work-order-identification',
+        title: 'Identificação da ordem de serviço',
+        critical: true,
+        components: [this.metadata('work-order-identification-metadata', [
+          ['Número', documentNumber],
+          ['Data de emissão', this.date(generatedAt)],
+          ['Data do agendamento', this.date(operation.scheduledFor)],
+          ['Status', 'ATENDIMENTO CANCELADO'],
+          ['Operador em campo', cancellation.requestedBy.name],
+          ['Responsável técnico', this.technicalResponsibleName(context) ?? cancellation.technicalSignature.name],
+        ])],
+      },
+      {
+        id: 'work-order-customer',
+        title: 'Cliente',
+        critical: true,
+        components: [this.metadata('work-order-customer-metadata', [
+          ['Cliente', operation.customer.tradeName ?? operation.customer.name],
+          ['Razão/Nome', operation.customer.name],
+          ['Documento', operation.customer.cnpj ?? operation.customer.cpf ?? '—'],
+          ['Contato', contact ? `${contact.name}${contact.phone ? ` · ${contact.phone}` : ''}` : (operation.customer.phone ?? '—')],
+          ['Endereço', address ? this.address(address) : '—'],
+        ])],
+      },
+      this.inspectedEquipmentSection(operation, 'work-order-cancellation'),
+      {
+        id: 'work-order-cancellation-reason',
+        title: 'Motivo do cancelamento',
+        critical: true,
+        components: [{ id: 'work-order-cancellation-reason-text', kind: 'observation', text: this.clean(cancellation.reason), keepTogether: true }],
+      },
     ].filter((section): section is DocumentSection => Boolean(section));
   }
 

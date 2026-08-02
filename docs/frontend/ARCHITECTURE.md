@@ -1291,3 +1291,21 @@ mantendo a semântica de um único destino por interação e evitando `<button>`
 A seleção de uma OS é apenas uma fonte de preenchimento. A data de emissão pertence ao novo Recibo
 e é inicializada pelo cliente web com a data civil local no momento da seleção; o backend persiste
 o valor explícito em `receiptIssuedAt`.
+
+## Cancelamento operacional
+
+```text
+Operator Wizard
+  → OperationCancellation REQUESTED
+  → WORK_ORDER DocumentContext/Blueprint/PDF
+  → Platform Review
+      ├─ RESCHEDULED → mesma Operation + mesmo Assignment
+      └─ APPROVED    → Operation CANCELED
+```
+
+O frontend não infere transições nem monta relatório. Estados, ownership e consistência são
+autoritativos no backend; Preview e PDF continuam derivados do mesmo Blueprint.
+
+Após o render oficial, o resultado documental é entregue a um estado terminal dedicado. Esse estado
+usa exclusivamente o download autenticado do Document Engine e a Web Share API; abrir o
+`DocumentViewer` permanece uma ação explícita do usuário, nunca um efeito automático da conclusão.

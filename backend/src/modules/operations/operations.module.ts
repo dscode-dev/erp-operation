@@ -10,11 +10,12 @@ import { OperationsController } from './operations.controller';
 import { OperationsService } from './operations.service';
 import { OperatorExecutionsController } from './operator-executions.controller';
 import { OperatorExecutionsService } from './operator-executions.service';
+import { OperationCancellationsService } from './operation-cancellations.service';
 
 @Module({
   imports: [StorageModule, AssetLifecycleModule, MaintenancePlanningModule, MaintenanceRemindersModule, AssignmentsModule, OperationAccessModule, FinancialModule],
   controllers: [OperationsController, OperatorExecutionsController],
-  providers: [OperationsService, OperatorExecutionsService],
+  providers: [OperationsService, OperatorExecutionsService, OperationCancellationsService],
   exports: [OperationsService],
 })
 export class OperationsModule {}

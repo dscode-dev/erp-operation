@@ -7,6 +7,7 @@
  * production Document Engine viewer.
  */
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { Drawer } from "@erp/ui/drawer";
 import { StatusChip } from "@erp/ui/status-chip";
 import { SkeletonList } from "@erp/ui/skeletons";
@@ -47,6 +48,7 @@ export function OperationDetailDrawer({
   const [previewDoc, setPreviewDoc] = useState<OperationDocument | null>(null);
 
   const op = detail.data;
+  const activeCancellation = op?.cancellations?.find((item) => item.status === "REQUESTED") ?? null;
   const isPmoc = Boolean(op?.maintenanceExecution?.plan.pmocPlan);
   const pmocConfiguration = useQuery<DocumentConfiguration | null>(
     (signal) => isPmoc ? documentsApi.getConfigurationByType("PMOC", { signal }) : Promise.resolve(null),
@@ -83,10 +85,12 @@ export function OperationDetailDrawer({
         <div className="space-y-5">
           <div className="flex flex-wrap items-center gap-2">
             <StatusChip tone="primary">{OPERATION_TYPE_LABEL[op.type]}</StatusChip>
-            <StatusChip tone={OPERATION_STATUS[op.status].tone} dot>{OPERATION_STATUS[op.status].label}</StatusChip>
+            <StatusChip tone={activeCancellation ? "danger" : OPERATION_STATUS[op.status].tone} dot>{activeCancellation ? "Cancelado pelo operador" : OPERATION_STATUS[op.status].label}</StatusChip>
           </div>
 
-          {op.status === "REVIEW" && <ApprovalSection operation={op} onApproved={detail.refetch} />}
+          {activeCancellation ? (
+            <CancellationReviewSection operation={op} photoSources={photoSources} onRefresh={() => { detail.refetch(); assignmentQuery.refetch(); }} onOpenDocument={setPreviewDoc} />
+          ) : op.status === "REVIEW" ? <ApprovalSection operation={op} onApproved={detail.refetch} /> : null}
 
           <DocumentReviewSection operation={op} onSaved={detail.refetch} />
 
@@ -128,6 +132,53 @@ export function OperationDetailDrawer({
       </Drawer>
     </Drawer>
   );
+}
+
+function CancellationReviewSection({ operation, photoSources, onRefresh, onOpenDocument }: { operation: OperationDetail; photoSources: Record<string, string>; onRefresh: () => void; onOpenDocument: (document: OperationDocument) => void }) {
+  const cancellation = operation.cancellations.find((item) => item.status === "REQUESTED");
+  const [reschedule, setReschedule] = useState(false);
+  const [operatorId, setOperatorId] = useState(operation.operator?.id ?? "");
+  const [scheduledFor, setScheduledFor] = useState("");
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  if (!cancellation) return null;
+  const document = operation.documents.find((item) => item.type === "WORK_ORDER") ?? null;
+
+  async function render() {
+    setBusy("render"); setError(null);
+    try {
+      await documentsApi.renderOperationDocument(operation.id, "WORK_ORDER");
+      onRefresh();
+      if (document) onOpenDocument(document);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Não foi possível gerar o relatório."); }
+    finally { setBusy(null); }
+  }
+  async function applyReschedule() {
+    if (!operatorId || !scheduledFor) return setError("Selecione o técnico e a nova data.");
+    setBusy("reschedule"); setError(null);
+    try { await operationApi.rescheduleCanceledOperation(operation.id, { assignedTo: operatorId, scheduledFor: new Date(scheduledFor).toISOString() }); setReschedule(false); onRefresh(); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "Não foi possível reagendar."); }
+    finally { setBusy(null); }
+  }
+  async function approve() {
+    if (!window.confirm("Confirmar definitivamente o cancelamento deste atendimento?")) return;
+    setBusy("approve"); setError(null);
+    try { await operationApi.approveOperationCancellation(operation.id); onRefresh(); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "Não foi possível aprovar o cancelamento."); }
+    finally { setBusy(null); }
+  }
+
+  return <Gate roles={["OWNER", "MANAGER"]}>
+    <section className="space-y-4 rounded-[var(--radius-lg)] border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/5 p-4">
+      <div><p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-danger)]">Cancelado pelo operador</p><p className="mt-1 text-sm">A solicitação aguarda decisão da gestão. A operação ainda não está cancelada definitivamente.</p></div>
+      <div className="grid gap-3 sm:grid-cols-2"><Info label="Operador" value={cancellation.requestedBy.name} /><Info label="Solicitado em" value={formatDateTime(cancellation.requestedAt)} /><Info label="Agendamento" value={operation.scheduledFor ? formatDateTime(operation.scheduledFor) : "Não agendado"} /><Info label="Cliente" value={operation.customer?.name ?? "—"} /></div>
+      <div><div className="text-[11px] uppercase tracking-wider text-[var(--color-muted-foreground)]">Motivo impeditivo</div><p className="mt-1 whitespace-pre-wrap text-sm font-medium">{cancellation.reason}</p></div>
+      {cancellation.photos.length > 0 && <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">{cancellation.photos.map((photo) => photoSources[photo.id] ? <figure key={photo.id} className="overflow-hidden rounded border border-[var(--color-border)] bg-white"><Image unoptimized src={photoSources[photo.id]} width={240} height={160} alt={photo.caption || "Evidência do cancelamento"} className="h-32 w-full object-contain" />{photo.caption && <figcaption className="p-2 text-xs">{photo.caption}</figcaption>}</figure> : null)}</div>}
+      <div className="grid gap-2 sm:grid-cols-3"><button type="button" onClick={() => void render()} disabled={Boolean(busy)} className="btn-secondary">{busy === "render" ? "Gerando…" : "Gerar relatório PDF"}</button><button type="button" onClick={() => setReschedule((value) => !value)} disabled={Boolean(busy)} className="btn-secondary">Reagendar</button><button type="button" onClick={() => void approve()} disabled={Boolean(busy)} className="btn-primary">{busy === "approve" ? "Finalizando…" : "Aprovar e finalizar"}</button></div>
+      {reschedule && <div className="space-y-3 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] p-3"><UserSelect value={operatorId} onChange={setOperatorId} /><label className="space-y-1"><span className="text-sm font-medium">Nova data e hora</span><input type="datetime-local" value={scheduledFor} onChange={(event) => setScheduledFor(event.target.value)} className={inputCls} /></label><button type="button" onClick={() => void applyReschedule()} disabled={busy === "reschedule"} className="btn-primary">{busy === "reschedule" ? "Reagendando…" : "Confirmar reagendamento"}</button></div>}
+      {error && <p className="text-sm text-[var(--color-danger)]">{error}</p>}
+    </section>
+  </Gate>;
 }
 
 function ApprovalSection({ operation, onApproved }: { operation: OperationDetail; onApproved: () => void }) {

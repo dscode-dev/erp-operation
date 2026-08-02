@@ -82,7 +82,12 @@ function OperacoesInner() {
       { key: "type", header: "Tipo", className: "w-[140px]", cell: (o) => <span className="text-sm">{OPERATION_TYPE_LABEL[o.type]}</span> },
       { key: "createdAt", header: "Criado", className: "w-[125px]", cell: (o) => <span className="font-mono text-xs">{formatDateTime(o.createdAt)}</span> },
       { key: "scheduledFor", header: "Data do agendamento", className: "w-[155px]", cell: (o) => <span className="font-mono text-xs">{o.scheduledFor ? formatDateTime(o.scheduledFor) : "Não agendado"}</span> },
-      { key: "status", header: "Status", className: "w-[150px]", cell: (o) => <StatusChip tone={OPERATION_STATUS[o.status].tone} dot>{OPERATION_STATUS[o.status].label}</StatusChip> },
+      { key: "status", header: "Status", className: "w-[190px]", cell: (o) => {
+        const cancellation = o.cancellations?.[0];
+        const label = cancellation?.status === "REQUESTED" ? "Cancelada · operador" : cancellation?.status === "RESCHEDULED" && o.status !== "COMPLETED" ? "Reagendada" : cancellation?.status === "APPROVED" ? "Cancelada" : OPERATION_STATUS[o.status].label;
+        const tone = cancellation?.status === "REQUESTED" || cancellation?.status === "APPROVED" ? "danger" : cancellation?.status === "RESCHEDULED" ? "info" : OPERATION_STATUS[o.status].tone;
+        return <StatusChip tone={tone} dot className="whitespace-nowrap" >{label}</StatusChip>;
+      } },
     ],
     [],
   );

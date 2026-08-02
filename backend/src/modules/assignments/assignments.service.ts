@@ -39,7 +39,7 @@ const ASSIGNMENT_INCLUDE = {
   assignee: { select: { id: true, name: true, username: true, role: true } },
   operation: {
     include: {
-      customer: { select: { id: true, name: true, tradeName: true } },
+      customer: { select: { id: true, name: true, tradeName: true, phone: true, secondaryPhone: true } },
       address: true,
       equipment: { select: { id: true, name: true, tag: true, type: true } },
       operator: { select: { id: true, name: true } },

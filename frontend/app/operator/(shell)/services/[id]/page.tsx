@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Banknote, CalendarClock, Camera, CheckCircle2, ClipboardCheck, Clock, FileText, MapPin, Package, PenLine, Play, XCircle } from "lucide-react";
+import { ArrowLeft, Banknote, CalendarClock, Camera, CheckCircle2, ClipboardCheck, Clock, Download, FileText, Loader2, MapPin, Package, PenLine, Phone, Play, Share2, XCircle } from "lucide-react";
 import { useAuth } from "@erp/ui/auth/auth-provider";
 import { SkeletonCard, SkeletonList } from "@erp/ui/skeletons";
 import { EmptyState } from "@erp/ui/empty-state";
@@ -14,7 +14,8 @@ import { DocumentViewer } from "@erp/ui/documents/document-viewer";
 import { SignaturePad } from "@erp/ui/documents/signature-pad";
 import { PhotoInput, type CapturedPhoto } from "@erp/ui/photo-input";
 import { CustomerSignaturePreview } from "@erp/ui/documents/customer-signature-preview";
-import { assignmentsApi, documentsApi, inventoryApi, operationApi, useQuery, type Assignment, type InventoryItem, type OperationDetail, type OperationDocument, type OperationPart, type Product } from "@erp/api";
+import { Drawer } from "@erp/ui/drawer";
+import { assignmentsApi, documentsApi, inventoryApi, operationApi, useQuery, type Assignment, type DocumentRenderResult, type InventoryItem, type OperationDetail, type OperationDocument, type OperationPart, type Product } from "@erp/api";
 import type { DocumentConfiguration, Signature, SignatureMode } from "@erp/types";
 import {
   ASSIGNMENT_STATUS_LABEL,
@@ -23,6 +24,7 @@ import {
 } from "@erp/ui/assignments/assignment-shared";
 import { serviceTypeLabel } from "@operator/lib/service-types";
 import { FieldReportHandoff } from "@operator/features/reports/field-report-handoff";
+import { OperatorSignatureChoice } from "@operator/components/operator-signature";
 
 const workflow = [
   { label: "Aceitar", icon: CheckCircle2 },
@@ -49,7 +51,7 @@ export default function OperatorServiceDetail() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function run(action: "accept" | "start" | "complete" | "reject") {
+  async function run(action: "accept" | "start" | "complete") {
     if (!assignment.data) return;
     setBusy(action);
     setError(null);
@@ -65,7 +67,6 @@ export default function OperatorServiceDetail() {
         }
       }
       if (action === "complete") await assignmentsApi.completeAssignment(assignment.data.id, "Concluído pelo operador em campo");
-      if (action === "reject") await assignmentsApi.rejectAssignment(assignment.data.id, "Recusado pelo operador");
       assignment.refetch();
       history.refetch();
     } catch (err) {
@@ -96,6 +97,7 @@ export default function OperatorServiceDetail() {
           materialsLoading={materials.loading}
           materialsError={materials.error}
           onMaterialsRefresh={materials.refetch}
+          onRefresh={async () => { await Promise.all([assignment.refetch(), history.refetch()]); }}
           error={error}
           busy={busy}
           onAction={run}
@@ -113,6 +115,7 @@ function AssignmentWorkflow({
   materialsLoading,
   materialsError,
   onMaterialsRefresh,
+  onRefresh,
   error,
   busy,
   onAction,
@@ -124,9 +127,10 @@ function AssignmentWorkflow({
   materialsLoading: boolean;
   materialsError: Error | null;
   onMaterialsRefresh: () => void;
+  onRefresh: () => Promise<void>;
   error: string | null;
   busy: string | null;
-  onAction: (action: "accept" | "start" | "complete" | "reject") => void;
+  onAction: (action: "accept" | "start" | "complete") => void;
 }) {
   const { role, can } = useAuth();
   // Sem permissão de Relatórios, o operador só visualiza a OS — não pode
@@ -136,6 +140,8 @@ function AssignmentWorkflow({
   const op = assignment.operation;
   const operation = useQuery((signal) => operationApi.getOperation(op.id, { signal }), [op.id]);
   const [document, setDocument] = useState<OperationDocument | null>(null);
+  const [cancellationOpen, setCancellationOpen] = useState(false);
+  const [cancellationResult, setCancellationResult] = useState<DocumentRenderResult | null>(null);
   const isPmoc = Boolean(op.maintenanceExecution?.plan.pmocPlan);
   const pmocConfiguration = useQuery<DocumentConfiguration | null>(
     (signal) => isPmoc ? documentsApi.getConfigurationByType("PMOC", { signal }) : Promise.resolve(null),
@@ -153,6 +159,10 @@ function AssignmentWorkflow({
   const visibleWorkflow = isPmoc && (pmocSignatureMode === "NONE" || pmocSignatureMode === "FIXED")
     ? workflow.filter((item) => item.label !== "Assinatura")
     : workflow;
+
+  if (cancellationResult) {
+    return <CancellationSuccessView document={cancellationResult} />;
+  }
   return (
     <>
       <header className="space-y-3">
@@ -173,6 +183,7 @@ function AssignmentWorkflow({
         <InfoRow icon={MapPin} label="Endereço" value={address} />
         <InfoRow icon={MapPin} label="Complemento" value={op.address?.complement || "Não informado"} />
         <InfoRow icon={MapPin} label="Ponto de referência" value={op.address?.referencePoint || "Não informado"} />
+        <InfoRow icon={Phone} label="Telefone do cliente" value={op.customer?.phone || op.customer?.secondaryPhone || "Não informado"} />
         <InfoRow icon={Package} label="Equipamentos" value={operation.data?.inspectedEquipments.map((item) => item.equipment?.name).filter(Boolean).join(", ") || pmoc?.equipments.map((item) => item.equipment.name).join(", ") || op.equipment?.name || "Sem equipamento vinculado"} />
         <InfoRow icon={ClipboardCheck} label="Tipos de serviço" value={(op.serviceTypes?.length ? op.serviceTypes : [op.type]).map(serviceTypeLabel).join(" · ")} />
         {op.serviceValue !== null && op.serviceValue !== undefined && (
@@ -212,12 +223,7 @@ function AssignmentWorkflow({
       {canReports && (
         <section className="grid gap-2">
           {assignment.status === "ASSIGNED" && (
-            <>
-              <BigButton icon={CheckCircle2} label="Aceitar ordem" busy={busy === "accept"} onClick={() => onAction("accept")} />
-              <button onClick={() => onAction("reject")} disabled={busy === "reject"} className="inline-flex h-12 items-center justify-center gap-2 rounded-[var(--radius-lg)] border border-[var(--color-danger)]/30 text-sm font-semibold text-[var(--color-danger)] disabled:opacity-50">
-                <XCircle className="h-5 w-5" /> Recusar
-              </button>
-            </>
+            <BigButton icon={CheckCircle2} label="Aceitar ordem" busy={busy === "accept"} onClick={() => onAction("accept")} />
           )}
           {assignment.status === "ACCEPTED" && <BigButton icon={Play} label="Iniciar atendimento" busy={busy === "start"} onClick={() => onAction("start")} />}
           {assignment.status === "STARTED" && (isPmoc ? (
@@ -227,6 +233,11 @@ function AssignmentWorkflow({
               <Play className="h-5 w-5" /> Continuar atendimento
             </Link>
           ))}
+          {(["ASSIGNED", "ACCEPTED", "STARTED", "PAUSED"] as const).includes(assignment.status as "ASSIGNED" | "ACCEPTED" | "STARTED" | "PAUSED") && (
+            <button type="button" onClick={() => setCancellationOpen(true)} className="inline-flex h-12 items-center justify-center gap-2 rounded-[var(--radius-lg)] border border-[var(--color-danger)]/30 text-sm font-semibold text-[var(--color-danger)]">
+              <XCircle className="h-5 w-5" /> Cancelar atendimento
+            </button>
+          )}
         </section>
       )}
 
@@ -369,8 +380,136 @@ function AssignmentWorkflow({
           </div>
         </div>
       )}
+      {operation.data && <OperationCancellationWizard
+        open={cancellationOpen}
+        operation={operation.data}
+        onClose={() => setCancellationOpen(false)}
+        onCompleted={async (rendered) => {
+          setCancellationOpen(false);
+          await Promise.all([onRefresh(), operation.refetch()]);
+          setCancellationResult(rendered);
+        }}
+      />}
     </>
   );
+}
+
+function OperationCancellationWizard({ open, operation, onClose, onCompleted }: { open: boolean; operation: OperationDetail; onClose: () => void; onCompleted: (document: DocumentRenderResult) => Promise<void> }) {
+  const [step, setStep] = useState<1 | 2>(1);
+  const [photos, setPhotos] = useState<CapturedPhoto[]>([]);
+  const [reason, setReason] = useState("");
+  const [technicalSignatureId, setTechnicalSignatureId] = useState<string | null>(null);
+  const [customerSignature, setCustomerSignature] = useState<string | null>(null);
+  const [customerName, setCustomerName] = useState("");
+  const [customerRole, setCustomerRole] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function finish() {
+    if (!reason.trim()) return setError("Informe o motivo impeditivo do cancelamento.");
+    if (!technicalSignatureId) return setError("Confirme sua assinatura técnica ativa.");
+    if (customerSignature && !customerName.trim()) return setError("Informe o nome do cliente que assinou.");
+    setBusy(true); setError(null);
+    try {
+      await operationApi.requestOperationCancellation(operation.id, {
+        reason: reason.trim(),
+        technicalSignatureId,
+        customerSignatureData: customerSignature ?? undefined,
+        customerSignerName: customerSignature ? customerName.trim() : undefined,
+        customerSignerRole: customerSignature ? customerRole.trim() || undefined : undefined,
+        customerSignedAt: customerSignature ? new Date().toISOString() : undefined,
+        photos: await Promise.all(photos.map(async (photo) => ({ dataUrl: await fileDataUrl(photo.file), caption: photo.caption?.trim() || null }))),
+      });
+      const rendered = await documentsApi.renderOperationDocument(operation.id, "WORK_ORDER");
+      await onCompleted(rendered);
+      setStep(1); setPhotos([]); setReason(""); setCustomerSignature(null); setCustomerName(""); setCustomerRole("");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível concluir o cancelamento.");
+    } finally { setBusy(false); }
+  }
+
+  return (
+    <Drawer open={open} onClose={busy ? () => undefined : onClose} eyebrow={`OP-${String(operation.number).padStart(6, "0")}`} title="Cancelar atendimento" width="max-w-2xl" footer={
+      <div className="flex w-full gap-2">
+        {step === 2 && <button type="button" onClick={() => setStep(1)} disabled={busy} className="btn-secondary flex-1">Voltar</button>}
+        {step === 1 ? <button type="button" onClick={() => setStep(2)} className="btn-primary flex-1">Continuar</button> : <button type="button" onClick={() => void finish()} disabled={busy} className="btn-primary flex-1">{busy ? "Finalizando…" : "Confirmar cancelamento"}</button>}
+      </div>
+    }>
+      <div className="space-y-5">
+        <div className="flex gap-2 text-xs"><StatusPill status={step === 1 ? "info" : "pending"} label="1 · Evidências" /><StatusPill status={step === 2 ? "info" : "pending"} label="2 · Motivo e assinaturas" /></div>
+        {step === 1 ? <section className="space-y-3"><div><h3 className="font-semibold">Evidências do impedimento</h3><p className="text-caption">Adicione até seis fotos. Elas serão incluídas no relatório de cancelamento.</p></div><PhotoInput photos={photos} onChange={setPhotos} max={6} /></section> : <div className="space-y-5">
+          <label className="space-y-1"><span className="text-sm font-medium">Motivo do cancelamento *</span><textarea value={reason} onChange={(event) => setReason(event.target.value)} maxLength={4000} rows={5} placeholder="Ex.: cliente não se encontrava no local…" className="w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent p-3 text-sm" /></label>
+          <section className="space-y-2"><h3 className="text-sm font-semibold">Assinatura do técnico</h3><OperatorSignatureChoice selectedId={technicalSignatureId} onSelect={setTechnicalSignatureId} /></section>
+          <section className="space-y-3"><div><h3 className="text-sm font-semibold">Assinatura do cliente (opcional)</h3><p className="text-caption">Pode ficar sem assinatura quando o cliente não estiver no local.</p></div>{customerSignature && <div className="grid gap-2 sm:grid-cols-2"><input value={customerName} onChange={(event) => setCustomerName(event.target.value)} placeholder="Nome do cliente" className="h-11 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-3 text-sm" /><input value={customerRole} onChange={(event) => setCustomerRole(event.target.value)} placeholder="Função ou vínculo (opcional)" className="h-11 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-3 text-sm" /></div>}<SignaturePad onChange={(value) => { if (!value) setCustomerSignature(null); }} onConfirm={setCustomerSignature} /></section>
+        </div>}
+        {error && <p className="rounded-[var(--radius-md)] bg-[var(--color-danger)]/10 p-3 text-sm text-[var(--color-danger)]">{error}</p>}
+      </div>
+    </Drawer>
+  );
+}
+
+function CancellationSuccessView({ document }: { document: DocumentRenderResult }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState<"share" | "download" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function fetchPdf(): Promise<File> {
+    const { blob, filename } = await documentsApi.downloadDocument(document.id);
+    return new File([blob], filename ?? `${document.number}.pdf`, { type: "application/pdf" });
+  }
+
+  async function download() {
+    setBusy("download"); setError(null);
+    try { triggerFileDownload(await fetchPdf()); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "Não foi possível baixar o relatório."); }
+    finally { setBusy(null); }
+  }
+
+  async function share() {
+    setBusy("share"); setError(null);
+    try {
+      const file = await fetchPdf();
+      const nav = navigator as Navigator & { canShare?: (data: ShareData) => boolean };
+      if (typeof nav.share === "function" && (!nav.canShare || nav.canShare({ files: [file] }))) {
+        await nav.share({ files: [file], title: document.number, text: `Relatório de cancelamento ${document.number}` });
+      } else {
+        triggerFileDownload(file);
+        setError("O compartilhamento nativo não está disponível. O PDF foi baixado para envio manual.");
+      }
+    } catch (cause) {
+      if (cause instanceof DOMException && cause.name === "AbortError") return;
+      setError(cause instanceof Error ? cause.message : "Não foi possível compartilhar o relatório.");
+    } finally { setBusy(null); }
+  }
+
+  return (
+    <div className="min-h-[70dvh] grid place-items-center p-6 text-center">
+      <div className="w-full max-w-xs">
+        <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-[var(--color-success)]/12 text-[var(--color-success)]"><CheckCircle2 className="h-9 w-9" /></div>
+        <h1 className="mt-4 text-section-title">Cancelamento registrado</h1>
+        <p className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-[var(--color-primary)]/30 bg-[var(--color-primary)]/10 px-3 py-1 text-sm font-medium text-[var(--color-primary)]"><FileText className="h-4 w-4" /> {document.number}</p>
+        <p className="mt-2 text-sm text-[var(--color-muted-foreground)]">O relatório oficial foi gerado e o cancelamento foi enviado para decisão da gestão.</p>
+        {error && <p className="mt-3 rounded-[var(--radius-md)] border border-[var(--color-warning)]/30 bg-[var(--color-warning)]/10 px-3 py-2 text-left text-xs text-[var(--color-warning)]">{error}</p>}
+        <div className="mt-6 space-y-2">
+          <div className="flex gap-2">
+            <button type="button" onClick={() => void share()} disabled={busy !== null} className="flex h-12 flex-1 items-center justify-center gap-2 rounded-[var(--radius-md)] bg-[var(--color-primary)] text-sm font-semibold text-[var(--color-primary-foreground)] disabled:opacity-60">{busy === "share" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Share2 className="h-4 w-4" />} Compartilhar</button>
+            <button type="button" onClick={() => void download()} disabled={busy !== null} className="inline-flex h-12 items-center justify-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] px-4 text-sm font-medium disabled:opacity-60">{busy === "download" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />} Baixar</button>
+          </div>
+          <button type="button" onClick={() => router.push("/operator/documents")} className="h-12 w-full rounded-[var(--radius-md)] border border-[var(--color-border)] text-sm font-medium">Ver em Documentos</button>
+          <button type="button" onClick={() => router.push("/operator/services")} className="h-12 w-full rounded-[var(--radius-md)] border border-[var(--color-border)] text-sm font-medium">Minhas ordens</button>
+          <button type="button" onClick={() => router.push("/operator")} className="h-12 w-full rounded-[var(--radius-md)] border border-[var(--color-border)] text-sm font-medium">Voltar ao início</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function triggerFileDownload(file: File) {
+  const url = URL.createObjectURL(file);
+  const anchor = window.document.createElement("a");
+  anchor.href = url; anchor.download = file.name;
+  window.document.body.appendChild(anchor); anchor.click(); anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
 function PmocFieldExecution({ operation, signatureMode, technicalSignature, configurationLoading, onSaved }: { operation: OperationDetail; signatureMode: SignatureMode | null; technicalSignature: Signature | null; configurationLoading: boolean; onSaved: () => void }) {

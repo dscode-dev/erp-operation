@@ -92,7 +92,12 @@ export class OperationAccessService {
       },
       select: { id: true },
     });
-    if (!allowed) await this.deny(actor, operationId, target, 'NO_ACTIVE_ASSIGNMENT');
+    if (allowed) return;
+    const pendingCancellation = await this.prisma.operationCancellation.findFirst({
+      where: { operationId, requestedById: actor.id, status: 'REQUESTED' },
+      select: { id: true },
+    });
+    if (!pendingCancellation) await this.deny(actor, operationId, target, 'NO_ACTIVE_ASSIGNMENT');
   }
 
   async assertOperationBackedResourceAccess(
@@ -116,7 +121,10 @@ export class OperationAccessService {
     const allowed = await this.prisma.operationPhoto.findFirst({
       where: {
         id: photoId,
-        operation: { assignments: { some: this.assignmentFilter(actor.id) } },
+        OR: [
+          { operation: { assignments: { some: this.assignmentFilter(actor.id) } } },
+          { cancellation: { is: { requestedById: actor.id, status: 'REQUESTED' } } },
+        ],
       },
       select: { id: true },
     });

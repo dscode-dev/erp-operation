@@ -1,5 +1,42 @@
 # API Contracts
 
+## Cancelamento de Operation
+
+### `POST /api/v1/operations/:id/cancellation`
+
+Somente o OPERATOR primário da Operation ainda não concluída.
+
+```json
+{
+  "reason": "Cliente não se encontrava no local",
+  "technicalSignatureId": "uuid",
+  "customerSignatureData": "data:image/png;base64,...",
+  "customerSignerName": "Nome opcional",
+  "customerSignerRole": "Responsável",
+  "customerSignedAt": "2026-08-02T14:30:00.000Z",
+  "photos": [{ "dataUrl": "data:image/jpeg;base64,...", "caption": "Local fechado" }]
+}
+```
+
+Assinatura do cliente e fotos são opcionais; assinatura técnica própria ativa e motivo são
+obrigatórios. Até seis evidências PNG/JPEG de 5 MiB.
+
+### `PATCH /api/v1/operations/:id/cancellation/reschedule`
+
+OWNER/MANAGER. Reabre a mesma Operation e o mesmo Assignment.
+
+```json
+{ "assignedTo": "uuid", "scheduledFor": "2026-08-05T13:00:00.000Z", "notes": "Nova visita" }
+```
+
+### `PATCH /api/v1/operations/:id/cancellation/approve`
+
+OWNER/MANAGER. Confirma definitivamente o cancelamento. Payload opcional: `{ "notes": "..." }`.
+
+`GET /operations?status=CANCELED` inclui cancelamentos definitivos e solicitações `REQUESTED`.
+As respostas de Operation incluem `cancellations[]` sanitizado, sem assinatura binária,
+`storageKey` ou paths.
+
 ## Compatibilidade de migrations
 
 As migrations recentes são aditivas e não removem contratos:

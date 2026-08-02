@@ -1,5 +1,19 @@
 # Backend State
 
+## Cancelamento operacional documentado — 2026-08-02
+
+- `OperationCancellation` registra a solicitação do técnico, motivo, evidências, assinatura técnica,
+  assinatura opcional do cliente e decisão da gestão.
+- Estados: `REQUESTED`, `RESCHEDULED` e `APPROVED`. A Operation permanece em `REVIEW` durante a
+  análise, volta a `PENDING` no reagendamento e somente recebe `CANCELED` após aprovação.
+- O Assignment é marcado `REJECTED` na solicitação, reutilizado no reagendamento e finalizado como
+  `CANCELED` na aprovação. Todo movimento gera `AssignmentHistory` e `AuditLog` append-only.
+- O relatório de cancelamento reutiliza o documento `WORK_ORDER` e o fluxo
+  `DocumentContext → Builder → Renderer → PdfEngine → Storage`.
+- Evidências usam `OperationPhoto.cancellationId`; fotos de uma tentativa cancelada não vazam para
+  uma execução posteriormente reagendada.
+- Migration aditiva: `20260802120000_operation_cancellation_workflow`.
+
 ## Certificação das migrations recentes para produção (2026-07-28)
 
 - As migrations `20260728180000`, `20260728181000` e `20260728190000` foram ensaiadas sobre clone

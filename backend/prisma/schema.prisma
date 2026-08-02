@@ -78,6 +78,12 @@ enum OperationStatus {
   CANCELED
 }
 
+enum OperationCancellationStatus {
+  REQUESTED
+  RESCHEDULED
+  APPROVED
+}
+
 enum OperationMaintenanceType {
   WEEKLY
   MONTHLY
@@ -548,6 +554,8 @@ model User {
   documentsFinalized       OperationDocument[]    @relation("DocumentFinalizedBy")
   documentRevisions        DocumentRevision[]
   operationPhotosCreated   OperationPhoto[]       @relation("OperationPhotoCreatedBy")
+  operationCancellationsRequested OperationCancellation[] @relation("OperationCancellationRequestedBy")
+  operationCancellationsResolved  OperationCancellation[] @relation("OperationCancellationResolvedBy")
   institutionalSignature   Signature?             @relation("UserInstitutionalSignature")
   salesCreated             Sale[]                 @relation("SaleCreatedBy")
   saleHistoryEvents        SaleHistory[]          @relation("SaleHistoryActor")
@@ -697,6 +705,7 @@ model Signature {
   organization        Organization                @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   user                User?                       @relation("UserInstitutionalSignature", fields: [userId], references: [id], onDelete: SetNull)
   selectedDocuments   OperationDocument[]         @relation("DocumentTechnicalSignature")
+  operationCancellations OperationCancellation[]
 
   @@index([organizationId, active, position])
   @@index([userId])
@@ -1039,6 +1048,7 @@ model Operation {
   maintenanceReminder             MaintenanceReminder?
   sourceSaleId                    String?                             @map("source_sale_id") @db.Uuid
   sourceSale                      Sale?                               @relation(fields: [sourceSaleId], references: [id], onDelete: SetNull)
+  cancellations                  OperationCancellation[]
 
   @@index([customerId, createdAt])
   @@index([equipmentId, createdAt])
@@ -1191,6 +1201,7 @@ model Assignment {
   assigner        User                @relation("AssignmentAssignedBy", fields: [assignedBy], references: [id], onDelete: Restrict)
   assignee        User                @relation("AssignmentAssignedTo", fields: [assignedTo], references: [id], onDelete: Restrict)
   history         AssignmentHistory[]
+  cancellations   OperationCancellation[]
 
   @@unique([operationId, assignedTo], map: "assignments_operation_assignee_uq")
   @@index([operationId, isPrimary], map: "assignments_operation_primary_idx")
@@ -1226,6 +1237,7 @@ model OperationPhoto {
   id          String    @id @default(uuid()) @db.Uuid
   operationId String    @map("operation_id") @db.Uuid
   createdById String?   @map("created_by_id") @db.Uuid
+  cancellationId String? @map("cancellation_id") @db.Uuid
   storageKey  String    @unique @map("storage_key") @db.VarChar(255)
   caption     String?   @db.VarChar(255)
   mimeType    String    @map("mime_type") @db.VarChar(100)
@@ -1233,10 +1245,48 @@ model OperationPhoto {
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   operation   Operation @relation(fields: [operationId], references: [id], onDelete: Cascade)
   createdBy   User?     @relation("OperationPhotoCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  cancellation OperationCancellation? @relation(fields: [cancellationId], references: [id], onDelete: Cascade)
 
   @@index([operationId, createdAt])
   @@index([createdById, createdAt])
+  @@index([cancellationId, createdAt])
   @@map("operation_photos")
+}
+
+/// Solicitação documentada de cancelamento feita pelo técnico em campo.
+/// O registro é preservado quando a operação é reagendada e somente a gestão
+/// pode convertê-lo em cancelamento definitivo.
+model OperationCancellation {
+  id                    String                      @id @default(uuid()) @db.Uuid
+  operationId           String                      @map("operation_id") @db.Uuid
+  assignmentId          String                      @map("assignment_id") @db.Uuid
+  requestedById         String                      @map("requested_by_id") @db.Uuid
+  technicalSignatureId  String                      @map("technical_signature_id") @db.Uuid
+  status                OperationCancellationStatus @default(REQUESTED)
+  reason                String                      @db.Text
+  customerSignatureData String?                     @map("customer_signature_data") @db.Text
+  customerSignerName    String?                     @map("customer_signer_name") @db.VarChar(180)
+  customerSignerRole    String?                     @map("customer_signer_role") @db.VarChar(120)
+  customerSignedAt      DateTime?                   @map("customer_signed_at") @db.Timestamptz(3)
+  requestedAt           DateTime                    @default(now()) @map("requested_at") @db.Timestamptz(3)
+  resolvedById          String?                     @map("resolved_by_id") @db.Uuid
+  resolvedAt            DateTime?                   @map("resolved_at") @db.Timestamptz(3)
+  rescheduledFor        DateTime?                   @map("rescheduled_for") @db.Timestamptz(3)
+  resolutionNotes       String?                     @map("resolution_notes") @db.Text
+  createdAt             DateTime                    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime                    @updatedAt @map("updated_at") @db.Timestamptz(3)
+  operation             Operation                   @relation(fields: [operationId], references: [id], onDelete: Cascade)
+  assignment            Assignment                  @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+  requestedBy           User                        @relation("OperationCancellationRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict)
+  resolvedBy            User?                       @relation("OperationCancellationResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
+  technicalSignature    Signature                   @relation(fields: [technicalSignatureId], references: [id], onDelete: Restrict)
+  photos                OperationPhoto[]
+
+  @@index([operationId, requestedAt])
+  @@index([assignmentId, requestedAt])
+  @@index([status, requestedAt])
+  @@index([requestedById, requestedAt])
+  @@map("operation_cancellations")
 }
 
 /// A document produced from an Operation. The same record backs every document
