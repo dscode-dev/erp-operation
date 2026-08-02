@@ -115,6 +115,16 @@ const DOCUMENT_CONTEXT_OPERATION_INCLUDE = {
     },
   },
   photos: { orderBy: { createdAt: 'asc' as const } },
+  cancellations: {
+    orderBy: { requestedAt: 'desc' as const },
+    take: 1,
+    include: {
+      requestedBy: { select: { id: true, name: true, username: true, jobTitle: true } },
+      resolvedBy: { select: { id: true, name: true, username: true, jobTitle: true } },
+      technicalSignature: true,
+      photos: { orderBy: { createdAt: 'asc' as const } },
+    },
+  },
   documents: {
     orderBy: { createdAt: 'asc' as const },
     include: {
@@ -360,6 +370,13 @@ export class DocumentContextService {
         ? operation.maintenanceExecution?.plan.pmocPlan?.signatureOverride
         : null,
       handoff,
+    );
+    const cancellation = operation.cancellations?.[0] ?? null;
+    const cancellationDocument = cancellation?.status === 'REQUESTED' || cancellation?.status === 'APPROVED';
+    // Evidências de uma tentativa cancelada nunca vazam para uma execução
+    // posteriormente reagendada. O mesmo Context alimenta Preview e PDF.
+    operation.photos = operation.photos.filter((photo) =>
+      cancellationDocument ? photo.cancellationId === cancellation.id : (photo.cancellationId ?? null) === null,
     );
     const usesOperationPhotos = true;
     const usesEquipmentQr =

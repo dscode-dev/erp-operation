@@ -954,6 +954,22 @@ Execuções.
 - Essas células não são envolvidas pelo `rowHref`, evitando elementos interativos aninhados e
   navegação acidental.
 - A tabela de equipamentos do cliente utiliza essa opção no botão Editar.
+
+## `OperationCancellationWizard`
+
+Wizard mobile em dois passos que reutiliza `PhotoInput`, `OperatorSignatureChoice`, `SignaturePad`,
+e `Drawer`. Evidências ficam locais até a confirmação final.
+
+## `CancellationSuccessView`
+
+Estado final do cancelamento no Operator. Recebe o documento emitido e oferece download autenticado,
+Web Share API com fallback para download e atalhos para Documentos, Minhas ordens e Início. O relatório
+não é aberto automaticamente.
+
+## `CancellationReviewSection`
+
+Bloco de gestão no `OperationDetailDrawer`: apresenta motivo/evidências e orquestra Render oficial,
+reagendamento e aprovação do cancelamento.
 # PMOC por equipamento
 
 - `PmocEquipmentExecutionWizard`: componente compartilhado entre Platform e Operator para

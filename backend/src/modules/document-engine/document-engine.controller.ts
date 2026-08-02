@@ -65,7 +65,7 @@ export class DocumentEngineController {
     );
   }
 
-  @Roles(Role.OWNER, Role.MANAGER)
+  @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR)
   @Post('operations/:operationId/:type/render')
   renderOperation(
     @Param() params: OperationDocumentParamsDto,

@@ -1402,3 +1402,19 @@ Status: concluído.
   O clique abre somente o drawer de edição; clicar nos demais campos continua abrindo o detalhe
   do equipamento.
 - Nenhum contrato de API, entidade ou migration foi alterado.
+
+# Cancelamento de atendimento no Operator — 2026-08-02
+
+- O botão “Cancelar atendimento” permanece visível antes da conclusão, inclusive após o início.
+- O wizard coleta evidências e depois motivo, assinatura técnica própria e assinatura opcional do
+  cliente; somente a confirmação final persiste a solicitação e gera o PDF oficial.
+- O resumo do atendimento passou a mostrar telefone principal/secundário do cliente.
+- Operações exibe “Cancelado pelo operador”, “Reagendado” e “Cancelamento aceito” conforme a
+  projeção oficial. O drawer permite gerar relatório, reagendar e aprovar/finalizar.
+
+## Refinamento da conclusão do cancelamento — 2026-08-02
+
+- A confirmação usa o rótulo compacto “Confirmar cancelamento”, adequado à largura mobile.
+- Após a emissão, o app não abre mais o visualizador automaticamente: apresenta a mesma experiência
+  de conclusão dos atendimentos, com Compartilhar, Baixar, Documentos, Minhas ordens e Início.
+- O status pendente na tabela da Platform foi compactado para “Cancelada · operador” e não quebra linha.

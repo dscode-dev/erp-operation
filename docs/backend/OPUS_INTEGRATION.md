@@ -2076,3 +2076,12 @@ documentados e termina no download/compartilhamento autenticado do Document Engi
 Assinaturas técnicas são elegíveis quando `Signature.userId` referencia um OWNER ativo e a
 assinatura possui imagem. A associação é administrada em Configurações > Assinaturas; não inferir
 responsabilidade técnica pelo nome, cargo ou assinatura padrão.
+# Cancelamento operacional — 2026-08-02
+
+- O detalhe do Assignment oferece cancelamento nos estados `ASSIGNED`, `ACCEPTED`, `STARTED` e
+  `PAUSED`.
+- O wizard possui somente Evidências e Motivo/Assinaturas. Nada é persistido antes da confirmação.
+- `Operation.cancellations[0]` fornece status, motivo, ator, datas, assinatura técnica pública e
+  metadados das fotos. Conteúdo das imagens continua em `/operations/photos/:photoId`.
+- Na gestão, `REQUESTED` permite Render oficial, reagendamento ou aprovação definitiva.
+- Nunca renderizar `customerSignatureData`, metadata como HTML ou qualquer path de Storage.

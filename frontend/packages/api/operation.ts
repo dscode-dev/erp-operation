@@ -10,6 +10,7 @@ import { api } from './client';
 import type {
   CreateOperationPayload,
   OperationDetail,
+  OperationCancellation,
   OperationStats,
   OperationSummary,
   OperationStatus,
@@ -124,6 +125,30 @@ export function updateOperation(
 /** Technical-responsible approval: REVIEW → COMPLETED (OWNER/MANAGER). */
 export function approveOperation(id: string): Promise<OperationDetail> {
   return api.patch<OperationDetail>(`/operations/${id}/approve`);
+}
+
+export function requestOperationCancellation(id: string, payload: {
+  reason: string;
+  technicalSignatureId: string;
+  customerSignatureData?: string;
+  customerSignerName?: string;
+  customerSignerRole?: string;
+  customerSignedAt?: string;
+  photos?: Array<{ dataUrl: string; caption?: string | null }>;
+}): Promise<OperationCancellation> {
+  return api.post<OperationCancellation>(`/operations/${id}/cancellation`, payload);
+}
+
+export function rescheduleCanceledOperation(id: string, payload: {
+  assignedTo: string;
+  scheduledFor: string;
+  notes?: string;
+}): Promise<OperationCancellation> {
+  return api.patch<OperationCancellation>(`/operations/${id}/cancellation/reschedule`, payload);
+}
+
+export function approveOperationCancellation(id: string, notes?: string): Promise<OperationCancellation> {
+  return api.patch<OperationCancellation>(`/operations/${id}/cancellation/approve`, { notes });
 }
 
 export function getOperationPhoto(

@@ -746,6 +746,19 @@ O wizard abre na rota atual. Preview, render e download continuam no drawer com
 
 - A Ordem de Serviço fornece cliente, endereço e conteúdo para preenchimento inicial.
 - A data do Recibo é sempre iniciada com a data local da nova emissão e permanece editável.
+
+## `/operator/services/:id` — cancelamento
+
+- Atendimentos não concluídos oferecem “Cancelar atendimento”.
+- Após confirmar, o PDF oficial é gerado e a própria rota apresenta a tela de conclusão.
+- A conclusão oferece Compartilhar, Baixar, Ver em Documentos, Minhas ordens e Voltar ao início;
+  o visualizador não é aberto automaticamente.
+- Telefone do cliente aparece no cartão operacional do topo.
+
+## `/operacoes` — análise de cancelamentos
+
+- O filtro Canceladas inclui solicitações do operador e cancelamentos aprovados.
+- O drawer da Operation concentra relatório, reagendamento e aprovação definitiva.
 # PMOC no Operator
 
 - `/operator/atendimento`: para OWNER, a opção “Executar PMOC” seleciona plano ativo e equipamento

@@ -13,10 +13,15 @@ import {
   UpdateOperationPhotoDto,
 } from './dto/operation.dto';
 import { OperationsService, type OperationAuditContext } from './operations.service';
+import { OperationCancellationsService } from './operation-cancellations.service';
+import { ApproveOperationCancellationDto, RequestOperationCancellationDto, RescheduleCanceledOperationDto } from './dto/operation-cancellation.dto';
 
 @Controller('operations')
 export class OperationsController {
-  constructor(private readonly operations: OperationsService) {}
+  constructor(
+    private readonly operations: OperationsService,
+    private readonly cancellations: OperationCancellationsService,
+  ) {}
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR, Role.VIEWER)
   @Get()
@@ -93,6 +98,40 @@ export class OperationsController {
     @Req() request: RequestWithId,
   ): Promise<unknown> {
     return this.operations.approve(id, actor, this.context(request));
+  }
+
+  @Roles(Role.OPERATOR)
+  @RequirePermission('canReports')
+  @Post(':id/cancellation')
+  requestCancellation(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body() body: RequestOperationCancellationDto,
+    @CurrentUser() actor: AuthenticatedUser,
+    @Req() request: RequestWithId,
+  ): Promise<unknown> {
+    return this.cancellations.request(id, body, actor, this.context(request));
+  }
+
+  @Roles(Role.OWNER, Role.MANAGER)
+  @Patch(':id/cancellation/reschedule')
+  rescheduleCancellation(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body() body: RescheduleCanceledOperationDto,
+    @CurrentUser() actor: AuthenticatedUser,
+    @Req() request: RequestWithId,
+  ): Promise<unknown> {
+    return this.cancellations.reschedule(id, body, actor, this.context(request));
+  }
+
+  @Roles(Role.OWNER, Role.MANAGER)
+  @Patch(':id/cancellation/approve')
+  approveCancellation(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body() body: ApproveOperationCancellationDto,
+    @CurrentUser() actor: AuthenticatedUser,
+    @Req() request: RequestWithId,
+  ): Promise<unknown> {
+    return this.cancellations.approve(id, body, actor, this.context(request));
   }
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR)

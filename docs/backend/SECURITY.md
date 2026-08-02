@@ -1,5 +1,17 @@
 # Security
 
+## Cancelamento operacional
+
+- Somente o operador primário autenticado pode solicitar cancelamento e somente antes da conclusão.
+- A assinatura técnica deve estar ativa, possuir imagem e estar vinculada ao próprio ator.
+- Evidências validam Data URL, MIME declarado, assinatura binária, tamanho e quantidade.
+- Um índice parcial garante no máximo uma solicitação `REQUESTED` por Operation, inclusive sob
+  concorrência.
+- Reagendamento e aprovação são exclusivos de OWNER/MANAGER e executados em transação serializável.
+- Assignment `REJECTED` continua revogando acesso geral. A exceção é estrita e temporária para o
+  próprio solicitante acessar Preview/Render/Download do cancelamento enquanto `REQUESTED`.
+- Responses nunca expõem assinatura em Base64, `imageStorageKey`, paths ou chaves de Storage.
+
 ## Segurança de dados nas migrations recentes
 
 - Nenhuma migration executa `DELETE`, `DROP TABLE`, alteração de FK ou mudança destrutiva de tipo.

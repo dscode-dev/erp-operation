@@ -561,15 +561,20 @@ export class DocumentEngineService {
     const operation = document.operationId
       ? await this.prisma.operation.findUnique({
           where: { id: document.operationId },
-          select: { status: true, operatorId: true },
+          select: {
+            status: true,
+            operatorId: true,
+            cancellations: { where: { status: 'REQUESTED', requestedById: actor.id }, take: 1, select: { id: true } },
+          },
         })
       : null;
+    const pendingOwnCancellation = Boolean(operation?.cancellations.length);
     if (
       actor.role !== Role.OPERATOR ||
       !directType ||
       document.editorialStatus !== 'READY' ||
-      operation?.status !== 'COMPLETED' ||
-      operation.operatorId !== actor.id
+      (operation?.status !== 'COMPLETED' && !pendingOwnCancellation) ||
+      operation?.operatorId !== actor.id
     ) {
       throw new ApplicationException(
         ERROR_CODES.FORBIDDEN,

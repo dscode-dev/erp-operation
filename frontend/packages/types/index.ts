@@ -916,6 +916,27 @@ export type OperationPhoto = {
   createdBy: { id: string; name: string; role: Role } | null;
 };
 
+export type OperationCancellationStatus = 'REQUESTED' | 'RESCHEDULED' | 'APPROVED';
+
+export type OperationCancellation = {
+  id: string;
+  operationId: string;
+  assignmentId: string;
+  status: OperationCancellationStatus;
+  reason: string;
+  requestedAt: string;
+  resolvedAt: string | null;
+  rescheduledFor: string | null;
+  resolutionNotes: string | null;
+  customerSignerName: string | null;
+  customerSignerRole: string | null;
+  customerSignedAt: string | null;
+  requestedBy: { id: string; name: string; role: Role };
+  resolvedBy: { id: string; name: string; role: Role } | null;
+  technicalSignature: Pick<Signature, 'id' | 'name' | 'title' | 'profession' | 'professionalCouncil' | 'registrationNumber' | 'department' | 'active' | 'isDefault'>;
+  photos: OperationPhoto[];
+};
+
 export type OperationSummary = {
   id: string;
   number: number;
@@ -925,7 +946,7 @@ export type OperationSummary = {
   status: OperationStatus;
   /** Informação operacional da OS; não compõe Preview/PDF nem o Financial Core. */
   serviceValue?: string | number | null;
-  customer: { id: string; name: string } | null;
+  customer: { id: string; name: string; tradeName?: string | null; phone?: string | null; secondaryPhone?: string | null } | null;
   equipment: { id: string; name: string } | null;
   operator: { id: string; name: string } | null;
   scheduledFor: string | null;
@@ -934,6 +955,7 @@ export type OperationSummary = {
   createdAt: string;
   updatedAt: string;
   documents: OperationDocument[];
+  cancellations?: OperationCancellation[];
   _count?: { photos: number; documents: number };
 };
 
@@ -967,6 +989,7 @@ export type OperationDetail = Omit<OperationSummary, 'equipment'> & {
     capacity: string | null;
   } | null;
   checklist: OperationChecklistItem[];
+  cancellations: OperationCancellation[];
   observations: string | null;
   reportedIssue: string | null;
   serviceDescription: string | null;
