@@ -1418,3 +1418,13 @@ Status: concluído.
 - Após a emissão, o app não abre mais o visualizador automaticamente: apresenta a mesma experiência
   de conclusão dos atendimentos, com Compartilhar, Baixar, Documentos, Minhas ordens e Início.
 - O status pendente na tabela da Platform foi compactado para “Cancelada · operador” e não quebra linha.
+# Equipamentos coletados no atendimento e encerramento de drafts — 2026-08-03
+
+- O wizard de execução atribuída detecta OS sem equipamento e permite selecionar ativos existentes
+  ou cadastrar vários equipamentos encontrados em campo.
+- Tipo, marca, modelo e capacidade são validados antes do avanço; os dados persistidos alimentam o
+  resumo, Preview e PDF oficial.
+- A Central de Relatórios desativa o autosave assim que o registro documental é materializado e
+  limpa novamente o draft ao finalizar ou renderizar, impedindo sua reaparição após a conclusão.
+- Identificadores locais do formulário possuem fallback para WebViews sem `crypto.randomUUID`, sem
+  alterar os UUIDs persistidos pelo backend.

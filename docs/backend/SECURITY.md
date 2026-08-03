@@ -2299,3 +2299,13 @@ The catalog is scoped to the installation Organization in every query. Reads req
   monotônica.
 - Preview, render e download permanecem autenticados; nenhum caminho, chave de Storage, Base64 de
   PDF ou URL pública é exposto.
+# Segurança — cadastro de equipamento em campo
+
+- O cadastro genérico de equipamentos permanece restrito a OWNER/MANAGER.
+- O Operator recebe somente a capability contextual `POST /operations/:id/equipments`.
+- O backend valida Assignment/ownership, `canReports`, estado `IN_PROGRESS`, ausência de vínculo
+  anterior, cliente, atividade do equipamento existente e catálogo técnico ativo.
+- `customerId` e `addressId` são sempre obtidos da Operation, impedindo mass assignment e IDOR
+  entre clientes.
+- Advisory lock por Operation e transação `Serializable` impedem cadastros concorrentes ou
+  vínculos parciais. Todo equipamento criado e vínculo efetuado gera auditoria append-only.

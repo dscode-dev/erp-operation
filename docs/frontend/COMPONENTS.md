@@ -978,3 +978,8 @@ reagendamento e aprovação do cancelamento.
   `PmocExecutionRequest` oficial e abre o componente compartilhado.
 - `SuccessView`: reutilizado após PMOC para download binário e Web Share API, com fallback seguro
   para download.
+# `FieldEquipmentCollection`
+
+Bloco contextual do `ExecucaoWizard` mostrado somente quando a OS atribuída não possui equipamento.
+Combina `MultiSelect` dos ativos do cliente com formulários repetíveis para cadastro em campo. A
+persistência ocorre em lote antes de sair do passo Conteúdo.

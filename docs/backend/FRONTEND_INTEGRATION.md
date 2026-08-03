@@ -2708,3 +2708,11 @@ oficial da solicitação.
 - O app nunca cria `PmocPlan`, nunca acessa Storage e nunca recebe `storageKey` ou Base64 do PDF.
 - Em Configurações > Assinaturas, associe a assinatura institucional ao respectivo OWNER para que o
   Wizard PMOC o reconheça como técnico responsável. Mais de um OWNER pode ser configurado.
+# OS atribuída sem equipamentos — integração mobile
+
+Quando `operation.equipment === null` e `operation.inspectedEquipments` estiver vazio, o wizard
+de campo deve permitir selecionar ativos existentes do cliente ou informar novos equipamentos.
+Antes de avançar do passo Conteúdo, enviar todos de uma vez para
+`POST /operations/:id/equipments`. A resposta substitui a fonte local de equipamentos e deve ser
+usada em `PATCH /operations/:id`, Preview e PDF. Não enviar `customerId` ou `addressId`: o backend
+os deriva da OS e rejeita vínculos cruzados.

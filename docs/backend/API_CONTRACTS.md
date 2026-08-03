@@ -6132,3 +6132,37 @@ Criação, edição, reordenação, ativação/desativação e exclusão utiliza
 - Prefill e geração retornam/persistem apenas esse equipamento em `inspectedEquipments`.
 - `operation.photos` aceita no máximo seis evidências; violações retornam
   `400 VALIDATION_ERROR`.
+# Equipamentos coletados durante a execução da OS
+
+## `POST /api/v1/operations/:id/equipments`
+
+Permissão: somente `OPERATOR` com `canReports`, Assignment próprio ativo e Operation
+`IN_PROGRESS` ainda sem equipamentos.
+
+Request:
+
+```json
+{
+  "existingEquipmentIds": ["uuid"],
+  "newEquipments": [
+    {
+      "equipmentTypeCatalogId": "uuid",
+      "sector": "Sala técnica",
+      "manufacturer": "Carrier",
+      "model": "42X",
+      "capacity": "18.000 BTU/h",
+      "serialNumber": "ABC123",
+      "voltage": "220 V"
+    }
+  ]
+}
+```
+
+Ao menos uma das listas precisa possuir itens; o total combinado é limitado a 20. Novos itens
+exigem tipo técnico ativo e ao menos marca ou modelo. Cliente e endereço nunca são aceitos do
+frontend: são derivados da Operation.
+
+Response `201`: `OperationDetail` atualizado, incluindo `equipment` e `inspectedEquipments`.
+
+Erros: `400 OPERATION_EQUIPMENT_INVALID`, `400 TECHNICAL_CATALOG_NOT_FOUND`,
+`403 FORBIDDEN`, `404 OPERATION_NOT_FOUND`, `409 OPERATION_INVALID_TRANSITION`.

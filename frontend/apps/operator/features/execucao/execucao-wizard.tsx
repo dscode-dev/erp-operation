@@ -14,7 +14,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import {
   Building2, Camera, Check, CheckCircle2, Circle, ClipboardList, FileText,
-  MapPin, Package, PenLine, Send, Wrench,
+  MapPin, Package, PenLine, Plus, Send, Trash2, Wrench,
 } from "lucide-react";
 import { WizardProgressHeader } from "@erp/ui/wizard/progress-header";
 import { WizardFooter } from "@erp/ui/wizard/step-footer";
@@ -25,9 +25,9 @@ import { PhotoInput, type CapturedPhoto } from "@erp/ui/photo-input";
 import { SignaturePad } from "@erp/ui/documents/signature-pad";
 import {
   assignmentsApi, documentsApi, equipmentsApi, inventoryApi, operationApi, technicalCatalogsApi, useQuery,
-  type DocumentKind, type EquipmentSummary, type InventoryItem, type OperationChecklistItem,
+  type DocumentKind, type EquipmentSummary, type FieldEquipmentDraft, type InventoryItem, type OperationChecklistItem,
   type OperationDetail, type OperationMaintenanceChecklistItem, type OperationMaintenanceType,
-  type OperationPart, type Product,
+  type OperationPart, type Product, type TechnicalCatalog,
 } from "@erp/api";
 import { DOCUMENT_KIND_LABEL } from "@erp/types";
 import { serviceTypeLabel } from "@operator/lib/service-types";
@@ -46,6 +46,29 @@ type EquipmentProfileDraft = {
   model: string;
   capacity: string;
 };
+type NewFieldEquipmentDraft = FieldEquipmentDraft & { localId: string };
+
+function emptyFieldEquipment(): NewFieldEquipmentDraft {
+  return {
+    localId: localFieldEquipmentId(),
+    equipmentTypeCatalogId: "",
+    sector: "",
+    manufacturer: "",
+    model: "",
+    serialNumber: "",
+    capacity: "",
+    voltage: "",
+    tag: "",
+    observations: "",
+  };
+}
+
+function localFieldEquipmentId(): string {
+  const randomUUID = globalThis.crypto?.randomUUID;
+  if (typeof randomUUID === "function") return randomUUID.call(globalThis.crypto);
+  // Identificador apenas para estado/chave React — não é persistido nem usado como UUID de domínio.
+  return `field-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
 
 export function ExecucaoWizard({ assignmentId }: { assignmentId: string }) {
   const router = useRouter();
@@ -90,6 +113,9 @@ function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; oper
       ? operation.inspectedEquipments.map((item) => item.equipmentId)
       : operation.equipment ? [operation.equipment.id] : [],
   );
+  const initiallyUnassigned = operation.inspectedEquipments.length === 0 && !operation.equipment;
+  const [fieldInspections, setFieldInspections] = useState<OperationDetail["inspectedEquipments"]>([]);
+  const [newFieldEquipments, setNewFieldEquipments] = useState<NewFieldEquipmentDraft[]>([]);
   const [issue, setIssue] = useState(operation.reportedIssue ?? "");
   const [diagnosis, setDiagnosis] = useState(operation.technicalDiagnosis ?? "");
   const [service, setService] = useState(operation.serviceDescription ?? "");
@@ -132,6 +158,10 @@ function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; oper
     (signal) => equipmentsApi.listEquipments({ customerId: operation.customer?.id, page: 1, limit: 100, signal }),
     [operation.customer?.id],
   );
+  const equipmentTypes = useQuery(
+    (signal) => initiallyUnassigned ? technicalCatalogsApi.listEquipmentTypes({ signal }) : Promise.resolve([]),
+    [initiallyUnassigned],
+  );
   const materials = useQuery((signal) => inventoryApi.listOperationMaterials(operation.id, { signal }), [operation.id]);
   const rvtChecklistCatalog = useQuery(
     async (signal) => type === "TECHNICAL_REPORT"
@@ -144,32 +174,48 @@ function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; oper
       new Set([
         ...operation.inspectedEquipments.map((item) => item.equipmentId),
         ...(operation.equipment ? [operation.equipment.id] : []),
+        ...fieldInspections.map((item) => item.equipmentId),
       ]),
-    [operation],
+    [fieldInspections, operation],
   );
+  const fieldCollectionPending = initiallyUnassigned && fieldInspections.length === 0;
   const equipmentOptions = useMemo(
-    () =>
-      (equipments.data?.items ?? [])
-        .filter((item) => authorizedEquipmentIds.has(item.id))
+    () => {
+      const persisted = (equipments.data?.items ?? [])
+        .filter((item) => fieldCollectionPending || authorizedEquipmentIds.has(item.id))
         .map((item) => ({
           value: item.id,
           label:
             [item.manufacturer, item.model, item.capacity].filter(Boolean).join(" - ") ||
             item.name,
           description: item.sector || "Setor não informado",
-        })),
-    [authorizedEquipmentIds, equipments.data],
+        }));
+      const persistedIds = new Set(persisted.map((item) => item.value));
+      const collected = fieldInspections
+        .filter((item) => !persistedIds.has(item.equipmentId))
+        .map((item) => ({
+          value: item.equipmentId,
+          label:
+            [item.equipment?.manufacturer ?? item.brandSnapshot, item.equipment?.model ?? item.modelSnapshot, item.equipment?.capacity ?? item.capacitySnapshot]
+              .filter(Boolean)
+              .join(" - ") || item.equipment?.name || "Equipamento",
+          description: item.equipment?.sector || item.sector || "Setor não informado",
+        }));
+      return [...persisted, ...collected];
+    },
+    [authorizedEquipmentIds, equipments.data, fieldCollectionPending, fieldInspections],
   );
   const requiredEquipmentProfileFields = useMemo(
     () =>
       Object.fromEntries(
         [...authorizedEquipmentIds].map((id) => {
           const inspected = operation.inspectedEquipments.find((item) => item.equipmentId === id);
+          const fieldInspection = fieldInspections.find((item) => item.equipmentId === id);
           const primary = operation.equipment?.id === id ? operation.equipment : null;
           const profile = {
-            manufacturer: inspected?.equipment?.manufacturer ?? inspected?.brandSnapshot ?? primary?.manufacturer ?? "",
-            model: inspected?.equipment?.model ?? inspected?.modelSnapshot ?? primary?.model ?? "",
-            capacity: inspected?.equipment?.capacity ?? inspected?.capacitySnapshot ?? primary?.capacity ?? "",
+            manufacturer: fieldInspection?.equipment?.manufacturer ?? fieldInspection?.brandSnapshot ?? inspected?.equipment?.manufacturer ?? inspected?.brandSnapshot ?? primary?.manufacturer ?? "",
+            model: fieldInspection?.equipment?.model ?? fieldInspection?.modelSnapshot ?? inspected?.equipment?.model ?? inspected?.modelSnapshot ?? primary?.model ?? "",
+            capacity: fieldInspection?.equipment?.capacity ?? fieldInspection?.capacitySnapshot ?? inspected?.equipment?.capacity ?? inspected?.capacitySnapshot ?? primary?.capacity ?? "",
           };
           return [
             id,
@@ -179,7 +225,7 @@ function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; oper
           ];
         }),
       ) as Record<string, Array<keyof EquipmentProfileDraft>>,
-    [authorizedEquipmentIds, operation],
+    [authorizedEquipmentIds, fieldInspections, operation],
   );
   const incompleteEquipmentIds = useMemo(
     () =>
@@ -191,6 +237,13 @@ function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; oper
       (field) => Boolean(equipmentProfiles[id]?.[field]?.trim()),
     ),
   );
+  const fieldEquipmentDraftsValid = newFieldEquipments.every((item) =>
+    Boolean(item.equipmentTypeCatalogId && item.manufacturer?.trim() && item.model?.trim() && item.capacity?.trim()),
+  );
+  const fieldEquipmentSelectionValid = !fieldCollectionPending ||
+    (equipmentIds.length + newFieldEquipments.length > 0 &&
+      equipmentIds.length + newFieldEquipments.length <= 20 &&
+      fieldEquipmentDraftsValid);
 
   useEffect(() => {
     if (type !== "TECHNICAL_REPORT" || maintenanceChecklist.length || rvtChecklistCatalog.loading) return;
@@ -208,7 +261,7 @@ function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; oper
   const canFinish = (!technicalSignatureRequired || Boolean(technicalSignatureId)) && (!signatureRequired || (Boolean(signature) && signerName.trim().length > 0));
   const isLast = step === STEPS.length - 1;
   const canAdvance =
-    (step !== 1 || equipmentProfilesComplete) &&
+    (step !== 1 || (equipmentProfilesComplete && fieldEquipmentSelectionValid)) &&
     (step !== 4 || ((!technicalSignatureRequired || Boolean(technicalSignatureId)) && (!signatureRequired || (Boolean(signature) && signerName.trim().length > 0))));
 
   function back() {
@@ -217,12 +270,59 @@ function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; oper
   }
 
   async function next() {
-    if (!isLast) { setStep((s) => s + 1); return; }
+    if (!isLast) {
+      if (step === 1 && fieldCollectionPending) {
+        setSubmitting(true); setSubmitError(null);
+        try {
+          const updated = await operationApi.addFieldEquipments(operation.id, {
+            existingEquipmentIds: equipmentIds,
+            newEquipments: newFieldEquipments.map((item) => ({
+              equipmentTypeCatalogId: item.equipmentTypeCatalogId,
+              sector: item.sector?.trim() || undefined,
+              tag: item.tag?.trim() || undefined,
+              manufacturer: item.manufacturer?.trim() || undefined,
+              model: item.model?.trim() || undefined,
+              serialNumber: item.serialNumber?.trim() || undefined,
+              capacity: item.capacity?.trim() || undefined,
+              voltage: item.voltage?.trim() || undefined,
+              observations: item.observations?.trim() || undefined,
+            })),
+          });
+          setFieldInspections(updated.inspectedEquipments);
+          setEquipmentIds(updated.inspectedEquipments.map((item) => item.equipmentId));
+          setEquipmentProfiles((current) => Object.fromEntries(updated.inspectedEquipments.map((item) => [
+            item.equipmentId,
+            {
+              manufacturer: item.equipment?.manufacturer ?? item.brandSnapshot ?? current[item.equipmentId]?.manufacturer ?? "",
+              model: item.equipment?.model ?? item.modelSnapshot ?? current[item.equipmentId]?.model ?? "",
+              capacity: item.equipment?.capacity ?? item.capacitySnapshot ?? current[item.equipmentId]?.capacity ?? "",
+            },
+          ])));
+          setNewFieldEquipments([]);
+          if (updated.inspectedEquipments.some((item) =>
+            !item.equipment?.manufacturer?.trim() ||
+            !item.equipment?.model?.trim() ||
+            !item.equipment?.capacity?.trim(),
+          )) {
+            setSubmitError("Complete marca, modelo e capacidade dos equipamentos selecionados antes de continuar.");
+            return;
+          }
+        } catch (err) {
+          setSubmitError(err instanceof Error ? err.message : "Não foi possível cadastrar os equipamentos do atendimento.");
+          return;
+        } finally { setSubmitting(false); }
+      }
+      setStep((s) => s + 1);
+      return;
+    }
     setSubmitting(true);
     setSubmitError(null);
     try {
       const customerSignedAt = signature ? new Date().toISOString() : null;
       const equipmentMap = new Map((equipments.data?.items ?? []).map((item) => [item.id, item] as [string, EquipmentSummary]));
+      for (const item of fieldInspections) {
+        if (item.equipment) equipmentMap.set(item.equipmentId, item.equipment as EquipmentSummary);
+      }
       await operationApi.updateOperation(operation.id, {
         checklist,
         maintenanceType: type === "TECHNICAL_REPORT" ? maintenanceType : null,
@@ -345,13 +445,24 @@ function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; oper
               {managementAssigned && <span className="block text-[11px] text-[var(--color-muted-foreground)]">Definido pela gestão para este atendimento.</span>}
             </div>
             <MultiSelect label="Equipamentos envolvidos" value={equipmentIds} onChange={setEquipmentIds} options={equipmentOptions} placeholder="Selecionar equipamentos" />
+            {fieldCollectionPending && (
+              <FieldEquipmentCollection
+                drafts={newFieldEquipments}
+                equipmentTypes={equipmentTypes.data ?? []}
+                equipmentTypesLoading={equipmentTypes.loading}
+                onAdd={() => setNewFieldEquipments((current) => [...current, emptyFieldEquipment()])}
+                onRemove={(localId) => setNewFieldEquipments((current) => current.filter((item) => item.localId !== localId))}
+                onChange={(localId, field, value) => setNewFieldEquipments((current) => current.map((item) => item.localId === localId ? { ...item, [field]: value } : item))}
+              />
+            )}
             {incompleteEquipmentIds.length > 0 && (
               <EquipmentProfileCompletion
                 equipmentIds={incompleteEquipmentIds}
                 equipmentOptions={equipmentOptions}
                 requiredFields={requiredEquipmentProfileFields}
                 profiles={equipmentProfiles}
-                onChange={(equipmentId, field, value) =>
+                onChange={(equipmentId, field, value) => {
+                  setSubmitError(null);
                   setEquipmentProfiles((current) => ({
                     ...current,
                     [equipmentId]: {
@@ -360,8 +471,8 @@ function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; oper
                       capacity: current[equipmentId]?.capacity ?? "",
                       [field]: value,
                     },
-                  }))
-                }
+                  }));
+                }}
               />
             )}
             {type === "TECHNICAL_REPORT" ? <>
@@ -449,6 +560,62 @@ function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; oper
 }
 
 /* ---------- Steps ---------- */
+
+function FieldEquipmentCollection({
+  drafts,
+  equipmentTypes,
+  equipmentTypesLoading,
+  onAdd,
+  onRemove,
+  onChange,
+}: {
+  drafts: NewFieldEquipmentDraft[];
+  equipmentTypes: TechnicalCatalog[];
+  equipmentTypesLoading: boolean;
+  onAdd: () => void;
+  onRemove: (localId: string) => void;
+  onChange: (localId: string, field: keyof FieldEquipmentDraft, value: string) => void;
+}) {
+  return (
+    <section className="space-y-3 rounded-[var(--radius-lg)] border border-[var(--color-info)]/30 bg-[var(--color-info)]/5 p-3">
+      <div>
+        <h2 className="font-semibold">Equipamentos identificados em campo</h2>
+        <p className="text-caption">
+          A gestão não definiu equipamentos nesta OS. Selecione acima um equipamento já cadastrado
+          ou registre os encontrados no local. Os novos itens serão vinculados ao cliente e ao relatório.
+        </p>
+      </div>
+      {drafts.map((draft, index) => (
+        <div key={draft.localId} className="space-y-3 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] p-3">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-semibold">Novo equipamento {index + 1}</p>
+            <button type="button" onClick={() => onRemove(draft.localId)} className="inline-flex h-9 items-center gap-1 rounded-[var(--radius-md)] px-2 text-xs text-[var(--color-danger)]" aria-label={`Remover equipamento ${index + 1}`}><Trash2 className="h-4 w-4" /> Remover</button>
+          </div>
+          <label className="block space-y-1 text-sm">
+            <span className="font-medium">Tipo *</span>
+            <select value={draft.equipmentTypeCatalogId} onChange={(event) => onChange(draft.localId, "equipmentTypeCatalogId", event.target.value)} disabled={equipmentTypesLoading} className={inputCls}>
+              <option value="">{equipmentTypesLoading ? "Carregando tipos…" : "Selecione"}</option>
+              {equipmentTypes.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
+            </select>
+          </label>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <FieldEquipmentInput label="Marca *" value={draft.manufacturer ?? ""} onChange={(value) => onChange(draft.localId, "manufacturer", value)} />
+            <FieldEquipmentInput label="Modelo *" value={draft.model ?? ""} onChange={(value) => onChange(draft.localId, "model", value)} />
+            <FieldEquipmentInput label="Capacidade *" value={draft.capacity ?? ""} onChange={(value) => onChange(draft.localId, "capacity", value)} placeholder="Ex.: 18.000 BTU/h" />
+            <FieldEquipmentInput label="Setor / local" value={draft.sector ?? ""} onChange={(value) => onChange(draft.localId, "sector", value)} />
+            <FieldEquipmentInput label="Número de série" value={draft.serialNumber ?? ""} onChange={(value) => onChange(draft.localId, "serialNumber", value)} />
+            <FieldEquipmentInput label="Tensão" value={draft.voltage ?? ""} onChange={(value) => onChange(draft.localId, "voltage", value)} />
+          </div>
+        </div>
+      ))}
+      <button type="button" onClick={onAdd} disabled={drafts.length >= 20} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-[var(--radius-md)] border border-dashed border-[var(--color-primary)]/50 text-sm font-medium text-[var(--color-primary)] disabled:opacity-50"><Plus className="h-4 w-4" /> Adicionar outro equipamento</button>
+    </section>
+  );
+}
+
+function FieldEquipmentInput({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (value: string) => void; placeholder?: string }) {
+  return <label className="block space-y-1 text-sm"><span className="font-medium">{label}</span><input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className={inputCls} /></label>;
+}
 
 function EquipmentProfileCompletion({
   equipmentIds,

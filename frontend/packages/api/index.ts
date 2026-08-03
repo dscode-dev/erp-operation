@@ -72,7 +72,7 @@ export type {
   PmocActiveCoverageConflict,
   PmocActiveCoverageResult,
 } from './pmoc';
-export type { OperationPhotoContent } from './operation';
+export type { FieldEquipmentDraft, OperationPhotoContent } from './operation';
 export type { DocumentCatalogItem } from './documents';
 export type { ListSignaturesParams, SignaturePayload } from './signatures';
 export type { ListAssetLifecycleParams } from './asset-lifecycle';

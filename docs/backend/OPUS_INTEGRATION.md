@@ -2085,3 +2085,12 @@ responsabilidade técnica pelo nome, cargo ou assinatura padrão.
   metadados das fotos. Conteúdo das imagens continua em `/operations/photos/:photoId`.
 - Na gestão, `REQUESTED` permite Render oficial, reagendamento ou aprovação definitiva.
 - Nunca renderizar `customerSignatureData`, metadata como HTML ou qualquer path de Storage.
+# Handoff — equipamento identificado pelo Operator
+
+- Gatilho: Operation atribuída em execução, sem `equipment` e sem `inspectedEquipments`.
+- Endpoint: `POST /operations/:id/equipments`.
+- UX: seleção múltipla de equipamentos existentes mais formulário repetível para novos ativos.
+- Campos mínimos adotados pelo app: tipo, marca, modelo e capacidade; setor, série e tensão são
+  opcionais.
+- Após sucesso, usar os `inspectedEquipments` retornados no resumo, Preview e conclusão.
+- O endpoint é one-shot: depois do primeiro vínculo, novas chamadas retornam conflito.

@@ -621,6 +621,7 @@ function ReportWorkflowDrawer({
   const draftEnabled = !initialOperationId && !initialSaleId;
   const draft = useLocalDraft<WorkflowForm>(`reports:new:${type}`, draftEnabled);
   const [recoveredAt, setRecoveredAt] = useState<string | null>(null);
+  const [draftMaterialized, setDraftMaterialized] = useState(false);
   const customers = useQuery<Paginated<Customer>>(
     (signal) => customersApi.listCustomers({ page: 1, limit: 100, signal }),
     [],
@@ -749,7 +750,7 @@ function ReportWorkflowDrawer({
 
   // Restaura o rascunho local uma vez, ao abrir o fluxo em branco.
   useEffect(() => {
-    if (!draftEnabled) return;
+    if (!draftEnabled || draftMaterialized) return;
     const stored = draft.read();
     if (stored) {
       setForm(stored.value);
@@ -762,11 +763,11 @@ function ReportWorkflowDrawer({
   // Autosave: persiste o formulário (debounced) enquanto houver conteúdo.
   const debouncedForm = useDebounce(form, 800);
   useEffect(() => {
-    if (!draftEnabled) return;
+    if (!draftEnabled || draftMaterialized) return;
     if (JSON.stringify(debouncedForm) === JSON.stringify(emptyForm)) return;
     draft.save(debouncedForm);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedForm, draftEnabled]);
+  }, [debouncedForm, draftEnabled, draftMaterialized]);
 
   useEffect(() => {
     if (initialOperationId) void selectOperation(initialOperationId);
@@ -1404,6 +1405,8 @@ function ReportWorkflowDrawer({
       setHandoff(documentDraft);
       setStep(type === 'RECEIPT' ? 4 : 3);
       // O registro já existe no backend — o rascunho local não é mais necessário.
+      // Desativa também o autosave; sem isso, o próximo debounce recriava a chave apagada.
+      setDraftMaterialized(true);
       draft.clear();
       setRecoveredAt(null);
     } catch (cause) {
@@ -1664,6 +1667,9 @@ function ReportWorkflowDrawer({
                       try {
                         await documentsApi.startHandoffReview(handoff.id);
                         setHandoff(await documentsApi.finalizeHandoffReview(handoff.id));
+                        setDraftMaterialized(true);
+                        draft.clear();
+                        setRecoveredAt(null);
                       } catch (cause) {
                         setError(message(cause));
                       }
@@ -1682,7 +1688,12 @@ function ReportWorkflowDrawer({
               }
               canRender={handoff?.editorialStatus === 'READY'}
               canDownload
-              onRendered={onRendered}
+              onRendered={() => {
+                setDraftMaterialized(true);
+                draft.clear();
+                setRecoveredAt(null);
+                onRendered();
+              }}
             />
           </div>
         )}

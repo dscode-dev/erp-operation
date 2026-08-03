@@ -765,3 +765,12 @@ O wizard abre na rota atual. Preview, render e download continuam no drawer com
   coberto. A rota não configura nem cria um plano PMOC.
 - Ao concluir, permanece na mesma rota exibindo ações para compartilhar, baixar ou abrir o
   Repositório Documental.
+# `/operator/execucao/:assignmentId` — OS sem equipamento
+
+No passo Conteúdo, uma OS sem ativos vinculados habilita coleta/cadastro de equipamentos. A rota
+permanece a mesma após o vínculo e utiliza a resposta oficial na conferência e emissão documental.
+
+# `/reports` — ciclo de rascunho
+
+O draft local é recuperável apenas antes da materialização. Preparar Preview, finalizar revisão ou
+renderizar o documento desativa o autosave e remove a chave `erp:draft:reports:new:{type}`.

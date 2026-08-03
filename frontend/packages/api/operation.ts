@@ -28,6 +28,18 @@ export type OperationPhotoContent = {
   contentBase64: string;
 };
 
+export type FieldEquipmentDraft = {
+  equipmentTypeCatalogId: string;
+  sector?: string;
+  tag?: string;
+  manufacturer?: string;
+  model?: string;
+  serialNumber?: string;
+  capacity?: string;
+  voltage?: string;
+  observations?: string;
+};
+
 export function listOperations(params?: {
   page?: number;
   limit?: number;
@@ -120,6 +132,13 @@ export function updateOperation(
   >,
 ): Promise<OperationDetail> {
   return api.patch<OperationDetail>(`/operations/${id}`, payload);
+}
+
+export function addFieldEquipments(
+  id: string,
+  payload: { existingEquipmentIds?: string[]; newEquipments?: FieldEquipmentDraft[] },
+): Promise<OperationDetail> {
+  return api.post<OperationDetail>(`/operations/${id}/equipments`, payload);
 }
 
 /** Technical-responsible approval: REVIEW → COMPLETED (OWNER/MANAGER). */

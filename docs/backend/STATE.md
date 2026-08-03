@@ -3314,3 +3314,13 @@ Status: implementado e validado em PostgreSQL/Docker.
 - A geração aceita no máximo seis evidências e continua sem mínimo obrigatório.
 - `POST /pmoc/:id/execution-requests` aceita `equipmentId?`; a omissão usa o equipamento primário
   para retrocompatibilidade.
+# Coleta de equipamentos em OS atribuída — 2026-08-03
+
+- Adicionado `POST /api/v1/operations/:id/equipments` para o Operator registrar, durante uma
+  execução atribuída, equipamentos que não foram definidos pela gestão.
+- O fluxo aceita vincular equipamentos ativos já cadastrados para o cliente e cadastrar vários
+  equipamentos encontrados em campo.
+- Cadastro, QR Code, vínculo principal, snapshots de `OperationInspectedEquipment`, revisão
+  documental e auditoria são persistidos em uma transação serializável protegida por advisory lock.
+- A operação precisa estar `IN_PROGRESS` e sem qualquer equipamento previamente vinculado.
+- Nenhuma entidade ou migration foi criada.

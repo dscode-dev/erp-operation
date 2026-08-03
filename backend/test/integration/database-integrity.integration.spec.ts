@@ -1,6 +1,9 @@
 import {
   BudgetStatus,
   EquipmentType,
+  OperationStatus,
+  OperationType,
+  Role,
   OperationMaintenanceType,
   TechnicalCatalogArea,
   TechnicalCatalogType,
@@ -9,6 +12,7 @@ import {
 import {
   createActor,
   createBudgetFixture,
+  createCustomerGraph,
   createOperation,
   createOrganization,
   createPricingFixture,
@@ -17,6 +21,7 @@ import {
   prisma,
   resetDatabase,
 } from './helpers';
+import { OperationsService } from '../../src/modules/operations/operations.service';
 
 describe('database integrity constraints with real PostgreSQL', () => {
   beforeEach(async () => {
@@ -250,5 +255,87 @@ describe('database integrity constraints with real PostgreSQL', () => {
     await expect(
       prisma.technicalCatalog.delete({ where: { id: catalog.id } }),
     ).rejects.toThrow();
+  });
+
+  it('atomically registers field equipment and links it to an unscoped assigned Operation', async () => {
+    const organization = await createOrganization();
+    const owner = await createActor(Role.OWNER, 'field-owner');
+    const operator = await createActor(Role.OPERATOR, 'field-operator');
+    const graph = await createCustomerGraph();
+    const operation = await prisma.operation.create({
+      data: {
+        customerId: graph.customerId,
+        addressId: graph.addressId,
+        operatorId: operator.id,
+        type: OperationType.CORRETIVA,
+        status: OperationStatus.IN_PROGRESS,
+        checklist: [],
+        assignments: {
+          create: { assignedBy: owner.id, assignedTo: operator.id, status: 'STARTED' },
+        },
+      },
+    });
+    const catalog = await prisma.technicalCatalog.create({
+      data: {
+        organizationId: organization.id,
+        type: TechnicalCatalogType.EQUIPMENT_TYPE,
+        title: 'Split de campo',
+        tags: ['legacy-split'],
+        areas: [TechnicalCatalogArea.GENERAL],
+        workflows: [TechnicalCatalogWorkflow.GENERAL],
+      },
+    });
+    const access = { assertOperationAccess: jest.fn().mockResolvedValue(undefined) };
+    const service = new OperationsService(
+      prisma as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      access as never,
+      {} as never,
+    );
+
+    await service.addFieldEquipments(
+      operation.id,
+      {
+        newEquipments: [{
+          equipmentTypeCatalogId: catalog.id,
+          sector: 'Sala CORE',
+          manufacturer: 'Carrier',
+          model: 'Ecosplit',
+          capacity: '20 TR',
+        }],
+      },
+      operator,
+      { requestId: 'field-equipment-integration', ip: '127.0.0.1', userAgent: 'jest' },
+    );
+
+    const persisted = await prisma.operation.findUniqueOrThrow({
+      where: { id: operation.id },
+      include: { equipment: true, inspectedEquipments: true },
+    });
+    expect(persisted.equipment).toMatchObject({
+      customerId: graph.customerId,
+      addressId: graph.addressId,
+      manufacturer: 'Carrier',
+      model: 'Ecosplit',
+      capacity: '20 TR',
+    });
+    expect(persisted.inspectedEquipments).toHaveLength(1);
+    await expect(
+      service.addFieldEquipments(
+        operation.id,
+        { existingEquipmentIds: [graph.equipmentId] },
+        operator,
+        { requestId: 'field-equipment-retry', ip: null, userAgent: 'jest' },
+      ),
+    ).rejects.toMatchObject({ code: 'OPERATION_EQUIPMENT_INVALID' });
+    await expect(
+      prisma.auditLog.count({
+        where: { action: { in: ['EQUIPMENT_CREATED', 'OPERATION_FIELD_EQUIPMENTS_ATTACHED'] } },
+      }),
+    ).resolves.toBe(2);
   });
 });

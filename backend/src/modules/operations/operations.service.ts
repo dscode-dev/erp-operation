@@ -1,5 +1,5 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import { DocumentHandoffOrigin, DocumentRevisionAction, DocumentTemplateType, OperationType, Prisma, Role } from '@prisma/client';
+import { DocumentHandoffOrigin, DocumentRevisionAction, DocumentTemplateType, EquipmentStatus, EquipmentType, OperationStatus, OperationType, Prisma, Role, TechnicalCatalogType } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import {
   STORAGE_PROVIDER_TOKEN,
@@ -30,6 +30,7 @@ import { MaintenanceRemindersService } from '../maintenance-reminders/maintenanc
 import { OperationAccessService } from '../operation-access/operation-access.service';
 import type {
   CreateOperationDto,
+  CreateOperationFieldEquipmentsDto,
   ListOperationsQueryDto,
   OperationChecklistItemDto,
   OperationPhotoInputDto,
@@ -825,6 +826,196 @@ export class OperationsService {
     return this.operationOrThrow(id);
   }
 
+  async addFieldEquipments(
+    id: string,
+    dto: CreateOperationFieldEquipmentsDto,
+    actor: AuthenticatedUser,
+    context: OperationAuditContext,
+  ): Promise<unknown> {
+    await this.access.assertOperationAccess(actor, id, {
+      resource: OPERATION_RESOURCE,
+      resourceId: id,
+      context,
+    });
+    const existingIds = [...new Set(dto.existingEquipmentIds ?? [])];
+    const drafts = dto.newEquipments ?? [];
+    if (existingIds.length + drafts.length === 0 || existingIds.length + drafts.length > 20) {
+      throw new ApplicationException(
+        ERROR_CODES.OPERATION_EQUIPMENT_INVALID,
+        'Selecione ou cadastre ao menos um equipamento, respeitando o limite de 20 itens',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    for (const item of drafts) {
+      if (!item.manufacturer?.trim() && !item.model?.trim()) {
+        throw new ApplicationException(
+          ERROR_CODES.OPERATION_EQUIPMENT_INVALID,
+          'Informe ao menos a marca ou o modelo de cada novo equipamento',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+    }
+
+    await this.prisma.$transaction(
+      async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${id}))`;
+        const operation = await tx.operation.findUnique({
+          where: { id },
+          select: {
+            id: true,
+            customerId: true,
+            addressId: true,
+            equipmentId: true,
+            status: true,
+            inspectedEquipments: { select: { equipmentId: true } },
+          },
+        });
+        if (!operation) {
+          throw new ApplicationException(
+            ERROR_CODES.OPERATION_NOT_FOUND,
+            'Operation was not found',
+            HttpStatus.NOT_FOUND,
+          );
+        }
+        if (operation.status !== OperationStatus.IN_PROGRESS) {
+          throw new ApplicationException(
+            ERROR_CODES.OPERATION_INVALID_TRANSITION,
+            'Os equipamentos só podem ser coletados durante um atendimento em execução',
+            HttpStatus.CONFLICT,
+          );
+        }
+        if (operation.equipmentId || operation.inspectedEquipments.length > 0) {
+          throw new ApplicationException(
+            ERROR_CODES.OPERATION_EQUIPMENT_INVALID,
+            'Esta Ordem de Serviço já possui equipamentos definidos',
+            HttpStatus.CONFLICT,
+          );
+        }
+
+        const existing = existingIds.length
+          ? await tx.equipment.findMany({
+              where: {
+                id: { in: existingIds },
+                customerId: operation.customerId,
+                isActive: true,
+                disabledAt: null,
+              },
+              select: {
+                id: true,
+                sector: true,
+                manufacturer: true,
+                model: true,
+                capacity: true,
+                tag: true,
+                serialNumber: true,
+              },
+            })
+          : [];
+        if (existing.length !== existingIds.length) {
+          throw new ApplicationException(
+            ERROR_CODES.OPERATION_EQUIPMENT_INVALID,
+            'Um dos equipamentos selecionados não pertence ao cliente ou não está ativo',
+            HttpStatus.BAD_REQUEST,
+          );
+        }
+
+        const catalogIds = [...new Set(drafts.map((item) => item.equipmentTypeCatalogId))];
+        const catalogs = catalogIds.length
+          ? await tx.technicalCatalog.findMany({
+              where: {
+                id: { in: catalogIds },
+                type: TechnicalCatalogType.EQUIPMENT_TYPE,
+                active: true,
+                deletedAt: null,
+              },
+              select: { id: true, title: true, tags: true },
+            })
+          : [];
+        const catalogById = new Map(catalogs.map((item) => [item.id, item]));
+        if (catalogs.length !== catalogIds.length) {
+          throw new ApplicationException(
+            ERROR_CODES.TECHNICAL_CATALOG_NOT_FOUND,
+            'Um dos tipos de equipamento não está disponível',
+            HttpStatus.BAD_REQUEST,
+          );
+        }
+
+        const created: typeof existing = [];
+        for (const item of drafts) {
+          const catalog = catalogById.get(item.equipmentTypeCatalogId)!;
+          const qrToken = randomUUID();
+          const manufacturer = item.manufacturer?.trim() || null;
+          const model = item.model?.trim() || null;
+          const equipment = await tx.equipment.create({
+            data: {
+              customerId: operation.customerId,
+              addressId: operation.addressId,
+              equipmentTypeCatalogId: catalog.id,
+              type: this.equipmentTypeFromTags(catalog.tags),
+              status: EquipmentStatus.ACTIVE,
+              name: ([manufacturer, model].filter(Boolean).join(' ') || catalog.title).slice(0, 180),
+              sector: item.sector?.trim() || null,
+              tag: item.tag?.trim() || null,
+              manufacturer,
+              model,
+              serialNumber: item.serialNumber?.trim() || null,
+              capacity: item.capacity?.trim() || null,
+              voltage: item.voltage?.trim() || null,
+              observations: item.observations?.trim() || null,
+              qrToken,
+              qrCode: `equipment:${qrToken}`,
+            },
+            select: {
+              id: true,
+              sector: true,
+              manufacturer: true,
+              model: true,
+              capacity: true,
+              tag: true,
+              serialNumber: true,
+              type: true,
+            },
+          });
+          created.push(equipment);
+          await tx.auditLog.create({
+            data: this.audit('EQUIPMENT_CREATED', 'EQUIPMENT', actor, context, {
+              equipmentId: equipment.id,
+              customerId: operation.customerId,
+              operationId: id,
+              source: 'FIELD_OPERATION',
+            }),
+          });
+        }
+
+        const selected = [...existing, ...created];
+        await tx.operation.update({ where: { id }, data: { equipmentId: selected[0].id } });
+        await tx.operationInspectedEquipment.createMany({
+          data: selected.map((item, position) => ({
+            operationId: id,
+            equipmentId: item.id,
+            position,
+            sector: item.sector?.trim() || 'Não informado',
+            brandSnapshot: item.manufacturer?.trim() || null,
+            modelSnapshot: item.model?.trim() || null,
+            capacitySnapshot: item.capacity?.trim() || null,
+            tagSnapshot: item.tag,
+            serialSnapshot: item.serialNumber,
+          })),
+        });
+        await this.markDocumentsChangedTx(tx, id, actor, ['equipmentId', 'inspectedEquipments']);
+        await tx.auditLog.create({
+          data: this.audit('OPERATION_FIELD_EQUIPMENTS_ATTACHED', OPERATION_RESOURCE, actor, context, {
+            operationId: id,
+            equipmentIds: selected.map((item) => item.id),
+            createdEquipmentIds: created.map((item) => item.id),
+          }),
+        });
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+    return this.operationOrThrow(id);
+  }
+
   /**
    * Technical-responsible approval: REVIEW → COMPLETED. Fires the completion
    * side-effects (asset lifecycle event + maintenance/PMOC execution sync) that
@@ -938,6 +1129,14 @@ export class OperationsService {
 
   private operationTypes(primary: OperationType, values?: OperationType[]): OperationType[] {
     return [...new Set([primary, ...(values ?? [])])];
+  }
+
+  private equipmentTypeFromTags(tags: string[]): EquipmentType {
+    for (const type of Object.values(EquipmentType)) {
+      const tag = `legacy-${type.toLowerCase().replaceAll('_', '-')}`;
+      if (tags.includes(tag)) return type;
+    }
+    return EquipmentType.OTHER;
   }
 
   private validateReferencePeriod(month?: number, year?: number): void {

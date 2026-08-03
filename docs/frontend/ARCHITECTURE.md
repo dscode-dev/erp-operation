@@ -1309,3 +1309,14 @@ autoritativos no backend; Preview e PDF continuam derivados do mesmo Blueprint.
 Após o render oficial, o resultado documental é entregue a um estado terminal dedicado. Esse estado
 usa exclusivamente o download autenticado do Document Engine e a Web Share API; abrir o
 `DocumentViewer` permanece uma ação explícita do usuário, nunca um efeito automático da conclusão.
+# Coleta contextual de ativos
+
+O Operator não recebe acesso ao CRUD administrativo de Equipment. O frontend utiliza uma operação
+contextual, ligada ao Assignment, que envia seleção e novos registros em lote. O backend deriva
+cliente/endereço, cria os ativos e os snapshots da OS atomicamente; o frontend apenas substitui seu
+estado pelos `inspectedEquipments` retornados.
+
+# Estado terminal do draft documental
+
+`draftMaterialized` separa edição local de registro oficial. Quando verdadeiro, bloqueia novos ciclos
+do autosave debounced e garante que `clear()` não seja revertido por um render posterior do formulário.
