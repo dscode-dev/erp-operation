@@ -14,7 +14,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import {
   Building2, Camera, Check, CheckCircle2, Circle, ClipboardList, FileText,
-  MapPin, Package, PenLine, Plus, Send, Trash2, Wrench,
+  MapPin, Package, PenLine, Send, Wrench,
 } from "lucide-react";
 import { WizardProgressHeader } from "@erp/ui/wizard/progress-header";
 import { WizardFooter } from "@erp/ui/wizard/step-footer";
@@ -25,13 +25,18 @@ import { PhotoInput, type CapturedPhoto } from "@erp/ui/photo-input";
 import { SignaturePad } from "@erp/ui/documents/signature-pad";
 import {
   assignmentsApi, documentsApi, equipmentsApi, inventoryApi, operationApi, technicalCatalogsApi, useQuery,
-  type DocumentKind, type EquipmentSummary, type FieldEquipmentDraft, type InventoryItem, type OperationChecklistItem,
+  type DocumentKind, type EquipmentSummary, type InventoryItem, type OperationChecklistItem,
   type OperationDetail, type OperationMaintenanceChecklistItem, type OperationMaintenanceType,
-  type OperationPart, type Product, type TechnicalCatalog,
+  type OperationPart, type Product,
 } from "@erp/api";
 import { DOCUMENT_KIND_LABEL } from "@erp/types";
 import { serviceTypeLabel } from "@operator/lib/service-types";
 import { OperatorSignatureChoice } from "@operator/components/operator-signature";
+import {
+  createEmptyFieldEquipmentDraft,
+  FieldEquipmentCollection,
+  type NewFieldEquipmentDraft,
+} from "@operator/components/field-equipment-collection";
 
 const STEPS = ["Checklist", "Conteúdo", "Evidências", "Materiais", "Assinatura", "Confirmar"] as const;
 const CUSTOMER_SIGNATURE = new Set<DocumentKind>(["WORK_ORDER", "TECHNICAL_REPORT", "BUDGET", "PMOC"]);
@@ -46,29 +51,6 @@ type EquipmentProfileDraft = {
   model: string;
   capacity: string;
 };
-type NewFieldEquipmentDraft = FieldEquipmentDraft & { localId: string };
-
-function emptyFieldEquipment(): NewFieldEquipmentDraft {
-  return {
-    localId: localFieldEquipmentId(),
-    equipmentTypeCatalogId: "",
-    sector: "",
-    manufacturer: "",
-    model: "",
-    serialNumber: "",
-    capacity: "",
-    voltage: "",
-    tag: "",
-    observations: "",
-  };
-}
-
-function localFieldEquipmentId(): string {
-  const randomUUID = globalThis.crypto?.randomUUID;
-  if (typeof randomUUID === "function") return randomUUID.call(globalThis.crypto);
-  // Identificador apenas para estado/chave React — não é persistido nem usado como UUID de domínio.
-  return `field-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-}
 
 export function ExecucaoWizard({ assignmentId }: { assignmentId: string }) {
   const router = useRouter();
@@ -450,7 +432,7 @@ function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; oper
                 drafts={newFieldEquipments}
                 equipmentTypes={equipmentTypes.data ?? []}
                 equipmentTypesLoading={equipmentTypes.loading}
-                onAdd={() => setNewFieldEquipments((current) => [...current, emptyFieldEquipment()])}
+                onAdd={() => setNewFieldEquipments((current) => [...current, createEmptyFieldEquipmentDraft()])}
                 onRemove={(localId) => setNewFieldEquipments((current) => current.filter((item) => item.localId !== localId))}
                 onChange={(localId, field, value) => setNewFieldEquipments((current) => current.map((item) => item.localId === localId ? { ...item, [field]: value } : item))}
               />
@@ -560,62 +542,6 @@ function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; oper
 }
 
 /* ---------- Steps ---------- */
-
-function FieldEquipmentCollection({
-  drafts,
-  equipmentTypes,
-  equipmentTypesLoading,
-  onAdd,
-  onRemove,
-  onChange,
-}: {
-  drafts: NewFieldEquipmentDraft[];
-  equipmentTypes: TechnicalCatalog[];
-  equipmentTypesLoading: boolean;
-  onAdd: () => void;
-  onRemove: (localId: string) => void;
-  onChange: (localId: string, field: keyof FieldEquipmentDraft, value: string) => void;
-}) {
-  return (
-    <section className="space-y-3 rounded-[var(--radius-lg)] border border-[var(--color-info)]/30 bg-[var(--color-info)]/5 p-3">
-      <div>
-        <h2 className="font-semibold">Equipamentos identificados em campo</h2>
-        <p className="text-caption">
-          A gestão não definiu equipamentos nesta OS. Selecione acima um equipamento já cadastrado
-          ou registre os encontrados no local. Os novos itens serão vinculados ao cliente e ao relatório.
-        </p>
-      </div>
-      {drafts.map((draft, index) => (
-        <div key={draft.localId} className="space-y-3 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] p-3">
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-sm font-semibold">Novo equipamento {index + 1}</p>
-            <button type="button" onClick={() => onRemove(draft.localId)} className="inline-flex h-9 items-center gap-1 rounded-[var(--radius-md)] px-2 text-xs text-[var(--color-danger)]" aria-label={`Remover equipamento ${index + 1}`}><Trash2 className="h-4 w-4" /> Remover</button>
-          </div>
-          <label className="block space-y-1 text-sm">
-            <span className="font-medium">Tipo *</span>
-            <select value={draft.equipmentTypeCatalogId} onChange={(event) => onChange(draft.localId, "equipmentTypeCatalogId", event.target.value)} disabled={equipmentTypesLoading} className={inputCls}>
-              <option value="">{equipmentTypesLoading ? "Carregando tipos…" : "Selecione"}</option>
-              {equipmentTypes.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
-            </select>
-          </label>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <FieldEquipmentInput label="Marca *" value={draft.manufacturer ?? ""} onChange={(value) => onChange(draft.localId, "manufacturer", value)} />
-            <FieldEquipmentInput label="Modelo *" value={draft.model ?? ""} onChange={(value) => onChange(draft.localId, "model", value)} />
-            <FieldEquipmentInput label="Capacidade *" value={draft.capacity ?? ""} onChange={(value) => onChange(draft.localId, "capacity", value)} placeholder="Ex.: 18.000 BTU/h" />
-            <FieldEquipmentInput label="Setor / local" value={draft.sector ?? ""} onChange={(value) => onChange(draft.localId, "sector", value)} />
-            <FieldEquipmentInput label="Número de série" value={draft.serialNumber ?? ""} onChange={(value) => onChange(draft.localId, "serialNumber", value)} />
-            <FieldEquipmentInput label="Tensão" value={draft.voltage ?? ""} onChange={(value) => onChange(draft.localId, "voltage", value)} />
-          </div>
-        </div>
-      ))}
-      <button type="button" onClick={onAdd} disabled={drafts.length >= 20} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-[var(--radius-md)] border border-dashed border-[var(--color-primary)]/50 text-sm font-medium text-[var(--color-primary)] disabled:opacity-50"><Plus className="h-4 w-4" /> Adicionar outro equipamento</button>
-    </section>
-  );
-}
-
-function FieldEquipmentInput({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (value: string) => void; placeholder?: string }) {
-  return <label className="block space-y-1 text-sm"><span className="font-medium">{label}</span><input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className={inputCls} /></label>;
-}
 
 function EquipmentProfileCompletion({
   equipmentIds,

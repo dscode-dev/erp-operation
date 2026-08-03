@@ -65,6 +65,7 @@ import {
   type TechnicalCatalog,
   type TechnicalCatalogArea,
   type DocumentKind,
+  type FieldEquipmentDraft,
   type OperationMaintenanceChecklistItem,
   type OperationMaintenanceType,
   type CreateOperationPayload,
@@ -80,6 +81,11 @@ import { useDebounce } from '@erp/utils';
 import { SERVICE_TYPES, serviceTypeLabel, type ServiceTypeKey } from '../../lib/service-types';
 import { createOperationFromDraft, workOrderNumber } from '../../lib/atendimento';
 import { OperatorSignatureChoice } from '../../components/operator-signature';
+import {
+  createEmptyFieldEquipmentDraft,
+  FieldEquipmentCollection,
+  type NewFieldEquipmentDraft,
+} from '../../components/field-equipment-collection';
 
 const STEPS = [
   'Cliente',
@@ -116,22 +122,21 @@ type WalkInForm = {
   state: string;
   contactName: string;
   contactPhone: string;
-  equipmentManufacturer: string;
-  equipmentModel: string;
-  equipmentCapacity: string;
 };
 const EMPTY_WALK_IN: WalkInForm = {
   personType: 'COMPANY', name: '', document: '', zipCode: '', street: '', number: '',
   complement: '', district: '', city: '', state: '', contactName: '', contactPhone: '',
-  equipmentManufacturer: '', equipmentModel: '', equipmentCapacity: '',
 };
-function walkInValid(w: WalkInForm): boolean {
-  // CPF/CNPJ é opcional; o perfil técnico mínimo do equipamento é obrigatório.
+function walkInValid(w: WalkInForm, equipmentDrafts: NewFieldEquipmentDraft[]): boolean {
+  // CPF/CNPJ é opcional; ao menos um equipamento tecnicamente identificado é obrigatório.
   return Boolean(
     w.name.trim() && w.street.trim() && w.number.trim() &&
     w.district.trim() && w.city.trim() && w.state.trim().length === 2 &&
     w.contactName.trim() && w.contactPhone.trim() &&
-    w.equipmentManufacturer.trim() && w.equipmentModel.trim() && w.equipmentCapacity.trim(),
+    equipmentDrafts.length > 0 && equipmentDrafts.length <= 20 &&
+    equipmentDrafts.every((item) =>
+      item.equipmentTypeCatalogId && item.manufacturer?.trim() && item.model?.trim() && item.capacity?.trim(),
+    ),
   );
 }
 function walkInAddressLabel(w: WalkInForm): string {
@@ -191,6 +196,9 @@ export function AtendimentoWizard({
   // OS avulso: cadastro de cliente novo direto em campo (fica em Revisão).
   const [walkInMode, setWalkInMode] = useState(false);
   const [walk, setWalk] = useState<WalkInForm>(EMPTY_WALK_IN);
+  const [walkInEquipments, setWalkInEquipments] = useState<NewFieldEquipmentDraft[]>(
+    () => [createEmptyFieldEquipmentDraft()],
+  );
   // Guarda o cadastro já criado para um retry não recriar o cliente (CNPJ/CPF único).
   const [walkInCreated, setWalkInCreated] = useState<WalkInCustomerResult | null>(null);
 
@@ -200,6 +208,11 @@ export function AtendimentoWizard({
     null,
   );
   const [startedAt] = useState(() => new Date().toISOString());
+
+  const walkInEquipmentTypes = useQuery(
+    (signal) => walkInMode ? technicalCatalogsApi.listEquipmentTypes({ signal }) : Promise.resolve([]),
+    [walkInMode],
+  );
 
   // Prefill from QR / "Iniciar atendimento" deep links.
   useEffect(() => {
@@ -308,7 +321,7 @@ export function AtendimentoWizard({
   const canNext = useMemo(() => {
     switch (step) {
       case 0:
-        return walkInMode ? walkInValid(walk) : !!customer;
+        return walkInMode ? walkInValid(walk, walkInEquipments) : !!customer;
       case 1:
         return equipmentProfilesComplete; // equipamento opcional; selecionados precisam estar identificados
       case 2:
@@ -326,11 +339,11 @@ export function AtendimentoWizard({
       default:
         return false;
     }
-  }, [step, customer, serviceType, signature, signerName, technicalSignatureId, walkInMode, walk, equipmentProfilesComplete]);
+  }, [step, customer, serviceType, signature, signerName, technicalSignatureId, walkInMode, walk, walkInEquipments, equipmentProfilesComplete]);
 
   function back() {
     if (step === 0) router.push('/operator');
-    // OS avulso pula o passo de Equipamento (equipamento é informado por texto).
+    // OS avulso pula o passo de seleção: os novos equipamentos já são coletados no cadastro.
     else if (step === 2 && walkInMode) setStep(0);
     else setStep((s) => s - 1);
   }
@@ -364,7 +377,7 @@ export function AtendimentoWizard({
     setSubmitError(null);
     try {
       if (!documentType) return;
-      // OS avulso: registra cliente novo (Revisão) + endereço + contato + equipamento.
+      // OS avulso: registra cliente novo (Revisão) + endereço + contato + equipamentos.
       let customerId = customer?.id ?? null;
       let addressId = address?.id ?? null;
       let inspectedEquipments: Array<{
@@ -398,17 +411,32 @@ export function AtendimentoWizard({
               state: walk.state.trim().toUpperCase(),
             },
             contact: { name: walk.contactName.trim(), phone: walk.contactPhone.trim() },
-            equipment: {
-              manufacturer: walk.equipmentManufacturer.trim() || undefined,
-              model: walk.equipmentModel.trim() || undefined,
-              capacity: walk.equipmentCapacity.trim() || undefined,
-            },
+            equipments: walkInEquipments.map((item) => ({
+              equipmentTypeCatalogId: item.equipmentTypeCatalogId,
+              sector: item.sector?.trim() || undefined,
+              tag: item.tag?.trim() || undefined,
+              manufacturer: item.manufacturer?.trim() || undefined,
+              model: item.model?.trim() || undefined,
+              serialNumber: item.serialNumber?.trim() || undefined,
+              capacity: item.capacity?.trim() || undefined,
+              voltage: item.voltage?.trim() || undefined,
+              observations: item.observations?.trim() || undefined,
+            })),
           }));
         setWalkInCreated(created);
         customerId = created.customerId;
         addressId = created.addressId;
         equipmentId = created.equipmentId;
-        inspectedEquipments = [{ equipmentId: created.equipmentId, sector: created.addressLabel || created.equipmentName }];
+        inspectedEquipments = created.equipments.map((item, index) => {
+          const draft = walkInEquipments[index];
+          return {
+            equipmentId: item.id,
+            sector: item.sector || created.addressLabel || item.name,
+            manufacturer: draft?.manufacturer?.trim() || undefined,
+            model: draft?.model?.trim() || undefined,
+            capacity: draft?.capacity?.trim() || undefined,
+          };
+        });
       }
       const submission = await createOperationFromDraft({
         documentType,
@@ -550,10 +578,10 @@ export function AtendimentoWizard({
     : customer;
   const displayAddress = walkInMode ? { id: '', label: walkInAddressLabel(walk) } : address;
   const displayEquipments = walkInMode
-    ? ([{
-        id: '',
-        name: [walk.equipmentManufacturer, walk.equipmentModel].map((v) => v.trim()).filter(Boolean).join(' ') || 'Equipamento',
-      } as unknown as EquipmentSummary])
+    ? walkInEquipments.map((item, index) => ({
+        id: item.localId,
+        name: [item.manufacturer, item.model, item.capacity].map((value) => value?.trim()).filter(Boolean).join(' - ') || `Equipamento ${index + 1}`,
+      } as unknown as EquipmentSummary))
     : equipments;
 
   return (
@@ -569,7 +597,17 @@ export function AtendimentoWizard({
       <div className="flex-1 overflow-y-auto p-4">
         {step === 0 && (
           walkInMode ? (
-            <WalkInStep value={walk} onChange={setWalk} onCancel={() => setWalkInMode(false)} />
+            <WalkInStep
+              value={walk}
+              onChange={setWalk}
+              onCancel={() => setWalkInMode(false)}
+              equipments={walkInEquipments}
+              equipmentTypes={walkInEquipmentTypes.data ?? []}
+              equipmentTypesLoading={walkInEquipmentTypes.loading}
+              onAddEquipment={() => setWalkInEquipments((current) => [...current, createEmptyFieldEquipmentDraft()])}
+              onRemoveEquipment={(localId) => setWalkInEquipments((current) => current.filter((item) => item.localId !== localId))}
+              onChangeEquipment={(localId, field, value) => setWalkInEquipments((current) => current.map((item) => item.localId === localId ? { ...item, [field]: value } : item))}
+            />
           ) : (
             <div className="space-y-5">
               <ClienteStep
@@ -586,6 +624,7 @@ export function AtendimentoWizard({
                 type="button"
                 onClick={() => {
                   setWalkInMode(true);
+                  setWalkInEquipments((current) => current.length ? current : [createEmptyFieldEquipmentDraft()]);
                   setCustomer(null);
                   setAddress(null);
                   setEquipments([]);
@@ -1081,10 +1120,22 @@ function WalkInStep({
   value,
   onChange,
   onCancel,
+  equipments,
+  equipmentTypes,
+  equipmentTypesLoading,
+  onAddEquipment,
+  onRemoveEquipment,
+  onChangeEquipment,
 }: {
   value: WalkInForm;
   onChange: (v: WalkInForm) => void;
   onCancel: () => void;
+  equipments: NewFieldEquipmentDraft[];
+  equipmentTypes: TechnicalCatalog[];
+  equipmentTypesLoading: boolean;
+  onAddEquipment: () => void;
+  onRemoveEquipment: (localId: string) => void;
+  onChangeEquipment: (localId: string, field: keyof FieldEquipmentDraft, value: string) => void;
 }) {
   const setField = (key: keyof Omit<WalkInForm, 'personType'>, v: string) => onChange({ ...value, [key]: v });
   const [cepBusy, setCepBusy] = useState(false);
@@ -1166,15 +1217,18 @@ function WalkInStep({
         <WalkField label="Telefone *" value={value.contactPhone} onChange={(v) => setField('contactPhone', v)} />
       </section>
 
-      <section className="space-y-3 border-t border-[var(--color-border)] pt-4">
-        <h3 className="text-sm font-semibold">Equipamento</h3>
-        <p className="text-[11px] text-[var(--color-muted-foreground)]">Identificado por marca e modelo (informe ao menos um).</p>
-        <div className="grid grid-cols-2 gap-2">
-          <WalkField label="Marca" value={value.equipmentManufacturer} onChange={(v) => setField('equipmentManufacturer', v)} placeholder="Ex.: Midea" />
-          <WalkField label="Modelo" value={value.equipmentModel} onChange={(v) => setField('equipmentModel', v)} placeholder="Ex.: Xtreme Save" />
-        </div>
-        <WalkField label="Capacidade" value={value.equipmentCapacity} onChange={(v) => setField('equipmentCapacity', v)} placeholder="Ex.: 12.000 BTU" />
-      </section>
+      <div className="border-t border-[var(--color-border)] pt-4">
+        <FieldEquipmentCollection
+          drafts={equipments}
+          equipmentTypes={equipmentTypes}
+          equipmentTypesLoading={equipmentTypesLoading}
+          onAdd={onAddEquipment}
+          onRemove={onRemoveEquipment}
+          onChange={onChangeEquipment}
+          title="Equipamentos do atendimento"
+          description="Adicione todos os equipamentos encontrados no local. Eles serão cadastrados para o novo cliente e incluídos nesta Ordem de Serviço."
+        />
+      </div>
     </div>
   );
 }

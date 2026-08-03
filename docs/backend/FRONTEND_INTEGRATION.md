@@ -2716,3 +2716,10 @@ Antes de avançar do passo Conteúdo, enviar todos de uma vez para
 `POST /operations/:id/equipments`. A resposta substitui a fonte local de equipamentos e deve ser
 usada em `PATCH /operations/:id`, Preview e PDF. Não enviar `customerId` ou `addressId`: o backend
 os deriva da OS e rejeita vínculos cruzados.
+
+# OS avulsa com cliente novo e vários equipamentos
+
+No primeiro passo, envie a coleção em `equipments` para `POST /customers/walk-in`. Use
+`response.equipments` para montar todos os `inspectedEquipments` da nova Operation e
+`response.equipmentId` apenas como equipamento principal compatível. Não faça uma chamada
+administrativa por equipamento e não reutilize IDs locais do formulário.

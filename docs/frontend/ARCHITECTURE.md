@@ -1320,3 +1320,10 @@ estado pelos `inspectedEquipments` retornados.
 
 `draftMaterialized` separa edição local de registro oficial. Quando verdadeiro, bloqueia novos ciclos
 do autosave debounced e garante que `clear()` não seja revertido por um render posterior do formulário.
+
+# Agregado de cadastro avulso
+
+O cadastro avulso reutiliza a coleção visual da execução atribuída, mas persiste pelo agregado
+transacional `Customer walk-in`: cliente, endereço, contato e N equipamentos são criados juntos. A
+API devolve os IDs de domínio e somente então o Wizard cria a Operation com todos os snapshots; não
+existe criação otimista de Equipment nem estado persistente paralelo no frontend.

@@ -2309,3 +2309,11 @@ The catalog is scoped to the installation Organization in every query. Reads req
   entre clientes.
 - Advisory lock por Operation e transação `Serializable` impedem cadastros concorrentes ou
   vínculos parciais. Todo equipamento criado e vínculo efetuado gera auditoria append-only.
+
+# Cadastro avulso com múltiplos equipamentos
+
+- A coleção é limitada a 20 itens e cada tipo informado deve ser um `EQUIPMENT_TYPE` ativo.
+- Cliente, contato, endereço e equipamentos são criados atomicamente; qualquer falha desfaz tudo.
+- QR Tokens são gerados no backend com CSPRNG. IDs efêmeros da interface nunca são persistidos.
+- O endpoint preserva `canReports`, RBAC e auditoria sem conceder ao Operator acesso ao CRUD
+  administrativo de equipamentos.

@@ -6166,3 +6166,53 @@ Response `201`: `OperationDetail` atualizado, incluindo `equipment` e `inspected
 
 Erros: `400 OPERATION_EQUIPMENT_INVALID`, `400 TECHNICAL_CATALOG_NOT_FOUND`,
 `403 FORBIDDEN`, `404 OPERATION_NOT_FOUND`, `409 OPERATION_INVALID_TRANSITION`.
+
+# Cadastro avulso de cliente com múltiplos equipamentos
+
+## `POST /api/v1/customers/walk-in`
+
+Permissão: OWNER, MANAGER ou OPERATOR com `canReports`.
+
+```json
+{
+  "type": "COMPANY",
+  "name": "Clínica Recife",
+  "address": {
+    "street": "Rua da Aurora",
+    "number": "100",
+    "district": "Boa Vista",
+    "city": "Recife",
+    "state": "PE"
+  },
+  "contact": { "name": "Ana Lima", "phone": "81999999999" },
+  "equipments": [
+    {
+      "equipmentTypeCatalogId": "uuid",
+      "manufacturer": "Midea",
+      "model": "Xtreme Save",
+      "capacity": "12.000 BTU/h",
+      "sector": "Recepção",
+      "serialNumber": "ABC123",
+      "voltage": "220 V"
+    }
+  ]
+}
+```
+
+`equipments` exige de 1 a 20 itens e tipo `EQUIPMENT_TYPE` ativo. Response `201`:
+
+```json
+{
+  "customerId": "uuid",
+  "addressId": "uuid",
+  "addressLabel": "Rua da Aurora, 100, Boa Vista, Recife",
+  "equipmentId": "uuid-do-primeiro-item",
+  "equipmentName": "Midea Xtreme Save",
+  "equipments": [
+    { "id": "uuid", "name": "Midea Xtreme Save", "sector": "Recepção" }
+  ]
+}
+```
+
+O campo legado singular `equipment` permanece aceito. Erros: `400 VALIDATION_ERROR`,
+`400 TECHNICAL_CATALOG_NOT_FOUND`, `403 FORBIDDEN` e `409 CUSTOMER_CONFLICT`.

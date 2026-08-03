@@ -117,6 +117,15 @@
 - O contrato anterior permanece compatível quando `configurationOnly` não é enviado.
 - Nenhuma entidade ou migration foi criada.
 
+# Múltiplos equipamentos na OS avulsa — 2026-08-03
+
+- `POST /api/v1/customers/walk-in` aceita `equipments[]` (1–20) e cria cliente pendente de revisão,
+  endereço, contato e todos os equipamentos em uma única transação.
+- Cada equipamento recebe tipo do Catálogo Técnico, QR Code próprio e vínculo com o mesmo
+  cliente/endereço. A resposta inclui `equipments[]`; `equipmentId` e `equipmentName` permanecem
+  como aliases do primeiro item para retrocompatibilidade.
+- O payload singular legado `equipment` continua aceito. Nenhuma migration ou entidade foi criada.
+
 ## Cliente 360 — métricas operacionais contextualizadas (2026-07-23)
 
 - `GET /operations/stats` aceita `customerId` opcional e calcula todos os estados somente para o cliente selecionado.

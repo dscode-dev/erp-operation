@@ -2094,3 +2094,10 @@ responsabilidade técnica pelo nome, cargo ou assinatura padrão.
   opcionais.
 - Após sucesso, usar os `inspectedEquipments` retornados no resumo, Preview e conclusão.
 - O endpoint é one-shot: depois do primeiro vínculo, novas chamadas retornam conflito.
+
+# Cliente novo em campo com vários equipamentos
+
+- Reutilizar o formulário repetível do atendimento atribuído na OS avulsa.
+- Persistir por `POST /customers/walk-in` com `equipments[]` (máximo 20).
+- Usar os IDs reais de `response.equipments` nos snapshots da Operation.
+- `equipment` singular é somente compatibilidade e não deve ser usado em implementações novas.

@@ -29,7 +29,7 @@ export * as authApi from './auth';
 export * as usersApi from './users';
 export * as organizationApi from './organization';
 export * as customersApi from './customers';
-export type { WalkInCustomerPayload, WalkInCustomerResult } from './customers';
+export type { WalkInCustomerPayload, WalkInCustomerResult, WalkInEquipmentPayload } from './customers';
 export * as equipmentsApi from './equipments';
 export * as financialApi from './financial';
 export * as procurementApi from './procurement';

@@ -1,5 +1,6 @@
 import {
   BudgetStatus,
+  CustomerType,
   EquipmentType,
   OperationStatus,
   OperationType,
@@ -22,6 +23,7 @@ import {
   resetDatabase,
 } from './helpers';
 import { OperationsService } from '../../src/modules/operations/operations.service';
+import { CustomersService } from '../../src/modules/customers/customers.service';
 
 describe('database integrity constraints with real PostgreSQL', () => {
   beforeEach(async () => {
@@ -255,6 +257,65 @@ describe('database integrity constraints with real PostgreSQL', () => {
     await expect(
       prisma.technicalCatalog.delete({ where: { id: catalog.id } }),
     ).rejects.toThrow();
+  });
+
+  it('atomically creates a walk-in customer with multiple field equipments', async () => {
+    const organization = await createOrganization();
+    const operator = await createActor(Role.OPERATOR, 'walk-in-operator');
+    const splitCatalog = await prisma.technicalCatalog.create({
+      data: {
+        organizationId: organization.id,
+        type: TechnicalCatalogType.EQUIPMENT_TYPE,
+        title: 'Split',
+        tags: ['legacy-split'],
+        areas: [TechnicalCatalogArea.GENERAL],
+        workflows: [TechnicalCatalogWorkflow.GENERAL],
+      },
+    });
+    const chillerCatalog = await prisma.technicalCatalog.create({
+      data: {
+        organizationId: organization.id,
+        type: TechnicalCatalogType.EQUIPMENT_TYPE,
+        title: 'Chiller',
+        tags: ['legacy-chiller'],
+        areas: [TechnicalCatalogArea.GENERAL],
+        workflows: [TechnicalCatalogWorkflow.GENERAL],
+      },
+    });
+    const service = new CustomersService(prisma as never, {} as never);
+
+    const result = await service.createWalkIn(
+      {
+        type: CustomerType.COMPANY,
+        name: 'Cliente cadastrado em campo',
+        address: {
+          street: 'Rua da Aurora', number: '100', district: 'Boa Vista', city: 'Recife', state: 'PE',
+        },
+        contact: { name: 'Ana Lima', phone: '81999999999' },
+        equipments: [
+          {
+            equipmentTypeCatalogId: splitCatalog.id,
+            manufacturer: 'Midea', model: 'Xtreme Save', capacity: '12.000 BTU/h', sector: 'Recepção',
+          },
+          {
+            equipmentTypeCatalogId: chillerCatalog.id,
+            manufacturer: 'Carrier', model: 'AquaSnap', capacity: '20 TR', sector: 'Sala técnica',
+          },
+        ],
+      },
+      operator,
+      { requestId: 'walk-in-multiple-equipment', ip: '127.0.0.1', userAgent: 'jest' },
+    );
+
+    expect(result.equipments).toHaveLength(2);
+    expect(result.equipmentId).toBe(result.equipments[0]?.id);
+    const persisted = await prisma.equipment.findMany({
+      where: { customerId: result.customerId },
+      orderBy: { createdAt: 'asc' },
+    });
+    expect(persisted).toHaveLength(2);
+    expect(persisted.map((item) => item.type)).toEqual([EquipmentType.SPLIT, EquipmentType.CHILLER]);
+    expect(persisted.every((item) => item.addressId === result.addressId && Boolean(item.qrToken))).toBe(true);
   });
 
   it('atomically registers field equipment and links it to an unscoped assigned Operation', async () => {

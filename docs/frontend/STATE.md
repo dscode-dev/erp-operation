@@ -1428,3 +1428,10 @@ Status: concluído.
   limpa novamente o draft ao finalizar ou renderizar, impedindo sua reaparição após a conclusão.
 - Identificadores locais do formulário possuem fallback para WebViews sem `crypto.randomUUID`, sem
   alterar os UUIDs persistidos pelo backend.
+
+# OS avulsa com múltiplos equipamentos — 2026-08-03
+
+- O cadastro de cliente novo no Operator deixou de possuir campos de equipamento único.
+- O primeiro passo reutiliza `FieldEquipmentCollection`, aceita até 20 equipamentos e exige tipo,
+  marca, modelo e capacidade em cada item.
+- Todos os equipamentos são cadastrados de uma vez e seguem para resumo, Operation, Preview e PDF.

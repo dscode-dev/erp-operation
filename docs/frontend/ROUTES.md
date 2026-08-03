@@ -774,3 +774,8 @@ permanece a mesma após o vínculo e utiliza a resposta oficial na conferência 
 
 O draft local é recuperável apenas antes da materialização. Preparar Preview, finalizar revisão ou
 renderizar o documento desativa o autosave e remove a chave `erp:draft:reports:new:{type}`.
+
+# `/operator/atendimento` — OS avulsa de cliente novo
+
+A opção “OS avulso — cliente novo” coleta cliente, endereço, contato e uma coleção de equipamentos
+no primeiro passo. Todos os ativos criados são incluídos na mesma OS e no documento oficial.

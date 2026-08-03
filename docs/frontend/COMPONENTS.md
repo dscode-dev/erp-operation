@@ -983,3 +983,7 @@ reagendamento e aprovação do cancelamento.
 Bloco contextual do `ExecucaoWizard` mostrado somente quando a OS atribuída não possui equipamento.
 Combina `MultiSelect` dos ativos do cliente com formulários repetíveis para cadastro em campo. A
 persistência ocorre em lote antes de sair do passo Conteúdo.
+
+O componente reside em `apps/operator/components` e também é usado por `AtendimentoWizard` na OS
+avulsa. Título e orientação são configuráveis; campos, fallback de chave e limite permanecem únicos
+nos dois fluxos.
