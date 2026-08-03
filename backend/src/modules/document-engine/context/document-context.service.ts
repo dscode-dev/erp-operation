@@ -593,8 +593,11 @@ export class DocumentContextService {
     const executionSignature = this.resolveExecutionSignature(operation);
     const acceptsExecutionSignatures =
       mode === SignatureMode.COLLECTED || mode === SignatureMode.HYBRID;
+    const hideUnsignedRvtClient =
+      template?.type === DocumentTemplateType.TECHNICAL_REPORT && !executionSignature;
     const clientEnabled = Boolean(
       acceptsExecutionSignatures &&
+      !hideUnsignedRvtClient &&
       (template?.executionSignatureClient ||
         mode === SignatureMode.COLLECTED ||
         mode === SignatureMode.HYBRID),
@@ -649,7 +652,8 @@ export class DocumentContextService {
       executionSignatureApplies,
     );
     const collectedSignature =
-      effectiveMode === SignatureMode.COLLECTED || effectiveMode === SignatureMode.HYBRID
+      clientEnabled &&
+      (effectiveMode === SignatureMode.COLLECTED || effectiveMode === SignatureMode.HYBRID)
         ? {
             label: 'Assinatura do cliente/responsável',
             name: operation?.customerSignerName ?? null,
@@ -782,6 +786,9 @@ export class DocumentContextService {
     // **PMOC** — decisão do owner: só o responsável técnico, sem assinatura do
     // cliente (nem no preview nem no PDF). Quando o owner oculta a assinatura do
     // cliente num documento específico, o bloco do cliente também some.
+    const customer = this.signatureSnapshot(handoff.customerSignatureSnapshot);
+    const executionSignature = this.resolveExecutionSignature(operation);
+    const customerSigned = Boolean(customer || executionSignature);
     const customerRequired =
       !handoff.customerSignatureHidden &&
       ([
@@ -790,15 +797,15 @@ export class DocumentContextService {
         DocumentTemplateType.BUDGET,
         DocumentTemplateType.REPORT,
         DocumentTemplateType.QUOTE,
-      ] as DocumentTemplateType[]).includes(handoff.type);
-    const customer = this.signatureSnapshot(handoff.customerSignatureSnapshot);
+      ] as DocumentTemplateType[]).includes(handoff.type) &&
+      (handoff.type !== DocumentTemplateType.TECHNICAL_REPORT || customerSigned);
     const technical = this.signatureSnapshot(handoff.technicalSignatureSnapshot);
     const collectedImage = customer
       ? await this.assets.resolveSignature(customer.storageKey, {
           mimeType: customer.mimeType,
           fileSize: customer.fileSize,
         })
-      : this.resolveExecutionSignature(operation)?.image ?? null;
+      : executionSignature?.image ?? null;
     const technicalSource = technical ??
       (handoff.technicalSignature?.imageStorageKey && handoff.technicalSignature.mimeType && handoff.technicalSignature.fileSize
         ? {

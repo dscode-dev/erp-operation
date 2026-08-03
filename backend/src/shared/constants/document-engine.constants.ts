@@ -51,7 +51,6 @@ export const SKIP_AUTO_WORK_ORDER_DOCUMENT_TYPES = ['RECEIPT', 'TECHNICAL_REPORT
 // (política FIXED), permitindo finalizar sem a assinatura do cliente.
 export const CUSTOMER_SIGNATURE_REQUIRED_DOCUMENT_TYPES = [
   'WORK_ORDER',
-  'TECHNICAL_REPORT',
 ] as const;
 
 export const DOCUMENT_MIME_TYPE = 'application/pdf';

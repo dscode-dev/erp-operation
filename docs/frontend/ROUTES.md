@@ -779,3 +779,37 @@ renderizar o documento desativa o autosave e remove a chave `erp:draft:reports:n
 
 A opção “OS avulso — cliente novo” coleta cliente, endereço, contato e uma coleção de equipamentos
 no primeiro passo. Todos os ativos criados são incluídos na mesma OS e no documento oficial.
+
+## RVT Planning (2026-08-03)
+
+| Rota | Finalidade |
+| --- | --- |
+| `/rvt` | Catálogo paginado e criação da configuração |
+| `/rvt/[id]` | Detalhe e ocorrências individuais |
+| `/operator/atendimento` | RVT avulso ou seleção de ocorrência configurada |
+| `/operator/execucao/[id]` | Coleta/conclusão da Assignment RVT |
+
+`/reports` encaminha `TECHNICAL_REPORT` para `/rvt?create=1`.
+
+Em `/rvt/[id]`, “gerenciar atribuição” prepara/repara a Assignment e abre o `OperationDetailDrawer`
+na própria rota, sem redirecionar para `/operacoes`. OWNER/MANAGER podem selecionar e confirmar o
+operador no drawer. “Executar RVT agora” reatribui a ocorrência ao usuário atual, inicia a Assignment
+e abre o wizard em um drawer da própria Platform, mantendo `/rvt/[id]`. A rota
+`/operator/execucao/[id]` é utilizada somente pelo PWA.
+
+Assignments RVT com `isPrimary=false` abrem no PWA somente para consulta; apenas o Técnico em Campo
+principal possui ações de aceite, início, cancelamento e conclusão.
+
+Em `/operator/execucao/[id]` e `/operator/atendimento`, novos equipamentos são preenchidos um por
+vez e só entram no comando da API após a confirmação “Adicionar equipamento”.
+
+O acesso ao wizard pela Platform não depende de uma atribuição previamente existente: o `prepare`
+garante ou repara a Assignment antes da navegação.
+
+O download de uma execução concluída permanece em `/rvt/[id]` e baixa o PDF autenticado associado,
+sem redirecionar o usuário para `/documentos`.
+
+Após concluir um RVT atribuído em `/operator/services/:assignmentId/execute`, a rota permanece no
+fluxo Operator e apresenta a tela padrão de documento pronto. As ações levam a `/operator`,
+`/operator/documents` ou `/operator/atendimento`; download e compartilhamento usam o documento
+recém-renderizado.

@@ -1327,3 +1327,33 @@ O cadastro avulso reutiliza a coleção visual da execução atribuída, mas per
 transacional `Customer walk-in`: cliente, endereço, contato e N equipamentos são criados juntos. A
 API devolve os IDs de domínio e somente então o Wizard cria a Operation com todos os snapshots; não
 existe criação otimista de Equipment nem estado persistente paralelo no frontend.
+
+## RVT configurável (2026-08-03)
+
+`RvtPlan -> RvtExecution -> MaintenanceExecution -> Operation -> Assignment -> DocumentContext -> Document Engine`.
+
+- `packages/api/rvt.ts` é o client único; páginas não usam `fetch` direto.
+- Planejamento especializa e não substitui agenda, execução ou documentos.
+- Platform e Operator convergem na mesma Operation; Preview, Renderer, PDF, Storage e repositório permanecem inalterados.
+- Objetos de leitura nunca são reutilizados diretamente como comandos: o adapter do wizard projeta o
+  checklist para o contrato gravável antes do PATCH.
+- O rascunho visual de Equipment pertence ao componente; o wizard conserva apenas a coleção de
+  itens confirmados, impedindo formulários incompletos no payload.
+- A garantia de Assignment pertence ao backend. O frontend apenas decide entre gerenciar a
+  atribuição existente ou assumir a execução e iniciar suas transições oficiais.
+- O detalhe de uma ocorrência reutiliza `OperationDetailDrawer` no contexto de `/rvt/[id]`; não há
+  transição para a Central de Operações nem implementação paralela de atribuição.
+- O workflow de coleta aceita superfícies distintas: a Platform o hospeda em `RvtExecutionDrawer`,
+  enquanto o PWA mantém suas rotas próprias. Ambos persistem na mesma Operation/Assignment e não
+  duplicam regras de conclusão ou emissão documental.
+- A equipe mantém uma Assignment primária e N secundárias. Somente a primária conduz estados;
+  auxiliares não entram no DocumentContext e não invalidam o PDF.
+- A UI não deriva URL de storage: localiza o `TECHNICAL_REPORT` `READY` projetado na execução e
+  delega o download ao client oficial do Document Engine.
+
+- O catálogo RVT é mesclado por identidade no estado do wizard: dados persistidos prevalecem e o
+  catálogo complementar preenche apenas itens ausentes. Isso evita perda de coleta em refetch.
+- A tela de conclusão documental é compartilhada entre atendimento avulso e execução atribuída;
+  não existe fluxo paralelo de download/compartilhamento.
+- A composição da equipe é submetida por um único contrato de Assignment. O frontend não tenta
+  reconciliar auxiliares em uma segunda atualização de Operation.

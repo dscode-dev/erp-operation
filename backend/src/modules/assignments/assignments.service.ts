@@ -10,7 +10,7 @@ import {
 } from '@prisma/client';
 import { ASSIGNMENT_AUDIT_ACTIONS, ASSIGNMENT_RESOURCE } from '../../shared/constants/assignments.constants';
 import { ERROR_CODES } from '../../shared/constants/error-codes.constants';
-import { OPERATOR_DIRECT_COMPLETION_DOCUMENT_TYPES } from '../../shared/constants/document-engine.constants';
+import { CUSTOMER_SIGNATURE_REQUIRED_DOCUMENT_TYPES, OPERATOR_DIRECT_COMPLETION_DOCUMENT_TYPES } from '../../shared/constants/document-engine.constants';
 import { PMOC_MIN_PROCEDURE_IMAGES } from '../../shared/constants/pmoc.constants';
 import { ApplicationException } from '../../shared/exceptions/application.exception';
 import type { AuthenticatedUser } from '../../shared/types/authenticated-user.type';
@@ -313,6 +313,16 @@ export class AssignmentsService {
       }
       const assignment = await tx.assignment.findUniqueOrThrow({ where: { id } });
       await tx.operation.update({ where: { id: assignment.operationId }, data: { operatorId: dto.assignedTo } });
+      if (dto.auxiliaryOperatorIds !== undefined) {
+        await this.syncAuxiliaryAssignmentsTx(
+          tx,
+          assignment.operationId,
+          dto.assignedTo,
+          dto.auxiliaryOperatorIds,
+          actor.id,
+          context,
+        );
+      }
       // Reassignment restarts the field flow: the operation waits for the new
       // operator again (never resurrects COMPLETED/CANCELED operations).
       await tx.operation.updateMany({
@@ -412,8 +422,12 @@ export class AssignmentsService {
       (assignment?.operation.requestedDocumentType ?? DocumentTemplateType.WORK_ORDER) as
         (typeof OPERATOR_DIRECT_COMPLETION_DOCUMENT_TYPES)[number],
     );
+    const customerSignatureRequired = CUSTOMER_SIGNATURE_REQUIRED_DOCUMENT_TYPES.includes(
+      (assignment?.operation.requestedDocumentType ?? DocumentTemplateType.WORK_ORDER) as
+        (typeof CUSTOMER_SIGNATURE_REQUIRED_DOCUMENT_TYPES)[number],
+    );
     if (
-      directCompletion &&
+      customerSignatureRequired &&
       (!assignment?.operation.signatureData ||
         !assignment.operation.customerSignerName?.trim() ||
         !assignment.operation.signedAt)
@@ -448,6 +462,7 @@ export class AssignmentsService {
   ): Promise<AssignmentPayload> {
     return this.prisma.$transaction(async (tx) => {
       const current = await this.assignmentOrThrowTx(tx, id);
+      this.assertRvtPrimaryExecutor(current);
       this.assertAssignee(current, actor);
       this.assertAllowed(current.status, [AssignmentStatus.ASSIGNED, AssignmentStatus.ACCEPTED]);
       const now = new Date();
@@ -494,6 +509,8 @@ export class AssignmentsService {
       notes?: string | null;
       /** false para técnicos auxiliares (recebem/visualizam, não executam). */
       isPrimary?: boolean;
+      /** Seleção explícita no fluxo de execução já autoriza a visualização. */
+      operatorVisible?: boolean;
     },
     actorId: string,
     context?: Partial<AssignmentAuditContext>,
@@ -503,6 +520,7 @@ export class AssignmentsService {
     // Auto-atribuição (o operador iniciou o próprio atendimento) já nasce visível;
     // demanda criada pela gestão fica oculta até o owner autorizar a exibição.
     const selfAssigned = input.assignedBy === input.assignedTo;
+    const operatorVisible = selfAssigned || input.operatorVisible === true;
     const assignment = await tx.assignment.create({
       data: {
         operationId: input.operationId,
@@ -510,9 +528,9 @@ export class AssignmentsService {
         assignedTo: input.assignedTo,
         isPrimary,
         notes: input.notes ?? null,
-        operatorVisible: selfAssigned,
-        authorizedAt: selfAssigned ? new Date() : null,
-        authorizedBy: selfAssigned ? input.assignedBy : null,
+        operatorVisible,
+        authorizedAt: operatorVisible ? new Date() : null,
+        authorizedBy: operatorVisible ? input.assignedBy : null,
       },
     });
     // Só o executor primário move a operação para PENDING; auxiliares apenas
@@ -547,6 +565,96 @@ export class AssignmentsService {
     return { id: assignment.id };
   }
 
+  async syncAuxiliaryAssignmentsTx(
+    tx: Prisma.TransactionClient,
+    operationId: string,
+    primaryOperatorId: string,
+    requestedIds: string[],
+    actorId: string,
+    context?: Partial<AssignmentAuditContext>,
+  ): Promise<void> {
+    const desiredIds = [...new Set(requestedIds)].filter((id) => id !== primaryOperatorId);
+    for (const id of desiredIds) await this.operationalUserOrThrowTx(tx, id);
+
+    const current = await tx.assignment.findMany({
+      where: { operationId, isPrimary: false },
+      orderBy: { assignedAt: 'asc' },
+    });
+    const desired = new Set(desiredIds);
+    const now = new Date();
+
+    for (const assignment of current) {
+      if (desired.has(assignment.assignedTo)) continue;
+      if (assignment.status === AssignmentStatus.CANCELED) continue;
+      await tx.assignment.update({
+        where: { id: assignment.id },
+        data: { status: AssignmentStatus.CANCELED, canceledAt: now },
+      });
+      await this.historyTx(
+        tx,
+        { ...assignment, status: AssignmentStatus.CANCELED },
+        AssignmentEventType.CANCELED,
+        actorId,
+        assignment.status,
+        'Auxiliar técnico removido da execução',
+      );
+      await this.auditTx(
+        tx,
+        ASSIGNMENT_AUDIT_ACTIONS.ASSIGNMENT_CANCELED,
+        actorId,
+        this.safeContext(context),
+        { assignmentId: assignment.id, operationId, assignedTo: assignment.assignedTo, isPrimary: false },
+      );
+    }
+
+    for (const assignedTo of desiredIds) {
+      const existing = current.find((item) => item.assignedTo === assignedTo);
+      if (!existing) {
+        await this.createForOperationTx(
+          tx,
+          { operationId, assignedBy: actorId, assignedTo, isPrimary: false, operatorVisible: true },
+          actorId,
+          context,
+        );
+        continue;
+      }
+      if (existing.status !== AssignmentStatus.CANCELED && existing.status !== AssignmentStatus.REJECTED) {
+        if (!existing.operatorVisible) {
+          await tx.assignment.update({
+            where: { id: existing.id },
+            data: { operatorVisible: true, authorizedAt: now, authorizedBy: actorId },
+          });
+        }
+        continue;
+      }
+      const restored = await tx.assignment.update({
+        where: { id: existing.id },
+        data: {
+          assignedBy: actorId,
+          status: AssignmentStatus.ASSIGNED,
+          assignedAt: now,
+          operatorVisible: true,
+          authorizedAt: now,
+          authorizedBy: actorId,
+          acceptedAt: null,
+          startedAt: null,
+          completedAt: null,
+          canceledAt: null,
+          rejectedAt: null,
+          rejectionReason: null,
+        },
+      });
+      await this.historyTx(tx, restored, AssignmentEventType.ASSIGNED, actorId, existing.status, 'Auxiliar técnico incluído novamente');
+      await this.auditTx(
+        tx,
+        ASSIGNMENT_AUDIT_ACTIONS.ASSIGNMENT_CREATED,
+        actorId,
+        this.safeContext(context),
+        { assignmentId: restored.id, operationId, assignedTo, isPrimary: false, restored: true },
+      );
+    }
+  }
+
   private async transition(
     id: string,
     actor: AuthenticatedUser,
@@ -566,6 +674,7 @@ export class AssignmentsService {
   ): Promise<AssignmentPayload> {
     return this.prisma.$transaction(async (tx) => {
       const current = await this.assignmentOrThrowTx(tx, id);
+      this.assertRvtPrimaryExecutor(current);
       this.assertAssignee(current, actor);
       this.assertAllowed(current.status, config.allowedFrom);
       const now = new Date();
@@ -604,6 +713,12 @@ export class AssignmentsService {
             'Operation could not be synchronized with assignment',
             HttpStatus.CONFLICT,
           );
+        }
+        if (config.operationStatus === 'IN_PROGRESS') {
+          await tx.rvtExecution.updateMany({
+            where: { operationId: assignment.operationId, status: { in: ['PENDING', 'ASSIGNED'] } },
+            data: { status: 'IN_PROGRESS', startedAt: now },
+          });
         }
       }
       await this.historyTx(tx, assignment, config.event, actor.id, current.status, config.notes);
@@ -724,6 +839,16 @@ export class AssignmentsService {
       throw new ApplicationException(
         ERROR_CODES.ASSIGNMENT_OPERATOR_FORBIDDEN,
         'Only the assigned operator can execute this transition',
+        HttpStatus.FORBIDDEN,
+      );
+    }
+  }
+
+  private assertRvtPrimaryExecutor(assignment: { isPrimary: boolean; operation: { requestedDocumentType: DocumentTemplateType } }): void {
+    if (!assignment.isPrimary && assignment.operation.requestedDocumentType === DocumentTemplateType.TECHNICAL_REPORT) {
+      throw new ApplicationException(
+        ERROR_CODES.ASSIGNMENT_OPERATOR_FORBIDDEN,
+        'Auxiliares técnicos podem acompanhar o RVT, mas somente o responsável principal pode executá-lo',
         HttpStatus.FORBIDDEN,
       );
     }

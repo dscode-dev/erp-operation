@@ -658,6 +658,10 @@ describe('DocumentEngine foundation', () => {
         'Semestral',
       ]);
       expect(maintenanceColumns.columns.map((column) => column.selected)).toEqual([false, true]);
+      expect(maintenanceColumns.columns[0].items[0]).toMatchObject({
+        label: 'Limpeza de filtro de ar',
+        done: false,
+      });
       expect(maintenanceColumns.columns[1].items[0]).toMatchObject({
         label: 'Limpeza total dos trocadores de calor',
         done: true,

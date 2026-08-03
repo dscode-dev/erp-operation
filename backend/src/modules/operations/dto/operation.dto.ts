@@ -288,6 +288,12 @@ export class UpdateOperationDto {
   @IsOptional()
   @IsArray()
   @ArrayUnique()
+  @ArrayMaxSize(10)
+  @IsUUID('4', { each: true })
+  auxiliaryOperatorIds?: string[];
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
   @ArrayMaxSize(4)
   @IsEnum(OperationType, { each: true })
   serviceTypes?: OperationType[];

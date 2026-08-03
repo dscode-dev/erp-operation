@@ -1226,6 +1226,7 @@ export class DocumentBuilderService {
     ];
     const order: string[] = [...reportTypes];
     const groups = new Map<string, Array<{ label: string; done: boolean }>>();
+    const selected = operation.maintenanceType ?? null;
     reportTypes.forEach((type) => groups.set(type, []));
     for (const item of operation.maintenanceChecklistItems ?? []) {
       if (!groups.has(item.maintenanceType)) {
@@ -1234,11 +1235,12 @@ export class DocumentBuilderService {
       }
       groups.get(item.maintenanceType)!.push({
         label: this.clean(item.description),
-        done: item.executed,
+        // O grupo não selecionado é documental: lista o catálogo, mas nunca
+        // representa procedimento executado nesta visita.
+        done: item.maintenanceType === selected && item.executed,
       });
     }
 
-    const selected = operation.maintenanceType ?? null;
     if (selected && !groups.has(selected)) {
       groups.set(selected, []);
       order.unshift(selected);

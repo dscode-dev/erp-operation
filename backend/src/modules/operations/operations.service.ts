@@ -6,7 +6,7 @@ import {
   type StorageProviderContract,
 } from '../../infra/storage/storage-provider.type';
 import { ERROR_CODES } from '../../shared/constants/error-codes.constants';
-import { DOCUMENT_ONLY_DOCUMENT_TYPES, OPERATOR_DIRECT_COMPLETION_DOCUMENT_TYPES, SKIP_AUTO_WORK_ORDER_DOCUMENT_TYPES } from '../../shared/constants/document-engine.constants';
+import { CUSTOMER_SIGNATURE_REQUIRED_DOCUMENT_TYPES, DOCUMENT_ONLY_DOCUMENT_TYPES, OPERATOR_DIRECT_COMPLETION_DOCUMENT_TYPES, SKIP_AUTO_WORK_ORDER_DOCUMENT_TYPES } from '../../shared/constants/document-engine.constants';
 import { PMOC_MIN_PROCEDURE_IMAGES } from '../../shared/constants/pmoc.constants';
 import {
   MAX_OPERATION_PHOTOS,
@@ -124,7 +124,29 @@ const OPERATION_INCLUDE = {
       },
     },
   },
-  assignments: { where: { isPrimary: true }, select: { id: true, assignedBy: true, assignedTo: true, status: true } },
+  rvtExecution: {
+    select: {
+      id: true,
+      rvtPlanId: true,
+      executionNumber: true,
+      status: true,
+      rvtPlan: {
+        select: {
+          responsibleTechnician: {
+            select: {
+              institutionalSignature: {
+                select: { id: true, name: true, title: true, professionalCouncil: true, registrationNumber: true },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+  assignments: {
+    orderBy: [{ isPrimary: 'desc' as const }, { assignedAt: 'asc' as const }],
+    select: { id: true, assignedBy: true, assignedTo: true, isPrimary: true, status: true, assignee: { select: { id: true, name: true, role: true } } },
+  },
   cancellations: {
     orderBy: { requestedAt: 'desc' as const },
     take: 1,
@@ -348,8 +370,8 @@ export class OperationsService {
     const signatureData = this.normalizeSignatureData(dto.signatureData);
     if (
       actor.role === Role.OPERATOR &&
-      OPERATOR_DIRECT_COMPLETION_DOCUMENT_TYPES.includes(
-        requestedDocumentType as (typeof OPERATOR_DIRECT_COMPLETION_DOCUMENT_TYPES)[number],
+      CUSTOMER_SIGNATURE_REQUIRED_DOCUMENT_TYPES.includes(
+        requestedDocumentType as (typeof CUSTOMER_SIGNATURE_REQUIRED_DOCUMENT_TYPES)[number],
       ) &&
       (!signatureData || !dto.customerSignerName?.trim())
     ) {
@@ -614,6 +636,13 @@ export class OperationsService {
         'Operation was not found',
         HttpStatus.NOT_FOUND,
       );
+    if (dto.auxiliaryOperatorIds !== undefined && actor.role !== Role.OWNER && actor.role !== Role.MANAGER) {
+      throw new ApplicationException(
+        ERROR_CODES.FORBIDDEN,
+        'Somente OWNER e MANAGER podem definir auxiliares técnicos',
+        HttpStatus.FORBIDDEN,
+      );
+    }
     this.validateReferencePeriod(
       dto.referenceMonth ?? existing.referenceMonth ?? undefined,
       dto.referenceYear ?? existing.referenceYear ?? undefined,
@@ -744,7 +773,18 @@ export class OperationsService {
             : {}),
         },
       });
-      if (Object.keys(dto).length > 0) await this.markDocumentsChangedTx(tx, id, actor, Object.keys(dto));
+      if (dto.auxiliaryOperatorIds !== undefined) {
+        await this.assignments.syncAuxiliaryAssignmentsTx(
+          tx,
+          id,
+          existing.operatorId,
+          dto.auxiliaryOperatorIds,
+          actor.id,
+          context,
+        );
+      }
+      const documentChangedFields = Object.keys(dto).filter((field) => field !== 'auxiliaryOperatorIds');
+      if (documentChangedFields.length > 0) await this.markDocumentsChangedTx(tx, id, actor, documentChangedFields);
       if (dto.maintenanceChecklist !== undefined) {
         await tx.operationMaintenanceChecklistItem.deleteMany({ where: { operationId: id } });
         if (dto.maintenanceChecklist.length > 0) {
@@ -868,6 +908,7 @@ export class OperationsService {
             equipmentId: true,
             status: true,
             inspectedEquipments: { select: { equipmentId: true } },
+            rvtExecution: { select: { rvtPlanId: true } },
           },
         });
         if (!operation) {
@@ -884,7 +925,7 @@ export class OperationsService {
             HttpStatus.CONFLICT,
           );
         }
-        if (operation.equipmentId || operation.inspectedEquipments.length > 0) {
+        if ((operation.equipmentId || operation.inspectedEquipments.length > 0) && !operation.rvtExecution) {
           throw new ApplicationException(
             ERROR_CODES.OPERATION_EQUIPMENT_INVALID,
             'Esta Ordem de Serviço já possui equipamentos definidos',
@@ -989,6 +1030,9 @@ export class OperationsService {
 
         const selected = [...existing, ...created];
         await tx.operation.update({ where: { id }, data: { equipmentId: selected[0].id } });
+        if (operation.inspectedEquipments.length > 0) {
+          await tx.operationInspectedEquipment.deleteMany({ where: { operationId: id } });
+        }
         await tx.operationInspectedEquipment.createMany({
           data: selected.map((item, position) => ({
             operationId: id,
@@ -1002,6 +1046,13 @@ export class OperationsService {
             serialSnapshot: item.serialNumber,
           })),
         });
+        if (operation.rvtExecution && created.length > 0) {
+          const lastPosition = await tx.rvtPlanEquipment.aggregate({ where: { rvtPlanId: operation.rvtExecution.rvtPlanId }, _max: { position: true } });
+          await tx.rvtPlanEquipment.createMany({
+            data: created.map((item, index) => ({ rvtPlanId: operation.rvtExecution!.rvtPlanId, equipmentId: item.id, position: (lastPosition._max.position ?? -1) + index + 1 })),
+            skipDuplicates: true,
+          });
+        }
         await this.markDocumentsChangedTx(tx, id, actor, ['equipmentId', 'inspectedEquipments']);
         await tx.auditLog.create({
           data: this.audit('OPERATION_FIELD_EQUIPMENTS_ATTACHED', OPERATION_RESOURCE, actor, context, {
@@ -1427,8 +1478,14 @@ export class OperationsService {
         'Operation was not found',
         HttpStatus.NOT_FOUND,
       );
-    const { signatureData: _privateSignature, ...safeOperation } = operation;
-    return { ...safeOperation, signatureCaptured: Boolean(_privateSignature) };
+    const { signatureData: _privateSignature, assignments, ...safeOperation } = operation;
+    const primaryAssignment = assignments?.find((item) => item.isPrimary) ?? null;
+    const auxiliaryAssignments = assignments?.filter((item) => !item.isPrimary) ?? [];
+    return {
+      ...safeOperation,
+      ...(assignments ? { assignment: primaryAssignment, auxiliaryAssignments } : {}),
+      signatureCaptured: Boolean(_privateSignature),
+    };
   }
 
   private async photoOrThrow(photoId: string): Promise<{ id: string; operationId: string; storageKey: string; caption: string | null }> {

@@ -1,6 +1,6 @@
 import { AssignmentStatus } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
-import { ArrayMaxSize, IsArray, IsEnum, IsInt, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min } from 'class-validator';
+import { ArrayMaxSize, ArrayUnique, IsArray, IsEnum, IsInt, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min } from 'class-validator';
 
 const trim = (value: unknown): unknown => (typeof value === 'string' ? value.trim() : value);
 
@@ -22,6 +22,7 @@ export class CreateAssignmentDto {
 
 export class ReassignAssignmentDto {
   @IsUUID('4') assignedTo!: string;
+  @IsOptional() @IsArray() @ArrayUnique() @ArrayMaxSize(10) @IsUUID('4', { each: true }) auxiliaryOperatorIds?: string[];
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(2000) notes?: string;
 }
 

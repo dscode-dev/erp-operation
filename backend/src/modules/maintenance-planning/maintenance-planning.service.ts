@@ -446,6 +446,38 @@ export class MaintenancePlanningService {
         ),
       },
     });
+    const rvtExecution = await tx.rvtExecution.findUnique({
+      where: { maintenanceExecutionId: execution.id },
+      select: { id: true, rvtPlanId: true, operationId: true },
+    });
+    if (rvtExecution) {
+      await tx.rvtExecution.update({
+        where: { id: rvtExecution.id },
+        data: { status: 'COMPLETED', completedAt: executedAt },
+      });
+      const remaining = await tx.rvtExecution.count({
+        where: { rvtPlanId: rvtExecution.rvtPlanId, status: { notIn: ['COMPLETED', 'CANCELED'] } },
+      });
+      if (remaining === 0) {
+        await tx.rvtPlan.update({
+          where: { id: rvtExecution.rvtPlanId },
+          data: { status: 'COMPLETED', active: false },
+        });
+      }
+      await tx.auditLog.create({
+        data: {
+          action: 'RVT_EXECUTION_COMPLETED',
+          resource: 'RVT_PLAN',
+          actor: actorId,
+          metadata: {
+            requestId: context.requestId,
+            rvtPlanId: rvtExecution.rvtPlanId,
+            rvtExecutionId: rvtExecution.id,
+            operationId: rvtExecution.operationId,
+          },
+        },
+      });
+    }
     const pmocRequest = await tx.pmocExecutionRequest.findUnique({
       where: { maintenanceExecutionId: execution.id },
       select: { id: true, pmocPlanId: true, executionNumber: true, operationId: true },
