@@ -24,24 +24,26 @@ import { assignmentsApi, budgetsApi, documentsApi, inventoryApi, operationApi, s
 import type { DocumentConfiguration, SignatureMode } from "@erp/types";
 import { formatCurrencyBRL, formatDateTime, formatNumber } from "@erp/utils";
 import { ASSIGNMENT_STATUS_LABEL, assignmentTime } from "@erp/ui/assignments/assignment-shared";
-import { UserSelect } from "./entity-select";
+import { AuxiliaryOperatorSelect, UserSelect } from "./entity-select";
 import { BudgetWizardDrawer } from "./budget-wizard-drawer";
 
 export function OperationDetailDrawer({
   operationId,
   open,
   onClose,
+  assignmentActionLabel = "Reatribuir",
 }: {
   operationId: string | null;
   open: boolean;
   onClose: () => void;
+  assignmentActionLabel?: string;
 }) {
   const detail = useQuery<OperationDetail | null>(
     (signal) => (operationId ? operationApi.getOperation(operationId, { signal }) : Promise.resolve(null)),
     [operationId],
   );
   const assignmentQuery = useQuery(
-    (signal) => (operationId ? assignmentsApi.listAssignments({ operationId, limit: 1, signal }) : Promise.resolve({ items: [], pagination: { page: 1, limit: 1, total: 0, totalPages: 0 } })),
+    (signal) => (operationId ? assignmentsApi.listAssignments({ operationId, limit: 20, signal }) : Promise.resolve({ items: [], pagination: { page: 1, limit: 20, total: 0, totalPages: 0 } })),
     [operationId],
   );
   const [photoSources, setPhotoSources] = useState<Record<string, string>>({});
@@ -94,9 +96,15 @@ export function OperationDetailDrawer({
 
           <DocumentReviewSection operation={op} onSaved={detail.refetch} />
 
-          <AssignmentSection assignment={assignmentQuery.data?.items[0] ?? null} loading={assignmentQuery.loading} onRefresh={() => { assignmentQuery.refetch(); detail.refetch(); }} />
+          <AssignmentSection
+            assignment={assignmentQuery.data?.items.find((item) => item.isPrimary) ?? null}
+            auxiliaryAssignments={op.auxiliaryAssignments ?? []}
+            loading={assignmentQuery.loading}
+            actionLabel={assignmentActionLabel}
+            onRefresh={() => { assignmentQuery.refetch(); detail.refetch(); }}
+          />
 
-          <OperationDates operation={op} assignment={assignmentQuery.data?.items[0] ?? null} />
+          <OperationDates operation={op} assignment={assignmentQuery.data?.items.find((item) => item.isPrimary) ?? null} />
 
           {/* Dados do atendimento primeiro (Identificação, checklist, fotos,
               assinatura, documentos); ações e histórico na sequência. */}
@@ -562,28 +570,48 @@ function WorkOrderSignatureSection({ operation, onSaved }: { operation: Operatio
 
 function AssignmentSection({
   assignment,
+  auxiliaryAssignments,
   loading,
+  actionLabel,
   onRefresh,
 }: {
   assignment: Assignment | null;
+  auxiliaryAssignments: NonNullable<OperationDetail["auxiliaryAssignments"]>;
   loading: boolean;
+  actionLabel: string;
   onRefresh: () => void;
 }) {
   const [operatorId, setOperatorId] = useState("");
+  const [auxiliaryOperatorIds, setAuxiliaryOperatorIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<string | null>(null);
 
   useEffect(() => {
     setOperatorId(assignment?.assignedTo ?? "");
+    setAuxiliaryOperatorIds(
+      auxiliaryAssignments
+        .filter((item) => item.status !== "CANCELED" && item.status !== "REJECTED")
+        .map((item) => item.assignedTo),
+    );
     setError(null);
-  }, [assignment?.assignedTo]);
+  }, [assignment?.assignedTo, auxiliaryAssignments]);
 
   async function reassign() {
-    if (!assignment || !operatorId || operatorId === assignment.assignedTo) return;
+    if (!assignment || !operatorId) return;
     setSaving(true);
     setError(null);
+    setFeedback(null);
     try {
-      await assignmentsApi.reassignAssignment(assignment.id, { assignedTo: operatorId });
+      await assignmentsApi.reassignAssignment(assignment.id, {
+        assignedTo: operatorId,
+        auxiliaryOperatorIds: auxiliaryOperatorIds.filter((id) => id !== operatorId),
+      });
+      setFeedback(
+        auxiliaryOperatorIds.length > 0
+          ? "Responsável e auxiliares técnicos atribuídos com sucesso."
+          : "Responsável atribuído com sucesso.",
+      );
       onRefresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Não foi possível reatribuir.");
@@ -614,9 +642,11 @@ function AssignmentSection({
             <Gate roles={["OWNER", "MANAGER"]}>
               <div className="space-y-2 rounded-[var(--radius-md)] border border-[var(--color-border)] p-3">
                 <UserSelect value={operatorId} onChange={setOperatorId} />
+                <AuxiliaryOperatorSelect value={auxiliaryOperatorIds} onChange={setAuxiliaryOperatorIds} excludeId={operatorId || undefined} />
                 {error && <p className="text-xs text-[var(--color-danger)]">{error}</p>}
-                <button onClick={reassign} disabled={saving || !operatorId || operatorId === assignment.assignedTo} className="rounded-[var(--radius-md)] bg-[var(--color-primary)] text-[var(--color-primary-foreground)] px-3 h-9 text-sm font-medium disabled:opacity-50">
-                  {saving ? "Reatribuindo…" : "Reatribuir"}
+                {feedback && <p role="status" className="text-xs font-medium text-[var(--color-success)]">{feedback}</p>}
+                <button onClick={reassign} disabled={saving || !operatorId} className="rounded-[var(--radius-md)] bg-[var(--color-primary)] text-[var(--color-primary-foreground)] px-3 h-9 text-sm font-medium disabled:opacity-50">
+                  {saving ? "Salvando atribuição…" : actionLabel}
                 </button>
               </div>
             </Gate>

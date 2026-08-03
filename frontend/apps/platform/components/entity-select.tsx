@@ -63,7 +63,7 @@ export function EquipmentSelect({ customerId, value, onChange }: { customerId: s
 
 export function UserSelect({ value, onChange }: { value: string; onChange: (id: string, user?: TeamUser) => void }) {
   const users = useQuery((signal) => usersApi.listUsers({ limit: 100, signal }), []);
-  const operators = useMemo(() => (users.data?.items ?? []).filter((user) => user.isActive), [users.data]);
+  const operators = useMemo(() => (users.data?.items ?? []).filter((user) => user.isActive && user.role !== "VIEWER"), [users.data]);
   return (
     <Field label="Operador responsável">
       <select value={value} onChange={(event) => onChange(event.target.value, operators.find((u) => u.id === event.target.value))} className={inputCls}>
@@ -90,7 +90,7 @@ export function AuxiliaryOperatorSelect({
 }) {
   const users = useQuery((signal) => usersApi.listUsers({ limit: 100, signal }), []);
   const operators = useMemo(
-    () => (users.data?.items ?? []).filter((user) => user.isActive && user.id !== excludeId),
+    () => (users.data?.items ?? []).filter((user) => user.isActive && user.role !== "VIEWER" && user.id !== excludeId),
     [users.data, excludeId],
   );
   return (

@@ -37,6 +37,7 @@ export * as maintenanceApi from './maintenance';
 export * as maintenanceChecklistTemplatesApi from './maintenance-checklist-templates';
 export * as technicalCatalogsApi from './technical-catalogs';
 export * as pmocApi from './pmoc';
+export * as rvtApi from './rvt';
 
 export * as operationApi from './operation';
 export * as operatorExecutionsApi from './operator-executions';
@@ -72,6 +73,7 @@ export type {
   PmocActiveCoverageConflict,
   PmocActiveCoverageResult,
 } from './pmoc';
+export type { ListRvtPlansParams, RvtPlanPayload } from './rvt';
 export type { FieldEquipmentDraft, OperationPhotoContent } from './operation';
 export type { DocumentCatalogItem } from './documents';
 export type { ListSignaturesParams, SignaturePayload } from './signatures';

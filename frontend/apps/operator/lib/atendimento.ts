@@ -5,7 +5,7 @@
  * operational domain), which also generates a Work Order (OS) draft. Reading data
  * (clients, equipments) and writing the Operation both use the production API.
  */
-import { assignmentsApi, documentsApi, operationApi } from '@erp/api';
+import { assignmentsApi, documentsApi, operationApi, rvtApi } from '@erp/api';
 import type {
   CreateOperationPayload,
   DocumentHandoff,
@@ -77,14 +77,17 @@ export async function createOperationFromDraft(draft: AtendimentoDraft): Promise
   if (draft.documentType !== 'WORK_ORDER' && draft.documentType !== 'TECHNICAL_REPORT') {
     throw new Error('O operador pode iniciar somente Ordem de Serviço ou Relatório de Visita Técnica.');
   }
-  if (!draft.signature || !draft.signerName.trim()) throw new Error('A assinatura e o nome do cliente/responsável são obrigatórios.');
+  if (draft.documentType === 'WORK_ORDER' && (!draft.signature || !draft.signerName.trim())) {
+    throw new Error('A assinatura e o nome do cliente/responsável são obrigatórios.');
+  }
+  if (draft.signature && !draft.signerName.trim()) throw new Error('Informe o nome de quem assinou.');
   if (!draft.technicalSignatureId) throw new Error('Selecione sua assinatura técnica para esta atividade.');
 
   const photos = await Promise.all(
     draft.photos.map(async (p) => ({ dataUrl: await fileToDataUrl(p.file), caption: p.name })),
   );
 
-  const now = draft.signedAt ?? new Date().toISOString();
+  const now = draft.signature ? draft.signedAt ?? new Date().toISOString() : null;
   const payload: CreateOperationPayload = {
     customerId: draft.customerId,
     addressId: draft.addressId,
@@ -111,7 +114,7 @@ export async function createOperationFromDraft(draft: AtendimentoDraft): Promise
     technicalOpinionRecommendations: draft.recommendations.join('\n') || null,
     technicalOpinionConclusion: draft.conclusion.join('\n') || null,
     signatureData: draft.signature,
-    customerSignerName: draft.signerName.trim(),
+    customerSignerName: draft.signature ? draft.signerName.trim() : null,
     customerSignerRole: draft.signerRole.trim() || null,
     signedAt: now,
     photos,
@@ -134,17 +137,20 @@ export async function createOperationFromDraft(draft: AtendimentoDraft): Promise
   );
   // Registro oficial da assinatura no documento (nome/função/quando/por quem),
   // usado pelo Preview e pelo PDF a partir do mesmo DocumentContext.
-  draftDocument = await documentsApi.collectCustomerSignature(draftDocument.id, {
-    signerName: draft.signerName.trim(),
-    signerRole: draft.signerRole.trim() || undefined,
-    signatureData: draft.signature,
-    collectedAt: now,
-    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Recife',
-  });
+  if (draft.signature && now) {
+    draftDocument = await documentsApi.collectCustomerSignature(draftDocument.id, {
+      signerName: draft.signerName.trim(),
+      signerRole: draft.signerRole.trim() || undefined,
+      signatureData: draft.signature,
+      collectedAt: now,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Recife',
+    });
+  }
   await documentsApi.submitHandoff(draftDocument.id);
   await assignmentsApi.completeAssignment(assignment.id, 'Atendimento iniciado e executado pelo operador.');
   const handoff = await documentsApi.finalizeHandoffReview(draftDocument.id);
   await documentsApi.renderDocument(draftDocument.id);
+  if (draft.documentType === 'TECHNICAL_REPORT') await rvtApi.registerAdHoc(created.id);
   const operation = await operationApi.getOperation(created.id);
   return { operation, handoff };
 }

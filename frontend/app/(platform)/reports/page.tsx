@@ -420,6 +420,10 @@ export default function ReportCenterPage() {
                     router.push('/pmoc');
                     return;
                   }
+                  if (reportType === 'TECHNICAL_REPORT') {
+                    router.push('/rvt?create=1');
+                    return;
+                  }
                   setWorkflow({ type: reportType });
                 }}
                 className="group rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 text-left transition hover:-translate-y-0.5 hover:border-[var(--color-primary)]/50 hover:shadow-[var(--shadow-card)]"

@@ -93,6 +93,7 @@ export function updateOperation(
     Pick<
       CreateOperationPayload,
       | 'status'
+      | 'auxiliaryOperatorIds'
       | 'startedAt'
       | 'completedAt'
       | 'checklist'
