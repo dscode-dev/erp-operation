@@ -96,6 +96,12 @@ const DOCUMENT_CONTEXT_OPERATION_INCLUDE = {
       },
     },
   },
+  rvtExecution: {
+    select: {
+      id: true,
+      executionNumber: true,
+    },
+  },
   parts: {
     where: { deletedAt: null },
     orderBy: { createdAt: 'asc' as const },

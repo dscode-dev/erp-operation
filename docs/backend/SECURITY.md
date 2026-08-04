@@ -2349,3 +2349,5 @@ The catalog is scoped to the installation Organization in every query. Reads req
   equipe parcialmente persistida.
 - O documento não expõe campo ou imagem de assinatura de cliente inexistente. Assets assinados
   continuam resolvidos exclusivamente pelo `DocumentAssetResolver`.
+- O número da execução é carregado pela relação Operation → RvtExecution dentro do DocumentContext;
+  nenhum identificador é aceito do cliente para compor o documento.

@@ -6277,3 +6277,8 @@ ativo e pertencente à instalação continuam no backend.
 
 Na preparação de RVT, `maintenanceChecklist` contém os grupos `WEEKLY` e `SEMIANNUAL`. Somente os
 itens cujo `maintenanceType` coincide com `operation.maintenanceType` podem ter `executed=true`.
+
+O Blueprint de `TECHNICAL_REPORT` preserva dois identificadores distintos: `metadata.documentNumber`
+e `header.documentNumber` são o número documental `RVT-*`; o item `Número` da seção de identificação
+é `rvtExecution.executionNumber` com três dígitos. RVTs avulsos, sem execução planejada, mantêm o
+número documental como fallback compatível.

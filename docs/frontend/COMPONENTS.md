@@ -1016,3 +1016,5 @@ nos dois fluxos.
 - `OperatorDocumentSuccessView`: agora também é reutilizado por `ExecucaoWizard` após render do RVT.
 - `AssignmentSection`: confirma `UserSelect` e `AuxiliaryOperatorSelect` de forma atômica e apresenta
   mensagem acessível com `role=status`.
+- `DocumentViewer` não transforma identificadores do RVT: renderiza o Blueprint oficial, preservando
+  o número documental no cabeçalho e o número da execução na seção de identificação.

@@ -543,6 +543,9 @@ export class DocumentBuilderService {
     const { operation } = context;
     const address = operation.address ?? operation.customer.addresses[0] ?? null;
     const contact = operation.customer.contacts[0] ?? null;
+    const executionNumber = operation.rvtExecution
+      ? String(operation.rvtExecution.executionNumber).padStart(3, '0')
+      : documentNumber;
     const sections: DocumentSection[] = [
       {
         id: 'technical-report-identification',
@@ -550,7 +553,7 @@ export class DocumentBuilderService {
         critical: true,
         components: [
           this.metadata('technical-report-identification-metadata', [
-            ['Número', documentNumber],
+            ['Número', `RVT-${executionNumber}`],
             ['Emissão', this.date(generatedAt)],
             ['Responsável técnico', this.technicalResponsibleName(context) ?? 'A definir na revisão'],
             ['Registro profissional', this.technicalResponsibleTitle(context) ?? '—'],

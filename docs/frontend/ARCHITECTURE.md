@@ -1357,3 +1357,5 @@ existe criação otimista de Equipment nem estado persistente paralelo no fronte
   não existe fluxo paralelo de download/compartilhamento.
 - A composição da equipe é submetida por um único contrato de Assignment. O frontend não tenta
   reconciliar auxiliares em uma segunda atualização de Operation.
+- A identidade documental e a identidade da execução permanecem conceitos separados no Blueprint;
+  componentes frontend não recalculam nem sobrescrevem nenhuma delas.

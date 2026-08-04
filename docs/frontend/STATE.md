@@ -1493,3 +1493,5 @@ Status: concluído.
   Documentos, novo atendimento e início.
 - Drawer de atribuição envia responsável e auxiliares na mesma confirmação e mostra feedback de
   sucesso após persistência.
+- Preview/PDF do RVT agora distinguem número documental no título e número sequencial da execução
+  no item `Número` da identificação, ambos fornecidos pelo Document Engine.

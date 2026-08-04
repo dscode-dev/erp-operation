@@ -813,3 +813,6 @@ Após concluir um RVT atribuído em `/operator/services/:assignmentId/execute`, 
 fluxo Operator e apresenta a tela padrão de documento pronto. As ações levam a `/operator`,
 `/operator/documents` ou `/operator/atendimento`; download e compartilhamento usam o documento
 recém-renderizado.
+
+Não houve nova rota para a correção do número da execução; Preview e PDF continuam nos contratos
+oficiais do Document Engine já consumidos pelas rotas RVT.

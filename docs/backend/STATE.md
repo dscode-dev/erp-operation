@@ -3394,3 +3394,5 @@ Status: implementado e validado em PostgreSQL/Docker.
   institucional do responsável técnico permanece no documento.
 - `PATCH /assignments/:id/reassign` sincroniza responsável e `auxiliaryOperatorIds` na mesma
   transação. Não houve alteração de schema ou migration.
+- No RVT planejado, o título/cabeçalho mantém o número documental (`RVT-000039`), enquanto o campo
+  `Identificação do relatório > Número` usa a sequência da execução (`001`, `002`, ...).

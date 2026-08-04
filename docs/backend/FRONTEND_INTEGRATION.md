@@ -2759,3 +2759,5 @@ administrativa por equipamento e não reutilize IDs locais do formulário.
   `PATCH /assignments/:id/reassign`; após sucesso, atualize Operation e Assignments.
 - Após conclusão direta no Operator, utilize o `documentId` retornado pelo render para oferecer
   compartilhamento e download autenticados na tela padrão de sucesso.
+- Não derive o número da execução a partir de `document.number` ou `operation.number`: no documento
+  final essa distinção é resolvida pelo backend (`RVT-*` no título e `001..N` na identificação).
