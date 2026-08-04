@@ -1,12 +1,16 @@
 import { CustomerType, EquipmentType } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  IsArray,
   IsBoolean,
   IsEmail,
   IsEnum,
   IsInt,
   IsOptional,
   IsString,
+  IsUUID,
   Length,
   Matches,
   Max,
@@ -218,6 +222,12 @@ class WalkInEquipmentDto {
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(120) manufacturer?: string;
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(120) model?: string;
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(80) capacity?: string;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(160) sector?: string;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(80) tag?: string;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(120) serialNumber?: string;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(40) voltage?: string;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(5000) observations?: string;
+  @IsOptional() @IsUUID('4') equipmentTypeCatalogId?: string;
   @IsOptional() @IsEnum(EquipmentType) type?: EquipmentType;
 }
 
@@ -227,5 +237,14 @@ export class CreateWalkInCustomerDto {
   @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MinLength(11) @MaxLength(18) document?: string;
   @ValidateNested() @Type(() => WalkInAddressDto) address!: WalkInAddressDto;
   @ValidateNested() @Type(() => WalkInContactDto) contact!: WalkInContactDto;
-  @ValidateNested() @Type(() => WalkInEquipmentDto) equipment!: WalkInEquipmentDto;
+  /** Contrato legado singular, preservado para clientes anteriores. */
+  @IsOptional() @ValidateNested() @Type(() => WalkInEquipmentDto) equipment?: WalkInEquipmentDto;
+  /** Coleção oficial usada pelo atendimento avulso para cadastrar até 20 equipamentos. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(20)
+  @ValidateNested({ each: true })
+  @Type(() => WalkInEquipmentDto)
+  equipments?: WalkInEquipmentDto[];
 }

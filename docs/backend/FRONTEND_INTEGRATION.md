@@ -2708,3 +2708,56 @@ oficial da solicitação.
 - O app nunca cria `PmocPlan`, nunca acessa Storage e nunca recebe `storageKey` ou Base64 do PDF.
 - Em Configurações > Assinaturas, associe a assinatura institucional ao respectivo OWNER para que o
   Wizard PMOC o reconheça como técnico responsável. Mais de um OWNER pode ser configurado.
+# OS atribuída sem equipamentos — integração mobile
+
+Quando `operation.equipment === null` e `operation.inspectedEquipments` estiver vazio, o wizard
+de campo deve permitir selecionar ativos existentes do cliente ou informar novos equipamentos.
+Antes de avançar do passo Conteúdo, enviar todos de uma vez para
+`POST /operations/:id/equipments`. A resposta substitui a fonte local de equipamentos e deve ser
+usada em `PATCH /operations/:id`, Preview e PDF. Não enviar `customerId` ou `addressId`: o backend
+os deriva da OS e rejeita vínculos cruzados.
+
+# OS avulsa com cliente novo e vários equipamentos
+
+No primeiro passo, envie a coleção em `equipments` para `POST /customers/walk-in`. Use
+`response.equipments` para montar todos os `inspectedEquipments` da nova Operation e
+`response.equipmentId` apenas como equipamento principal compatível. Não faça uma chamada
+administrativa por equipamento e não reutilize IDs locais do formulário.
+
+## RVT configurado e avulso (2026-08-03)
+
+- Central de Relatórios encaminha `TECHNICAL_REPORT` para `/rvt?create=1`.
+- Configuração chama `/rvt-plans` e nunca Preview/Render. A execução chama uma vez `/rvt-executions/:id/prepare` e continua pela Operation/Assignment retornada.
+- Operator escolhe RVT avulso ou configurado. O configurado usa ocorrência pendente; o avulso chama `/rvt-plans/ad-hoc` após conclusão/render.
+- Assinatura do cliente é opcional: se houver imagem, nome é obrigatório; sem imagem, não persistir placeholder. A assinatura técnica vem da configuração ou do técnico no avulso.
+- Fotos, checklist, recomendações e equipamentos continuam na Operation e no mesmo `DocumentContext` do Preview/PDF.
+- Ao atualizar uma execução, serialize os itens de checklist para o DTO gravável; não reenvie `id`,
+  `position`, `equipment` ou outros campos retornados apenas para apresentação.
+- `prepare` é idempotente e garante `OperationDetail.assignment` em ocorrências não finais. A gestão
+  pode reatribuir a Assignment retornada antes de aceitar/iniciar o wizard.
+
+### Equipe e assinatura do RVT
+
+- `assignment` é o Técnico em Campo principal; `auxiliaryAssignments` são somente acompanhamento.
+- A Platform envia `auxiliaryOperatorIds` pelo PATCH da Operation.
+- Se `rvtExecution.rvtPlan.responsibleTechnician.institutionalSignature` existir, trate-a como
+  assinatura configurada e somente leitura. O Operator não deve chamar novamente a seleção dessa assinatura.
+# Hotfix RVT — preparo e download (2026-08-03)
+
+- `prepare` é idempotente: o frontend não cria Assignment nem repete o POST para compensar
+  conflitos; consome `OperationDetail.assignment` retornado pelo backend.
+- Na lista de execuções, um `TECHNICAL_REPORT` em estado `READY` baixa diretamente por
+  `documentsApi.downloadDocument(document.id)`, sem redirecionamento para o catálogo documental.
+
+## RVT — contrato visual final
+
+- Renderize ambos os catálogos de manutenção retornados pela Operation. O grupo selecionado é
+  `operation.maintenanceType`; o outro é somente leitura e não recebe checks.
+- A ausência de assinatura coletada do cliente é um estado válido: o Document Engine omite esse
+  bloco no RVT e mantém apenas a assinatura técnica configurada.
+- Para confirmar a equipe no drawer, envie responsável e auxiliares juntos em
+  `PATCH /assignments/:id/reassign`; após sucesso, atualize Operation e Assignments.
+- Após conclusão direta no Operator, utilize o `documentId` retornado pelo render para oferecer
+  compartilhamento e download autenticados na tela padrão de sucesso.
+- Não derive o número da execução a partir de `document.number` ou `operation.number`: no documento
+  final essa distinção é resolvida pelo backend (`RVT-*` no título e `001..N` na identificação).

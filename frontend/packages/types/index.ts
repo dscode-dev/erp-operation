@@ -35,6 +35,68 @@ export type PaginatedTimeline<T> = Paginated<T> & {
   }>;
 };
 
+/* ============ RVT Planning ============ */
+
+export type RvtPlanStatus = 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'CANCELED';
+export type RvtExecutionStatus = 'PENDING' | 'ASSIGNED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELED';
+
+export type RvtPlan = {
+  id: string;
+  organizationId: string;
+  customerId: string;
+  addressId: string;
+  number: number;
+  name: string;
+  maintenanceType: 'WEEKLY' | 'SEMIANNUAL';
+  startDate: string;
+  endDate: string;
+  responsibleTechnicianId: string;
+  defaultOperatorId: string | null;
+  status: RvtPlanStatus;
+  active: boolean;
+  observations: string | null;
+  createdAt: string;
+  updatedAt: string;
+  customer: { id: string; name: string; tradeName: string | null };
+  address: CustomerAddress;
+  responsibleTechnician: { id: string; name: string; jobTitle: string | null };
+  defaultOperator: { id: string; name: string; role: Role } | null;
+  equipments: Array<{ id: string; equipmentId: string; position: number; equipment: EquipmentSummary }>;
+  checklists: Array<{ id: string; technicalCatalogId: string; position: number; technicalCatalog: { id: string; title: string; description?: string | null } }>;
+  executions: RvtExecution[];
+  _count?: { executions: number; checklists: number };
+};
+
+export type RvtExecution = {
+  id: string;
+  rvtPlanId: string;
+  maintenanceExecutionId: string;
+  operationId: string | null;
+  executionNumber: number;
+  scheduledAt: string;
+  status: RvtExecutionStatus;
+  assignedOperatorId: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  assignedOperator?: { id: string; name: string } | null;
+  operation?: OperationDetail | null;
+};
+
+export type RvtExecutionPrefill = {
+  rvtPlanId: string;
+  rvtExecutionId: string;
+  executionNumber: number;
+  customerId: string;
+  addressId: string;
+  equipmentIds: string[];
+  responsibleTechnician: { id: string; name: string; jobTitle: string | null };
+  fieldTechnician: { id: string; name: string };
+  maintenanceType: 'WEEKLY' | 'SEMIANNUAL';
+  maintenanceChecklist: OperationMaintenanceChecklistItem[];
+  observations: string | null;
+  scheduledAt: string;
+};
+
 /* ============ Auth / Roles ============ */
 
 export type Role = 'OWNER' | 'MANAGER' | 'OPERATOR' | 'VIEWER';
@@ -977,6 +1039,14 @@ export type OperationDetail = Omit<OperationSummary, 'equipment'> & {
     assignedTo: string;
     status: AssignmentStatus;
   } | null;
+  auxiliaryAssignments?: Array<{
+    id: string;
+    assignedBy: string;
+    assignedTo: string;
+    isPrimary: false;
+    status: AssignmentStatus;
+    assignee: Pick<TeamUser, 'id' | 'name' | 'role'>;
+  }>;
   address: CustomerAddress | null;
   equipment: {
     id: string;
@@ -1046,6 +1116,17 @@ export type OperationDetail = Omit<OperationSummary, 'equipment'> & {
         };
       })
     | null;
+  rvtExecution?: {
+    id: string;
+    rvtPlanId: string;
+    executionNumber: number;
+    status: RvtExecutionStatus;
+    rvtPlan?: {
+      responsibleTechnician?: {
+        institutionalSignature?: Pick<Signature, 'id' | 'name' | 'title' | 'professionalCouncil' | 'registrationNumber'> | null;
+      };
+    };
+  } | null;
 };
 
 export type OperationStats = {
@@ -1230,6 +1311,7 @@ export type Assignment = {
   operationId: string;
   assignedBy: string;
   assignedTo: string;
+  isPrimary: boolean;
   status: AssignmentStatus;
   assignedAt: string;
   acceptedAt: string | null;
@@ -1641,6 +1723,7 @@ export type PmocStats = {
 
 export type ReassignAssignmentPayload = {
   assignedTo: string;
+  auxiliaryOperatorIds?: string[];
   notes?: string | null;
 };
 

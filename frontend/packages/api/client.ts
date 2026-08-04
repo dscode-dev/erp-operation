@@ -73,7 +73,8 @@ function emitSessionInvalid(reason: "expired" | "password-change") {
 }
 
 function requestId(): string {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
+  const randomUUID = globalThis.crypto?.randomUUID;
+  if (typeof randomUUID === "function") return randomUUID.call(globalThis.crypto);
   return `req-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 

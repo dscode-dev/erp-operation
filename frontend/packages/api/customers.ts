@@ -48,7 +48,23 @@ export type WalkInCustomerPayload = {
     state: string;
   };
   contact: { name: string; phone: string };
-  equipment: { name?: string; manufacturer?: string; model?: string; capacity?: string; type?: string };
+  /** Contrato singular legado. Novos clientes devem usar `equipments`. */
+  equipment?: WalkInEquipmentPayload;
+  equipments?: WalkInEquipmentPayload[];
+};
+
+export type WalkInEquipmentPayload = {
+  name?: string;
+  equipmentTypeCatalogId?: string;
+  manufacturer?: string;
+  model?: string;
+  capacity?: string;
+  sector?: string;
+  tag?: string;
+  serialNumber?: string;
+  voltage?: string;
+  observations?: string;
+  type?: string;
 };
 
 export type WalkInCustomerResult = {
@@ -57,6 +73,7 @@ export type WalkInCustomerResult = {
   addressLabel: string;
   equipmentId: string;
   equipmentName: string;
+  equipments: Array<{ id: string; name: string; sector: string | null }>;
 };
 
 /** OS avulso: registra um cliente novo em campo (fica em Revisão). */

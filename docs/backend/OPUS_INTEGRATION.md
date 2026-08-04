@@ -2085,3 +2085,49 @@ responsabilidade técnica pelo nome, cargo ou assinatura padrão.
   metadados das fotos. Conteúdo das imagens continua em `/operations/photos/:photoId`.
 - Na gestão, `REQUESTED` permite Render oficial, reagendamento ou aprovação definitiva.
 - Nunca renderizar `customerSignatureData`, metadata como HTML ou qualquer path de Storage.
+# Handoff — equipamento identificado pelo Operator
+
+- Gatilho: Operation atribuída em execução, sem `equipment` e sem `inspectedEquipments`.
+- Endpoint: `POST /operations/:id/equipments`.
+- UX: seleção múltipla de equipamentos existentes mais formulário repetível para novos ativos.
+- Campos mínimos adotados pelo app: tipo, marca, modelo e capacidade; setor, série e tensão são
+  opcionais.
+- Após sucesso, usar os `inspectedEquipments` retornados no resumo, Preview e conclusão.
+- O endpoint é one-shot: depois do primeiro vínculo, novas chamadas retornam conflito.
+
+# Cliente novo em campo com vários equipamentos
+
+- Reutilizar o formulário repetível do atendimento atribuído na OS avulsa.
+- Persistir por `POST /customers/walk-in` com `equipments[]` (máximo 20).
+- Usar os IDs reais de `response.equipments` nos snapshots da Operation.
+- `equipment` singular é somente compatibilidade e não deve ser usado em implementações novas.
+
+## RVT Planning (2026-08-03)
+
+- Clients oficiais: `/rvt-plans`, `/rvt-plans/:id/executions`, `/rvt-executions/:id/prefill`, `/rvt-executions/:id/prepare`, `/rvt-plans/ad-hoc`.
+- Configuração não possui Preview/PDF. Após `prepare`, consumir Operation/Assignment e Document Engine oficiais.
+- O cálculo visual do wizard é estimativa; as ocorrências persistidas pelo backend são a autoridade.
+- Não criar placeholder para assinatura do cliente ausente no RVT.
+- Para concluir, converta `maintenanceChecklistItems` no DTO explícito antes de `PATCH /operations/:id`;
+  os objetos de resposta contêm metadados read-only incompatíveis com a whitelist de escrita.
+- `POST /rvt-executions/:id/prepare` devolve a Assignment primária para ocorrências não finais;
+  use seu `id` nas transições e não tente inferir uma atribuição pela Operation.
+- Checklist configurado chega marcado e pode ser desmarcado.
+- Auxiliares usam `isPrimary=false`, aparecem apenas para acompanhamento e não compõem o documento.
+# Hotfix RVT — preparo e download (2026-08-03)
+
+- A preparação cria/reutiliza uma única Assignment primária e retorna sua projeção em
+  `OperationDetail.assignment`.
+- Para execução concluída com documento `READY`, use `GET /documents/:id/download` e inicie o
+  download autenticado do blob na própria tela.
+
+## RVT — ajustes de integração 2026-08-03
+
+- A Operation preparada contém checklist Semanal e Semestral; apenas o grupo escolhido é executável.
+- Não crie placeholder de assinatura do cliente quando `executionSignatures` estiver vazio.
+- `ReassignAssignmentPayload` aceita `auxiliaryOperatorIds?: string[]`; use uma única chamada para
+  persistir toda a equipe e exiba confirmação somente após resposta bem-sucedida.
+- A conclusão do RVT atribuído retorna ao fluxo compartilhado de sucesso documental, com download,
+  compartilhamento, Documentos, novo atendimento e início.
+- O cabeçalho do RVT continua exibindo seu identificador documental; a seção de identificação exibe
+  a sequência própria da execução. O frontend não deve substituir esses valores no Preview.

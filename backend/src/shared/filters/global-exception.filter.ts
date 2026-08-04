@@ -40,6 +40,9 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       path: request.originalUrl,
       statusCode: status,
       errorCode: normalized.code,
+      ...(Object.keys(normalized.details).length > 0
+        ? { errorDetails: normalized.details }
+        : {}),
       ...(exception instanceof Error && exception.stack ? { stack: exception.stack } : {}),
     });
 

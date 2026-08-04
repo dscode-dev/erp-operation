@@ -6132,3 +6132,153 @@ Criação, edição, reordenação, ativação/desativação e exclusão utiliza
 - Prefill e geração retornam/persistem apenas esse equipamento em `inspectedEquipments`.
 - `operation.photos` aceita no máximo seis evidências; violações retornam
   `400 VALIDATION_ERROR`.
+# Equipamentos coletados durante a execução da OS
+
+## `POST /api/v1/operations/:id/equipments`
+
+Permissão: somente `OPERATOR` com `canReports`, Assignment próprio ativo e Operation
+`IN_PROGRESS` ainda sem equipamentos.
+
+Request:
+
+```json
+{
+  "existingEquipmentIds": ["uuid"],
+  "newEquipments": [
+    {
+      "equipmentTypeCatalogId": "uuid",
+      "sector": "Sala técnica",
+      "manufacturer": "Carrier",
+      "model": "42X",
+      "capacity": "18.000 BTU/h",
+      "serialNumber": "ABC123",
+      "voltage": "220 V"
+    }
+  ]
+}
+```
+
+Ao menos uma das listas precisa possuir itens; o total combinado é limitado a 20. Novos itens
+exigem tipo técnico ativo e ao menos marca ou modelo. Cliente e endereço nunca são aceitos do
+frontend: são derivados da Operation.
+
+Response `201`: `OperationDetail` atualizado, incluindo `equipment` e `inspectedEquipments`.
+
+Erros: `400 OPERATION_EQUIPMENT_INVALID`, `400 TECHNICAL_CATALOG_NOT_FOUND`,
+`403 FORBIDDEN`, `404 OPERATION_NOT_FOUND`, `409 OPERATION_INVALID_TRANSITION`.
+
+# Cadastro avulso de cliente com múltiplos equipamentos
+
+## `POST /api/v1/customers/walk-in`
+
+Permissão: OWNER, MANAGER ou OPERATOR com `canReports`.
+
+```json
+{
+  "type": "COMPANY",
+  "name": "Clínica Recife",
+  "address": {
+    "street": "Rua da Aurora",
+    "number": "100",
+    "district": "Boa Vista",
+    "city": "Recife",
+    "state": "PE"
+  },
+  "contact": { "name": "Ana Lima", "phone": "81999999999" },
+  "equipments": [
+    {
+      "equipmentTypeCatalogId": "uuid",
+      "manufacturer": "Midea",
+      "model": "Xtreme Save",
+      "capacity": "12.000 BTU/h",
+      "sector": "Recepção",
+      "serialNumber": "ABC123",
+      "voltage": "220 V"
+    }
+  ]
+}
+```
+
+`equipments` exige de 1 a 20 itens e tipo `EQUIPMENT_TYPE` ativo. Response `201`:
+
+```json
+{
+  "customerId": "uuid",
+  "addressId": "uuid",
+  "addressLabel": "Rua da Aurora, 100, Boa Vista, Recife",
+  "equipmentId": "uuid-do-primeiro-item",
+  "equipmentName": "Midea Xtreme Save",
+  "equipments": [
+    { "id": "uuid", "name": "Midea Xtreme Save", "sector": "Recepção" }
+  ]
+}
+```
+
+O campo legado singular `equipment` permanece aceito. Erros: `400 VALIDATION_ERROR`,
+`400 TECHNICAL_CATALOG_NOT_FOUND`, `403 FORBIDDEN` e `409 CUSTOMER_CONFLICT`.
+
+## RVT Planning (2026-08-03)
+
+- `GET /api/v1/rvt-plans`: paginação e filtros `search`, `customerId`, `equipmentId`, `status`.
+- `POST /api/v1/rvt-plans` (`OWNER/MANAGER`): `{ customerId, addressId, name, maintenanceType: "WEEKLY"|"SEMIANNUAL", startDate, endDate, responsibleTechnicianId, defaultOperatorId?, equipmentIds[], checklistCatalogIds[], observations? }`. Cria somente planejamento (1–520 ocorrências).
+- `GET|PATCH|DELETE /api/v1/rvt-plans/:id`: detalhe, alteração e cancelamento lógico; cobertura só é recalculada antes de existir Operation.
+- `GET /api/v1/rvt-plans/:id/executions`: query `page`, `limit`, `status`, `from`, `to`; retorna ocorrências com operador, Operation e documentos.
+- `GET /api/v1/rvt-executions/:id/prefill`: cliente, endereço, equipamentos, responsáveis, periodicidade, checklist, observações e data prevista.
+- `POST /api/v1/rvt-executions/:id/prepare`: `{ operatorId? }`; cria idempotentemente Operation, Assignment e vínculos, retornando `OperationDetail`.
+- `POST /api/v1/rvt-plans/ad-hoc` (`OPERATOR`): `{ operationId }`; registra configuração/primeira ocorrência de RVT avulso já concluído.
+- Estados do plano: `ACTIVE|PAUSED|COMPLETED|CANCELED`; ocorrência: `PENDING|ASSIGNED|IN_PROGRESS|COMPLETED|CANCELED`.
+
+### Conclusão da Operation de uma execução RVT
+
+`PATCH /api/v1/operations/:id` continua aceitando em `maintenanceChecklist[]` somente
+`equipmentId?`, `pmocUnit?`, `maintenanceType`, `description`, `executed`, `result?` e
+`observations?`. Propriedades de projeção como `id`, `position` e `equipment` são somente leitura e
+continuam rejeitadas por `forbidNonWhitelisted`.
+
+Para ocorrências não finais, a resposta de `POST /rvt-executions/:id/prepare` contém
+`assignment: { id, assignedBy, assignedTo, status }`. Se uma Operation histórica estiver sem
+atribuição, o endpoint cria a Assignment primária antes de responder. OWNER/MANAGER podem informar
+qualquer usuário operacional ativo em `operatorId`; OPERATOR permanece restrito a si próprio.
+
+### Auxiliares da execução
+
+`PATCH /api/v1/operations/:id`
+
+```json
+{ "auxiliaryOperatorIds": ["uuid-do-auxiliar"] }
+```
+
+Somente OWNER/MANAGER. Máximo de dez usuários ativos. `OperationDetail` retorna `assignment`
+primária e `auxiliaryAssignments`; auxiliares de RVT não podem aceitar, iniciar, rejeitar ou concluir.
+# Hotfix RVT — preparo e download (2026-08-03)
+
+O `POST /api/v1/rvt-executions/:id/prepare` cria no máximo uma Assignment primária. A criação da
+Operation é a autoridade da atribuição inicial; chamadas posteriores reutilizam a Operation e a
+Assignment existentes. O contrato de resposta permanece `OperationDetail`.
+
+Quando `operation.documents[]` contiver o documento `TECHNICAL_REPORT` com `status=READY`, o PDF
+deve ser obtido pelo contrato oficial `GET /api/v1/documents/:documentId/download`.
+
+### PATCH `/api/v1/assignments/:id/reassign` — equipe da execução RVT
+
+Request compatível e aditivo:
+
+```json
+{
+  "assignedTo": "uuid-do-responsavel",
+  "auxiliaryOperatorIds": ["uuid-do-auxiliar"],
+  "notes": "opcional"
+}
+```
+
+`auxiliaryOperatorIds` é opcional, aceita até 10 UUIDs únicos e é sincronizado atomicamente com a
+reatribuição. O responsável é excluído da lista auxiliar. As validações de usuário operacional,
+ativo e pertencente à instalação continuam no backend.
+
+Na preparação de RVT, `maintenanceChecklist` contém os grupos `WEEKLY` e `SEMIANNUAL`. Somente os
+itens cujo `maintenanceType` coincide com `operation.maintenanceType` podem ter `executed=true`.
+
+O Blueprint de `TECHNICAL_REPORT` preserva dois identificadores distintos: `metadata.documentNumber`
+e `header.documentNumber` são o número documental `RVT-*`; o item `Número` da seção de identificação
+é `rvtExecution.executionNumber` com três dígitos. RVTs avulsos, sem execução planejada, mantêm o
+número documental como fallback compatível.

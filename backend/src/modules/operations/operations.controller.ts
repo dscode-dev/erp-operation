@@ -7,6 +7,7 @@ import type { AuthenticatedUser } from '../../shared/types/authenticated-user.ty
 import type { RequestWithId } from '../../shared/types/request-with-id.type';
 import {
   CreateOperationDto,
+  CreateOperationFieldEquipmentsDto,
   ListOperationsQueryDto,
   OperationStatsQueryDto,
   UpdateOperationDto,
@@ -47,6 +48,18 @@ export class OperationsController {
     @Req() request: RequestWithId,
   ): Promise<unknown> {
     return this.operations.create(body, actor, this.context(request));
+  }
+
+  @Roles(Role.OPERATOR)
+  @RequirePermission('canReports')
+  @Post(':id/equipments')
+  addFieldEquipments(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body() body: CreateOperationFieldEquipmentsDto,
+    @CurrentUser() actor: AuthenticatedUser,
+    @Req() request: RequestWithId,
+  ): Promise<unknown> {
+    return this.operations.addFieldEquipments(id, body, actor, this.context(request));
   }
 
   @Roles(Role.OWNER, Role.MANAGER, Role.OPERATOR, Role.VIEWER)

@@ -349,6 +349,21 @@ enum PmocExecutionOrigin {
   MANUAL
 }
 
+enum RvtPlanStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
+  CANCELED
+}
+
+enum RvtExecutionStatus {
+  PENDING
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELED
+}
+
 enum PmocSchedulerStatus {
   NEVER_RUN
   RUNNING
@@ -507,58 +522,62 @@ model AuditLog {
 }
 
 model User {
-  id                       String                 @id @default(uuid()) @db.Uuid
-  email                    String                 @unique @db.VarChar(254)
-  username                 String                 @unique @db.VarChar(50)
-  name                     String                 @db.VarChar(150)
-  passwordHash             String                 @map("password_hash") @db.VarChar(255)
-  role                     Role
-  avatarAssetId            String?                @unique @map("avatar_asset_id") @db.Uuid
-  phone                    String?                @db.VarChar(30)
-  jobTitle                 String?                @map("job_title") @db.VarChar(100)
-  notes                    String?                @db.Text
-  mustChangePassword       Boolean                @default(false) @map("must_change_password")
-  isActive                 Boolean                @default(true) @map("is_active")
-  disabledAt               DateTime?              @map("disabled_at") @db.Timestamptz(3)
-  lastLoginAt              DateTime?              @map("last_login_at") @db.Timestamptz(3)
-  createdAt                DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt                DateTime               @updatedAt @map("updated_at") @db.Timestamptz(3)
-  refreshTokens            RefreshToken[]
-  preferences              UserPreferences?
-  permission               UserPermission?
-  avatarAsset              UserAvatarAsset?       @relation(fields: [avatarAssetId], references: [id], onDelete: SetNull)
-  operations               Operation[]
-  assignmentsCreated       Assignment[]           @relation("AssignmentAssignedBy")
-  assignmentsReceived      Assignment[]           @relation("AssignmentAssignedTo")
-  assignmentEvents         AssignmentHistory[]    @relation("AssignmentHistoryActor")
-  assetLifecycleEvents     AssetLifecycleEvent[]
-  maintenancePlans         MaintenancePlan[]
-  stockMovements           StockMovement[]
-  budgetsCreated           Budget[]               @relation("BudgetCreatedBy")
-  budgetApprovals          BudgetApproval[]       @relation("BudgetApprovalActor")
-  budgetHistoryEvents      BudgetHistory[]        @relation("BudgetHistoryActor")
-  financialEntriesCreated  FinancialEntry[]       @relation("FinancialEntryCreatedBy")
-  financialHistoryEvents   FinancialHistory[]     @relation("FinancialHistoryActor")
-  purchaseOrdersCreated    PurchaseOrder[]        @relation("PurchaseOrderCreatedBy")
-  purchaseReceiptsReceived PurchaseReceipt[]      @relation("PurchaseReceiptReceivedBy")
-  purchaseHistoryEvents    PurchaseHistory[]      @relation("PurchaseHistoryActor")
-  notifications            Notification[]         @relation("NotificationRecipient")
-  pmocDefaultOperatorFor   PmocPlan[]             @relation("PmocDefaultOperator")
-  pmocDefaultTechnicianFor PmocPlan[]             @relation("PmocDefaultTechnician")
-  pmocPlannedOperatorFor   PmocExecutionRequest[] @relation("PmocPlannedOperator")
-  pmocPlannedTechnicianFor PmocExecutionRequest[] @relation("PmocPlannedTechnician")
-  pmocExecutionRequests    PmocExecutionRequest[] @relation("PmocExecutionRequestActor")
-  pmocHistoryEvents        PmocHistory[]          @relation("PmocHistoryActor")
-  documentsCollected       OperationDocument[]    @relation("DocumentCollectedBy")
-  documentsReviewed        OperationDocument[]    @relation("DocumentReviewedBy")
-  documentsFinalized       OperationDocument[]    @relation("DocumentFinalizedBy")
-  documentRevisions        DocumentRevision[]
-  operationPhotosCreated   OperationPhoto[]       @relation("OperationPhotoCreatedBy")
+  id                              String                  @id @default(uuid()) @db.Uuid
+  email                           String                  @unique @db.VarChar(254)
+  username                        String                  @unique @db.VarChar(50)
+  name                            String                  @db.VarChar(150)
+  passwordHash                    String                  @map("password_hash") @db.VarChar(255)
+  role                            Role
+  avatarAssetId                   String?                 @unique @map("avatar_asset_id") @db.Uuid
+  phone                           String?                 @db.VarChar(30)
+  jobTitle                        String?                 @map("job_title") @db.VarChar(100)
+  notes                           String?                 @db.Text
+  mustChangePassword              Boolean                 @default(false) @map("must_change_password")
+  isActive                        Boolean                 @default(true) @map("is_active")
+  disabledAt                      DateTime?               @map("disabled_at") @db.Timestamptz(3)
+  lastLoginAt                     DateTime?               @map("last_login_at") @db.Timestamptz(3)
+  createdAt                       DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                       DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
+  refreshTokens                   RefreshToken[]
+  preferences                     UserPreferences?
+  permission                      UserPermission?
+  avatarAsset                     UserAvatarAsset?        @relation(fields: [avatarAssetId], references: [id], onDelete: SetNull)
+  operations                      Operation[]
+  assignmentsCreated              Assignment[]            @relation("AssignmentAssignedBy")
+  assignmentsReceived             Assignment[]            @relation("AssignmentAssignedTo")
+  assignmentEvents                AssignmentHistory[]     @relation("AssignmentHistoryActor")
+  assetLifecycleEvents            AssetLifecycleEvent[]
+  maintenancePlans                MaintenancePlan[]
+  stockMovements                  StockMovement[]
+  budgetsCreated                  Budget[]                @relation("BudgetCreatedBy")
+  budgetApprovals                 BudgetApproval[]        @relation("BudgetApprovalActor")
+  budgetHistoryEvents             BudgetHistory[]         @relation("BudgetHistoryActor")
+  financialEntriesCreated         FinancialEntry[]        @relation("FinancialEntryCreatedBy")
+  financialHistoryEvents          FinancialHistory[]      @relation("FinancialHistoryActor")
+  purchaseOrdersCreated           PurchaseOrder[]         @relation("PurchaseOrderCreatedBy")
+  purchaseReceiptsReceived        PurchaseReceipt[]       @relation("PurchaseReceiptReceivedBy")
+  purchaseHistoryEvents           PurchaseHistory[]       @relation("PurchaseHistoryActor")
+  notifications                   Notification[]          @relation("NotificationRecipient")
+  pmocDefaultOperatorFor          PmocPlan[]              @relation("PmocDefaultOperator")
+  pmocDefaultTechnicianFor        PmocPlan[]              @relation("PmocDefaultTechnician")
+  pmocPlannedOperatorFor          PmocExecutionRequest[]  @relation("PmocPlannedOperator")
+  pmocPlannedTechnicianFor        PmocExecutionRequest[]  @relation("PmocPlannedTechnician")
+  pmocExecutionRequests           PmocExecutionRequest[]  @relation("PmocExecutionRequestActor")
+  pmocHistoryEvents               PmocHistory[]           @relation("PmocHistoryActor")
+  documentsCollected              OperationDocument[]     @relation("DocumentCollectedBy")
+  documentsReviewed               OperationDocument[]     @relation("DocumentReviewedBy")
+  documentsFinalized              OperationDocument[]     @relation("DocumentFinalizedBy")
+  documentRevisions               DocumentRevision[]
+  operationPhotosCreated          OperationPhoto[]        @relation("OperationPhotoCreatedBy")
   operationCancellationsRequested OperationCancellation[] @relation("OperationCancellationRequestedBy")
   operationCancellationsResolved  OperationCancellation[] @relation("OperationCancellationResolvedBy")
-  institutionalSignature   Signature?             @relation("UserInstitutionalSignature")
-  salesCreated             Sale[]                 @relation("SaleCreatedBy")
-  saleHistoryEvents        SaleHistory[]          @relation("SaleHistoryActor")
+  institutionalSignature          Signature?              @relation("UserInstitutionalSignature")
+  salesCreated                    Sale[]                  @relation("SaleCreatedBy")
+  saleHistoryEvents               SaleHistory[]           @relation("SaleHistoryActor")
+  rvtPlansCreated                 RvtPlan[]               @relation("RvtPlanCreatedBy")
+  rvtResponsibleFor               RvtPlan[]               @relation("RvtResponsibleTechnician")
+  rvtDefaultOperatorFor           RvtPlan[]               @relation("RvtDefaultOperator")
+  rvtExecutionsAssigned           RvtExecution[]          @relation("RvtExecutionOperator")
 
   @@map("users")
 }
@@ -616,6 +635,7 @@ model Organization {
   signatures           Signature[]
   sales                Sale[]
   maintenanceReminders MaintenanceReminder[]
+  rvtPlans             RvtPlan[]
 
   @@map("organizations")
 }
@@ -680,31 +700,31 @@ model DocumentTemplate {
 }
 
 model Signature {
-  id                  String                      @id @default(uuid()) @db.Uuid
-  organizationId      String                      @map("organization_id") @db.Uuid
-  userId              String?                     @unique @map("user_id") @db.Uuid
-  name                String                      @db.VarChar(120)
-  title               String                      @db.VarChar(120)
-  profession          String?                     @db.VarChar(120)
-  professionalCouncil String?                     @map("professional_council") @db.VarChar(120)
-  registrationNumber  String?                     @map("registration_number") @db.VarChar(80)
-  department          String?                     @db.VarChar(120)
-  imageStorageKey     String?                     @unique @map("image_storage_key") @db.VarChar(255)
-  mimeType            String?                     @map("mime_type") @db.VarChar(100)
-  originalFileName    String?                     @map("original_file_name") @db.VarChar(255)
-  fileSize            Int?                        @map("file_size")
-  active              Boolean                     @default(true)
-  isDefault           Boolean                     @default(false) @map("is_default")
-  position            Int                         @default(0)
-  deletedAt           DateTime?                   @map("deleted_at") @db.Timestamptz(3)
-  createdAt           DateTime                    @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt           DateTime                    @updatedAt @map("updated_at") @db.Timestamptz(3)
-  templates           DocumentTemplate[]
-  templateLinks       DocumentTemplateSignature[]
-  pmocOverrides       PmocPlan[]
-  organization        Organization                @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  user                User?                       @relation("UserInstitutionalSignature", fields: [userId], references: [id], onDelete: SetNull)
-  selectedDocuments   OperationDocument[]         @relation("DocumentTechnicalSignature")
+  id                     String                      @id @default(uuid()) @db.Uuid
+  organizationId         String                      @map("organization_id") @db.Uuid
+  userId                 String?                     @unique @map("user_id") @db.Uuid
+  name                   String                      @db.VarChar(120)
+  title                  String                      @db.VarChar(120)
+  profession             String?                     @db.VarChar(120)
+  professionalCouncil    String?                     @map("professional_council") @db.VarChar(120)
+  registrationNumber     String?                     @map("registration_number") @db.VarChar(80)
+  department             String?                     @db.VarChar(120)
+  imageStorageKey        String?                     @unique @map("image_storage_key") @db.VarChar(255)
+  mimeType               String?                     @map("mime_type") @db.VarChar(100)
+  originalFileName       String?                     @map("original_file_name") @db.VarChar(255)
+  fileSize               Int?                        @map("file_size")
+  active                 Boolean                     @default(true)
+  isDefault              Boolean                     @default(false) @map("is_default")
+  position               Int                         @default(0)
+  deletedAt              DateTime?                   @map("deleted_at") @db.Timestamptz(3)
+  createdAt              DateTime                    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime                    @updatedAt @map("updated_at") @db.Timestamptz(3)
+  templates              DocumentTemplate[]
+  templateLinks          DocumentTemplateSignature[]
+  pmocOverrides          PmocPlan[]
+  organization           Organization                @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  user                   User?                       @relation("UserInstitutionalSignature", fields: [userId], references: [id], onDelete: SetNull)
+  selectedDocuments      OperationDocument[]         @relation("DocumentTechnicalSignature")
   operationCancellations OperationCancellation[]
 
   @@index([organizationId, active, position])
@@ -820,6 +840,7 @@ model Customer {
   budgets              Budget[]
   sales                Sale[]
   maintenanceReminders MaintenanceReminder[]
+  rvtPlans             RvtPlan[]
 
   @@index([name])
   @@index([email])
@@ -849,6 +870,7 @@ model CustomerAddress {
   budgets                 Budget[]
   sales                   Sale[]
   pmocDefaultAddressPlans PmocPlan[]
+  rvtPlans                RvtPlan[]
 
   @@index([customerId, isPrimary])
   @@map("customer_addresses")
@@ -934,6 +956,7 @@ model Equipment {
   maintenanceChecklistItems OperationMaintenanceChecklistItem[]
   budgets                   Budget[]
   maintenanceReminders      MaintenanceReminder[]
+  rvtPlanLinks              RvtPlanEquipment[]
 
   @@index([customerId, status])
   @@index([addressId])
@@ -1039,6 +1062,7 @@ model Operation {
   maintenanceExecution            MaintenanceExecution?
   pmocExecutionRequest            PmocExecutionRequest?
   generatedPmocExecutionRequest   PmocExecutionRequest?               @relation("PmocGeneratedOperation")
+  rvtExecution                    RvtExecution?
   pmocHistoryEvents               PmocHistory[]
   parts                           OperationPart[]
   stockMovements                  StockMovement[]
@@ -1048,7 +1072,7 @@ model Operation {
   maintenanceReminder             MaintenanceReminder?
   sourceSaleId                    String?                             @map("source_sale_id") @db.Uuid
   sourceSale                      Sale?                               @relation(fields: [sourceSaleId], references: [id], onDelete: SetNull)
-  cancellations                  OperationCancellation[]
+  cancellations                   OperationCancellation[]
 
   @@index([customerId, createdAt])
   @@index([equipmentId, createdAt])
@@ -1137,6 +1161,7 @@ model TechnicalCatalog {
   organization       Organization               @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   pmocPlanScopes     PmocPlanScope[]
   pmocPlanChecklists PmocPlanChecklist[]
+  rvtPlanChecklists  RvtPlanChecklist[]
   equipments         Equipment[]                @relation("EquipmentTypeCatalog")
 
   @@index([organizationId, type, active, sortOrder], map: "technical_catalog_lookup_idx")
@@ -1173,33 +1198,33 @@ model OperationInspectedEquipment {
 }
 
 model Assignment {
-  id              String              @id @default(uuid()) @db.Uuid
-  operationId     String              @map("operation_id") @db.Uuid
-  assignedBy      String              @map("assigned_by") @db.Uuid
-  assignedTo      String              @map("assigned_to") @db.Uuid
+  id              String                  @id @default(uuid()) @db.Uuid
+  operationId     String                  @map("operation_id") @db.Uuid
+  assignedBy      String                  @map("assigned_by") @db.Uuid
+  assignedTo      String                  @map("assigned_to") @db.Uuid
   // Executor primário (o operador que executa e gera o relatório = Operation.operatorId)
   // vs. auxiliar (recebe/visualiza a mesma demanda). Uma operação tem 1 primário
   // e N auxiliares.
-  isPrimary       Boolean             @default(true) @map("is_primary")
-  status          AssignmentStatus    @default(ASSIGNED)
+  isPrimary       Boolean                 @default(true) @map("is_primary")
+  status          AssignmentStatus        @default(ASSIGNED)
   // Visibilidade no app do operador: demandas criadas pela gestão só aparecem
   // após o owner autorizar. Auto-liberado quando o próprio operador se atribui.
-  operatorVisible Boolean             @default(false) @map("operator_visible")
-  authorizedAt    DateTime?           @map("authorized_at") @db.Timestamptz(3)
-  authorizedBy    String?             @map("authorized_by") @db.Uuid
-  assignedAt      DateTime            @default(now()) @map("assigned_at") @db.Timestamptz(3)
-  acceptedAt      DateTime?           @map("accepted_at") @db.Timestamptz(3)
-  startedAt       DateTime?           @map("started_at") @db.Timestamptz(3)
-  completedAt     DateTime?           @map("completed_at") @db.Timestamptz(3)
-  canceledAt      DateTime?           @map("canceled_at") @db.Timestamptz(3)
-  rejectedAt      DateTime?           @map("rejected_at") @db.Timestamptz(3)
-  rejectionReason String?             @map("rejection_reason") @db.Text
-  notes           String?             @db.Text
-  createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt       DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
-  operation       Operation           @relation(fields: [operationId], references: [id], onDelete: Cascade)
-  assigner        User                @relation("AssignmentAssignedBy", fields: [assignedBy], references: [id], onDelete: Restrict)
-  assignee        User                @relation("AssignmentAssignedTo", fields: [assignedTo], references: [id], onDelete: Restrict)
+  operatorVisible Boolean                 @default(false) @map("operator_visible")
+  authorizedAt    DateTime?               @map("authorized_at") @db.Timestamptz(3)
+  authorizedBy    String?                 @map("authorized_by") @db.Uuid
+  assignedAt      DateTime                @default(now()) @map("assigned_at") @db.Timestamptz(3)
+  acceptedAt      DateTime?               @map("accepted_at") @db.Timestamptz(3)
+  startedAt       DateTime?               @map("started_at") @db.Timestamptz(3)
+  completedAt     DateTime?               @map("completed_at") @db.Timestamptz(3)
+  canceledAt      DateTime?               @map("canceled_at") @db.Timestamptz(3)
+  rejectedAt      DateTime?               @map("rejected_at") @db.Timestamptz(3)
+  rejectionReason String?                 @map("rejection_reason") @db.Text
+  notes           String?                 @db.Text
+  createdAt       DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
+  operation       Operation               @relation(fields: [operationId], references: [id], onDelete: Cascade)
+  assigner        User                    @relation("AssignmentAssignedBy", fields: [assignedBy], references: [id], onDelete: Restrict)
+  assignee        User                    @relation("AssignmentAssignedTo", fields: [assignedTo], references: [id], onDelete: Restrict)
   history         AssignmentHistory[]
   cancellations   OperationCancellation[]
 
@@ -1234,18 +1259,18 @@ model AssignmentHistory {
 }
 
 model OperationPhoto {
-  id          String    @id @default(uuid()) @db.Uuid
-  operationId String    @map("operation_id") @db.Uuid
-  createdById String?   @map("created_by_id") @db.Uuid
-  cancellationId String? @map("cancellation_id") @db.Uuid
-  storageKey  String    @unique @map("storage_key") @db.VarChar(255)
-  caption     String?   @db.VarChar(255)
-  mimeType    String    @map("mime_type") @db.VarChar(100)
-  fileSize    Int       @map("file_size")
-  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  operation   Operation @relation(fields: [operationId], references: [id], onDelete: Cascade)
-  createdBy   User?     @relation("OperationPhotoCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  cancellation OperationCancellation? @relation(fields: [cancellationId], references: [id], onDelete: Cascade)
+  id             String                 @id @default(uuid()) @db.Uuid
+  operationId    String                 @map("operation_id") @db.Uuid
+  createdById    String?                @map("created_by_id") @db.Uuid
+  cancellationId String?                @map("cancellation_id") @db.Uuid
+  storageKey     String                 @unique @map("storage_key") @db.VarChar(255)
+  caption        String?                @db.VarChar(255)
+  mimeType       String                 @map("mime_type") @db.VarChar(100)
+  fileSize       Int                    @map("file_size")
+  createdAt      DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  operation      Operation              @relation(fields: [operationId], references: [id], onDelete: Cascade)
+  createdBy      User?                  @relation("OperationPhotoCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  cancellation   OperationCancellation? @relation(fields: [cancellationId], references: [id], onDelete: Cascade)
 
   @@index([operationId, createdAt])
   @@index([createdById, createdAt])
@@ -1427,6 +1452,7 @@ model MaintenancePlan {
   creator        User?                  @relation(fields: [createdBy], references: [id], onDelete: SetNull)
   executions     MaintenanceExecution[]
   pmocPlan       PmocPlan?
+  rvtPlan        RvtPlan?
 
   @@index([equipmentId, active])
   @@index([active, nextExecution])
@@ -1447,11 +1473,108 @@ model MaintenanceExecution {
   plan                 MaintenancePlan            @relation(fields: [maintenancePlanId], references: [id], onDelete: Cascade)
   operation            Operation?                 @relation(fields: [operationId], references: [id], onDelete: SetNull)
   pmocExecutionRequest PmocExecutionRequest?
+  rvtExecution         RvtExecution?
 
   @@index([maintenancePlanId, scheduledAt])
   @@index([status, scheduledAt])
   @@index([executedAt])
   @@map("maintenance_executions")
+}
+
+/// Configuração recorrente do Relatório de Visita Técnica. Planejamento e
+/// execução continuam apoiados por MaintenancePlan/MaintenanceExecution.
+model RvtPlan {
+  id                      String                   @id @default(uuid()) @db.Uuid
+  organizationId          String                   @map("organization_id") @db.Uuid
+  customerId              String                   @map("customer_id") @db.Uuid
+  addressId               String                   @map("address_id") @db.Uuid
+  maintenancePlanId       String                   @unique @map("maintenance_plan_id") @db.Uuid
+  number                  Int
+  name                    String                   @db.VarChar(160)
+  maintenanceType         OperationMaintenanceType @map("maintenance_type")
+  startDate               DateTime                 @map("start_date") @db.Date
+  endDate                 DateTime                 @map("end_date") @db.Date
+  responsibleTechnicianId String                   @map("responsible_technician_id") @db.Uuid
+  defaultOperatorId       String?                  @map("default_operator_id") @db.Uuid
+  status                  RvtPlanStatus            @default(ACTIVE)
+  active                  Boolean                  @default(true)
+  observations            String?                  @db.Text
+  createdBy               String                   @map("created_by") @db.Uuid
+  createdAt               DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt               DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(3)
+  organization            Organization             @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  customer                Customer                 @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  address                 CustomerAddress          @relation(fields: [addressId], references: [id], onDelete: Restrict)
+  maintenancePlan         MaintenancePlan          @relation(fields: [maintenancePlanId], references: [id], onDelete: Cascade)
+  responsibleTechnician   User                     @relation("RvtResponsibleTechnician", fields: [responsibleTechnicianId], references: [id], onDelete: Restrict)
+  defaultOperator         User?                    @relation("RvtDefaultOperator", fields: [defaultOperatorId], references: [id], onDelete: SetNull)
+  creator                 User                     @relation("RvtPlanCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
+  equipments              RvtPlanEquipment[]
+  checklists              RvtPlanChecklist[]
+  executions              RvtExecution[]
+
+  @@unique([customerId, number], map: "rvt_plan_customer_number_uq")
+  @@index([organizationId, status, active])
+  @@index([customerId, active])
+  @@index([startDate, endDate])
+  @@index([responsibleTechnicianId])
+  @@index([defaultOperatorId])
+  @@map("rvt_plans")
+}
+
+model RvtPlanEquipment {
+  id          String    @id @default(uuid()) @db.Uuid
+  rvtPlanId   String    @map("rvt_plan_id") @db.Uuid
+  equipmentId String    @map("equipment_id") @db.Uuid
+  position    Int
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  rvtPlan     RvtPlan   @relation(fields: [rvtPlanId], references: [id], onDelete: Cascade)
+  equipment   Equipment @relation(fields: [equipmentId], references: [id], onDelete: Restrict)
+
+  @@unique([rvtPlanId, equipmentId])
+  @@unique([rvtPlanId, position])
+  @@index([equipmentId])
+  @@map("rvt_plan_equipments")
+}
+
+model RvtPlanChecklist {
+  id                 String           @id @default(uuid()) @db.Uuid
+  rvtPlanId          String           @map("rvt_plan_id") @db.Uuid
+  technicalCatalogId String           @map("technical_catalog_id") @db.Uuid
+  position           Int
+  createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  rvtPlan            RvtPlan          @relation(fields: [rvtPlanId], references: [id], onDelete: Cascade)
+  technicalCatalog   TechnicalCatalog @relation(fields: [technicalCatalogId], references: [id], onDelete: Restrict)
+
+  @@unique([rvtPlanId, technicalCatalogId])
+  @@unique([rvtPlanId, position])
+  @@index([technicalCatalogId])
+  @@map("rvt_plan_checklists")
+}
+
+model RvtExecution {
+  id                     String               @id @default(uuid()) @db.Uuid
+  rvtPlanId              String               @map("rvt_plan_id") @db.Uuid
+  maintenanceExecutionId String               @unique @map("maintenance_execution_id") @db.Uuid
+  operationId            String?              @unique @map("operation_id") @db.Uuid
+  executionNumber        Int                  @map("execution_number")
+  scheduledAt            DateTime             @map("scheduled_at") @db.Timestamptz(3)
+  status                 RvtExecutionStatus   @default(PENDING)
+  assignedOperatorId     String?              @map("assigned_operator_id") @db.Uuid
+  startedAt              DateTime?            @map("started_at") @db.Timestamptz(3)
+  completedAt            DateTime?            @map("completed_at") @db.Timestamptz(3)
+  createdAt              DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
+  rvtPlan                RvtPlan              @relation(fields: [rvtPlanId], references: [id], onDelete: Cascade)
+  maintenanceExecution   MaintenanceExecution @relation(fields: [maintenanceExecutionId], references: [id], onDelete: Cascade)
+  operation              Operation?           @relation(fields: [operationId], references: [id], onDelete: SetNull)
+  assignedOperator       User?                @relation("RvtExecutionOperator", fields: [assignedOperatorId], references: [id], onDelete: SetNull)
+
+  @@unique([rvtPlanId, executionNumber])
+  @@unique([rvtPlanId, scheduledAt])
+  @@index([status, scheduledAt])
+  @@index([assignedOperatorId, status, scheduledAt])
+  @@map("rvt_executions")
 }
 
 model PmocPlan {

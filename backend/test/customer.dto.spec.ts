@@ -4,6 +4,7 @@ import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import {
   CreateCustomerDto,
+  CreateWalkInCustomerDto,
   CustomerAddressDto,
   ListCustomersQueryDto,
 } from '../src/modules/customers/dto/customer.dto';
@@ -50,5 +51,56 @@ describe('Customer DTOs', () => {
     expect(await validate(dto)).toHaveLength(0);
     expect(dto.referencePoint).toBe('Entrada ao lado da farmácia');
     expect(dto.state).toBe('PE');
+  });
+
+  it('accepts multiple technically identified equipments in a walk-in customer', async () => {
+    const dto = plainToInstance(CreateWalkInCustomerDto, {
+      type: CustomerType.COMPANY,
+      name: 'Clínica Recife',
+      address: {
+        street: 'Rua do Sol',
+        number: '120',
+        district: 'Centro',
+        city: 'Recife',
+        state: 'PE',
+      },
+      contact: { name: 'Ana Lima', phone: '81999999999' },
+      equipments: [
+        {
+          equipmentTypeCatalogId: '11111111-1111-4111-8111-111111111111',
+          manufacturer: 'Midea',
+          model: 'Xtreme Save',
+          capacity: '12.000 BTU/h',
+          sector: 'Recepção',
+        },
+        {
+          equipmentTypeCatalogId: '22222222-2222-4222-8222-222222222222',
+          manufacturer: 'Carrier',
+          model: 'EcoSplit',
+          capacity: '20 TR',
+          sector: 'Sala técnica',
+        },
+      ],
+    });
+
+    expect(await validate(dto)).toHaveLength(0);
+    expect(dto.equipments).toHaveLength(2);
+  });
+
+  it('rejects more than twenty equipments in a walk-in customer', async () => {
+    const dto = plainToInstance(CreateWalkInCustomerDto, {
+      type: CustomerType.COMPANY,
+      name: 'Clínica Recife',
+      address: {
+        street: 'Rua do Sol', number: '120', district: 'Centro', city: 'Recife', state: 'PE',
+      },
+      contact: { name: 'Ana Lima', phone: '81999999999' },
+      equipments: Array.from({ length: 21 }, (_, index) => ({
+        equipmentTypeCatalogId: `${String(index + 1).padStart(8, '0')}-1111-4111-8111-111111111111`,
+        manufacturer: 'Midea', model: `Modelo ${index}`, capacity: '12.000 BTU/h',
+      })),
+    });
+
+    expect((await validate(dto)).some((error) => error.property === 'equipments')).toBe(true);
   });
 });

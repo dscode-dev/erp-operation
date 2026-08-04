@@ -29,7 +29,7 @@ export * as authApi from './auth';
 export * as usersApi from './users';
 export * as organizationApi from './organization';
 export * as customersApi from './customers';
-export type { WalkInCustomerPayload, WalkInCustomerResult } from './customers';
+export type { WalkInCustomerPayload, WalkInCustomerResult, WalkInEquipmentPayload } from './customers';
 export * as equipmentsApi from './equipments';
 export * as financialApi from './financial';
 export * as procurementApi from './procurement';
@@ -37,6 +37,7 @@ export * as maintenanceApi from './maintenance';
 export * as maintenanceChecklistTemplatesApi from './maintenance-checklist-templates';
 export * as technicalCatalogsApi from './technical-catalogs';
 export * as pmocApi from './pmoc';
+export * as rvtApi from './rvt';
 
 export * as operationApi from './operation';
 export * as operatorExecutionsApi from './operator-executions';
@@ -72,7 +73,8 @@ export type {
   PmocActiveCoverageConflict,
   PmocActiveCoverageResult,
 } from './pmoc';
-export type { OperationPhotoContent } from './operation';
+export type { ListRvtPlansParams, RvtPlanPayload } from './rvt';
+export type { FieldEquipmentDraft, OperationPhotoContent } from './operation';
 export type { DocumentCatalogItem } from './documents';
 export type { ListSignaturesParams, SignaturePayload } from './signatures';
 export type { ListAssetLifecycleParams } from './asset-lifecycle';

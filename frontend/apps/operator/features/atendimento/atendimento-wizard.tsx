@@ -49,6 +49,7 @@ import { QrScanner } from '@erp/ui/qr-scanner';
 import {
   cepApi,
   customersApi,
+  rvtApi,
   documentsApi,
   equipmentsApi,
   operationApi,
@@ -71,6 +72,7 @@ import {
   type PmocPlan,
   type PmocExecutionRequest,
   type WalkInCustomerResult,
+  type RvtPlan,
 } from '@erp/api';
 import { DOCUMENT_KIND_LABEL } from '@erp/types';
 import { useAuth } from '@erp/ui/auth/auth-provider';
@@ -80,6 +82,7 @@ import { useDebounce } from '@erp/utils';
 import { SERVICE_TYPES, serviceTypeLabel, type ServiceTypeKey } from '../../lib/service-types';
 import { createOperationFromDraft, workOrderNumber } from '../../lib/atendimento';
 import { OperatorSignatureChoice } from '../../components/operator-signature';
+import { FieldEquipmentCollection, type NewFieldEquipmentDraft } from '../../components/field-equipment-collection';
 
 const STEPS = [
   'Cliente',
@@ -116,22 +119,21 @@ type WalkInForm = {
   state: string;
   contactName: string;
   contactPhone: string;
-  equipmentManufacturer: string;
-  equipmentModel: string;
-  equipmentCapacity: string;
 };
 const EMPTY_WALK_IN: WalkInForm = {
   personType: 'COMPANY', name: '', document: '', zipCode: '', street: '', number: '',
   complement: '', district: '', city: '', state: '', contactName: '', contactPhone: '',
-  equipmentManufacturer: '', equipmentModel: '', equipmentCapacity: '',
 };
-function walkInValid(w: WalkInForm): boolean {
-  // CPF/CNPJ é opcional; o perfil técnico mínimo do equipamento é obrigatório.
+function walkInValid(w: WalkInForm, equipmentDrafts: NewFieldEquipmentDraft[]): boolean {
+  // CPF/CNPJ é opcional; ao menos um equipamento tecnicamente identificado é obrigatório.
   return Boolean(
     w.name.trim() && w.street.trim() && w.number.trim() &&
     w.district.trim() && w.city.trim() && w.state.trim().length === 2 &&
     w.contactName.trim() && w.contactPhone.trim() &&
-    w.equipmentManufacturer.trim() && w.equipmentModel.trim() && w.equipmentCapacity.trim(),
+    equipmentDrafts.length > 0 && equipmentDrafts.length <= 20 &&
+    equipmentDrafts.every((item) =>
+      item.equipmentTypeCatalogId && item.manufacturer?.trim() && item.model?.trim() && item.capacity?.trim(),
+    ),
   );
 }
 function walkInAddressLabel(w: WalkInForm): string {
@@ -161,6 +163,7 @@ export function AtendimentoWizard({
   const { session, can } = useAuth();
   const isOwner = session?.role === 'OWNER';
   const [documentType, setDocumentType] = useState<DocumentKind | null>(null);
+  const [rvtMode, setRvtMode] = useState<'standalone' | 'configured' | null>(null);
   const [pmocDoc, setPmocDoc] = useState<{ documentId: string; documentNumber: string } | null>(null);
   const [step, setStep] = useState(0);
 
@@ -191,6 +194,7 @@ export function AtendimentoWizard({
   // OS avulso: cadastro de cliente novo direto em campo (fica em Revisão).
   const [walkInMode, setWalkInMode] = useState(false);
   const [walk, setWalk] = useState<WalkInForm>(EMPTY_WALK_IN);
+  const [walkInEquipments, setWalkInEquipments] = useState<NewFieldEquipmentDraft[]>([]);
   // Guarda o cadastro já criado para um retry não recriar o cliente (CNPJ/CPF único).
   const [walkInCreated, setWalkInCreated] = useState<WalkInCustomerResult | null>(null);
 
@@ -200,6 +204,11 @@ export function AtendimentoWizard({
     null,
   );
   const [startedAt] = useState(() => new Date().toISOString());
+
+  const walkInEquipmentTypes = useQuery(
+    (signal) => walkInMode ? technicalCatalogsApi.listEquipmentTypes({ signal }) : Promise.resolve([]),
+    [walkInMode],
+  );
 
   // Prefill from QR / "Iniciar atendimento" deep links.
   useEffect(() => {
@@ -308,9 +317,9 @@ export function AtendimentoWizard({
   const canNext = useMemo(() => {
     switch (step) {
       case 0:
-        return walkInMode ? walkInValid(walk) : !!customer;
+        return walkInMode ? walkInValid(walk, walkInEquipments) : !!customer && (documentType !== 'TECHNICAL_REPORT' || !!address);
       case 1:
-        return equipmentProfilesComplete; // equipamento opcional; selecionados precisam estar identificados
+        return equipmentProfilesComplete && (documentType !== 'TECHNICAL_REPORT' || equipments.length > 0);
       case 2:
         return !!serviceType;
       case 3:
@@ -320,17 +329,17 @@ export function AtendimentoWizard({
       case 5:
         return true;
       case 6:
-        return !!technicalSignatureId && !!signature && signerName.trim().length > 0;
+        return !!technicalSignatureId && (documentType === 'TECHNICAL_REPORT' ? (!signature || signerName.trim().length > 0) : !!signature && signerName.trim().length > 0);
       case 7:
         return true;
       default:
         return false;
     }
-  }, [step, customer, serviceType, signature, signerName, technicalSignatureId, walkInMode, walk, equipmentProfilesComplete]);
+  }, [step, customer, address, serviceType, signature, signerName, technicalSignatureId, walkInMode, walk, walkInEquipments, equipmentProfilesComplete, equipments.length, documentType]);
 
   function back() {
     if (step === 0) router.push('/operator');
-    // OS avulso pula o passo de Equipamento (equipamento é informado por texto).
+    // OS avulso pula o passo de seleção: os novos equipamentos já são coletados no cadastro.
     else if (step === 2 && walkInMode) setStep(0);
     else setStep((s) => s - 1);
   }
@@ -364,7 +373,7 @@ export function AtendimentoWizard({
     setSubmitError(null);
     try {
       if (!documentType) return;
-      // OS avulso: registra cliente novo (Revisão) + endereço + contato + equipamento.
+      // OS avulso: registra cliente novo (Revisão) + endereço + contato + equipamentos.
       let customerId = customer?.id ?? null;
       let addressId = address?.id ?? null;
       let inspectedEquipments: Array<{
@@ -398,17 +407,32 @@ export function AtendimentoWizard({
               state: walk.state.trim().toUpperCase(),
             },
             contact: { name: walk.contactName.trim(), phone: walk.contactPhone.trim() },
-            equipment: {
-              manufacturer: walk.equipmentManufacturer.trim() || undefined,
-              model: walk.equipmentModel.trim() || undefined,
-              capacity: walk.equipmentCapacity.trim() || undefined,
-            },
+            equipments: walkInEquipments.map((item) => ({
+              equipmentTypeCatalogId: item.equipmentTypeCatalogId,
+              sector: item.sector?.trim() || undefined,
+              tag: item.tag?.trim() || undefined,
+              manufacturer: item.manufacturer?.trim() || undefined,
+              model: item.model?.trim() || undefined,
+              serialNumber: item.serialNumber?.trim() || undefined,
+              capacity: item.capacity?.trim() || undefined,
+              voltage: item.voltage?.trim() || undefined,
+              observations: item.observations?.trim() || undefined,
+            })),
           }));
         setWalkInCreated(created);
         customerId = created.customerId;
         addressId = created.addressId;
         equipmentId = created.equipmentId;
-        inspectedEquipments = [{ equipmentId: created.equipmentId, sector: created.addressLabel || created.equipmentName }];
+        inspectedEquipments = created.equipments.map((item, index) => {
+          const draft = walkInEquipments[index];
+          return {
+            equipmentId: item.id,
+            sector: item.sector || created.addressLabel || item.name,
+            manufacturer: draft?.manufacturer?.trim() || undefined,
+            model: draft?.model?.trim() || undefined,
+            capacity: draft?.capacity?.trim() || undefined,
+          };
+        });
       }
       const submission = await createOperationFromDraft({
         documentType,
@@ -478,7 +502,7 @@ export function AtendimentoWizard({
 
   if (result) {
     return (
-      <SuccessView
+      <OperatorDocumentSuccessView
         documentId={result.documentId}
         documentNumber={result.documentNumber}
         documentType={result.documentType}
@@ -492,7 +516,7 @@ export function AtendimentoWizard({
   // Execução PMOC concluída no mobile: compartilhar/baixar o PDF oficial.
   if (pmocDoc) {
     return (
-      <SuccessView
+      <OperatorDocumentSuccessView
         documentId={pmocDoc.documentId}
         documentNumber={pmocDoc.documentNumber}
         documentType="PMOC"
@@ -519,6 +543,10 @@ export function AtendimentoWizard({
   // OWNER inicia no mobile uma execução de um PMOC já configurado.
   if (documentType === 'PMOC') {
     return <PmocStartStep onBack={() => setDocumentType(null)} onCompleted={setPmocDoc} />;
+  }
+
+  if (documentType === 'TECHNICAL_REPORT' && rvtMode === null) {
+    return <RvtStartModeStep onBack={() => setDocumentType(null)} onStandalone={() => setRvtMode('standalone')} />;
   }
 
   // OS: escolha da origem (do zero / a partir de RVT / a partir de PMOC).
@@ -550,10 +578,10 @@ export function AtendimentoWizard({
     : customer;
   const displayAddress = walkInMode ? { id: '', label: walkInAddressLabel(walk) } : address;
   const displayEquipments = walkInMode
-    ? ([{
-        id: '',
-        name: [walk.equipmentManufacturer, walk.equipmentModel].map((v) => v.trim()).filter(Boolean).join(' ') || 'Equipamento',
-      } as unknown as EquipmentSummary])
+    ? walkInEquipments.map((item, index) => ({
+        id: item.localId,
+        name: [item.manufacturer, item.model, item.capacity].map((value) => value?.trim()).filter(Boolean).join(' - ') || `Equipamento ${index + 1}`,
+      } as unknown as EquipmentSummary))
     : equipments;
 
   return (
@@ -569,7 +597,16 @@ export function AtendimentoWizard({
       <div className="flex-1 overflow-y-auto p-4">
         {step === 0 && (
           walkInMode ? (
-            <WalkInStep value={walk} onChange={setWalk} onCancel={() => setWalkInMode(false)} />
+            <WalkInStep
+              value={walk}
+              onChange={setWalk}
+              onCancel={() => setWalkInMode(false)}
+              equipments={walkInEquipments}
+              equipmentTypes={walkInEquipmentTypes.data ?? []}
+              equipmentTypesLoading={walkInEquipmentTypes.loading}
+              onAddEquipment={(draft) => setWalkInEquipments((current) => [...current, draft])}
+              onRemoveEquipment={(localId) => setWalkInEquipments((current) => current.filter((item) => item.localId !== localId))}
+            />
           ) : (
             <div className="space-y-5">
               <ClienteStep
@@ -586,6 +623,7 @@ export function AtendimentoWizard({
                 type="button"
                 onClick={() => {
                   setWalkInMode(true);
+                  setWalkInEquipments([]);
                   setCustomer(null);
                   setAddress(null);
                   setEquipments([]);
@@ -780,6 +818,21 @@ function AttendanceTypeStep({ onSelect, onClose, canCreatePmoc = false, onCreate
       </div>
     </div>
   );
+}
+
+function RvtStartModeStep({ onBack, onStandalone }: { onBack: () => void; onStandalone: () => void }) {
+  const router = useRouter();
+  const { session } = useAuth();
+  const [planId, setPlanId] = useState(''); const [busy, setBusy] = useState<string | null>(null); const [error, setError] = useState<string | null>(null);
+  const plans = useQuery((signal) => rvtApi.listPlans({ status: 'ACTIVE', limit: 100, signal }), []);
+  const executions = useQuery((signal) => planId ? rvtApi.listExecutions(planId, { limit: 100, signal }) : Promise.resolve({ items: [], pagination: { page: 1, limit: 100, total: 0, totalPages: 0 } }), [planId]);
+  const available = (executions.data?.items ?? []).filter((item) => !item.operationId && item.status !== 'CANCELED' && (!item.assignedOperatorId || item.assignedOperatorId === session?.user.id));
+  async function start(id: string) { setBusy(id); setError(null); try { const operation = await rvtApi.prepareExecution(id); if (!operation.assignment?.id) throw new Error('A execução foi preparada, mas a atribuição não foi localizada.'); router.push(`/operator/services/${operation.assignment.id}`); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível preparar a visita.'); } finally { setBusy(null); } }
+  return <div className="min-h-dvh px-4 py-5"><div className="mx-auto max-w-lg space-y-5"><header className="flex items-start gap-3"><button type="button" onClick={onBack} className="grid h-10 w-10 shrink-0 place-items-center rounded-full border"><ChevronRight className="h-4 w-4 rotate-180" /></button><div><p className="text-caption uppercase tracking-wider">Relatório de Visita Técnica</p><h1 className="text-[22px] font-semibold">Como deseja iniciar?</h1><p className="mt-1 text-sm text-[var(--color-muted-foreground)]">Use uma programação existente ou registre uma visita avulsa.</p></div></header>
+    <button type="button" onClick={onStandalone} className="flex w-full items-center gap-3 rounded-[var(--radius-lg)] border bg-[var(--color-card)] p-4 text-left"><span className="grid h-11 w-11 place-items-center rounded-md bg-[var(--color-primary)]/10 text-[var(--color-primary)]"><FilePlus2 className="h-5 w-5" /></span><span className="flex-1"><strong className="block">RVT avulso</strong><span className="text-caption">Preencher do zero; a configuração e a primeira execução serão registradas ao concluir.</span></span><ChevronRight className="h-5 w-5" /></button>
+    <section className="space-y-3 rounded-[var(--radius-lg)] border bg-[var(--color-card)] p-4"><div><strong>RVT configurado</strong><p className="text-caption">Selecione a programação e uma ocorrência disponível.</p></div>{plans.loading ? <SkeletonList rows={3} /> : plans.error ? <ErrorState error={plans.error} onRetry={plans.refetch} /> : <select className="w-full rounded-md border bg-transparent px-3 py-3 text-sm" value={planId} onChange={(event) => setPlanId(event.target.value)}><option value="">Selecione uma configuração</option>{plans.data?.items.map((plan: RvtPlan) => <option key={plan.id} value={plan.id}>RVT-{String(plan.number).padStart(5, '0')} · {plan.name}</option>)}</select>}
+      {planId && (executions.loading ? <SkeletonList rows={3} /> : available.length ? <div className="space-y-2">{available.map((execution) => <button key={execution.id} disabled={Boolean(busy)} onClick={() => void start(execution.id)} className="flex w-full items-center justify-between rounded-md border p-3 text-left disabled:opacity-50"><span><strong className="block text-sm">Execução #{String(execution.executionNumber).padStart(3, '0')}</strong><span className="text-caption">Prevista para {new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC' }).format(new Date(execution.scheduledAt))}</span></span>{busy === execution.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <ChevronRight className="h-4 w-4" />}</button>)}</div> : <EmptyState icon={CheckCircle2} title="Sem execuções disponíveis" description="Não há ocorrência pendente disponível para este usuário." />)}
+    </section>{error && <p className="rounded-md border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 p-3 text-sm text-[var(--color-danger)]">{error}</p>}</div></div>;
 }
 
 function PmocStartStep({
@@ -1081,10 +1134,20 @@ function WalkInStep({
   value,
   onChange,
   onCancel,
+  equipments,
+  equipmentTypes,
+  equipmentTypesLoading,
+  onAddEquipment,
+  onRemoveEquipment,
 }: {
   value: WalkInForm;
   onChange: (v: WalkInForm) => void;
   onCancel: () => void;
+  equipments: NewFieldEquipmentDraft[];
+  equipmentTypes: TechnicalCatalog[];
+  equipmentTypesLoading: boolean;
+  onAddEquipment: (draft: NewFieldEquipmentDraft) => void;
+  onRemoveEquipment: (localId: string) => void;
 }) {
   const setField = (key: keyof Omit<WalkInForm, 'personType'>, v: string) => onChange({ ...value, [key]: v });
   const [cepBusy, setCepBusy] = useState(false);
@@ -1166,15 +1229,17 @@ function WalkInStep({
         <WalkField label="Telefone *" value={value.contactPhone} onChange={(v) => setField('contactPhone', v)} />
       </section>
 
-      <section className="space-y-3 border-t border-[var(--color-border)] pt-4">
-        <h3 className="text-sm font-semibold">Equipamento</h3>
-        <p className="text-[11px] text-[var(--color-muted-foreground)]">Identificado por marca e modelo (informe ao menos um).</p>
-        <div className="grid grid-cols-2 gap-2">
-          <WalkField label="Marca" value={value.equipmentManufacturer} onChange={(v) => setField('equipmentManufacturer', v)} placeholder="Ex.: Midea" />
-          <WalkField label="Modelo" value={value.equipmentModel} onChange={(v) => setField('equipmentModel', v)} placeholder="Ex.: Xtreme Save" />
-        </div>
-        <WalkField label="Capacidade" value={value.equipmentCapacity} onChange={(v) => setField('equipmentCapacity', v)} placeholder="Ex.: 12.000 BTU" />
-      </section>
+      <div className="border-t border-[var(--color-border)] pt-4">
+        <FieldEquipmentCollection
+          drafts={equipments}
+          equipmentTypes={equipmentTypes}
+          equipmentTypesLoading={equipmentTypesLoading}
+          onAdd={onAddEquipment}
+          onRemove={onRemoveEquipment}
+          title="Equipamentos do atendimento"
+          description="Adicione todos os equipamentos encontrados no local. Eles serão cadastrados para o novo cliente e incluídos nesta Ordem de Serviço."
+        />
+      </div>
     </div>
   );
 }
@@ -1968,7 +2033,7 @@ function triggerDownload(file: File) {
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
-function SuccessView({
+export function OperatorDocumentSuccessView({
   documentId,
   documentNumber,
   documentType,

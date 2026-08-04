@@ -543,6 +543,9 @@ export class DocumentBuilderService {
     const { operation } = context;
     const address = operation.address ?? operation.customer.addresses[0] ?? null;
     const contact = operation.customer.contacts[0] ?? null;
+    const executionNumber = operation.rvtExecution
+      ? String(operation.rvtExecution.executionNumber).padStart(3, '0')
+      : documentNumber;
     const sections: DocumentSection[] = [
       {
         id: 'technical-report-identification',
@@ -550,7 +553,7 @@ export class DocumentBuilderService {
         critical: true,
         components: [
           this.metadata('technical-report-identification-metadata', [
-            ['Número', documentNumber],
+            ['Número', `RVT-${executionNumber}`],
             ['Emissão', this.date(generatedAt)],
             ['Responsável técnico', this.technicalResponsibleName(context) ?? 'A definir na revisão'],
             ['Registro profissional', this.technicalResponsibleTitle(context) ?? '—'],
@@ -1226,6 +1229,7 @@ export class DocumentBuilderService {
     ];
     const order: string[] = [...reportTypes];
     const groups = new Map<string, Array<{ label: string; done: boolean }>>();
+    const selected = operation.maintenanceType ?? null;
     reportTypes.forEach((type) => groups.set(type, []));
     for (const item of operation.maintenanceChecklistItems ?? []) {
       if (!groups.has(item.maintenanceType)) {
@@ -1234,11 +1238,12 @@ export class DocumentBuilderService {
       }
       groups.get(item.maintenanceType)!.push({
         label: this.clean(item.description),
-        done: item.executed,
+        // O grupo não selecionado é documental: lista o catálogo, mas nunca
+        // representa procedimento executado nesta visita.
+        done: item.maintenanceType === selected && item.executed,
       });
     }
 
-    const selected = operation.maintenanceType ?? null;
     if (selected && !groups.has(selected)) {
       groups.set(selected, []);
       order.unshift(selected);

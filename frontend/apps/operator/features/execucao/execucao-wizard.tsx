@@ -24,7 +24,7 @@ import { MultiSelect } from "@erp/ui/multi-select";
 import { PhotoInput, type CapturedPhoto } from "@erp/ui/photo-input";
 import { SignaturePad } from "@erp/ui/documents/signature-pad";
 import {
-  assignmentsApi, documentsApi, equipmentsApi, inventoryApi, operationApi, technicalCatalogsApi, useQuery,
+  assignmentsApi, documentsApi, equipmentsApi, inventoryApi, operationApi, technicalCatalogsApi, usersApi, useQuery,
   type DocumentKind, type EquipmentSummary, type InventoryItem, type OperationChecklistItem,
   type OperationDetail, type OperationMaintenanceChecklistItem, type OperationMaintenanceType,
   type OperationPart, type Product,
@@ -32,9 +32,14 @@ import {
 import { DOCUMENT_KIND_LABEL } from "@erp/types";
 import { serviceTypeLabel } from "@operator/lib/service-types";
 import { OperatorSignatureChoice } from "@operator/components/operator-signature";
+import { OperatorDocumentSuccessView } from "@operator/features/atendimento/atendimento-wizard";
+import {
+  FieldEquipmentCollection,
+  type NewFieldEquipmentDraft,
+} from "@operator/components/field-equipment-collection";
 
 const STEPS = ["Checklist", "Conteúdo", "Evidências", "Materiais", "Assinatura", "Confirmar"] as const;
-const CUSTOMER_SIGNATURE = new Set<DocumentKind>(["WORK_ORDER", "TECHNICAL_REPORT", "BUDGET", "PMOC"]);
+const CUSTOMER_SIGNATURE = new Set<DocumentKind>(["WORK_ORDER"]);
 const DIRECT_COMPLETION = new Set<DocumentKind>(["WORK_ORDER", "TECHNICAL_REPORT"]);
 const inputCls = "w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--color-primary)]";
 const RVT_MAINTENANCE_TYPES: Array<{ value: OperationMaintenanceType; label: string }> = [
@@ -47,7 +52,17 @@ type EquipmentProfileDraft = {
   capacity: string;
 };
 
-export function ExecucaoWizard({ assignmentId }: { assignmentId: string }) {
+export function ExecucaoWizard({
+  assignmentId,
+  surface = "operator",
+  onClose,
+  onCompleted,
+}: {
+  assignmentId: string;
+  surface?: "operator" | "platform";
+  onClose?: () => void;
+  onCompleted?: () => void;
+}) {
   const router = useRouter();
   const assignment = useQuery((signal) => assignmentsApi.getAssignment(assignmentId, { signal }), [assignmentId]);
   const operation = useQuery(
@@ -58,11 +73,14 @@ export function ExecucaoWizard({ assignmentId }: { assignmentId: string }) {
   // PMOC keeps the specialized inline flow; only STARTED executions run here.
   const redirect = Boolean(
     operation.data?.maintenanceExecution?.plan.pmocPlan ||
+    (operation.data?.requestedDocumentType === "TECHNICAL_REPORT" && assignment.data && !assignment.data.isPrimary) ||
     (assignment.data && assignment.data.status !== "STARTED"),
   );
   useEffect(() => {
-    if (redirect) router.replace(`/operator/services/${assignmentId}`);
-  }, [redirect, assignmentId, router]);
+    if (!redirect) return;
+    if (surface === "operator") router.replace(`/operator/services/${assignmentId}`);
+    else onClose?.();
+  }, [redirect, assignmentId, onClose, router, surface]);
 
   if ((assignment.loading && !assignment.data) || (operation.loading && !operation.data)) {
     return <div className="p-4"><SkeletonCard /><div className="mt-3"><SkeletonList rows={4} /></div></div>;
@@ -71,25 +89,51 @@ export function ExecucaoWizard({ assignmentId }: { assignmentId: string }) {
   if (operation.error && !operation.data) return <div className="p-4"><ErrorState error={operation.error} onRetry={operation.refetch} /></div>;
   if (!assignment.data || !operation.data || redirect) return null;
 
-  return <ExecucaoSteps assignmentId={assignmentId} operation={operation.data} />;
+  return (
+    <ExecucaoSteps
+      assignmentId={assignmentId}
+      operation={operation.data}
+      surface={surface}
+      onClose={onClose}
+      onCompleted={onCompleted}
+    />
+  );
 }
 
-function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; operation: OperationDetail }) {
+function ExecucaoSteps({
+  assignmentId,
+  operation,
+  surface,
+  onClose,
+  onCompleted,
+}: {
+  assignmentId: string;
+  operation: OperationDetail;
+  surface: "operator" | "platform";
+  onClose?: () => void;
+  onCompleted?: () => void;
+}) {
   const router = useRouter();
   const [step, setStep] = useState(0);
 
   const managementAssigned = Boolean(operation.assignment && operation.assignment.assignedBy !== operation.assignment.assignedTo);
   const type: DocumentKind = operation.requestedDocumentType ?? "WORK_ORDER";
   const directCompletion = DIRECT_COMPLETION.has(type);
+  const configuredRvt = type === "TECHNICAL_REPORT" && Boolean(operation.rvtExecution);
 
   const [checklist, setChecklist] = useState<OperationChecklistItem[]>(operation.checklist);
   const [maintenanceType, setMaintenanceType] = useState<OperationMaintenanceType>(operation.maintenanceType ?? "SEMIANNUAL");
-  const [maintenanceChecklist, setMaintenanceChecklist] = useState<OperationMaintenanceChecklistItem[]>(operation.maintenanceChecklistItems);
+  const [maintenanceChecklist, setMaintenanceChecklist] = useState<OperationMaintenanceChecklistItem[]>(
+    () => operation.maintenanceChecklistItems.map((item) => configuredRvt ? { ...item, executed: true, result: "YES" } : item),
+  );
   const [equipmentIds, setEquipmentIds] = useState<string[]>(
     operation.inspectedEquipments.length > 0
       ? operation.inspectedEquipments.map((item) => item.equipmentId)
       : operation.equipment ? [operation.equipment.id] : [],
   );
+  const initiallyUnassigned = operation.inspectedEquipments.length === 0 && !operation.equipment;
+  const [fieldInspections, setFieldInspections] = useState<OperationDetail["inspectedEquipments"]>([]);
+  const [newFieldEquipments, setNewFieldEquipments] = useState<NewFieldEquipmentDraft[]>([]);
   const [issue, setIssue] = useState(operation.reportedIssue ?? "");
   const [diagnosis, setDiagnosis] = useState(operation.technicalDiagnosis ?? "");
   const [service, setService] = useState(operation.serviceDescription ?? "");
@@ -99,7 +143,15 @@ function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; oper
   const [signature, setSignature] = useState<string | null>(null);
   const [signerName, setSignerName] = useState(operation.customerSignerName ?? "");
   const [signerRole, setSignerRole] = useState(operation.customerSignerRole ?? "");
-  const [technicalSignatureId, setTechnicalSignatureId] = useState<string | null>(null);
+  const configuredTechnicalSignatureId = operation.documents.find((document) => document.type === type)?.technicalSignatureId
+    ?? operation.rvtExecution?.rvtPlan?.responsibleTechnician?.institutionalSignature?.id
+    ?? null;
+  const [technicalSignatureId, setTechnicalSignatureId] = useState<string | null>(configuredTechnicalSignatureId);
+  const [auxiliaryOperatorIds, setAuxiliaryOperatorIds] = useState<string[]>(
+    () => (operation.auxiliaryAssignments ?? [])
+      .filter((item) => item.status !== "CANCELED" && item.status !== "REJECTED")
+      .map((item) => item.assignedTo),
+  );
   const [equipmentProfiles, setEquipmentProfiles] = useState<Record<string, EquipmentProfileDraft>>(
     () => {
       const entries = operation.inspectedEquipments.map((item) => [
@@ -127,10 +179,19 @@ function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; oper
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const [completedDocument, setCompletedDocument] = useState<{ id: string; number: string } | null>(null);
 
   const equipments = useQuery(
     (signal) => equipmentsApi.listEquipments({ customerId: operation.customer?.id, page: 1, limit: 100, signal }),
     [operation.customer?.id],
+  );
+  const equipmentTypes = useQuery(
+    (signal) => initiallyUnassigned ? technicalCatalogsApi.listEquipmentTypes({ signal }) : Promise.resolve([]),
+    [initiallyUnassigned],
+  );
+  const auxiliaryUsers = useQuery(
+    (signal) => surface === "platform" ? usersApi.listUsers({ page: 1, limit: 100, signal }) : Promise.resolve(null),
+    [surface],
   );
   const materials = useQuery((signal) => inventoryApi.listOperationMaterials(operation.id, { signal }), [operation.id]);
   const rvtChecklistCatalog = useQuery(
@@ -144,32 +205,48 @@ function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; oper
       new Set([
         ...operation.inspectedEquipments.map((item) => item.equipmentId),
         ...(operation.equipment ? [operation.equipment.id] : []),
+        ...fieldInspections.map((item) => item.equipmentId),
       ]),
-    [operation],
+    [fieldInspections, operation],
   );
+  const fieldCollectionPending = initiallyUnassigned && fieldInspections.length === 0;
   const equipmentOptions = useMemo(
-    () =>
-      (equipments.data?.items ?? [])
-        .filter((item) => authorizedEquipmentIds.has(item.id))
+    () => {
+      const persisted = (equipments.data?.items ?? [])
+        .filter((item) => fieldCollectionPending || authorizedEquipmentIds.has(item.id))
         .map((item) => ({
           value: item.id,
           label:
             [item.manufacturer, item.model, item.capacity].filter(Boolean).join(" - ") ||
             item.name,
           description: item.sector || "Setor não informado",
-        })),
-    [authorizedEquipmentIds, equipments.data],
+        }));
+      const persistedIds = new Set(persisted.map((item) => item.value));
+      const collected = fieldInspections
+        .filter((item) => !persistedIds.has(item.equipmentId))
+        .map((item) => ({
+          value: item.equipmentId,
+          label:
+            [item.equipment?.manufacturer ?? item.brandSnapshot, item.equipment?.model ?? item.modelSnapshot, item.equipment?.capacity ?? item.capacitySnapshot]
+              .filter(Boolean)
+              .join(" - ") || item.equipment?.name || "Equipamento",
+          description: item.equipment?.sector || item.sector || "Setor não informado",
+        }));
+      return [...persisted, ...collected];
+    },
+    [authorizedEquipmentIds, equipments.data, fieldCollectionPending, fieldInspections],
   );
   const requiredEquipmentProfileFields = useMemo(
     () =>
       Object.fromEntries(
         [...authorizedEquipmentIds].map((id) => {
           const inspected = operation.inspectedEquipments.find((item) => item.equipmentId === id);
+          const fieldInspection = fieldInspections.find((item) => item.equipmentId === id);
           const primary = operation.equipment?.id === id ? operation.equipment : null;
           const profile = {
-            manufacturer: inspected?.equipment?.manufacturer ?? inspected?.brandSnapshot ?? primary?.manufacturer ?? "",
-            model: inspected?.equipment?.model ?? inspected?.modelSnapshot ?? primary?.model ?? "",
-            capacity: inspected?.equipment?.capacity ?? inspected?.capacitySnapshot ?? primary?.capacity ?? "",
+            manufacturer: fieldInspection?.equipment?.manufacturer ?? fieldInspection?.brandSnapshot ?? inspected?.equipment?.manufacturer ?? inspected?.brandSnapshot ?? primary?.manufacturer ?? "",
+            model: fieldInspection?.equipment?.model ?? fieldInspection?.modelSnapshot ?? inspected?.equipment?.model ?? inspected?.modelSnapshot ?? primary?.model ?? "",
+            capacity: fieldInspection?.equipment?.capacity ?? fieldInspection?.capacitySnapshot ?? inspected?.equipment?.capacity ?? inspected?.capacitySnapshot ?? primary?.capacity ?? "",
           };
           return [
             id,
@@ -179,7 +256,7 @@ function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; oper
           ];
         }),
       ) as Record<string, Array<keyof EquipmentProfileDraft>>,
-    [authorizedEquipmentIds, operation],
+    [authorizedEquipmentIds, fieldInspections, operation],
   );
   const incompleteEquipmentIds = useMemo(
     () =>
@@ -191,42 +268,133 @@ function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; oper
       (field) => Boolean(equipmentProfiles[id]?.[field]?.trim()),
     ),
   );
+  const fieldEquipmentDraftsValid = newFieldEquipments.every((item) =>
+    Boolean(item.equipmentTypeCatalogId && item.manufacturer?.trim() && item.model?.trim() && item.capacity?.trim()),
+  );
+  const fieldEquipmentSelectionValid = !fieldCollectionPending ||
+    (equipmentIds.length + newFieldEquipments.length > 0 &&
+      equipmentIds.length + newFieldEquipments.length <= 20 &&
+      fieldEquipmentDraftsValid);
 
   useEffect(() => {
-    if (type !== "TECHNICAL_REPORT" || maintenanceChecklist.length || rvtChecklistCatalog.loading) return;
-    setMaintenanceChecklist((rvtChecklistCatalog.data ?? []).map((item) => ({
-      maintenanceType: item.maintenanceType ?? "SEMIANNUAL",
-      description: item.title,
-      executed: false,
-      result: "NO",
-      observations: item.description,
+    if (type !== "TECHNICAL_REPORT" || rvtChecklistCatalog.loading) return;
+    setMaintenanceChecklist((current) => {
+      const persisted = new Map(
+        current.map((item) => [`${item.maintenanceType}:${item.description.trim().toLocaleLowerCase("pt-BR")}`, item]),
+      );
+      return (rvtChecklistCatalog.data ?? []).map((catalogItem) => {
+        const itemType = catalogItem.maintenanceType ?? "SEMIANNUAL";
+        const existing = persisted.get(`${itemType}:${catalogItem.title.trim().toLocaleLowerCase("pt-BR")}`);
+        if (existing) {
+          return itemType === maintenanceType
+            ? existing
+            : { ...existing, executed: false, result: "NO" as const };
+        }
+        const selected = itemType === maintenanceType;
+        return {
+          maintenanceType: itemType,
+          description: catalogItem.title,
+          executed: selected,
+          result: selected ? "YES" as const : "NO" as const,
+          observations: catalogItem.description,
+        };
+      });
+    });
+  }, [maintenanceType, rvtChecklistCatalog.data, rvtChecklistCatalog.loading, type]);
+
+  function selectRvtMaintenanceType(value: OperationMaintenanceType) {
+    setMaintenanceChecklist((current) => current.map((item) => ({
+      ...item,
+      executed: item.maintenanceType === value,
+      result: item.maintenanceType === value ? "YES" : "NO",
     })));
-  }, [maintenanceChecklist.length, rvtChecklistCatalog.data, rvtChecklistCatalog.loading, type]);
+    setMaintenanceType(value);
+  }
 
   const signatureRequired = CUSTOMER_SIGNATURE.has(type) && !operation.signatureCaptured;
   const technicalSignatureRequired = directCompletion;
   const canFinish = (!technicalSignatureRequired || Boolean(technicalSignatureId)) && (!signatureRequired || (Boolean(signature) && signerName.trim().length > 0));
   const isLast = step === STEPS.length - 1;
   const canAdvance =
-    (step !== 1 || equipmentProfilesComplete) &&
+    (step !== 1 || (equipmentProfilesComplete && fieldEquipmentSelectionValid)) &&
     (step !== 4 || ((!technicalSignatureRequired || Boolean(technicalSignatureId)) && (!signatureRequired || (Boolean(signature) && signerName.trim().length > 0))));
 
   function back() {
-    if (step === 0) router.push(`/operator/services/${assignmentId}`);
+    if (step === 0) {
+      if (surface === "platform") onClose?.();
+      else router.push(`/operator/services/${assignmentId}`);
+    }
     else setStep((s) => s - 1);
   }
 
   async function next() {
-    if (!isLast) { setStep((s) => s + 1); return; }
+    if (!isLast) {
+      if (step === 1 && fieldCollectionPending) {
+        setSubmitting(true); setSubmitError(null);
+        try {
+          const updated = await operationApi.addFieldEquipments(operation.id, {
+            existingEquipmentIds: equipmentIds,
+            newEquipments: newFieldEquipments.map((item) => ({
+              equipmentTypeCatalogId: item.equipmentTypeCatalogId,
+              sector: item.sector?.trim() || undefined,
+              tag: item.tag?.trim() || undefined,
+              manufacturer: item.manufacturer?.trim() || undefined,
+              model: item.model?.trim() || undefined,
+              serialNumber: item.serialNumber?.trim() || undefined,
+              capacity: item.capacity?.trim() || undefined,
+              voltage: item.voltage?.trim() || undefined,
+              observations: item.observations?.trim() || undefined,
+            })),
+          });
+          setFieldInspections(updated.inspectedEquipments);
+          setEquipmentIds(updated.inspectedEquipments.map((item) => item.equipmentId));
+          setEquipmentProfiles((current) => Object.fromEntries(updated.inspectedEquipments.map((item) => [
+            item.equipmentId,
+            {
+              manufacturer: item.equipment?.manufacturer ?? item.brandSnapshot ?? current[item.equipmentId]?.manufacturer ?? "",
+              model: item.equipment?.model ?? item.modelSnapshot ?? current[item.equipmentId]?.model ?? "",
+              capacity: item.equipment?.capacity ?? item.capacitySnapshot ?? current[item.equipmentId]?.capacity ?? "",
+            },
+          ])));
+          setNewFieldEquipments([]);
+          if (updated.inspectedEquipments.some((item) =>
+            !item.equipment?.manufacturer?.trim() ||
+            !item.equipment?.model?.trim() ||
+            !item.equipment?.capacity?.trim(),
+          )) {
+            setSubmitError("Complete marca, modelo e capacidade dos equipamentos selecionados antes de continuar.");
+            return;
+          }
+        } catch (err) {
+          setSubmitError(err instanceof Error ? err.message : "Não foi possível cadastrar os equipamentos do atendimento.");
+          return;
+        } finally { setSubmitting(false); }
+      }
+      setStep((s) => s + 1);
+      return;
+    }
     setSubmitting(true);
     setSubmitError(null);
     try {
       const customerSignedAt = signature ? new Date().toISOString() : null;
       const equipmentMap = new Map((equipments.data?.items ?? []).map((item) => [item.id, item] as [string, EquipmentSummary]));
+      for (const item of fieldInspections) {
+        if (item.equipment) equipmentMap.set(item.equipmentId, item.equipment as EquipmentSummary);
+      }
       await operationApi.updateOperation(operation.id, {
+        ...(surface === "platform" ? { auxiliaryOperatorIds } : {}),
         checklist,
         maintenanceType: type === "TECHNICAL_REPORT" ? maintenanceType : null,
-        maintenanceChecklist: type === "TECHNICAL_REPORT" ? maintenanceChecklist : [],
+        maintenanceChecklist: type === "TECHNICAL_REPORT"
+          ? maintenanceChecklist.map((item) => ({
+              ...(item.equipmentId ? { equipmentId: item.equipmentId } : {}),
+              maintenanceType: item.maintenanceType,
+              description: item.description,
+              executed: item.executed,
+              ...(item.result ? { result: item.result } : {}),
+              ...(item.observations != null ? { observations: item.observations } : {}),
+            }))
+          : [],
         reportedIssue: issue,
         technicalDiagnosis: diagnosis,
         serviceDescription: service,
@@ -257,7 +425,7 @@ function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; oper
           : {}),
       });
       let handoff = await documentsApi.saveHandoffDraft(operation.id, type);
-      if (technicalSignatureRequired) {
+      if (technicalSignatureRequired && !configuredTechnicalSignatureId) {
         if (!technicalSignatureId) throw new Error("Selecione sua assinatura técnica para esta atividade.");
         handoff = await documentsApi.selectHandoffTechnicalSignature(handoff.id, technicalSignatureId);
       }
@@ -276,6 +444,13 @@ function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; oper
       if (directCompletion) {
         await documentsApi.finalizeHandoffReview(handoff.id);
         await documentsApi.renderDocument(handoff.id);
+        setCompletedDocument({
+          id: handoff.id,
+          number:
+            handoff.number ??
+            operation.documents.find((document) => document.id === handoff.id)?.number ??
+            `RVT-${String(operation.number).padStart(6, "0")}`,
+        });
       }
       photos.forEach((photo) => URL.revokeObjectURL(photo.url));
       setDone(true);
@@ -287,6 +462,41 @@ function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; oper
   }
 
   if (done) {
+    if (surface === "platform") {
+      return (
+        <div className="grid min-h-[420px] place-items-center p-6 text-center">
+          <div className="max-w-sm">
+            <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-[var(--color-success)]/12 text-[var(--color-success)]">
+              <CheckCircle2 className="h-9 w-9" />
+            </div>
+            <h2 className="mt-4 text-section-title">RVT concluído</h2>
+            <p className="mt-2 text-sm text-[var(--color-muted-foreground)]">
+              A execução foi concluída e o documento oficial foi gerado pelo Document Engine.
+            </p>
+            <div className="mt-6 grid gap-2 sm:grid-cols-2">
+              <button type="button" onClick={() => router.push("/documentos")} className="h-11 rounded-[var(--radius-md)] bg-[var(--color-primary)] px-4 text-sm font-semibold text-[var(--color-primary-foreground)]">
+                Abrir documentos
+              </button>
+              <button type="button" onClick={() => { onCompleted?.(); onClose?.(); }} className="h-11 rounded-[var(--radius-md)] border border-[var(--color-border)] px-4 text-sm font-medium hover:bg-[var(--color-muted)]">
+                Voltar ao RVT
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    if (directCompletion && completedDocument) {
+      return (
+        <OperatorDocumentSuccessView
+          documentId={completedDocument.id}
+          documentNumber={completedDocument.number}
+          documentType={type}
+          onDone={() => router.push("/operator")}
+          onDocuments={() => router.push("/operator/documents")}
+          onNew={() => router.push("/operator/atendimento")}
+        />
+      );
+    }
     return (
       <div className="min-h-dvh grid place-items-center p-6 text-center">
         <div className="max-w-xs">
@@ -310,24 +520,24 @@ function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; oper
   }
 
   return (
-    <div className="flex flex-col min-h-dvh">
+    <div className={`flex flex-col overflow-hidden ${surface === "platform" ? "h-full min-h-0" : "min-h-dvh"}`}>
       <WizardProgressHeader
         title={STEPS[step]}
         current={step}
         total={STEPS.length}
         onBack={back}
-        onClose={() => router.push(`/operator/services/${assignmentId}`)}
+        onClose={() => surface === "platform" ? onClose?.() : router.push(`/operator/services/${assignmentId}`)}
       />
 
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="min-h-0 flex-1 overflow-y-auto p-4">
         {step === 0 && (
           type === "TECHNICAL_REPORT" ? (
             <AssignedRvtChecklistStep
               maintenanceType={maintenanceType}
-              onMaintenanceType={setMaintenanceType}
+              onMaintenanceType={selectRvtMaintenanceType}
               items={maintenanceChecklist}
               loading={rvtChecklistCatalog.loading}
-              onToggle={(index) => setMaintenanceChecklist((current) => current.map((item, currentIndex) => currentIndex === index ? { ...item, executed: !item.executed, result: item.executed ? "NO" : "YES" } : item))}
+              onToggle={(index) => setMaintenanceChecklist((current) => current.map((item, currentIndex) => currentIndex === index && item.maintenanceType === maintenanceType ? { ...item, executed: !item.executed, result: item.executed ? "NO" : "YES" } : item))}
             />
           ) : (
             <ChecklistStep
@@ -345,13 +555,23 @@ function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; oper
               {managementAssigned && <span className="block text-[11px] text-[var(--color-muted-foreground)]">Definido pela gestão para este atendimento.</span>}
             </div>
             <MultiSelect label="Equipamentos envolvidos" value={equipmentIds} onChange={setEquipmentIds} options={equipmentOptions} placeholder="Selecionar equipamentos" />
+            {fieldCollectionPending && (
+              <FieldEquipmentCollection
+                drafts={newFieldEquipments}
+                equipmentTypes={equipmentTypes.data ?? []}
+                equipmentTypesLoading={equipmentTypes.loading}
+                onAdd={(draft) => setNewFieldEquipments((current) => [...current, draft])}
+                onRemove={(localId) => setNewFieldEquipments((current) => current.filter((item) => item.localId !== localId))}
+              />
+            )}
             {incompleteEquipmentIds.length > 0 && (
               <EquipmentProfileCompletion
                 equipmentIds={incompleteEquipmentIds}
                 equipmentOptions={equipmentOptions}
                 requiredFields={requiredEquipmentProfileFields}
                 profiles={equipmentProfiles}
-                onChange={(equipmentId, field, value) =>
+                onChange={(equipmentId, field, value) => {
+                  setSubmitError(null);
                   setEquipmentProfiles((current) => ({
                     ...current,
                     [equipmentId]: {
@@ -360,11 +580,27 @@ function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; oper
                       capacity: current[equipmentId]?.capacity ?? "",
                       [field]: value,
                     },
-                  }))
-                }
+                  }));
+                }}
               />
             )}
             {type === "TECHNICAL_REPORT" ? <>
+              {surface === "platform" && (
+                <MultiSelect
+                  label="Auxiliar Técnico (opcional)"
+                  value={auxiliaryOperatorIds}
+                  onChange={setAuxiliaryOperatorIds}
+                  options={(auxiliaryUsers.data?.items ?? [])
+                    .filter((user) => user.isActive && user.id !== operation.operator?.id)
+                    .map((user) => ({
+                      value: user.id,
+                      label: user.name,
+                      description: `${user.role} · somente acompanhamento`,
+                    }))}
+                  placeholder="Selecionar auxiliares"
+                  emptyMessage="Nenhum outro usuário operacional disponível."
+                />
+              )}
               <TextArea label="Observações" value={observations} onChange={setObservations} />
               <TextArea label="Recomendações técnicas (opcional)" value={recommendations} onChange={setRecommendations} />
             </> : <>
@@ -387,7 +623,7 @@ function ExecucaoSteps({ assignmentId, operation }: { assignmentId: string; oper
         )}
         {step === 4 && (
           <div className="space-y-5">
-            {technicalSignatureRequired && <OperatorSignatureChoice selectedId={technicalSignatureId} onSelect={setTechnicalSignatureId} />}
+            {technicalSignatureRequired && (configuredTechnicalSignatureId ? <div className="rounded-[var(--radius-md)] border border-emerald-500/30 bg-emerald-500/5 p-3 text-sm"><strong>Assinatura técnica definida</strong><p className="text-caption">Esta execução utilizará a assinatura do responsável técnico configurado no RVT.</p></div> : <OperatorSignatureChoice selectedId={technicalSignatureId} onSelect={setTechnicalSignatureId} />)}
             <RevisaoStep
               operation={operation}
               type={type}
@@ -528,7 +764,7 @@ function AssignedRvtChecklistStep({ maintenanceType, onMaintenanceType, items, l
   if (loading) return <SkeletonList rows={6} />;
   return <div className="space-y-5">
     <section className="space-y-3"><div><h2 className="font-semibold">Tipo de manutenção</h2><p className="text-caption">Selecione o tipo realizado. Ambos permanecerão visíveis no relatório.</p></div><div className="grid grid-cols-2 gap-3">{RVT_MAINTENANCE_TYPES.map((type) => <button key={type.value} type="button" onClick={() => onMaintenanceType(type.value)} className={`flex min-h-16 items-center justify-between rounded-[var(--radius-lg)] border p-3 ${maintenanceType === type.value ? "border-[var(--color-primary)] bg-[var(--color-primary)]/5" : "border-[var(--color-border)]"}`}><span className="font-medium">{type.label}</span>{maintenanceType === type.value && <Check className="h-5 w-5 text-[var(--color-primary)]" />}</button>)}</div></section>
-    {RVT_MAINTENANCE_TYPES.map((type) => { const indexed = items.map((item, index) => ({ item, index })).filter(({ item }) => item.maintenanceType === type.value); return <section key={type.value} className={`space-y-2 rounded-[var(--radius-lg)] border p-3 ${maintenanceType === type.value ? "border-[var(--color-primary)]" : "border-[var(--color-border)]"}`}><div className="flex items-center justify-between"><h3 className="font-semibold">Checklist {type.label.toLowerCase()}</h3>{maintenanceType === type.value && <span className="rounded-full bg-[var(--color-success)]/10 px-2 py-1 text-xs text-[var(--color-success)]">Selecionado</span>}</div>{indexed.length === 0 ? <p className="text-caption">Nenhum item cadastrado.</p> : indexed.map(({ item, index }) => <button key={`${type.value}-${index}`} type="button" onClick={() => onToggle(index)} className="flex w-full items-center gap-3 rounded-md bg-[var(--color-card)] p-3 text-left">{item.executed ? <CheckCircle2 className="h-5 w-5 shrink-0 text-[var(--color-success)]" /> : <Circle className="h-5 w-5 shrink-0 text-[var(--color-muted-foreground)]" />}<span className="text-sm">{item.description}</span></button>)}</section>; })}
+    {RVT_MAINTENANCE_TYPES.map((type) => { const selected = maintenanceType === type.value; const indexed = items.map((item, index) => ({ item, index })).filter(({ item }) => item.maintenanceType === type.value); return <section key={type.value} className={`space-y-2 rounded-[var(--radius-lg)] border p-3 ${selected ? "border-[var(--color-primary)]" : "border-[var(--color-border)]"}`}><div className="flex items-center justify-between"><h3 className="font-semibold">Checklist {type.label.toLowerCase()}</h3>{selected && <span className="rounded-full bg-[var(--color-success)]/10 px-2 py-1 text-xs text-[var(--color-success)]">Selecionado</span>}</div>{indexed.length === 0 ? <p className="text-caption">Nenhum item cadastrado.</p> : indexed.map(({ item, index }) => <button key={`${type.value}-${index}`} type="button" disabled={!selected} onClick={() => onToggle(index)} className="flex w-full items-center gap-3 rounded-md bg-[var(--color-card)] p-3 text-left disabled:cursor-default disabled:opacity-70">{selected && item.executed ? <CheckCircle2 className="h-5 w-5 shrink-0 text-[var(--color-success)]" /> : <Circle className="h-5 w-5 shrink-0 text-[var(--color-muted-foreground)]" />}<span className="text-sm">{item.description}</span></button>)}</section>; })}
   </div>;
 }
 

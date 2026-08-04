@@ -450,8 +450,10 @@ function SimpleCodeInput({
 
 function suggestProductCodes(): Pick<FormState, "sku" | "internalCode"> {
   const date = new Date().toISOString().slice(2, 10).replaceAll("-", "");
-  const suffix = globalThis.crypto?.randomUUID().replaceAll("-", "").slice(0, 4).toUpperCase()
-    ?? Math.random().toString(36).slice(2, 6).toUpperCase();
+  const randomUUID = globalThis.crypto?.randomUUID;
+  const suffix = (typeof randomUUID === "function"
+    ? randomUUID.call(globalThis.crypto).replaceAll("-", "").slice(0, 4)
+    : Math.random().toString(36).slice(2, 6)).toUpperCase();
   return { sku: `PRD-${date}-${suffix}`, internalCode: `INT-${date}-${suffix}` };
 }
 

@@ -1,5 +1,5 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import { CustomerType, EquipmentType, Prisma } from '@prisma/client';
+import { CustomerType, EquipmentType, Prisma, TechnicalCatalogType } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { extname } from 'node:path';
 import {
@@ -137,9 +137,64 @@ export class CustomersService {
     addressLabel: string;
     equipmentId: string;
     equipmentName: string;
+    equipments: Array<{ id: string; name: string; sector: string | null }>;
   }> {
     try {
       return await this.prisma.$transaction(async (tx) => {
+        const equipmentInputs = dto.equipments?.length
+          ? dto.equipments
+          : dto.equipment
+            ? [dto.equipment]
+            : [];
+        if (equipmentInputs.length === 0) {
+          throw new ApplicationException(
+            ERROR_CODES.VALIDATION_ERROR,
+            'Informe ao menos um equipamento para o atendimento',
+            HttpStatus.BAD_REQUEST,
+          );
+        }
+        if (
+          dto.equipments?.some(
+            (item) =>
+              !item.equipmentTypeCatalogId ||
+              !item.manufacturer?.trim() ||
+              !item.model?.trim() ||
+              !item.capacity?.trim(),
+          )
+        ) {
+          throw new ApplicationException(
+            ERROR_CODES.VALIDATION_ERROR,
+            'Informe tipo, marca, modelo e capacidade de todos os equipamentos',
+            HttpStatus.BAD_REQUEST,
+          );
+        }
+        const catalogIds = [
+          ...new Set(
+            equipmentInputs
+              .map((item) => item.equipmentTypeCatalogId)
+              .filter((id): id is string => Boolean(id)),
+          ),
+        ];
+        const catalogs = catalogIds.length
+          ? await tx.technicalCatalog.findMany({
+              where: {
+                id: { in: catalogIds },
+                type: TechnicalCatalogType.EQUIPMENT_TYPE,
+                active: true,
+                deletedAt: null,
+              },
+              select: { id: true, tags: true },
+            })
+          : [];
+        if (catalogs.length !== catalogIds.length) {
+          throw new ApplicationException(
+            ERROR_CODES.TECHNICAL_CATALOG_NOT_FOUND,
+            'Um dos tipos de equipamento não está disponível',
+            HttpStatus.BAD_REQUEST,
+          );
+        }
+        const catalogById = new Map(catalogs.map((catalog) => [catalog.id, catalog]));
+
         const customer = await tx.customer.create({
           data: {
             type: dto.type,
@@ -173,30 +228,43 @@ export class CustomersService {
             isPrimary: true,
           },
         });
-        const qrToken = randomUUID();
-        // O equipamento é identificado por marca + modelo; o nome é derivado
-        // quando não informado.
-        const equipmentName =
-          (dto.equipment.name?.trim() ||
-            [dto.equipment.manufacturer, dto.equipment.model]
-              .map((value) => value?.trim())
-              .filter(Boolean)
-              .join(' ')
-              .trim() ||
-            'Equipamento').slice(0, 180);
-        const equipment = await tx.equipment.create({
-          data: {
-            customerId: customer.id,
-            addressId: address.id,
-            type: dto.equipment.type ?? EquipmentType.OTHER,
-            name: equipmentName,
-            manufacturer: dto.equipment.manufacturer || null,
-            model: dto.equipment.model || null,
-            capacity: dto.equipment.capacity || null,
-            qrToken,
-            qrCode: `equipment:${qrToken}`,
-          },
-        });
+        const equipments: Array<{ id: string; name: string; sector: string | null }> = [];
+        for (const input of equipmentInputs) {
+          const catalog = input.equipmentTypeCatalogId
+            ? catalogById.get(input.equipmentTypeCatalogId)
+            : undefined;
+          const qrToken = randomUUID();
+          const equipmentName =
+            (input.name?.trim() ||
+              [input.manufacturer, input.model]
+                .map((value) => value?.trim())
+                .filter(Boolean)
+                .join(' ')
+                .trim() ||
+              'Equipamento').slice(0, 180);
+          const equipment = await tx.equipment.create({
+            data: {
+              customerId: customer.id,
+              addressId: address.id,
+              equipmentTypeCatalogId: catalog?.id ?? null,
+              type: catalog ? this.equipmentTypeFromTags(catalog.tags) : input.type ?? EquipmentType.OTHER,
+              name: equipmentName,
+              sector: input.sector || null,
+              tag: input.tag || null,
+              manufacturer: input.manufacturer || null,
+              model: input.model || null,
+              serialNumber: input.serialNumber || null,
+              capacity: input.capacity || null,
+              voltage: input.voltage || null,
+              observations: input.observations || null,
+              qrToken,
+              qrCode: `equipment:${qrToken}`,
+            },
+            select: { id: true, name: true, sector: true },
+          });
+          equipments.push(equipment);
+        }
+        const equipment = equipments[0];
         await tx.auditLog.create({
           data: this.audit(CUSTOMER_AUDIT_ACTIONS.CUSTOMER_CREATED, CUSTOMER_RESOURCE, actor, context, {
             customerId: customer.id,
@@ -204,6 +272,8 @@ export class CustomersService {
             pendingReview: true,
             origin: 'WALK_IN',
             equipmentId: equipment.id,
+            equipmentIds: equipments.map((item) => item.id),
+            equipmentCount: equipments.length,
           }),
         });
         return {
@@ -214,12 +284,21 @@ export class CustomersService {
             .join(', '),
           equipmentId: equipment.id,
           equipmentName: equipment.name,
+          equipments,
         };
       });
     } catch (error: unknown) {
       this.handleConflict(error);
       throw error;
     }
+  }
+
+  private equipmentTypeFromTags(tags: string[]): EquipmentType {
+    for (const type of Object.values(EquipmentType)) {
+      const tag = `legacy-${type.toLowerCase().replaceAll('_', '-')}`;
+      if (tags.includes(tag)) return type;
+    }
+    return EquipmentType.OTHER;
   }
 
   async update(

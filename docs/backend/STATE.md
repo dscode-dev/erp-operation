@@ -1,5 +1,25 @@
 # Backend State
 
+## Hotfix RVT — preparo idempotente e Assignment única (2026-08-03)
+
+- `OperationsService.create` permanece como único responsável por criar a Assignment primária de
+  uma nova execução RVT; o hook do planejamento apenas vincula `RvtExecution`,
+  `MaintenanceExecution`, assinatura técnica e auditoria.
+- Removida a segunda criação que violava a constraint única `(operation_id, assigned_to)` e fazia
+  rollback integral do `POST /rvt-executions/:id/prepare`.
+- Execuções preparadas anteriormente continuam usando o reparo idempotente existente quando não
+  possuem Assignment primária. Nenhuma migration ou mudança de contrato foi necessária.
+
+## Hotfix RVT — validação da equipe auxiliar (2026-08-03)
+
+- `UpdateOperationDto` aceita oficialmente `auxiliaryOperatorIds` no `PATCH /operations/:id`,
+  mantendo whitelist, UUID v4, unicidade e limite de dez usuários.
+- Um teste executa o DTO pela mesma configuração do `ValidationPipe` global para impedir que o
+  contrato TypeScript exista sem os decorators no artefato JavaScript compilado.
+- Falhas de validação agora registram somente as violações normalizadas em `errorDetails`; corpo,
+  assinaturas e imagens da requisição continuam fora dos logs.
+- Nenhuma migration ou alteração de contrato adicional foi necessária.
+
 ## Cancelamento operacional documentado — 2026-08-02
 
 - `OperationCancellation` registra a solicitação do técnico, motivo, evidências, assinatura técnica,
@@ -116,6 +136,25 @@
   são validados no backend.
 - O contrato anterior permanece compatível quando `configurationOnly` não é enviado.
 - Nenhuma entidade ou migration foi criada.
+
+# RVT Planning — configuração e execuções independentes (2026-08-03)
+
+- Criados `RvtPlan`, `RvtPlanEquipment`, `RvtPlanChecklist` e `RvtExecution` como especialização de `MaintenancePlan`/`MaintenanceExecution`; `Operation`, `Assignment` e Document Engine continuam oficiais.
+- Migration aditiva `20260803180000_rvt_planning_foundation`; numeração monotônica por cliente com advisory lock e transação `SERIALIZABLE`.
+- Configurar/editar não emite documento. `POST /rvt-executions/:id/prepare` materializa a Operation `TECHNICAL_REPORT` somente no início/atribuição.
+- Conclusão da Operation sincroniza a ocorrência e encerra a configuração quando não restam execuções abertas.
+- RVT avulso concluído pelo Operator é registrado idempotentemente por `/rvt-plans/ad-hoc`.
+- Assinatura do cliente é opcional no RVT; assinatura técnica ativa do responsável configurado permanece obrigatória.
+- Equipamento encontrado durante RVT configurado é vinculado ao cliente, Operation e configuração na mesma transação.
+
+# Múltiplos equipamentos na OS avulsa — 2026-08-03
+
+- `POST /api/v1/customers/walk-in` aceita `equipments[]` (1–20) e cria cliente pendente de revisão,
+  endereço, contato e todos os equipamentos em uma única transação.
+- Cada equipamento recebe tipo do Catálogo Técnico, QR Code próprio e vínculo com o mesmo
+  cliente/endereço. A resposta inclui `equipments[]`; `equipmentId` e `equipmentName` permanecem
+  como aliases do primeiro item para retrocompatibilidade.
+- O payload singular legado `equipment` continua aceito. Nenhuma migration ou entidade foi criada.
 
 ## Cliente 360 — métricas operacionais contextualizadas (2026-07-23)
 
@@ -3314,3 +3353,46 @@ Status: implementado e validado em PostgreSQL/Docker.
 - A geração aceita no máximo seis evidências e continua sem mínimo obrigatório.
 - `POST /pmoc/:id/execution-requests` aceita `equipmentId?`; a omissão usa o equipamento primário
   para retrocompatibilidade.
+# Coleta de equipamentos em OS atribuída — 2026-08-03
+
+- Adicionado `POST /api/v1/operations/:id/equipments` para o Operator registrar, durante uma
+  execução atribuída, equipamentos que não foram definidos pela gestão.
+- O fluxo aceita vincular equipamentos ativos já cadastrados para o cliente e cadastrar vários
+  equipamentos encontrados em campo.
+- Cadastro, QR Code, vínculo principal, snapshots de `OperationInspectedEquipment`, revisão
+  documental e auditoria são persistidos em uma transação serializável protegida por advisory lock.
+- A operação precisa estar `IN_PROGRESS` e sem qualquer equipamento previamente vinculado.
+- Nenhuma entidade ou migration foi criada.
+
+## RVT — correção de conclusão e acionamento (2026-08-03)
+
+- O payload de conclusão agora projeta apenas os campos graváveis de `maintenanceChecklist`; campos
+  de leitura retornados pela API não atravessam o `ValidationPipe` com `forbidNonWhitelisted`.
+- A validação estrita do backend foi preservada; não houve alteração de entidade, migration ou contrato.
+- A Platform mantém ações distintas para gerenciar a atribuição e executar o RVT no wizard de campo.
+- Execuções RVT operacionais agora garantem uma Assignment primária na mesma transação da Operation.
+- Registros preparados anteriormente sem Assignment são reparados idempotentemente no próximo `prepare`.
+- `OperationDetail` projeta oficialmente `assignment` a partir da atribuição primária.
+
+## RVT — consolidação da execução Platform/Operator (2026-08-03)
+
+- Checklists configurados nascem executados (`YES`) e podem ser desmarcados em campo.
+- A assinatura do responsável técnico é projetada na Operation e preservada no Handoff; o Operator
+  não tenta reassociá-la como assinatura pessoal.
+- `PATCH /operations/:id` sincroniza até dez `auxiliaryOperatorIds` em Assignments secundárias.
+- Apenas a Assignment primária executa o RVT. Auxiliares são read-only e nunca substituem
+  `Operation.operator` no documento.
+- Mudanças de auxiliares não tornam o documento STALE.
+
+## RVT — fechamento de checklist, assinatura e atribuição (2026-08-03)
+
+- A preparação da execução persiste no snapshot da Operation os catálogos Semanal e Semestral; o
+  tipo selecionado nasce marcado e o complementar permanece apenas informativo.
+- O Builder sempre projeta os dois grupos no mesmo Blueprint e impede marcação no grupo não
+  selecionado. Preview e PDF continuam compartilhando esse Blueprint.
+- RVT sem assinatura efetivamente coletada não cria bloco pendente de cliente. A assinatura
+  institucional do responsável técnico permanece no documento.
+- `PATCH /assignments/:id/reassign` sincroniza responsável e `auxiliaryOperatorIds` na mesma
+  transação. Não houve alteração de schema ou migration.
+- No RVT planejado, o título/cabeçalho mantém o número documental (`RVT-000039`), enquanto o campo
+  `Identificação do relatório > Número` usa a sequência da execução (`001`, `002`, ...).

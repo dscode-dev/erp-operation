@@ -138,6 +138,7 @@ function AssignmentWorkflow({
   // operadores; owner/manager têm acesso pleno.
   const canReports = role !== "OPERATOR" || can("canReports");
   const op = assignment.operation;
+  const readOnlyRvtAuxiliary = op.requestedDocumentType === "TECHNICAL_REPORT" && !assignment.isPrimary;
   const operation = useQuery((signal) => operationApi.getOperation(op.id, { signal }), [op.id]);
   const [document, setDocument] = useState<OperationDocument | null>(null);
   const [cancellationOpen, setCancellationOpen] = useState(false);
@@ -215,12 +216,17 @@ function AssignmentWorkflow({
         </section>
       )}
 
-      {!canReports && assignment.status !== "COMPLETED" && (
+      {readOnlyRvtAuxiliary && (
+        <p className="rounded-[var(--radius-md)] border border-[var(--color-info)]/30 bg-[var(--color-info)]/10 px-3 py-2 text-sm text-[var(--color-info)]">
+          Você está vinculado como Auxiliar Técnico. Os dados desta visita estão disponíveis para acompanhamento, mas a execução e o documento pertencem ao técnico principal.
+        </p>
+      )}
+      {!readOnlyRvtAuxiliary && !canReports && assignment.status !== "COMPLETED" && (
         <p className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-muted)] px-3 py-2 text-sm text-[var(--color-muted-foreground)]">
           Seu perfil tem acesso apenas à agenda. Você pode visualizar esta ordem, mas iniciar o atendimento (que gera relatório) requer a permissão de Relatórios.
         </p>
       )}
-      {canReports && (
+      {canReports && !readOnlyRvtAuxiliary && (
         <section className="grid gap-2">
           {assignment.status === "ASSIGNED" && (
             <BigButton icon={CheckCircle2} label="Aceitar ordem" busy={busy === "accept"} onClick={() => onAction("accept")} />

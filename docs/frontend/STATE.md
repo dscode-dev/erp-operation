@@ -1,5 +1,20 @@
 # STATE — Frontend
 
+## Hotfix RVT — atribuição e download (2026-08-03)
+
+- Abrir detalhes de uma ocorrência pode preparar a Operation sem conflito de Assignment duplicada.
+- O ícone de download da execução concluída baixa o PDF RVT diretamente pelo Document Engine,
+  mantendo o usuário na página de detalhes.
+- Erros de download são apresentados no estado de erro da própria página.
+
+## Hotfix do executor RVT na Platform (2026-08-03)
+
+- O executor continua dentro do drawer da Platform e envia a equipe auxiliar pelo contrato oficial
+  da Operation.
+- O corpo do drawer agora reserva toda a altura útil ao wizard: cabeçalho e rodapé permanecem
+  estáveis, somente o conteúdo da etapa rola e `Continuar`/`Confirmar` ficam na base do painel.
+- `Drawer.contentClassName` permite esse layout sem duplicar o shell ou alterar os demais drawers.
+
 ## Atendimento mobile e calendário PMOC (2026-07-28)
 
 - O resumo do atendimento mostra complemento e ponto de referência do endereço.
@@ -1418,3 +1433,65 @@ Status: concluído.
 - Após a emissão, o app não abre mais o visualizador automaticamente: apresenta a mesma experiência
   de conclusão dos atendimentos, com Compartilhar, Baixar, Documentos, Minhas ordens e Início.
 - O status pendente na tabela da Platform foi compactado para “Cancelada · operador” e não quebra linha.
+# Equipamentos coletados no atendimento e encerramento de drafts — 2026-08-03
+
+- O wizard de execução atribuída detecta OS sem equipamento e permite selecionar ativos existentes
+  ou cadastrar vários equipamentos encontrados em campo.
+- Tipo, marca, modelo e capacidade são validados antes do avanço; os dados persistidos alimentam o
+  resumo, Preview e PDF oficial.
+- A Central de Relatórios desativa o autosave assim que o registro documental é materializado e
+  limpa novamente o draft ao finalizar ou renderizar, impedindo sua reaparição após a conclusão.
+- Identificadores locais do formulário possuem fallback para WebViews sem `crypto.randomUUID`, sem
+  alterar os UUIDs persistidos pelo backend.
+
+# OS avulsa com múltiplos equipamentos — 2026-08-03
+
+- O cadastro de cliente novo no Operator deixou de possuir campos de equipamento único.
+- O primeiro passo reutiliza `FieldEquipmentCollection`, aceita até 20 equipamentos e exige tipo,
+  marca, modelo e capacidade em cada item.
+- Todos os equipamentos são cadastrados de uma vez e seguem para resumo, Operation, Preview e PDF.
+
+# RVT Planning — Platform e Operator (2026-08-03)
+
+- `/rvt` centraliza configurações; `/rvt/[id]` exibe cobertura, equipamentos e execuções paginadas.
+- A Central de Relatórios redireciona criação de RVT para configuração, sem emissão antecipada.
+- Operator escolhe “RVT avulso” ou “RVT configurado”; ambos convergem no fluxo oficial de Operation/Assignment/Document Engine.
+- Assinatura do cliente é opcional apenas no RVT; assinatura técnica configurada é preservada na execução.
+- Corrigida a conclusão de execuções configuradas: o checklist é sanitizado para o contrato de escrita.
+- A tabela de ocorrências mantém ações separadas para detalhes/atribuição e execução no wizard,
+  inclusive depois que a Operation já foi preparada.
+
+## Equipamentos em campo — formulário único (2026-08-03)
+
+- O Operator não empilha mais formulários ao adicionar equipamentos durante um atendimento.
+- Um único formulário confirma cada equipamento em “Adicionar equipamento” e limpa os campos.
+- Equipamentos confirmados aparecem em lista compacta, numerada e removível antes da persistência.
+
+## RVT — garantia de atribuição da execução (2026-08-03)
+
+- OWNER/MANAGER podem assumir ou reatribuir qualquer ocorrência não concluída.
+- “Executar RVT agora” utiliza a Assignment primária garantida pelo backend e abre o wizard oficial.
+- Operations históricas sem Assignment são corrigidas pelo `prepare`, sem intervenção manual.
+
+## RVT — detalhes e atribuição no contexto (2026-08-03)
+
+- A ação de detalhes não redireciona mais para `/operacoes`; o drawer permanece sobre `/rvt/[id]`.
+- O preparo idempotente garante a Assignment antes de abrir os detalhes, inclusive em registros antigos.
+- OWNER/MANAGER selecionam o operador e confirmam a atribuição no próprio drawer.
+- A ação `Executar RVT agora` na Platform abre o wizard em um drawer local de `/rvt/[id]`; não
+  navega nem renderiza a interface do PWA em uma rota `/operator`.
+- Checklist abre marcado; cadastro em campo aparece somente sem equipamentos configurados.
+- Cabeçalho/progresso ficam fixos e apenas o conteúdo da etapa possui scroll.
+- A assinatura configurada do responsável técnico é preservada; o operador principal permanece como
+  Técnico em Campo. Auxiliares são somente acompanhamento no mobile.
+
+## RVT — fechamento de execução (2026-08-03)
+
+- Wizard exibe Semanal e Semestral; a seleção marca todos os itens do tipo escolhido e limpa o
+  grupo complementar, que permanece visível e bloqueado.
+- Conclusão direta no Operator reutiliza a tela documental oficial com compartilhar, baixar,
+  Documentos, novo atendimento e início.
+- Drawer de atribuição envia responsável e auxiliares na mesma confirmação e mostra feedback de
+  sucesso após persistência.
+- Preview/PDF do RVT agora distinguem número documental no título e número sequencial da execução
+  no item `Número` da identificação, ambos fornecidos pelo Document Engine.

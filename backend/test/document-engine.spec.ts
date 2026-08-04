@@ -658,6 +658,10 @@ describe('DocumentEngine foundation', () => {
         'Semestral',
       ]);
       expect(maintenanceColumns.columns.map((column) => column.selected)).toEqual([false, true]);
+      expect(maintenanceColumns.columns[0].items[0]).toMatchObject({
+        label: 'Limpeza de filtro de ar',
+        done: false,
+      });
       expect(maintenanceColumns.columns[1].items[0]).toMatchObject({
         label: 'Limpeza total dos trocadores de calor',
         done: true,
@@ -929,6 +933,7 @@ describe('DocumentEngine foundation', () => {
   it('certifies the Technical Visit Report structure and Preview/PDF blueprint parity', async () => {
     const context = operationContext(DocumentTemplateType.TECHNICAL_REPORT);
     const operation = context.operation as Record<string, unknown>;
+    operation.rvtExecution = { id: 'rvt-execution-7', executionNumber: 7 };
     operation.reportedIssue = 'Avaliar a perda de rendimento térmico relatada pelo cliente.';
     operation.technicalDiagnosis =
       'Foi identificada obstrução parcial do filtro.\n- Pressão dentro da faixa operacional\n- Dreno com escoamento reduzido';
@@ -1030,6 +1035,14 @@ describe('DocumentEngine foundation', () => {
     const identification = built.sections.find(
       (section) => section.id === 'technical-report-identification',
     );
+    const identificationMetadata = identification?.components.find(
+      (component) => component.kind === 'metadata',
+    );
+    expect(built.header.documentNumber).toBe('RVT-000042');
+    expect(identificationMetadata?.kind === 'metadata' ? identificationMetadata.items : []).toContainEqual({
+      label: 'Número',
+      value: '007',
+    });
     expect(
       identification?.components.some(
         (component) =>

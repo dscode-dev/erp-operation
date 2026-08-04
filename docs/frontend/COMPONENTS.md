@@ -978,3 +978,43 @@ reagendamento e aprovação do cancelamento.
   `PmocExecutionRequest` oficial e abre o componente compartilhado.
 - `SuccessView`: reutilizado após PMOC para download binário e Web Share API, com fallback seguro
   para download.
+# `FieldEquipmentCollection`
+
+Bloco contextual do `ExecucaoWizard` mostrado somente quando a OS atribuída não possui equipamento.
+Combina `MultiSelect` dos ativos do cliente com formulários repetíveis para cadastro em campo. A
+persistência ocorre em lote antes de sair do passo Conteúdo.
+
+O componente reside em `apps/operator/components` e também é usado por `AtendimentoWizard` na OS
+avulsa. Título e orientação são configuráveis; campos, fallback de chave e limite permanecem únicos
+nos dois fluxos.
+
+## RVT Planning (2026-08-03)
+
+- `RvtPlanWizard`: drawer de configuração em quatro etapas; não renderiza documento.
+- `RvtStartModeStep`: escolha mobile entre RVT avulso e ocorrência configurada.
+- `ExecucaoWizard`: reutilizado pela ocorrência preparada, com checklist, fotos, recomendações e assinatura opcional do cliente.
+- `FieldEquipmentCollection`: também adiciona equipamentos a RVT configurado pelo contrato oficial.
+- `ExecucaoWizard` projeta os itens persistidos para o DTO de checklist antes da atualização, evitando
+  o envio de metadados read-only.
+- `FieldEquipmentCollection` mantém um único rascunho interno e entrega ao wizard somente itens
+  confirmados; a coleção persistível aparece como lista compacta com remoção individual.
+- A ação `Executar RVT agora` consome `OperationDetail.assignment`, reatribui ao usuário atual quando
+  necessário e realiza as transições `ASSIGNED -> ACCEPTED -> STARTED` antes de abrir o wizard.
+- `OperationDetailDrawer` aceita `assignmentActionLabel`; no detalhe do RVT a ação é apresentada como
+  `Confirmar atribuição` e reutiliza o seletor e o contrato oficial de Assignment.
+- `RvtExecutionDrawer`: hospeda a execução guiada no shell da Platform. O workflow compartilhado
+  recebe `surface="platform"`, fecha no detalhe do RVT e nunca redireciona para telas do Operator.
+- `ExecucaoWizard`: no RVT configurado inicia o checklist marcado, preserva a assinatura do
+  responsável e isola o scroll no corpo da etapa.
+- `AssignmentSection`: combina responsável principal e `AuxiliaryOperatorSelect` na mesma confirmação.
+- A tabela de execuções resolve o documento RVT `READY` da própria Operation e usa
+  `documentsApi.downloadDocument`; o ícone de download não funciona como link de navegação.
+
+### Componentes RVT consolidados
+
+- `AssignedRvtChecklistStep`: dois grupos sempre visíveis; somente o selecionado aceita checks.
+- `OperatorDocumentSuccessView`: agora também é reutilizado por `ExecucaoWizard` após render do RVT.
+- `AssignmentSection`: confirma `UserSelect` e `AuxiliaryOperatorSelect` de forma atômica e apresenta
+  mensagem acessível com `role=status`.
+- `DocumentViewer` não transforma identificadores do RVT: renderiza o Blueprint oficial, preservando
+  o número documental no cabeçalho e o número da execução na seção de identificação.

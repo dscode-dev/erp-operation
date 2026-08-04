@@ -66,6 +66,34 @@ export class UpdateOperationPhotoDto {
   caption!: string;
 }
 
+export class OperationFieldEquipmentDto {
+  @IsUUID('4') equipmentTypeCatalogId!: string;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(160) sector?: string;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(80) tag?: string;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(120) manufacturer?: string;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(120) model?: string;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(120) serialNumber?: string;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(80) capacity?: string;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(40) voltage?: string;
+  @IsOptional() @Transform(({ value }) => trim(value)) @IsString() @MaxLength(5000) observations?: string;
+}
+
+export class CreateOperationFieldEquipmentsDto {
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @ArrayMaxSize(20)
+  @IsUUID('4', { each: true })
+  existingEquipmentIds?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @ValidateNested({ each: true })
+  @Type(() => OperationFieldEquipmentDto)
+  newEquipments?: OperationFieldEquipmentDto[];
+}
+
 export class OperationMaintenanceChecklistItemDto {
   @IsOptional() @IsUUID('4') equipmentId?: string;
   @IsOptional() @IsEnum(PmocChecklistUnit) pmocUnit?: PmocChecklistUnit;
@@ -257,6 +285,12 @@ export class CreateOperationDto {
 }
 
 export class UpdateOperationDto {
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @ArrayMaxSize(10)
+  @IsUUID('4', { each: true })
+  auxiliaryOperatorIds?: string[];
   @IsOptional()
   @IsArray()
   @ArrayUnique()

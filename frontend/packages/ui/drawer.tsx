@@ -18,6 +18,7 @@ export function Drawer({
   children,
   footer,
   width = "max-w-xl",
+  contentClassName = "overflow-y-auto p-5",
   dismissOnOverlayClick = false,
 }: {
   open: boolean;
@@ -27,6 +28,8 @@ export function Drawer({
   children: ReactNode;
   footer?: ReactNode;
   width?: string;
+  /** Classes do corpo rolável. Permite que fluxos altos controlem seu próprio scroll. */
+  contentClassName?: string;
   /**
    * Fechar ao clicar no overlay. Desligado por padrão para evitar que um clique
    * acidental fora do drawer descarte um formulário preenchido — o usuário fecha
@@ -71,7 +74,7 @@ export function Drawer({
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-5">{children}</div>
+        <div className={`min-h-0 flex-1 ${contentClassName}`}>{children}</div>
 
         {footer && (
           <div className="border-t border-[var(--color-border)] p-4 flex items-center justify-end gap-2">{footer}</div>

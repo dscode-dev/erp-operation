@@ -2299,3 +2299,55 @@ The catalog is scoped to the installation Organization in every query. Reads req
   monotônica.
 - Preview, render e download permanecem autenticados; nenhum caminho, chave de Storage, Base64 de
   PDF ou URL pública é exposto.
+# Segurança — cadastro de equipamento em campo
+
+- O cadastro genérico de equipamentos permanece restrito a OWNER/MANAGER.
+- O Operator recebe somente a capability contextual `POST /operations/:id/equipments`.
+- O backend valida Assignment/ownership, `canReports`, estado `IN_PROGRESS`, ausência de vínculo
+  anterior, cliente, atividade do equipamento existente e catálogo técnico ativo.
+- `customerId` e `addressId` são sempre obtidos da Operation, impedindo mass assignment e IDOR
+  entre clientes.
+- Advisory lock por Operation e transação `Serializable` impedem cadastros concorrentes ou
+  vínculos parciais. Todo equipamento criado e vínculo efetuado gera auditoria append-only.
+
+# Cadastro avulso com múltiplos equipamentos
+
+- A coleção é limitada a 20 itens e cada tipo informado deve ser um `EQUIPMENT_TYPE` ativo.
+- Cliente, contato, endereço e equipamentos são criados atomicamente; qualquer falha desfaz tudo.
+- QR Tokens são gerados no backend com CSPRNG. IDs efêmeros da interface nunca são persistidos.
+- O endpoint preserva `canReports`, RBAC e auditoria sem conceder ao Operator acesso ao CRUD
+  administrativo de equipamentos.
+
+## RVT Planning (2026-08-03)
+
+- Configuração/alteração: `OWNER/MANAGER`; UUID, paginação e DTOs validados globalmente.
+- Endereço/equipamentos devem pertencer ao cliente; usuários devem estar ativos; checklist deve ser ativo, `TECHNICAL_REPORT` e da periodicidade escolhida.
+- Responsável técnico exige assinatura institucional ativa com imagem. Operator não prepara ocorrência atribuída a outro usuário.
+- Advisory lock + `SERIALIZABLE` e constraints únicas protegem número do cliente, occurrence number/date, Operation e MaintenanceExecution.
+- A preparação usa a autorização normal de `OperationsService`; não existe bypass interno de tipo documental ou RBAC.
+- Nenhum storage key, path, binário ou assinatura base64 é retornado nos contratos RVT.
+- A correção de conclusão mantém a whitelist global: o cliente remove projeções read-only antes do
+  PATCH, sem ampliar DTOs nem permitir mass assignment.
+- Somente OWNER/MANAGER podem escolher ou reatribuir outro executor. O reparo de Assignment usa
+  advisory lock, transação serializável e validação de usuário operacional ativo.
+- A assinatura institucional configurada não passa pela autorização de assinatura pessoal do Operator.
+- Auxiliares são usuários operacionais ativos, limitados a dez e auditados; transições secundárias de
+  RVT são bloqueadas no backend.
+# Hotfix RVT — integridade e download (2026-08-03)
+
+- A atribuição inicial é escrita uma única vez pelo domínio Operation dentro da mesma transação da
+  criação. A constraint `(operation_id, assigned_to)` continua ativa como defesa de integridade.
+- Downloads RVT utilizam exclusivamente o endpoint autenticado do Document Engine; storage keys,
+  caminhos internos e URLs públicas não são expostos.
+
+## RVT — integridade adicional
+
+- O catálogo complementar é resolvido pelo `organizationId` do plano e por workflow
+  `TECHNICAL_REPORT`, impedindo mistura de dados de outra instalação.
+- A API limita auxiliares a 10 UUIDs únicos e valida cada usuário antes de alterar Assignments.
+- Responsável e auxiliares são sincronizados na mesma transação da reatribuição; falhas não deixam
+  equipe parcialmente persistida.
+- O documento não expõe campo ou imagem de assinatura de cliente inexistente. Assets assinados
+  continuam resolvidos exclusivamente pelo `DocumentAssetResolver`.
+- O número da execução é carregado pela relação Operation → RvtExecution dentro do DocumentContext;
+  nenhum identificador é aceito do cliente para compor o documento.
