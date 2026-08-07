@@ -17,6 +17,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { Role } from '@prisma/client';
 import { memoryStorage } from 'multer';
 import { CurrentUser } from '../../shared/decorators/current-user.decorator';
+import { Public } from '../../shared/decorators/public.decorator';
 import { Roles } from '../../shared/decorators/roles.decorator';
 import type { AuthenticatedUser } from '../../shared/types/authenticated-user.type';
 import type { RequestWithId } from '../../shared/types/request-with-id.type';
@@ -29,6 +30,7 @@ import {
   type AssetContentResponse,
   type AssetResponse,
   type OrganizationResponse,
+  type PublicOrganizationProfile,
   type RequestAuditContext,
   type SettingsResponse,
   type TemplateResponse,
@@ -43,6 +45,13 @@ export class OrganizationController {
   @Get()
   getOrganization(): Promise<OrganizationResponse> {
     return this.organization.getOrganization();
+  }
+
+  /** Vitrine pública para a landing page — sem autenticação, dados não sigilosos. */
+  @Public()
+  @Get('public')
+  getPublicProfile(): Promise<PublicOrganizationProfile> {
+    return this.organization.getPublicProfile();
   }
 
   @Roles(Role.OWNER)

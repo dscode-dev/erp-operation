@@ -8,6 +8,7 @@ import type {
   DocumentTemplate,
   Organization,
   OrganizationSettings,
+  PublicCompanyProfile,
   UpdateDocumentTemplatePayload,
   UpdateOrganizationPayload,
   UpdateOrganizationSettingsPayload,
@@ -15,6 +16,11 @@ import type {
 
 export function getOrganization(opts?: { signal?: AbortSignal }): Promise<Organization> {
   return api.get<Organization>("/organization", opts);
+}
+
+/** Vitrine pública (landing page) — endpoint sem autenticação. */
+export function getPublicCompany(opts?: { signal?: AbortSignal }): Promise<PublicCompanyProfile> {
+  return api.get<PublicCompanyProfile>("/organization/public", { auth: false, ...opts });
 }
 
 export function updateOrganization(payload: UpdateOrganizationPayload): Promise<Organization> {
