@@ -285,6 +285,20 @@ export type Organization = {
   updatedAt: string;
 };
 
+/** Vitrine pública da empresa (landing page) — somente dados não sigilosos. */
+export type PublicCompanyProfile = {
+  name: string;
+  segment: string | null;
+  email: string;
+  phones: string[];
+  whatsapp: string | null;
+  website: string | null;
+  city: string;
+  state: string;
+  primaryColor: string;
+  secondaryColor: string;
+};
+
 export type OrganizationSettings = {
   id: string;
   organizationId: string;

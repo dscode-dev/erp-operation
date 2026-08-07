@@ -5,7 +5,7 @@ import { RequireAuth } from "@erp/ui/auth/require-auth";
 
 export default function PlatformLayout({ children }: { children: ReactNode }) {
   return (
-    <RequireAuth>
+    <RequireAuth fallbackPath="/inicio">
       <div className="min-h-dvh flex bg-[var(--color-background)] text-[var(--color-foreground)]">
         <PlatformSidebar />
         <div className="flex-1 flex flex-col min-w-0">

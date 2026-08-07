@@ -26,7 +26,7 @@ const COPY: Record<Variant, { title: string; subtitle: string; home: string; cha
   platform: {
     title: "Acessar plataforma",
     subtitle: "Gestão · OWNER e MANAGER.",
-    home: "/",
+    home: "/inicio",
     change: "/trocar-senha",
   },
   operator: {

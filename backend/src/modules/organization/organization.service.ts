@@ -58,6 +58,24 @@ const ORGANIZATION_SELECT = {
   updatedAt: true,
 } satisfies Prisma.OrganizationSelect;
 
+/**
+ * Campos liberados para a landing page pública (sem autenticação).
+ * Apenas dados de vitrine: nome, segmento e formas de contato. Nenhum dado
+ * sigiloso (CNPJ, inscrição estadual, endereço detalhado, ids internos etc.).
+ */
+const PUBLIC_ORGANIZATION_SELECT = {
+  tradeName: true,
+  segment: true,
+  email: true,
+  phone: true,
+  phoneNumbers: true,
+  website: true,
+  city: true,
+  state: true,
+  primaryColor: true,
+  secondaryColor: true,
+} satisfies Prisma.OrganizationSelect;
+
 const SETTINGS_SELECT = {
   id: true,
   organizationId: true,
@@ -120,6 +138,20 @@ export interface AssetContentResponse extends AssetResponse {
   contentBase64: string;
 }
 
+/** Perfil público (landing page) — somente vitrine e contato. */
+export interface PublicOrganizationProfile {
+  name: string;
+  segment: string | null;
+  email: string;
+  phones: string[];
+  whatsapp: string | null;
+  website: string | null;
+  city: string;
+  state: string;
+  primaryColor: string;
+  secondaryColor: string;
+}
+
 @Injectable()
 export class OrganizationService {
   constructor(
@@ -130,6 +162,48 @@ export class OrganizationService {
 
   async getOrganization(): Promise<OrganizationResponse> {
     return this.getSingleOrganizationOrThrow();
+  }
+
+  /**
+   * Perfil público consumido pela landing page (endpoint sem autenticação).
+   * Retorna apenas dados de vitrine e contato — nunca dados sigilosos.
+   */
+  async getPublicProfile(): Promise<PublicOrganizationProfile> {
+    const org = await this.prisma.organization.findFirst({
+      orderBy: { createdAt: 'asc' },
+      where: { isActive: true },
+      select: PUBLIC_ORGANIZATION_SELECT,
+    });
+    if (!org) {
+      throw new ApplicationException(
+        ERROR_CODES.ORGANIZATION_NOT_FOUND,
+        'Organization was not found.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    const phones = [org.phone, ...org.phoneNumbers]
+      .map((value) => value?.trim())
+      .filter((value): value is string => Boolean(value));
+    const uniquePhones = Array.from(new Set(phones));
+    const primaryDigits = uniquePhones[0]?.replace(/\D/g, '') ?? '';
+    // wa.me exige DDI; assume Brasil (55) quando o número não o inclui.
+    const whatsapp = primaryDigits
+      ? primaryDigits.length > 11
+        ? primaryDigits
+        : `55${primaryDigits}`
+      : null;
+    return {
+      name: org.tradeName,
+      segment: org.segment ?? null,
+      email: org.email,
+      phones: uniquePhones,
+      whatsapp,
+      website: org.website ?? null,
+      city: org.city,
+      state: org.state,
+      primaryColor: org.primaryColor,
+      secondaryColor: org.secondaryColor,
+    };
   }
 
   async updateOrganization(
